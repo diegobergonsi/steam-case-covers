@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/preview.png" alt="steam-case-covers: your Steam library as a fan of physical game boxes">
+  <img src="assets/preview.png" alt="Steam Case Covers: your Steam library as a fan of physical game boxes">
 </p>
 
 <h1 align="center">steam-case-covers</h1>
