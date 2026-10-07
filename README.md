@@ -21,7 +21,13 @@ python steamcase.py apply    # copies them into Steam
 
 Start Steam again. `python steamcase.py run` does both steps.
 
-By default only installed games are found. For your whole library, open <https://store.steampowered.com/dynamicstore/userdata/> while logged in, save it as `userdata.json`, and add `--library userdata.json`.
+By default only installed games are found. To include your whole library:
+
+1. Log in at <https://store.steampowered.com>, then open <https://store.steampowered.com/dynamicstore/userdata/>.
+2. Press Ctrl+S and save the page as `userdata.json`.
+3. Run `python steamcase.py run --library userdata.json`.
+
+That file has your account data. Don't share it.
 
 Other commands and options: `python steamcase.py -h`.
 
