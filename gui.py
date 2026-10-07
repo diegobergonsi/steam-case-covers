@@ -2,42 +2,11 @@
 """steamcase GUI: three steps, no terminal.  Run:  python gui.py"""
 import os, queue, re, subprocess, sys, threading, time, webbrowser
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import messagebox, filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-
-BG, CARD, FG, MUTED, ACCENT = "#171a21", "#1b2838", "#e6edf3", "#8fa3b8", "#66c0f4"
-
-
-class Tooltip:
-    """Small hover bubble."""
-
-    def __init__(self, widget, text):
-        self.widget, self.text, self.tip = widget, text, None
-        widget.bind("<Enter>", self.show)
-        widget.bind("<Leave>", self.hide)
-        widget.bind("<FocusIn>", self.show)        # keyboard users: Tab to the ? to read it
-        widget.bind("<FocusOut>", self.hide)
-        widget.bind("<Escape>", self.hide)
-
-    def show(self, _e=None):
-        if self.tip:
-            return
-        x, y = self.widget.winfo_rootx() + 20, self.widget.winfo_rooty() + self.widget.winfo_height() + 6
-        self.tip = tk.Toplevel(self.widget)
-        self.tip.wm_overrideredirect(True)
-        self.tip.wm_geometry("+%d+%d" % (x, y))
-        tk.Label(self.tip, text=self.text, justify="left", wraplength=340, bg="#0e1218", fg=FG,
-                 relief="solid", borderwidth=1, padx=10, pady=8).pack()
-
-    def toggle(self, _e=None):
-        self.hide() if self.tip else self.show()
-
-    def hide(self, _e=None):
-        if self.tip:
-            self.tip.destroy()
-            self.tip = None
+from widgets import (BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, px, set_scale)
 
 
 def downloads_dir():
@@ -53,26 +22,14 @@ def downloads_dir():
     return os.path.join(home, "Downloads")
 
 
-class InfoBadge(tk.Canvas):
-    """Round "i" badge. Hover or Tab to it to read the help text (Escape closes it)."""
-
-    def __init__(self, parent, text, bg=CARD):
-        super().__init__(parent, width=26, height=26, bg=bg, highlightthickness=2, highlightbackground=bg,
-                         highlightcolor="#ffffff", takefocus=True, cursor="hand2")
-        self.disc = self.create_oval(3, 3, 23, 23, fill=ACCENT, outline="")
-        self.create_text(13, 13, text="i", fill="#0b141d", font=("TkDefaultFont", 12, "bold"))
-        self.bind("<Enter>", lambda e: self.itemconfigure(self.disc, fill="#8fd3ff"), add="+")
-        self.bind("<Leave>", lambda e: self.itemconfigure(self.disc, fill=ACCENT), add="+")
-        self.bind("<Button-1>", lambda e: self.focus_set())
-        Tooltip(self, text)
-
-
 class App(tk.Tk):
     def __init__(self, downloads=None, covers_dir=None):
         super().__init__()
         self.covers_dir = covers_dir or sc.default_covers_dir()
         self.cover_files = []             # covers built by the last run; step 3 applies exactly these
         self.running = False
+        self.busy = False                 # step 3 (apply/restore) in progress
+        self.applied = False              # covers were added to Steam in this session
         self.events = queue.Queue()
         self.cancel_flag = threading.Event()
         self.downloads = downloads or downloads_dir()
@@ -86,14 +43,22 @@ class App(tk.Tk):
             pass
         self.configure(bg=BG)
         self._style()
+        set_scale(self)
 
         self.library_path = None          # chosen userdata.json
         self.installed_only = tk.BooleanVar(value=False)
         self.skip_auto = tk.BooleanVar(value=False)
         self.restart_steam = tk.BooleanVar(value=True)
 
-        tk.Label(self, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w", padx=24, pady=(20, 0))
-        tk.Label(self, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED).pack(anchor="w", padx=24, pady=(0, 12))
+        head = tk.Frame(self, bg=BG)
+        head.pack(fill="x", padx=px(28), pady=(px(24), px(14)))
+        if getattr(self, "_icon", None):
+            self._icon_small = self._icon.subsample(4 if px(1) == 1 else 3)
+            tk.Label(head, image=self._icon_small, bg=BG).pack(side="left", padx=(0, px(16)))
+        titles = tk.Frame(head, bg=BG)
+        titles.pack(side="left")
+        tk.Label(titles, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
+        tk.Label(titles, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED).pack(anchor="w")
 
         self.step1 = self._card("1", "Get your game list")
         self.step2 = self._card("2", "Make the covers")
@@ -102,7 +67,6 @@ class App(tk.Tk):
         self._build_step2(self.step2)
         self._build_step3(self.step3)
         self.refresh_step1()
-        self.busy = False                 # step 3 (apply/restore) in progress
         self.refresh_step3()
         self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events)]
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -129,47 +93,48 @@ class App(tk.Tk):
     def _style(self):
         for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
             tkfont.nametofont(name).configure(size=11)          # a little larger than the 10 pt default
-        s = ttk.Style(self)
-        s.theme_use("clam")
-        s.configure("TButton", focuscolor="#ffffff")             # visible keyboard focus ring
-        s.configure("Accent.TButton", focuscolor="#0b141d")
-        s.configure("TCheckbutton", focuscolor="#ffffff")
-        s.configure("TButton", padding=(14, 8))
-        s.configure("Accent.TButton", background=ACCENT, foreground="#0b141d", padding=(14, 8))
-        s.map("Accent.TButton", background=[("active", "#8fd3ff"), ("disabled", "#3a4a5a")])
-        s.configure("TCheckbutton", background=CARD, foreground=FG)
-        s.map("TCheckbutton", background=[("active", CARD)])
-        s.configure("Horizontal.TProgressbar", troughcolor="#0e1218", background=ACCENT, thickness=14)
 
     def _card(self, num, title):
-        outer = tk.Frame(self, bg=CARD, padx=18, pady=14)
-        outer.pack(fill="x", padx=24, pady=6)
-        head = tk.Frame(outer, bg=CARD)
+        card = Card(self)
+        card.pack(fill="x", padx=px(28), pady=px(7))
+        head = tk.Frame(card.body, bg=CARD)
         head.pack(fill="x")
-        tk.Label(head, text=num, bg=ACCENT, fg="#0b141d", width=2, font=("TkDefaultFont", 12, "bold")).pack(side="left")
-        tk.Label(head, text=title, bg=CARD, fg=FG, font=("TkDefaultFont", 14, "bold")).pack(side="left", padx=10)
-        body = tk.Frame(outer, bg=CARD)
-        body.pack(fill="x", pady=(10, 0))
-        body.outer = outer
+        badge = StepBadge(head, num)
+        badge.pack(side="left")
+        title_lbl = tk.Label(head, text=title, bg=CARD, fg=FG, font=("TkDefaultFont", 14, "bold"))
+        title_lbl.pack(side="left", padx=px(12))
+        body = tk.Frame(card.body, bg=CARD)
+        body.pack(fill="x", pady=(px(12), 0))
+        body.badge, body.title_lbl = badge, title_lbl
         return body
 
-    def _row(self, parent):
+    def _row(self, parent, pady=px(4)):
         r = tk.Frame(parent, bg=CARD)
-        r.pack(fill="x", pady=3)
+        r.pack(fill="x", pady=pady)
         return r
 
     def _note(self, parent, text):
-        tk.Label(parent, text=text, bg=CARD, fg=MUTED, justify="left", wraplength=640, anchor="w").pack(fill="x", pady=(0, 4))
+        tk.Label(parent, text=text, bg=CARD, fg=MUTED, justify="left", wraplength=px(620), anchor="w").pack(fill="x", pady=(0, px(6)))
 
     def _set_state(self, body, enabled):
         st = "normal" if enabled else "disabled"
 
         def walk(w):
             for c in w.winfo_children():
-                if isinstance(c, (ttk.Button, ttk.Checkbutton)):
+                if isinstance(c, (RoundedButton, Switch)):
                     c.configure(state=st)
                 walk(c)
         walk(body)
+
+    def update_steps(self):
+        """Badges and titles show where you are: locked, active or done."""
+        ready = self.installed_only.get() or bool(self.library_path)
+        s1 = "done" if ready else "active"
+        s2 = "locked" if not ready else "done" if self.cover_files else "active"
+        s3 = "locked" if not self.cover_files else "done" if self.applied else "active"
+        for body, status in ((self.step1, s1), (self.step2, s2), (self.step3, s3)):
+            body.badge.set(status)
+            body.title_lbl.configure(fg=FAINT if status == "locked" else FG)
 
     # ----- step 1 -----
     def _build_step1(self, body):
@@ -177,12 +142,13 @@ class App(tk.Tk):
                          "then press Ctrl+S and save the page (keep the name userdata.json). "
                          "This app will notice the file by itself.")
         r = self._row(body)
-        ttk.Button(r, text="Download your userdata.json", style="Accent.TButton", command=self.open_download_page).pack(side="left")
-        ttk.Button(r, text="Browse…", command=self.browse).pack(side="left", padx=8)
+        RoundedButton(r, "Download your userdata.json", self.open_download_page, primary=True).pack(side="left")
+        RoundedButton(r, "Browse…", self.browse).pack(side="left", padx=px(10))
         r = self._row(body)
-        ttk.Checkbutton(r, text="Only my installed games (no file needed)", variable=self.installed_only, command=self.on_installed_only).pack(side="left")
+        self.sw_installed = Switch(r, "Only my installed games (no file needed)", self.installed_only, self.on_installed_only)
+        self.sw_installed.pack(side="left")
         self.step1_status = tk.Label(body, text="Waiting for userdata.json…", bg=CARD, fg=MUTED, anchor="w")
-        self.step1_status.pack(fill="x", pady=(6, 0))
+        self.step1_status.pack(fill="x", pady=(px(8), 0))
 
     def open_download_page(self):
         webbrowser.open(sc.LIBRARY_JSON_URL)
@@ -220,6 +186,7 @@ class App(tk.Tk):
             self.step1_status.configure(text="Waiting for userdata.json…", fg=MUTED)
         self._set_state(self.step2, ready and not self.running)
         self.btn_cancel.configure(state="normal" if self.running else "disabled")
+        self.update_steps()
 
     def watch_downloads(self):
         """Every 1.5 s: look for a new, finished, valid userdata*.json in Downloads."""
@@ -244,16 +211,17 @@ class App(tk.Tk):
     def _build_step2(self, body):
         self._note(body, "Downloads each game's artwork from Steam and builds the covers on your computer.")
         r = self._row(body)
-        ttk.Checkbutton(r, text="Skip blurry auto-art", variable=self.skip_auto).pack(side="left")
-        InfoBadge(r, sc.AUTO_ART_HELP).pack(side="left", padx=6)
-        r = self._row(body)
-        self.btn_make = ttk.Button(r, text="Make covers", style="Accent.TButton", command=self.start_make)
+        self.sw_skip = Switch(r, "Skip blurry auto-art", self.skip_auto)
+        self.sw_skip.pack(side="left")
+        InfoBadge(r, sc.AUTO_ART_HELP).pack(side="left", padx=px(6))
+        r = self._row(body, pady=px(6))
+        self.btn_make = RoundedButton(r, "Make covers", self.start_make, primary=True)
         self.btn_make.pack(side="left")
-        self.btn_cancel = ttk.Button(r, text="Cancel", command=self.cancel_make, state="disabled")
-        self.btn_cancel.pack(side="left", padx=8)
-        self.btn_folder = ttk.Button(r, text="Open covers folder", command=self.open_covers_folder)
-        self.progress = ttk.Progressbar(body, mode="determinate")
-        self.progress.pack(fill="x", pady=(8, 2))
+        self.btn_cancel = RoundedButton(r, "Cancel", self.cancel_make, state="disabled")
+        self.btn_cancel.pack(side="left", padx=px(10))
+        self.btn_folder = RoundedButton(r, "Open covers folder", self.open_covers_folder)
+        self.progress = Bar(body)
+        self.progress.pack(fill="x", pady=(px(10), px(6)))
         self.step2_status = tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w")
         self.step2_status.pack(fill="x")
 
@@ -264,6 +232,7 @@ class App(tk.Tk):
         self.running = True
         self.cancel_flag.clear()
         self.cover_files = []
+        self.applied = False
         self.progress.configure(value=0, maximum=1)
         self.step2_status.configure(text="Looking up your games on Steam…", fg=MUTED)
         self.btn_folder.pack_forget()
@@ -300,19 +269,20 @@ class App(tk.Tk):
                 elif ev[0] == "done":
                     self.finish_make(ev[1])
                 elif ev[0] == "step3_status":
-                    self.step3_status.configure(text=ev[1], fg=MUTED)
+                    self.say3(ev[1], MUTED)
                 elif ev[0] == "step3_done":
                     self.busy = False
-                    self.step3_status.configure(text=ev[1], fg=ACCENT)
+                    self.applied = ev[2] == "apply" if len(ev) > 2 else self.applied
+                    self.say3(ev[1], ACCENT)
                     self.refresh_step3()
                 elif ev[0] == "step3_error":
                     self.busy = False
-                    self.step3_status.configure(text=ev[1], fg="#ff7b72")
+                    self.say3(ev[1], RED)
                     self.refresh_step3()
                     messagebox.showerror("Could not finish", ev[1])
                 elif ev[0] == "error":
                     self.running = False
-                    self.step2_status.configure(text=ev[1], fg="#ff7b72")
+                    self.step2_status.configure(text=ev[1], fg=RED)
                     self._set_state(self.step1, True)
                     self.refresh_step1()
                     messagebox.showerror("Could not make covers", ev[1])
@@ -331,7 +301,7 @@ class App(tk.Tk):
         self._set_state(self.step1, True)
         self.refresh_step1()
         if n:
-            self.btn_folder.pack(side="left")
+            self.btn_folder.pack(side="left", padx=px(10))
         self.refresh_step3()
 
     def cancel_make(self):
@@ -350,15 +320,22 @@ class App(tk.Tk):
         self._note(body, "Warning: this step closes Steam automatically (any running game or download stops). "
                          "Your current artwork is backed up first, so you can undo it.")
         r = self._row(body)
-        self.chk_restart = ttk.Checkbutton(r, text="Start Steam again when finished", variable=self.restart_steam)
+        self.chk_restart = Switch(r, "Start Steam again when finished", self.restart_steam)
         self.chk_restart.pack(side="left")
-        r = self._row(body)
-        self.btn_apply = ttk.Button(r, text="Apply to Steam", style="Accent.TButton", command=lambda: self.confirm_and_run("apply"))
+        r = self._row(body, pady=px(6))
+        self.btn_apply = RoundedButton(r, "Apply to Steam", lambda: self.confirm_and_run("apply"), primary=True)
         self.btn_apply.pack(side="left")
-        self.btn_restore = ttk.Button(r, text="Restore previous artwork", command=lambda: self.confirm_and_run("restore"))
-        self.btn_restore.pack(side="left", padx=8)
-        self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=640)
-        self.step3_status.pack(fill="x", pady=(6, 0))
+        self.btn_restore = RoundedButton(r, "Restore previous artwork", lambda: self.confirm_and_run("restore"))
+        self.btn_restore.pack(side="left", padx=px(10))
+        self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
+
+    def say3(self, text, fg=MUTED):
+        """Step 3 message; the line only takes space while it has something to say."""
+        self.step3_status.configure(text=text, fg=fg)
+        if text and not self.step3_status.winfo_ismapped():
+            self.step3_status.pack(fill="x", pady=(px(8), 0))
+        elif not text:
+            self.step3_status.pack_forget()
 
     def has_backup(self):
         try:
@@ -371,7 +348,8 @@ class App(tk.Tk):
         can_apply = idle and bool(self.cover_files)
         self.btn_apply.configure(state="normal" if can_apply else "disabled")
         self.btn_restore.configure(state="normal" if idle and self.has_backup() else "disabled")
-        self.chk_restart.configure(state="normal" if idle else "disabled")
+        self.chk_restart.configure(state="normal" if idle and (can_apply or self.has_backup()) else "disabled")
+        self.update_steps()
 
     def confirm_and_run(self, mode):
         if self.busy or self.running:
@@ -392,7 +370,7 @@ class App(tk.Tk):
             return
         self.busy = True
         self.refresh_step3()
-        self.step3_status.configure(text="Closing Steam…" if steam_on else "Working…", fg=MUTED)
+        self.say3("Closing Steam…" if steam_on else "Working…", MUTED)
         threading.Thread(target=self._step3_worker, args=(mode, self.restart_steam.get()), daemon=True).start()
 
     def _step3_worker(self, mode, restart):
@@ -423,7 +401,7 @@ class App(tk.Tk):
                     text += " Could not start Steam (%s). Please open it yourself." % e
             else:
                 text += " Start Steam to see the change."
-            self.events.put(("step3_done", text))
+            self.events.put(("step3_done", text, mode))
         except sc.SteamcaseError as e:
             self.events.put(("step3_error", str(e)))
         except Exception as e:
