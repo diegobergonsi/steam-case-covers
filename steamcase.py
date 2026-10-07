@@ -157,9 +157,12 @@ def owned_ids(json_path):
     except (OSError, ValueError) as e:
         raise SteamcaseError("Could not read %s as JSON (%s)." % (json_path, e))
     ids = d.get("rgOwnedApps") if isinstance(d, dict) else None
-    if not ids:
+    if not ids or not isinstance(ids, list):
         raise SteamcaseError("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam." % LIBRARY_JSON_URL)
-    return [int(i) for i in ids]
+    try:
+        return [int(i) for i in ids]
+    except (TypeError, ValueError):
+        raise SteamcaseError("The game list in that file is damaged. Save %s again." % LIBRARY_JSON_URL)
 
 
 def load_games(steam, library_json=None):
@@ -343,6 +346,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if log:
         log("Looking up %d apps on Steam's store..." % len(ids))
     info = store_items(ids, log, cancelled)
+    if ids and not info and not (cancelled and cancelled()):
+        raise SteamcaseError("Could not reach Steam's servers. Check your internet connection and try again.")
     res = {"ok": 0, "skipped": 0, "missing": [], "cancelled": False, "files": []}
     total = len(ids)
 
@@ -424,18 +429,22 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     os.makedirs(grid, exist_ok=True)
     backup = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(backup)
-    added, replaced = [], []
-    for f in covers:
-        name = "%sp.png" % appid_of(f)
-        dest = os.path.join(grid, name)
-        if os.path.exists(dest):
-            shutil.copy2(dest, os.path.join(backup, name))
-            replaced.append(name)
-        else:
-            added.append(name)
-        shutil.copy2(f, dest)
-    with open(os.path.join(backup, "manifest.json"), "w") as f:
-        json.dump({"added": added, "replaced": replaced}, f)
+    names = ["%sp.png" % appid_of(f) for f in covers]
+    replaced = [n for n in names if os.path.exists(os.path.join(grid, n))]
+    added = [n for n in names if n not in replaced]
+    try:
+        for n in replaced:
+            shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
+        with open(os.path.join(backup, "manifest.json"), "w") as f:      # written before copying, so a rollback always works
+            json.dump({"added": added, "replaced": replaced}, f)
+        for f, n in zip(covers, names):
+            shutil.copy2(f, os.path.join(grid, n))
+    except OSError as e:
+        try:
+            restore_backup(steam, backup, user)                             # leave Steam's art exactly as it was
+        except Exception:
+            pass
+        raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
     return {"account": os.path.basename(os.path.dirname(os.path.dirname(grid))), "grid": grid,
             "applied": len(covers), "replaced": len(replaced), "backup": backup}
 

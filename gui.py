@@ -79,8 +79,16 @@ class App(tk.Tk):
         self.busy = False                 # step 3 (apply/restore) in progress
         self.refresh_step3()
         self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events)]
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.update_idletasks()                       # size the window to its content
         self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
+
+    def on_close(self):
+        if self.busy:
+            messagebox.showinfo("Please wait", "Steam's artwork is being changed. Closing now could leave it half-done. "
+                                               "Wait a few seconds, then close the window.")
+            return
+        self.destroy()
 
     def destroy(self):
         self.cancel_flag.set()
