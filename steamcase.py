@@ -14,12 +14,17 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, filecmp, json, os, re, shutil, socket, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image
 except ImportError:
     Image = None
+
+try:
+    import certifi                      # a bundled set of trusted certificates (the packaged app's own Python may not find the system's)
+except ImportError:
+    certifi = None
 
 for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; never crash a legacy console
     if _s is not None and hasattr(_s, "reconfigure"):
@@ -66,6 +71,49 @@ class SteamcaseError(Exception):
 
 
 # ---------- helpers ----------
+_ssl_ctx = None
+
+
+def _ssl_context():
+    """TLS settings: the system's trusted certificates plus certifi's. Without certifi, the packaged Linux app
+    looked in /usr/lib/ssl (a Debian path), found nothing on SteamOS and failed every HTTPS request."""
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        ctx = ssl.create_default_context()
+        if certifi is not None:
+            try:
+                ctx.load_verify_locations(cafile=certifi.where())
+            except Exception:
+                pass
+        _ssl_ctx = ctx
+    return _ssl_ctx
+
+
+def explain_error(exc):
+    """A short human reason for a failed request."""
+    text = str(exc)
+    inner = getattr(exc, "reason", exc)
+    if isinstance(inner, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in text:
+        return "its security certificate could not be verified. Check that your computer's date and time are right and that your network isn't intercepting secure connections"
+    if isinstance(exc, urllib.error.HTTPError):
+        return "it answered with an error (HTTP %d)" % exc.code
+    if isinstance(inner, socket.gaierror) or "Name or service not known" in text or "getaddrinfo" in text:
+        return "no internet, or a DNS problem (the address could not be found)"
+    if isinstance(inner, (socket.timeout, TimeoutError)) or "timed out" in text:
+        return "the connection timed out"
+    return (text or type(exc).__name__)[:120]
+
+
+def check_network():
+    """One tiny real request to Steam's store API. Returns (ok, message). Used by 'gui.py --check-network'."""
+    try:
+        q = json.dumps({"ids": [{"appid": 220}], "context": {"language": "english", "country_code": "US"}, "data_request": {}})
+        json.loads(http_get(STORE_API + urllib.parse.urlencode({"input_json": q}), tries=1))
+        return True, "Steam's servers answered."
+    except Exception as e:
+        return False, explain_error(e)
+
+
 def _read_capped(resp):
     size = resp.headers.get("Content-Length")
     if size and size.isdigit() and int(size) > MAX_DOWNLOAD:
@@ -80,7 +128,7 @@ def http_get(url, tries=3):
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 steamcase"})
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=30, context=_ssl_context()) as r:
                 return _read_capped(r)
         except SteamcaseError:
             raise
@@ -328,7 +376,7 @@ def start_steam(steam):
 
 
 # ---------- store data ----------
-def store_items(appids, log=None, cancelled=None):
+def store_items(appids, log=None, cancelled=None, errors=None):
     out = {}
     for n in range(0, len(appids), 100):
         if cancelled and cancelled():
@@ -339,6 +387,8 @@ def store_items(appids, log=None, cancelled=None):
         try:
             items = json.loads(http_get(STORE_API + urllib.parse.urlencode({"input_json": q})))["response"].get("store_items", [])
         except Exception as e:
+            if errors is not None:
+                errors.append(e)
             if log:
                 log("store lookup failed for a chunk: %s" % e)
             continue
@@ -412,9 +462,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         ids = [i for i in ids if i in set(only)]
     if log:
         log("Looking up %d apps on Steam's store..." % len(ids))
-    info = store_items(ids, log, cancelled)
+    errs = []
+    info = store_items(ids, log, cancelled, errs)
     if ids and not info and not (cancelled and cancelled()):
-        raise SteamcaseError("Could not reach Steam's servers. Check your internet connection and try again.")
+        why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
+        raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
     res = {"ok": 0, "skipped": 0, "missing": [], "failed": [], "cancelled": False, "files": []}
     total = len(ids)
 

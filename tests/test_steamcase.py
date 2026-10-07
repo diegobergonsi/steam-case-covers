@@ -219,6 +219,33 @@ class Reset(Base):
         self.assertEqual(os.listdir(self.grid), ["2p.png"])
 
 
+class Network(Base):
+    def test_trusted_certificates_are_loaded(self):
+        self.assertGreater(sc._ssl_context().cert_store_stats()["x509_ca"], 0)
+
+    def test_errors_are_explained_in_plain_words(self):
+        import ssl
+        import urllib.error
+        cert = urllib.error.URLError(ssl.SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"))
+        self.assertIn("security certificate", sc.explain_error(cert))
+        self.assertIn("DNS", sc.explain_error(urllib.error.URLError(OSError(-2, "Name or service not known"))))
+        self.assertIn("timed out", sc.explain_error(TimeoutError("timed out")))
+        self.assertIn("404", sc.explain_error(urllib.error.HTTPError("u", 404, "nf", {}, None)))
+
+    def test_the_real_reason_reaches_the_user(self):
+        import ssl
+        import urllib.error
+        real_get = sc.http_get
+        sc.http_get = lambda url, tries=3: (_ for _ in ()).throw(urllib.error.URLError(ssl.SSLCertVerificationError(1, "CERTIFICATE_VERIFY_FAILED")))
+        try:
+            with self.assertRaises(sc.SteamcaseError) as cm:
+                sc.make_covers({1: "G"}, os.path.join(self.tmp, "cv"))
+        finally:
+            sc.http_get = real_get
+        self.assertIn("security certificate", str(cm.exception))
+        self.assertNotIn("Check your internet connection and try again", str(cm.exception))
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]
@@ -252,7 +279,7 @@ class Concurrency(Base):
         sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
         games = {i: "Game %d" % i for i in range(1, 31)}
         real_store, real_get = sc.store_items, sc.http_get
-        sc.store_items = lambda ids, log=None, cancelled=None: {i: {"type": 0, "name": games[i], "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}} for i in ids}
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": games[i], "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}} for i in ids}
         sc.http_get = lambda url, tries=3: buf.getvalue()
         out = []
         try:
@@ -395,7 +422,7 @@ class Attacks(Base):
 
     def test_a_login_page_instead_of_art_counts_as_a_connection_problem(self):
         real_store, real_get = sc.store_items, sc.http_get
-        sc.store_items = lambda ids, log=None, cancelled=None: {1: {"type": 0, "name": "G", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}}}
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {1: {"type": 0, "name": "G", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}}}
         sc.http_get = lambda url, tries=3: b"<html>Please log in to the WiFi</html>"
         try:
             r = sc.make_covers({1: "G"}, os.path.join(self.tmp, "cv"))

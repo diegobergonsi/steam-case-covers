@@ -536,6 +536,7 @@ def selftest():
         assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
         assert os.path.exists(os.path.join(sc.HERE, "assets", "icon.png")), "icon missing"
         restore_child_env()
+        assert sc._ssl_context().cert_store_stats()["x509_ca"] > 0, "no trusted certificates loaded: secure connections to Steam would fail"
         if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
             assert getattr(sys, "_MEIPASS", "\0") not in os.environ.get("LD_LIBRARY_PATH", ""), "child programs would inherit the bundled libraries"
         with tempfile.TemporaryDirectory() as d:
@@ -555,6 +556,10 @@ def selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         sys.exit(selftest())
+    if "--check-network" in sys.argv:                     # for bug reports: does this computer reach Steam?
+        ok, msg = sc.check_network()
+        print(("network ok: " if ok else "network FAILED: ") + msg)
+        sys.exit(0 if ok else 1)
     restore_child_env()
     enable_dpi_awareness()
     App().mainloop()
