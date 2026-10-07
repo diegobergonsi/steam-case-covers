@@ -20,3 +20,6 @@ The font and the SVG sources are only used by `tools/build_frame.py` to render `
 
 ## Game artwork
 No game artwork is included in this repository. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.
+
+## Release builds
+The downloadable apps bundle Python (PSF License), Pillow (HPND License) and Tcl/Tk (BSD-style license), and are built with PyInstaller (GPL-2.0 with a bootloader exception that allows distributing the built apps under other licenses).
