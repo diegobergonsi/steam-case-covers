@@ -73,3 +73,4 @@ jobs:
         with:
           files: assets/*
           generate_release_notes: true
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}   # v0.x = pre-release until v1.0.0

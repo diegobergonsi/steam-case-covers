@@ -10,7 +10,7 @@ Covers I already made are on SteamGridDB: <https://www.steamgriddb.com/profile/7
 
 ## Get the app
 
-Download the file for your system from the [latest release](https://github.com/diegobergonsi/steam-case-covers/releases/latest):
+Download the file for your system from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases):
 
 | System | File | First run |
 |---|---|---|
