@@ -65,6 +65,11 @@ class App(tk.Tk):
         self.started = time.time()
         self._seen = {}                   # path -> (size, mtime) from the last poll, to wait for a finished download
         self.title("Steam Case Covers")
+        try:                                           # window / taskbar icon
+            self._icon = tk.PhotoImage(file=os.path.join(sc.HERE, "assets", "icon.png"))
+            self.iconphoto(True, self._icon)
+        except tk.TclError:
+            pass
         self.configure(bg=BG)
         self._style()
 
@@ -431,6 +436,7 @@ def selftest():
     from PIL import Image
     try:
         assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
+        assert os.path.exists(os.path.join(sc.HERE, "assets", "icon.png")), "icon missing"
         with tempfile.TemporaryDirectory() as d:
             src, out = os.path.join(d, "p.png"), os.path.join(d, "c.png")
             Image.new("RGB", (600, 900), (200, 60, 60)).save(src)

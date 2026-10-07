@@ -16,6 +16,8 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 | `tools/src/tux.svg` | KDE Breeze icon theme (`preferences-system-linux`), from the Arch Linux `breeze-icons` package | LGPL-3.0-or-later (package metadata also lists LGPL-2.1-only). Text: `tools/src/LICENSE-LGPL-3.0.txt` |
 | `tools/src/fonts/NunitoSans.ttf` | Nunito Sans, Google Fonts | SIL Open Font License 1.1 (`tools/src/fonts/OFL.txt`) |
 
+`assets/icon.*` (the app icon, source in `tools/src/icon.svg`) is original artwork released under the MIT license. It deliberately does not use the Steam logo.
+
 The font and the SVG sources are only used by `tools/build_frame.py` to render `assets/frame.png`. They are not needed to run `steamcase.py`.
 
 ## Game artwork
