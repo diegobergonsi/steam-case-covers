@@ -12,13 +12,13 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 ## Included files
 | File | Source | License |
 |---|---|---|
-| `tools/src/steam_logo.svg` | SVG Repo ("steam" icon) | See the page it was downloaded from; Steam's logo is Valve's trademark |
+| `tools/src/steam_logo.svg` | SVG Repo ("steam" icon) | **License not verified.** The logo itself is Valve's trademark. If a rights holder objects, it will be replaced. |
 | `tools/src/tux.svg` | KDE Breeze icon theme (`preferences-system-linux`), from the Arch Linux `breeze-icons` package | LGPL-3.0-or-later (package metadata also lists LGPL-2.1-only). Text: `tools/src/LICENSE-LGPL-3.0.txt` |
 | `tools/src/fonts/NunitoSans.ttf` | Nunito Sans, Google Fonts | SIL Open Font License 1.1 (`tools/src/fonts/OFL.txt`) |
 
 `assets/icon.*` (the app icon, source in `tools/src/icon.svg`) is original artwork released under the MIT license. It deliberately does not use the Steam logo.
 
-The font and the SVG sources are only used by `tools/build_frame.py` to render `assets/frame.png`. They are not needed to run `steamcase.py`.
+The font and the SVG sources are only used by `tools/build_frame.py` and `tools/build_icon.py` to render `assets/frame.png` and the icons. They are not needed to run the app.
 
 ## Game artwork
 No game artwork is included in this repository. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.

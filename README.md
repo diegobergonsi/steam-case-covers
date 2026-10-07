@@ -22,18 +22,18 @@ The app isn't code-signed (that costs money), which is why Windows and macOS war
 
 ## Use it
 
-1. **Get your game list.** Click "Download your userdata.json", log in to Steam if asked, then press Ctrl+S and save the page. The app notices the file by itself. Or tick "Only my installed games" to skip this.
-2. **Make the covers.** Click "Make covers" and wait.
+1. **Get your game list.** Click "Download your userdata.json", log in to Steam if asked, then press Ctrl+S and save the page. The app notices the file by itself. No browser opening? Click "Copy link" and paste it yourself. Or tick "Only my installed games" to skip this.
+2. **Make the covers.** Click "Make covers" and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped.
 3. **Add them to Steam.** Click "Apply to Steam". **It closes Steam for you**, backs up your current artwork, adds the covers and starts Steam again.
 
-Changed your mind? "Restore previous artwork" puts everything back.
+Changed your mind? "Restore previous artwork" undoes the last Apply. Press it again to go one step further back. Each Apply keeps a backup of only what it changed.
 
 ## From source
 
-Needs Python 3.8+ and Pillow.
+Needs Python 3.8+ and Pillow 10.3 or newer.
 
 ```bash
-python -m pip install pillow
+python -m pip install -r requirements.txt
 python gui.py                     # the window
 python steamcase.py -h            # or the command line
 ```
@@ -44,7 +44,7 @@ Command line, step by step: `python steamcase.py make --library userdata.json`, 
 
 ## Notes
 
-- Many old games have no real portrait on Steam, so their covers look blurry. Tick "Skip blurry auto-art" (hover the **?**) to leave those alone.
+- Many old games have no real portrait on Steam, so their covers look blurry. Tick "Skip blurry auto-art" (hover the **i** next to it) to leave those alone.
 - Custom art you set by hand in Steam overrides these covers.
 - Covers are local to the computer. Copy Steam's `userdata/<id>/config/grid` folder to use them elsewhere.
 - Run it in desktop mode on a Steam Deck.
