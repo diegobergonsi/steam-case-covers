@@ -53,6 +53,20 @@ def downloads_dir():
     return os.path.join(home, "Downloads")
 
 
+class InfoBadge(tk.Canvas):
+    """Round "i" badge. Hover or Tab to it to read the help text (Escape closes it)."""
+
+    def __init__(self, parent, text, bg=CARD):
+        super().__init__(parent, width=26, height=26, bg=bg, highlightthickness=2, highlightbackground=bg,
+                         highlightcolor="#ffffff", takefocus=True, cursor="hand2")
+        self.disc = self.create_oval(3, 3, 23, 23, fill=ACCENT, outline="")
+        self.create_text(13, 13, text="i", fill="#0b141d", font=("TkDefaultFont", 12, "bold"))
+        self.bind("<Enter>", lambda e: self.itemconfigure(self.disc, fill="#8fd3ff"), add="+")
+        self.bind("<Leave>", lambda e: self.itemconfigure(self.disc, fill=ACCENT), add="+")
+        self.bind("<Button-1>", lambda e: self.focus_set())
+        Tooltip(self, text)
+
+
 class App(tk.Tk):
     def __init__(self, downloads=None, covers_dir=None):
         super().__init__()
@@ -231,11 +245,7 @@ class App(tk.Tk):
         self._note(body, "Downloads each game's artwork from Steam and builds the covers on your computer.")
         r = self._row(body)
         ttk.Checkbutton(r, text="Skip blurry auto-art", variable=self.skip_auto).pack(side="left")
-        info = tk.Button(r, text="?", bg=ACCENT, fg="#0b141d", activebackground="#8fd3ff", relief="flat", width=2, takefocus=True,
-                         cursor="question_arrow", font=("TkDefaultFont", 11, "bold"), highlightthickness=2,
-                         highlightbackground=CARD, highlightcolor="#ffffff")
-        info.pack(side="left", padx=6)
-        info.configure(command=Tooltip(info, sc.AUTO_ART_HELP).toggle)
+        InfoBadge(r, sc.AUTO_ART_HELP).pack(side="left", padx=6)
         r = self._row(body)
         self.btn_make = ttk.Button(r, text="Make covers", style="Accent.TButton", command=self.start_make)
         self.btn_make.pack(side="left")
