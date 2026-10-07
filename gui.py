@@ -329,11 +329,12 @@ class App(tk.Tk):
         self.step2_status.configure(text="Stopping…", fg=MUTED)
 
     def open_covers_folder(self):
-        os.makedirs(self.covers_dir, exist_ok=True)
+        folder = os.path.abspath(self.covers_dir)
+        os.makedirs(folder, exist_ok=True)
         if sys.platform.startswith("win"):
-            os.startfile(self.covers_dir)
+            os.startfile(folder)
         else:
-            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", self.covers_dir])
+            subprocess.Popen([sc._tool("open" if sys.platform == "darwin" else "xdg-open"), folder])
 
     # ----- step 3 -----
     def _build_step3(self, body):

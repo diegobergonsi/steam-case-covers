@@ -1,6 +1,6 @@
 """Regression tests: normal use, plus the attacks the app must refuse. No network, no real Steam.
 Run:  python -m unittest discover -s tests -v"""
-import http.server, json, os, shutil, socketserver, struct, sys, tempfile, threading, unittest, zlib
+import http.server, json, os, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import steamcase as sc
@@ -97,10 +97,79 @@ class ApplyRestore(Base):
         self.assertEqual(os.listdir(self.grid), [])
         self.assertEqual(sc.list_backups(self.steam), [])
 
+    def test_rollback_still_works_while_holding_the_lock(self):
+        with open(os.path.join(self.grid, "1p.png"), "wb") as f:
+            f.write(b"ORIG1")
+        fs = [self.cover(1), self.cover(2)]
+        real, calls = shutil.copy2, {"n": 0}
+
+        def flaky(src, dst, **k):
+            if os.path.dirname(dst) == self.grid:
+                calls["n"] += 1
+                if calls["n"] == 2:
+                    raise PermissionError("disk full")
+            return real(src, dst, **k)
+        shutil.copy2 = flaky
+        try:
+            with self.assertRaises(sc.SteamcaseError):
+                sc.apply_covers(self.steam, self.covers, files=fs)
+        finally:
+            shutil.copy2 = real
+        self.assertEqual(self.read(self.grid, "1p.png"), b"ORIG1")
+        self.assertFalse(os.path.exists(os.path.join(self.cfg, ".steamcase.lock")))
+
     def test_two_applies_in_the_same_second(self):
         for data in (b"A", b"B", b"C"):
             sc.apply_covers(self.steam, self.covers, files=[self.cover(1, data)])
         self.assertEqual(len(sc.list_backups(self.steam)), 3)
+
+
+class Concurrency(Base):
+    def test_simultaneous_applies_never_lose_covers(self):
+        files = [self.cover(i) for i in range(1, 41)]
+        results = []
+
+        def go():
+            try:
+                results.append(sc.apply_covers(self.steam, self.covers, files=files)["applied"])
+            except sc.SteamcaseError as e:
+                results.append(str(e))
+        threads = [threading.Thread(target=go) for _ in range(4)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        self.assertIn(40, results)                                       # one run did the work
+        self.assertEqual(len(os.listdir(self.grid)), 40)                 # and nobody removed anything
+        self.assertEqual([f for f in os.listdir(self.grid) if not f.endswith("p.png")], [])
+        self.assertFalse(os.path.exists(os.path.join(self.cfg, ".steamcase.lock")))
+
+    def test_stale_lock_from_a_crashed_run_is_ignored(self):
+        lock = os.path.join(self.cfg, ".steamcase.lock")
+        os.makedirs(lock)
+        old = time.time() - 3600
+        os.utime(lock, (old, old))
+        self.assertEqual(sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])["applied"], 1)
+
+    def test_simultaneous_makes_do_not_trip_over_each_other(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
+        games = {i: "Game %d" % i for i in range(1, 31)}
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None: {i: {"type": 0, "name": games[i], "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}} for i in ids}
+        sc.http_get = lambda url, tries=3: buf.getvalue()
+        out = []
+        try:
+            threads = [threading.Thread(target=lambda: out.append(sc.make_covers(games, os.path.join(self.tmp, "cv")))) for _ in range(3)]
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+        self.assertTrue(all(len(r["failed"]) == 0 for r in out), [len(r["failed"]) for r in out])
+        left = os.listdir(os.path.join(self.tmp, "cv"))
+        self.assertEqual(len([f for f in left if f.endswith(".png")]), 30)
+        self.assertEqual([f for f in left if not f.endswith(".png")], [])
 
 
 class Attacks(Base):
@@ -190,6 +259,60 @@ class Attacks(Base):
         make_png(bomb, 6000, 6000)                       # 36 MP from a few KB
         with self.assertRaises(sc.SteamcaseError):
             sc.build_cover(bomb, os.path.join(self.tmp, "o.png"), sc.Image.open(sc.FRAME).convert("RGBA"))
+
+    def test_lookalike_digits_are_refused(self):
+        self.assertIsNone(sc._COVER_NAME.match("\u0661\u0662\u0663p.png"))
+        self.assertIsNone(sc.appid_of("Game_\u0661\u0662\u0663.png"))
+        os.makedirs(os.path.join(self.steam, "userdata", "\u00b2"))
+        self.assertEqual(sc.pick_account(self.steam), "111")
+        with self.assertRaises(sc.SteamcaseError):
+            sc.pick_account(self.steam, "\u00b2")
+
+    def test_symlinked_file_inside_a_backup_is_not_copied(self):
+        secret = os.path.join(self.tmp, "secret.txt")
+        open(secret, "w").write("TOP SECRET")
+        bk = os.path.join(self.cfg, "grid_backup_20260101_000000")
+        os.makedirs(bk)
+        try:
+            os.symlink(secret, os.path.join(bk, "5p.png"))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not allowed here")
+        json.dump({"added": [], "replaced": ["5p.png"]}, open(os.path.join(bk, "manifest.json"), "w"))
+        sc.restore_backup(self.steam, bk, keep=True)
+        self.assertFalse(os.path.exists(os.path.join(self.grid, "5p.png")))
+
+    def test_nested_manifest_is_a_clean_error(self):
+        bk = os.path.join(self.cfg, "grid_backup_20260101_000000")
+        os.makedirs(bk)
+        open(os.path.join(bk, "manifest.json"), "w").write("[" * 100000)
+        with self.assertRaises(sc.SteamcaseError):
+            sc.restore_backup(self.steam, bk, keep=True)
+
+    def test_only_png_jpeg_webp_images_are_decoded(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        frame = sc.Image.open(sc.FRAME).convert("RGBA")
+        for ext in ("tif", "gif", "bmp"):
+            p = os.path.join(self.tmp, "x." + ext)
+            sc.Image.new("RGB", (10, 10)).save(p)
+            with self.assertRaises(Exception):
+                sc.build_cover(p, os.path.join(self.tmp, "o.png"), frame)
+
+    def test_a_login_page_instead_of_art_counts_as_a_connection_problem(self):
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None: {1: {"type": 0, "name": "G", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}}}
+        sc.http_get = lambda url, tries=3: b"<html>Please log in to the WiFi</html>"
+        try:
+            r = sc.make_covers({1: "G"}, os.path.join(self.tmp, "cv"))
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+        self.assertEqual((len(r["failed"]), len(r["missing"])), (1, 0))
+
+    def test_hostile_api_data_cannot_change_the_download_host(self):
+        import urllib.parse
+        for key in ("../../../x", "@evil.example/p.jpg", "p.jpg\r\nHost: evil.example"):
+            urls, _ = sc.portrait_candidates(1, {"assets": {"asset_url_format": "steam/apps/1/${FILENAME}", "library_capsule_2x": key}})
+            self.assertEqual(urllib.parse.urlparse(urls[0]).hostname, "shared.fastly.steamstatic.com")
 
     def test_file_names_are_safe(self):
         self.assertEqual(sc.slug("../../etc/passwd"), "etc_passwd")

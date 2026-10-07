@@ -12,7 +12,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import argparse, filecmp, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image
@@ -92,6 +92,11 @@ def http_get(url, tries=3):
             time.sleep(1.5 * (i + 1))
 
 
+def _tmp(path, tag="tmp"):
+    """A temp file name next to `path` that no other run can share."""
+    return "%s.%d.%s.%s" % (path, os.getpid(), uuid.uuid4().hex[:8], tag)
+
+
 def slug(name):
     return re.sub(r"[^\w]+", "_", name)[:60].strip("_") or "game"      # short enough for any filesystem (255 bytes)
 
@@ -116,7 +121,7 @@ def _tool(name):
 
 
 def appid_of(filename):
-    m = re.search(r"_(\d{1,10})\.png$", filename)
+    m = re.search(r"_([0-9]{1,10})\.png$", filename)
     return m.group(1) if m and 0 < int(m.group(1)) < 2 ** 32 else None
 
 
@@ -218,9 +223,9 @@ def load_games(steam, library_json=None):
 
 def pick_account(steam, forced=None):
     base = os.path.join(steam, "userdata")
-    accs = [d for d in os.listdir(base) if d.isdigit() and d != "0"] if os.path.isdir(base) else []
+    accs = [d for d in os.listdir(base) if re.fullmatch(r"[0-9]+", d) and d != "0"] if os.path.isdir(base) else []
     if forced:
-        if not str(forced).isdigit():
+        if not re.fullmatch(r"[0-9]+", str(forced)):
             raise SteamcaseError("The account must be the numeric folder name inside userdata/, e.g. 12345678")
         return str(forced)
     if not accs:
@@ -230,7 +235,7 @@ def pick_account(steam, forced=None):
     recent = None
     lu = os.path.join(steam, "config", "loginusers.vdf")
     if os.path.exists(lu):
-        for m in re.finditer(r'"(\d{17})"\s*\{(.*?)\}', read_text(lu), re.S):
+        for m in re.finditer(r'"([0-9]{17})"\s*\{(.*?)\}', read_text(lu), re.S):
             if re.search(r'"MostRecent"\s+"1"', m.group(2)):
                 recent = str(int(m.group(1)) - STEAMID64_BASE)
     if recent in accs:
@@ -242,7 +247,7 @@ def account_label(steam, acc):
     """Human name for a userdata folder id: Steam display name, else login name, else the number."""
     lu = os.path.join(steam, "config", "loginusers.vdf")
     if os.path.exists(lu):
-        for m in re.finditer(r'"(\d{17})"\s*\{(.*?)\}', read_text(lu), re.S):
+        for m in re.finditer(r'"([0-9]{17})"\s*\{(.*?)\}', read_text(lu), re.S):
             if str(int(m.group(1)) - STEAMID64_BASE) == str(acc):
                 names = vdf_values(m.group(2), "PersonaName") + vdf_values(m.group(2), "AccountName")
                 for n in names:
@@ -370,7 +375,7 @@ def list_games(games, log=None):
 def build_cover(portrait_path, out_path, frame):
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
-    with Image.open(portrait_path) as im:
+    with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
@@ -382,7 +387,7 @@ def build_cover(portrait_path, out_path, frame):
     art = art.crop((cx, cy, cx + ww, cy + wh))
     canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     canvas.paste(art, (x0, y0))
-    part = out_path + ".part"                      # write aside, then rename: a crash never leaves a half-written cover
+    part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True)
     os.replace(part, out_path)
 
@@ -436,7 +441,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["files"].append(dest)
             report(n, appid, name, "exists")
             continue
-        tmp = os.path.join(out, ".tmp_%d" % appid)
+        tmp = os.path.join(out, ".tmp_%d_%s" % (appid, uuid.uuid4().hex[:8]))
         got = neterr = False
         for u in urls:
             try:
@@ -452,6 +457,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
                     f.write(b)
                 got = True
                 break
+            neterr = True                                    # answered, but not with an image: a login page or proxy in the way
         if not got:
             res["failed" if neterr else "missing"].append((appid, name))        # failed = connection problem, worth a retry
             report(n, appid, name, "failed" if neterr else "noart")
@@ -475,9 +481,13 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 # ---------- apply / backup / restore ----------
 def _safe_copy(src, dst):
     """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
-    tmp = dst + ".steamcase-tmp"
-    shutil.copy2(src, tmp)
-    os.replace(tmp, dst)
+    tmp = _tmp(dst)
+    try:
+        shutil.copy2(src, tmp)
+        os.replace(tmp, dst)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def find_covers(covers_dir):
@@ -502,45 +512,72 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     if gone:
         raise SteamcaseError("%d cover files are missing (deleted since they were made). Click “Make covers” again. Nothing was changed." % len(gone))
     os.makedirs(grid, exist_ok=True)
-    acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
-    info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
-    work, added, replaced = [], [], []
-    for f in covers:
-        n = "%sp.png" % appid_of(f)
-        dest = os.path.join(grid, n)
-        if os.path.exists(dest):
-            if filecmp.cmp(f, dest, shallow=False):
-                continue                                     # identical already: no need to touch or back it up
-            replaced.append(n)
-        else:
-            added.append(n)
-        work.append((f, n))
-    if not work:
-        return dict(info, applied=0, unchanged=len(covers), replaced=0, backup=None)
-    base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
-    backup, k = base, 1
-    while True:
+    with _Lock(os.path.dirname(grid)):
+        acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
+        info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
+        work, added, replaced = [], [], []
+        for f in covers:
+            n = "%sp.png" % appid_of(f)
+            dest = os.path.join(grid, n)
+            if os.path.exists(dest):
+                if filecmp.cmp(f, dest, shallow=False):
+                    continue                                     # identical already: no need to touch or back it up
+                replaced.append(n)
+            else:
+                added.append(n)
+            work.append((f, n))
+        if not work:
+            return dict(info, applied=0, unchanged=len(covers), replaced=0, backup=None)
+        base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
+        backup, k = base, 1
+        while True:
+            try:
+                os.makedirs(backup)
+                break
+            except FileExistsError:                                  # two applies in the same second
+                k += 1
+                backup = "%s-%d" % (base, k)
         try:
-            os.makedirs(backup)
-            break
-        except FileExistsError:                                  # two applies in the same second
-            k += 1
-            backup = "%s-%d" % (base, k)
-    try:
-        for n in replaced:
-            shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
-        with open(os.path.join(backup, "manifest.json"), "w") as fh:     # written before copying, so a rollback always works
-            json.dump({"added": added, "replaced": replaced}, fh)
-        for f, n in work:
-            _safe_copy(f, os.path.join(grid, n))
-    except OSError as e:
-        try:
-            restore_backup(steam, backup, user)                             # leave Steam's art exactly as it was
-        except Exception:
-            pass
-        shutil.rmtree(backup, ignore_errors=True)                           # a failed run must not leave a backup behind
-        raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
-    return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), backup=backup)
+            for n in replaced:
+                shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
+            with open(os.path.join(backup, "manifest.json"), "w") as fh:     # written before copying, so a rollback always works
+                json.dump({"added": added, "replaced": replaced}, fh)
+            for f, n in work:
+                _safe_copy(f, os.path.join(grid, n))
+        except OSError as e:
+            try:
+                _undo(grid, backup, {"added": added, "replaced": replaced})     # leave Steam's art exactly as it was (we already hold the lock)
+            except Exception:
+                pass
+            shutil.rmtree(backup, ignore_errors=True)                           # a failed run must not leave a backup behind
+            raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
+        return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), backup=backup)
+
+
+class _Lock:
+    """One Apply/Restore at a time per Steam account (two open windows, or a script and a window)."""
+
+    def __init__(self, cfg):
+        self.path = os.path.join(cfg, ".steamcase.lock")
+
+    def __enter__(self):
+        for _ in range(3):
+            try:
+                os.mkdir(self.path)                                  # atomic: only one run can create it
+                return self
+            except FileExistsError:
+                try:
+                    stale = time.time() - os.path.getmtime(self.path) > 600       # left behind by a crashed run
+                except OSError:
+                    continue
+                if stale:
+                    shutil.rmtree(self.path, ignore_errors=True)
+                    continue
+                raise SteamcaseError("Another steamcase window is changing Steam's artwork right now. Wait for it to finish, then try again.")
+        raise SteamcaseError("Could not get exclusive access to Steam's artwork folder. Please try again.")
+
+    def __exit__(self, *exc):
+        shutil.rmtree(self.path, ignore_errors=True)
 
 
 def list_backups(steam, user=None):
@@ -551,7 +588,23 @@ def list_backups(steam, user=None):
     return [os.path.join(cfg, d) for d in sorted(os.listdir(cfg), reverse=True) if d.startswith(BACKUP_PREFIX)]
 
 
-_COVER_NAME = re.compile(r"^\d{1,10}p\.png$")
+def _undo(grid, backup_dir, m):
+    """Put the replaced files back from backup_dir and remove the added ones. Caller holds the lock. Returns files touched."""
+    n = 0
+    for name in m.get("replaced", []):
+        src = os.path.join(backup_dir, name)
+        if os.path.exists(src) and not os.path.islink(src):          # a symlink here could smuggle another file into Steam's folder
+            _safe_copy(src, os.path.join(grid, name))
+            n += 1
+    for name in m.get("added", []):
+        p = os.path.join(grid, name)
+        if os.path.lexists(p):
+            os.remove(p)                                             # removes a symlink itself, never what it points to
+            n += 1
+    return n
+
+
+_COVER_NAME = re.compile(r"^[0-9]{1,10}p\.png$")
 
 
 def restore_backup(steam, backup_dir, user=None, keep=False):
@@ -569,23 +622,14 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
     try:
         m = json.load(open(mf))
         names = [str(x) for x in m.get("replaced", []) + m.get("added", [])]
-    except (OSError, ValueError, AttributeError, TypeError):
+    except (OSError, ValueError, AttributeError, TypeError, RecursionError, MemoryError, UnicodeError):
         raise SteamcaseError("The backup's manifest is damaged.")
     if not all(_COVER_NAME.match(n) for n in names):
         raise SteamcaseError("The backup's manifest lists unexpected files; refusing to use it.")
-    n = 0
-    for name in m.get("replaced", []):
-        src = os.path.join(real, name)
-        if os.path.exists(src):
-            _safe_copy(src, os.path.join(grid, name))
-            n += 1
-    for name in m.get("added", []):
-        p = os.path.join(grid, name)
-        if os.path.lexists(p):
-            os.remove(p)                                     # removes a symlink itself, never what it points to
-            n += 1
-    if not keep:
-        shutil.rmtree(real, ignore_errors=True)
+    with _Lock(cfg):
+        n = _undo(grid, real, m)
+        if not keep:
+            shutil.rmtree(real, ignore_errors=True)
     return n
 
 
