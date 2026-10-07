@@ -358,3 +358,125 @@ class ScrollFrame(tk.Frame):
                 self.canvas.yview_moveto(min(1, (bottom - view_h + px(24)) / total))
         except tk.TclError:
             pass
+
+
+# ----- dialogs ---------------------------------------------------------------------------------------------
+
+AMBER = "#f0b429"
+
+
+class _Glyph(tk.Canvas):
+    """Round icon for dialogs: warning (!), question (?), info (i) or error (x)."""
+
+    COLORS = {"warning": AMBER, "question": ACCENT, "info": ACCENT, "error": RED}
+
+    def __init__(self, parent, kind):
+        s = px(48)
+        super().__init__(parent, width=s, height=s, bg=CARD, highlightthickness=0)
+        color = self.COLORS.get(kind, ACCENT)
+        self.create_oval(2, 2, s - 2, s - 2, fill=color, outline=color)
+        if kind == "error":
+            a, b = s * .34, s * .66
+            self.create_line(a, a, b, b, fill=DARK, width=max(3, px(4)), capstyle="round")
+            self.create_line(a, b, b, a, fill=DARK, width=max(3, px(4)), capstyle="round")
+        else:
+            self.create_text(s // 2, s // 2, text={"warning": "!", "question": "?"}.get(kind, "i"), fill=DARK, font=("TkDefaultFont", 20, "bold"))
+
+
+class Dialog(tk.Toplevel):
+    """A modal message window in the app's own style (replaces the plain system message boxes).
+
+    paragraphs: list of (text, style), style in "main", "muted", "warn".
+    buttons:    list of (label, value, primary); the primary one has the focus, so Enter confirms.
+    Escape or closing the window returns `cancel_value`."""
+
+    def __init__(self, parent, title, paragraphs, kind="info", buttons=(("OK", True, True),), cancel_value=None):
+        super().__init__(parent)
+        self.result = cancel_value
+        self._cancel_value = cancel_value
+        self.title(title)
+        self.configure(bg=LINE)
+        self.resizable(False, False)
+        icon = getattr(parent, "_icon", None)
+        if icon is not None:
+            try:
+                self.iconphoto(False, icon)
+            except tk.TclError:
+                pass
+        self.transient(parent)
+        frame = tk.Frame(self, bg=CARD, padx=px(28), pady=px(24))
+        frame.pack(padx=1, pady=1)
+        head = tk.Frame(frame, bg=CARD)
+        head.pack(fill="x")
+        _Glyph(head, kind).pack(side="left")
+        tk.Label(head, text=title, bg=CARD, fg=FG, font=("TkDefaultFont", 15, "bold"), justify="left",
+                 wraplength=px(400), anchor="w").pack(side="left", padx=px(16))
+        body = tk.Frame(frame, bg=CARD)
+        body.pack(fill="x", pady=(px(16), px(6)))
+        for text, style in paragraphs:
+            fg, font = {"main": (FG, "TkDefaultFont"), "muted": (MUTED, "TkDefaultFont")}.get(style, (AMBER, "TkDefaultFont"))
+            tk.Label(body, text=text, bg=CARD, fg=fg, font=(font, 11, "bold") if style == "warn" else (font, 11),
+                     justify="left", wraplength=px(470), anchor="w").pack(fill="x", pady=(0, px(10)))
+        row = tk.Frame(frame, bg=CARD)
+        row.pack(fill="x", pady=(px(8), 0))
+        first_primary = None
+        for label, value, primary in reversed(list(buttons)):                 # right to left: the primary action sits at the right edge
+            b = RoundedButton(row, label, lambda v=value: self._finish(v), primary=primary)
+            b.pack(side="right", padx=(px(10), 0))
+            if primary and first_primary is None:
+                first_primary = b
+        self._default = first_primary or row
+        self.bind("<Escape>", lambda e: self._finish(self._cancel_value))
+        self.protocol("WM_DELETE_WINDOW", lambda: self._finish(self._cancel_value))
+        self.update_idletasks()
+        self._center(parent)
+
+    def _center(self, parent):
+        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+        try:
+            x = parent.winfo_rootx() + (parent.winfo_width() - w) // 2
+            y = parent.winfo_rooty() + max(px(40), (parent.winfo_height() - h) // 3)
+        except tk.TclError:
+            x, y = 200, 150
+        self.geometry("+%d+%d" % (max(0, x), max(0, y)))
+
+    def _finish(self, value):
+        self.result = value
+        self.destroy()
+
+    def show(self):
+        self.deiconify()
+        self.lift()
+        try:
+            self.wait_visibility()
+            self.grab_set()
+        except tk.TclError:
+            pass
+        self._default.focus_force()
+        self.wait_window()
+        return self.result
+
+
+class Messages:
+    """Drop-in for tkinter.messagebox using Dialog. Set .parent to the main window."""
+
+    parent = None
+
+    @staticmethod
+    def _paragraphs(message):
+        if not isinstance(message, str):
+            return list(message)
+        parts = [p.strip() for p in message.split("\n\n") if p.strip()]
+        return [(p, "main" if i == 0 else "muted") for i, p in enumerate(parts)]
+
+    def _run(self, title, message, kind, buttons, cancel_value):
+        return Dialog(self.parent, title, self._paragraphs(message), kind, buttons, cancel_value).show()
+
+    def askokcancel(self, title, message, icon="question", ok="OK", cancel="Cancel", **_):
+        return bool(self._run(title, message, icon, ((cancel, False, False), (ok, True, True)), False))
+
+    def showinfo(self, title, message, **_):
+        self._run(title, message, "info", (("OK", True, True),), True)
+
+    def showerror(self, title, message, **_):
+        self._run(title, message, "error", (("OK", True, True),), True)

@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """steamcase GUI: three steps, no terminal.  Run:  python gui.py"""
-import os, queue, re, subprocess, sys, threading, time, webbrowser
+import os, queue, re, shutil, subprocess, sys, threading, time, webbrowser
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-from widgets import (BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, px, set_scale)
+from widgets import (BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, px, set_scale)
 
 
 def downloads_dir():
@@ -22,6 +22,31 @@ def downloads_dir():
             if os.path.isdir(p):
                 return p
     return os.path.join(home, "Downloads")
+
+
+messagebox = Messages()                      # themed dialogs; App sets the parent window
+
+
+def pick_file(title, initialdir):
+    """File chooser. On Linux the plain Tk dialog looks very dated, so use the desktop's own (KDE or GNOME) when present."""
+    start = (initialdir if initialdir and os.path.isdir(initialdir) else os.path.expanduser("~")).rstrip("/") + "/"
+    if sys.platform.startswith("linux"):
+        if shutil.which("kdialog"):
+            cmds = [["kdialog", "--title", title, "--getopenfilename", start, "*.json|JSON files (*.json)\n*|All files"]]
+        elif shutil.which("zenity"):
+            cmds = [["zenity", "--file-selection", "--title=" + title, "--filename=" + start, "--file-filter=JSON files | *.json", "--file-filter=All files | *"]]
+        else:
+            cmds = []
+        for cmd in cmds:
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True)
+            except OSError:
+                break
+            if r.returncode == 0:
+                return r.stdout.strip()
+            if r.returncode == 1:                    # the user pressed Cancel
+                return ""
+    return filedialog.askopenfilename(title=title, initialdir=start, filetypes=[("userdata.json", "*.json"), ("All files", "*.*")])
 
 
 class App(tk.Tk):
@@ -38,6 +63,7 @@ class App(tk.Tk):
         self.started = time.time()
         self._seen = {}                   # path -> (size, mtime) from the last poll, to wait for a finished download
         self.title("Steam Case Covers")
+        messagebox.parent = self
         try:                                           # window / taskbar icon
             self._icon = tk.PhotoImage(master=self, file=os.path.join(sc.HERE, "assets", "icon.png"))
             self.iconphoto(True, self._icon)
@@ -175,8 +201,7 @@ class App(tk.Tk):
         self.step1_status.configure(text="Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (Ctrl+S).", fg=ACCENT)
 
     def browse(self):
-        path = filedialog.askopenfilename(title="Choose your userdata.json", initialdir=self.downloads if os.path.isdir(self.downloads) else None,
-                                          filetypes=[("userdata.json", "*.json"), ("All files", "*.*")])
+        path = pick_file("Choose your userdata.json", self.downloads)
         if path:
             self.load_library(path, ask=True)
 
@@ -401,11 +426,12 @@ class App(tk.Tk):
             self.refresh_step3()
             return
         steam_on = sc.steam_running()
-        msg = ("%d covers made by this app will be removed from the Steam account “%s”. Steam goes back to its own default art for them.\n\n"
-               "Art you set yourself is not touched. A backup is kept, so “Restore previous artwork” brings the covers back.\n\n") % (len(names), who)
+        paras = [("%d covers made by this app will be removed from the Steam account “%s”. Steam goes back to its own default art for them." % (len(names), who), "main"),
+                 ("Art you set yourself is not touched. A backup is kept, so “Restore previous artwork” brings the covers back.", "muted")]
         if steam_on:
-            msg += "Steam will be CLOSED automatically. Any running game stops and downloads pause. Save your game first.\n\n"
-        if not messagebox.askokcancel("Reset to Steam's default art", msg + "Continue?", icon="warning" if steam_on else "question"):
+            paras.append(("Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.", "warn"))
+        if not messagebox.askokcancel("Reset to Steam's default art", paras, icon="warning" if steam_on else "question",
+                                      ok="Close Steam and reset" if steam_on else "Reset"):
             self.busy = False
             self.say3("")
             self.refresh_step3()
@@ -444,17 +470,18 @@ class App(tk.Tk):
         except sc.SteamcaseError:
             who = "your Steam account"
         if mode == "apply":
-            title, ok_text = "Add covers to Steam", "%d covers will be added to the Steam account “%s”." % (len(self.cover_files), who)
-            undo = "Your current artwork is backed up first, and you can undo this with “Restore previous artwork”."
+            title = "Add covers to Steam"
+            paras = [("%d covers will be added to the Steam account “%s”." % (len(self.cover_files), who), "main"),
+                     ("Your current artwork is backed up first. You can undo this with “Restore previous artwork”.", "muted")]
+            go = "Close Steam and add them" if steam_on else "Add them"
         else:
-            title, ok_text = "Restore previous artwork", "Your artwork from before the last Apply will be put back on the Steam account “%s”." % who
-            undo = "The covers added by that Apply are removed."
+            title = "Restore previous artwork"
+            paras = [("Your artwork from before the last Apply will be put back on the Steam account “%s”." % who, "main"),
+                     ("The covers added by that Apply are removed.", "muted")]
+            go = "Close Steam and restore" if steam_on else "Restore"
         if steam_on:
-            msg = ("%s\n\nSteam will be CLOSED automatically. Any running game stops and downloads pause. "
-                   "Save your game first.\n\n%s\n\nContinue?") % (ok_text, undo)
-        else:
-            msg = "%s\n\n%s\n\nContinue?" % (ok_text, undo)
-        if not messagebox.askokcancel(title, msg, icon="warning" if steam_on else "question"):
+            paras.append(("Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.", "warn"))
+        if not messagebox.askokcancel(title, paras, icon="warning" if steam_on else "question", ok=go):
             return
         self.busy = True
         self.refresh_step3()
