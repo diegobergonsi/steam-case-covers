@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Maintainers only: render assets/icon.png, icon.ico and icon.icns from tools/src/icon.svg.
 Needs rsvg-convert (librsvg) and Pillow."""
 import os, subprocess, tempfile

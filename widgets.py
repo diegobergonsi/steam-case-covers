@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Small custom tkinter widgets for the steamcase window: rounded, dark, keyboard friendly.
 
 Everything here is drawn on a Canvas because the built-in widgets cannot be rounded.

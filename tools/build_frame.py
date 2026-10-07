@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Maintainers only: render assets/frame.png (600x900, transparent art window) from SVG.
 Needs rsvg-convert (librsvg). Users of steamcase.py do NOT need this: frame.png is committed."""
 import os, re, base64, subprocess, tempfile

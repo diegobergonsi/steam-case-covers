@@ -54,4 +54,4 @@ Command line, step by step: `python steamcase.py make --library userdata.json`, 
 - Tested on Linux (SteamOS). Windows and macOS should work, but please open an issue if something breaks.
 - Covers contain publishers' art. Keep them for personal use.
 
-MIT license. Third-party files and trademarks: [THIRD_PARTY.md](THIRD_PARTY.md).
+Copyright (C) 2026 Diego Bergonsi. Free software under the [GNU General Public License v3 or later](LICENSE): you may use, change and share it, and anything you distribute built on it must stay open under the same license. Third-party files and trademarks: [THIRD_PARTY.md](THIRD_PARTY.md).

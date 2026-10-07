@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Regression tests: normal use, plus the attacks the app must refuse. No network, no real Steam.
 Run:  python -m unittest discover -s tests -v"""
 import http.server, json, os, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
