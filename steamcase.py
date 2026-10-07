@@ -32,6 +32,10 @@ CDN = "https://shared.fastly.steamstatic.com/store_item_assets/"
 OLD_CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/%d/library_600x900_2x.jpg"
 STORE_API = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1?"
 LIBRARY_JSON_URL = "https://store.steampowered.com/dynamicstore/userdata/"
+MAX_DOWNLOAD = 25 * 1024 * 1024          # a cover portrait is ~1 MB; anything bigger is not one
+MAX_LIBRARY_FILE = 20 * 1024 * 1024      # a real library list is a few KB
+MAX_APPS = 100_000                       # a real library has at most a few thousand apps
+MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompression bombs
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
@@ -60,12 +64,24 @@ class SteamcaseError(Exception):
 
 
 # ---------- helpers ----------
+def _read_capped(resp):
+    size = resp.headers.get("Content-Length")
+    if size and size.isdigit() and int(size) > MAX_DOWNLOAD:
+        raise SteamcaseError("A download was unexpectedly large (%s bytes); refusing it." % size)
+    data = resp.read(MAX_DOWNLOAD + 1)
+    if len(data) > MAX_DOWNLOAD:
+        raise SteamcaseError("A download was unexpectedly large; refusing it.")
+    return data
+
+
 def http_get(url, tries=3):
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 steamcase"})
             with urllib.request.urlopen(req, timeout=30) as r:
-                return r.read()
+                return _read_capped(r)
+        except SteamcaseError:
+            raise
         except urllib.error.HTTPError as e:
             if i == tries - 1 or (400 <= e.code < 500 and e.code != 429):      # a real "not found": retrying will not help
                 raise
@@ -88,9 +104,20 @@ def vdf_values(text, key):
     return re.findall(r'"%s"\s+"((?:[^"\\]|\\.)*)"' % re.escape(key), text, re.I)
 
 
+def _tool(name):
+    """Full path of a system tool, so a look-alike file next to the app (or in the current folder) can never be run instead."""
+    if sys.platform.startswith("win"):
+        return os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", name + ".exe")
+    for d in ("/usr/bin", "/bin"):
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            return p
+    return name
+
+
 def appid_of(filename):
-    m = re.search(r"_(\d+)\.png$", filename)
-    return m.group(1) if m else None
+    m = re.search(r"_(\d{1,10})\.png$", filename)
+    return m.group(1) if m and 0 < int(m.group(1)) < 2 ** 32 else None
 
 
 # ---------- finding Steam ----------
@@ -156,13 +183,20 @@ def installed_games(steam):
 
 
 def owned_ids(json_path):
+    path = os.path.expanduser(json_path)
     try:
-        d = json.load(open(os.path.expanduser(json_path), encoding="utf-8-sig"))
-    except (OSError, ValueError) as e:
-        raise SteamcaseError("Could not read %s as JSON (%s)." % (json_path, e))
+        if os.path.getsize(path) > MAX_LIBRARY_FILE:
+            raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
+        d = json.load(open(path, encoding="utf-8-sig"))
+    except SteamcaseError:
+        raise
+    except (OSError, ValueError, RecursionError, MemoryError, UnicodeError) as e:
+        raise SteamcaseError("Could not read %s as a game list (%s)." % (os.path.basename(path), type(e).__name__))
     ids = d.get("rgOwnedApps") if isinstance(d, dict) else None
     if not ids or not isinstance(ids, list):
         raise SteamcaseError("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam." % LIBRARY_JSON_URL)
+    if len(ids) > MAX_APPS:
+        raise SteamcaseError("That game list has %d entries; a real library has far fewer. Refusing it." % len(ids))
     try:
         out = [int(i) for i in ids]
     except (TypeError, ValueError):
@@ -225,9 +259,9 @@ def grid_dir(steam, user=None):
 def steam_running():
     try:
         if sys.platform.startswith("win"):
-            out = subprocess.run(["tasklist"], capture_output=True, text=True).stdout.lower()
+            out = subprocess.run([_tool("tasklist")], capture_output=True, text=True).stdout.lower()
             return "steam.exe" in out
-        out = subprocess.run(["ps", "-A", "-o", "comm="], capture_output=True, text=True).stdout.lower()
+        out = subprocess.run([_tool("ps"), "-A", "-o", "comm="], capture_output=True, text=True).stdout.lower()
         return any(l.strip() in ("steam", "steam_osx", "steamwebhelper") for l in out.splitlines())
     except Exception:
         return False
@@ -239,7 +273,7 @@ def _steam_launcher(steam):
         exe = os.path.join(steam, "steam.exe")
         return [exe] if os.path.exists(exe) else None
     if sys.platform == "darwin":
-        return ["open", "-a", "Steam", "--args"]
+        return [_tool("open"), "-a", "Steam", "--args"]
     if "com.valvesoftware.Steam" in steam and shutil.which("flatpak"):
         return ["flatpak", "run", "com.valvesoftware.Steam"]
     found = shutil.which("steam")
@@ -259,7 +293,7 @@ def close_steam(steam, timeout=60):
     cmd = _steam_launcher(steam)
     try:
         if sys.platform == "darwin":
-            subprocess.Popen(["osascript", "-e", 'quit app "Steam"'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen([_tool("osascript"), "-e", 'quit app "Steam"'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif cmd:
             subprocess.Popen(cmd + ["-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
@@ -337,6 +371,8 @@ def build_cover(portrait_path, out_path, frame):
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     with Image.open(portrait_path) as im:
+        if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
+            raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
     x0, y0, x1, y1 = WINDOW
     ww, wh = x1 - x0, y1 - y0
@@ -437,6 +473,13 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
+def _safe_copy(src, dst):
+    """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
+    tmp = dst + ".steamcase-tmp"
+    shutil.copy2(src, tmp)
+    os.replace(tmp, dst)
+
+
 def find_covers(covers_dir):
     cdir = os.path.abspath(covers_dir)
     if not os.path.isdir(cdir):
@@ -474,15 +517,22 @@ def apply_covers(steam, covers_dir, user=None, files=None):
         work.append((f, n))
     if not work:
         return dict(info, applied=0, unchanged=len(covers), replaced=0, backup=None)
-    backup = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
-    os.makedirs(backup)
+    base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
+    backup, k = base, 1
+    while True:
+        try:
+            os.makedirs(backup)
+            break
+        except FileExistsError:                                  # two applies in the same second
+            k += 1
+            backup = "%s-%d" % (base, k)
     try:
         for n in replaced:
             shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
         with open(os.path.join(backup, "manifest.json"), "w") as fh:     # written before copying, so a rollback always works
             json.dump({"added": added, "replaced": replaced}, fh)
         for f, n in work:
-            shutil.copy2(f, os.path.join(grid, n))
+            _safe_copy(f, os.path.join(grid, n))
     except OSError as e:
         try:
             restore_backup(steam, backup, user)                             # leave Steam's art exactly as it was
@@ -501,27 +551,41 @@ def list_backups(steam, user=None):
     return [os.path.join(cfg, d) for d in sorted(os.listdir(cfg), reverse=True) if d.startswith(BACKUP_PREFIX)]
 
 
+_COVER_NAME = re.compile(r"^\d{1,10}p\.png$")
+
+
 def restore_backup(steam, backup_dir, user=None, keep=False):
     """Undo one apply: put replaced files back and remove the ones that were added. Returns files touched.
-    The backup is deleted afterwards (so the next restore goes one step further back) unless keep=True."""
+    The backup is deleted afterwards (so the next restore goes one step further back) unless keep=True.
+    Only real steamcase backups inside this account's config folder are accepted, and only files named <appid>p.png are touched."""
     grid = grid_dir(steam, user)
-    mf = os.path.join(backup_dir, "manifest.json")
+    cfg = os.path.realpath(os.path.dirname(grid))
+    real = os.path.realpath(backup_dir)
+    if os.path.dirname(real) != cfg or not os.path.basename(real).startswith(BACKUP_PREFIX):
+        raise SteamcaseError("That is not a steamcase backup of this Steam account.")
+    mf = os.path.join(real, "manifest.json")
     if not os.path.exists(mf):
         raise SteamcaseError("That folder is not a steamcase backup: %s" % backup_dir)
-    m = json.load(open(mf))
+    try:
+        m = json.load(open(mf))
+        names = [str(x) for x in m.get("replaced", []) + m.get("added", [])]
+    except (OSError, ValueError, AttributeError, TypeError):
+        raise SteamcaseError("The backup's manifest is damaged.")
+    if not all(_COVER_NAME.match(n) for n in names):
+        raise SteamcaseError("The backup's manifest lists unexpected files; refusing to use it.")
     n = 0
     for name in m.get("replaced", []):
-        src = os.path.join(backup_dir, name)
+        src = os.path.join(real, name)
         if os.path.exists(src):
-            shutil.copy2(src, os.path.join(grid, name))
+            _safe_copy(src, os.path.join(grid, name))
             n += 1
     for name in m.get("added", []):
         p = os.path.join(grid, name)
-        if os.path.exists(p):
-            os.remove(p)
+        if os.path.lexists(p):
+            os.remove(p)                                     # removes a symlink itself, never what it points to
             n += 1
     if not keep:
-        shutil.rmtree(backup_dir, ignore_errors=True)
+        shutil.rmtree(real, ignore_errors=True)
     return n
 
 
@@ -587,6 +651,8 @@ def cmd_restore(args):
     backups = list_backups(steam, args.user)
     if not backups:
         raise SteamcaseError("No backups found.")
+    if args.backup and os.path.basename(args.backup) != args.backup:
+        raise SteamcaseError("--backup takes just the folder name (like grid_backup_20260101_120000), not a path.")
     target = os.path.join(os.path.dirname(backups[0]), args.backup) if args.backup else backups[0]
     if steam_running() and not args.yes:
         print("Steam seems to be running. Close it first so it picks the files up on next start.")
