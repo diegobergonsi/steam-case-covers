@@ -12,7 +12,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
+import argparse, filecmp, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 
 try:
     from PIL import Image
@@ -66,6 +66,10 @@ def http_get(url, tries=3):
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 steamcase"})
             with urllib.request.urlopen(req, timeout=30) as r:
                 return r.read()
+        except urllib.error.HTTPError as e:
+            if i == tries - 1 or (400 <= e.code < 500 and e.code != 429):      # a real "not found": retrying will not help
+                raise
+            time.sleep(1.5 * (i + 1))
         except Exception:
             if i == tries - 1:
                 raise
@@ -73,7 +77,7 @@ def http_get(url, tries=3):
 
 
 def slug(name):
-    return re.sub(r"[^\w]+", "_", name).strip("_") or "game"
+    return re.sub(r"[^\w]+", "_", name)[:60].strip("_") or "game"      # short enough for any filesystem (255 bytes)
 
 
 def read_text(path):
@@ -160,9 +164,13 @@ def owned_ids(json_path):
     if not ids or not isinstance(ids, list):
         raise SteamcaseError("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam." % LIBRARY_JSON_URL)
     try:
-        return [int(i) for i in ids]
+        out = [int(i) for i in ids]
     except (TypeError, ValueError):
         raise SteamcaseError("The game list in that file is damaged. Save %s again." % LIBRARY_JSON_URL)
+    out = [i for i in out if 0 < i < 2 ** 32]                    # real Steam app IDs only
+    if not out:
+        raise SteamcaseError("The game list in that file is empty. Save %s while logged in to Steam." % LIBRARY_JSON_URL)
+    return out
 
 
 def load_games(steam, library_json=None):
@@ -349,7 +357,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
-    Returns {"ok", "skipped", "missing": [(appid, name)], "cancelled", "files": [cover paths of this run]}.
+    Returns {"ok", "skipped", "missing": [(appid, name)] (Steam has no art), "failed": [(appid, name)] (download problem),
+    "cancelled", "files": [cover paths of this run]}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
@@ -363,7 +372,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     info = store_items(ids, log, cancelled)
     if ids and not info and not (cancelled and cancelled()):
         raise SteamcaseError("Could not reach Steam's servers. Check your internet connection and try again.")
-    res = {"ok": 0, "skipped": 0, "missing": [], "cancelled": False, "files": []}
+    res = {"ok": 0, "skipped": 0, "missing": [], "failed": [], "cancelled": False, "files": []}
     total = len(ids)
 
     def report(done, appid, name, status):
@@ -392,11 +401,15 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "exists")
             continue
         tmp = os.path.join(out, ".tmp_%d" % appid)
-        got = False
+        got = neterr = False
         for u in urls:
             try:
                 b = http_get(u)
+            except urllib.error.HTTPError as e:
+                neterr = neterr or not (400 <= e.code < 500 and e.code != 429)      # 404/403 = no such art; the rest = trouble
+                continue
             except Exception:
+                neterr = True
                 continue
             if b[:2] == b"\xff\xd8" or b[:4] == b"\x89PNG" or b[8:12] == b"WEBP":
                 with open(tmp, "wb") as f:
@@ -404,8 +417,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
                 got = True
                 break
         if not got:
-            res["missing"].append((appid, name))
-            report(n, appid, name, "noart")
+            res["failed" if neterr else "missing"].append((appid, name))        # failed = connection problem, worth a retry
+            report(n, appid, name, "failed" if neterr else "noart")
             continue
         try:
             build_cover(tmp, dest, frame)
@@ -413,7 +426,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["files"].append(dest)
             report(n, appid, name, "ok")
         except Exception as e:
-            res["missing"].append((appid, name))
+            res["failed"].append((appid, name))
             if log:
                 log("FAIL %s %s: %s" % (appid, name, e))
             report(n, appid, name, "failed")
@@ -435,34 +448,49 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     """Copy covers into Steam's grid folder as <appid>p.png. Always makes a backup first.
 
     `files`: apply only these cover files (default: every cover in covers_dir).
-    Returns {"account", "account_name", "grid", "applied", "replaced", "backup"}.
+    Only files that differ are written (and backed up); if nothing differs there is no backup and "backup" is None.
+    Returns {"account", "account_name", "grid", "applied", "unchanged", "replaced", "backup"}.
     The caller closes Steam beforehand (see close_steam)."""
     grid = grid_dir(steam, user)
     covers = list(files) if files else find_covers(covers_dir)
     if not covers:
         raise SteamcaseError("No covers found in %s. Make them first." % covers_dir)
+    gone = [f for f in covers if not os.path.exists(f)]
+    if gone:
+        raise SteamcaseError("%d cover files are missing (deleted since they were made). Click “Make covers” again. Nothing was changed." % len(gone))
     os.makedirs(grid, exist_ok=True)
+    acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
+    info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
+    work, added, replaced = [], [], []
+    for f in covers:
+        n = "%sp.png" % appid_of(f)
+        dest = os.path.join(grid, n)
+        if os.path.exists(dest):
+            if filecmp.cmp(f, dest, shallow=False):
+                continue                                     # identical already: no need to touch or back it up
+            replaced.append(n)
+        else:
+            added.append(n)
+        work.append((f, n))
+    if not work:
+        return dict(info, applied=0, unchanged=len(covers), replaced=0, backup=None)
     backup = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(backup)
-    names = ["%sp.png" % appid_of(f) for f in covers]
-    replaced = [n for n in names if os.path.exists(os.path.join(grid, n))]
-    added = [n for n in names if n not in replaced]
     try:
         for n in replaced:
             shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
-        with open(os.path.join(backup, "manifest.json"), "w") as f:      # written before copying, so a rollback always works
-            json.dump({"added": added, "replaced": replaced}, f)
-        for f, n in zip(covers, names):
+        with open(os.path.join(backup, "manifest.json"), "w") as fh:     # written before copying, so a rollback always works
+            json.dump({"added": added, "replaced": replaced}, fh)
+        for f, n in work:
             shutil.copy2(f, os.path.join(grid, n))
     except OSError as e:
         try:
             restore_backup(steam, backup, user)                             # leave Steam's art exactly as it was
         except Exception:
             pass
+        shutil.rmtree(backup, ignore_errors=True)                           # a failed run must not leave a backup behind
         raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
-    acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
-    return {"account": acc, "account_name": account_label(steam, acc), "grid": grid,
-            "applied": len(covers), "replaced": len(replaced), "backup": backup}
+    return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), backup=backup)
 
 
 def list_backups(steam, user=None):
@@ -473,8 +501,9 @@ def list_backups(steam, user=None):
     return [os.path.join(cfg, d) for d in sorted(os.listdir(cfg), reverse=True) if d.startswith(BACKUP_PREFIX)]
 
 
-def restore_backup(steam, backup_dir, user=None):
-    """Undo one apply: put replaced files back and remove the ones that were added. Returns files touched."""
+def restore_backup(steam, backup_dir, user=None, keep=False):
+    """Undo one apply: put replaced files back and remove the ones that were added. Returns files touched.
+    The backup is deleted afterwards (so the next restore goes one step further back) unless keep=True."""
     grid = grid_dir(steam, user)
     mf = os.path.join(backup_dir, "manifest.json")
     if not os.path.exists(mf):
@@ -491,6 +520,8 @@ def restore_backup(steam, backup_dir, user=None):
         if os.path.exists(p):
             os.remove(p)
             n += 1
+    if not keep:
+        shutil.rmtree(backup_dir, ignore_errors=True)
     return n
 
 
@@ -520,6 +551,8 @@ def cmd_make(args):
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"])))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
+    for appid, name in res["failed"]:
+        print("  failed (connection problem? run again to retry):", appid, name)
 
 
 def cmd_apply(args):
@@ -535,7 +568,10 @@ def cmd_apply(args):
                 raise SteamcaseError("Cancelled.")
     r = apply_covers(steam, args.covers, args.user)
     print("Steam account:", r["account_name"], "(folder %s)" % r["account"], "\nGrid folder:", r["grid"])
-    print("Applied %d covers (%d replaced older files). Backup: %s" % (r["applied"], r["replaced"], r["backup"]))
+    if r["applied"]:
+        print("Applied %d covers (%d replaced older files, %d already up to date). Backup: %s" % (r["applied"], r["replaced"], r["unchanged"], r["backup"]))
+    else:
+        print("Nothing to change: all %d covers were already in Steam." % r["unchanged"])
     print("Start Steam to see them. A custom artwork set by hand in Steam may override these.")
     print("To undo: python steamcase.py restore")
 
@@ -557,7 +593,8 @@ def cmd_restore(args):
         if input("Restore anyway? [y/N] ").strip().lower() != "y":
             raise SteamcaseError("Cancelled.")
     n = restore_backup(steam, target, args.user)
-    print("Restored from %s (%d files)." % (target, n))
+    left = len(list_backups(steam, args.user))
+    print("Restored from %s (%d files). %d older backup%s left; run restore again to go one step further back." % (target, n, left, "" if left == 1 else "s"))
 
 
 def main():
