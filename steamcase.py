@@ -44,6 +44,17 @@ AUTO_ART_HELP = (
 )
 
 
+def default_covers_dir():
+    """Per-user folder for the app (GUI) to keep covers in."""
+    if sys.platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+    elif sys.platform == "darwin":
+        base = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "steamcase", "covers")
+
+
 class SteamcaseError(Exception):
     """A problem the user can understand (no Steam found, bad file...). The message is meant to be shown."""
 
@@ -252,9 +263,11 @@ def start_steam(steam):
 
 
 # ---------- store data ----------
-def store_items(appids, log=None):
+def store_items(appids, log=None, cancelled=None):
     out = {}
     for n in range(0, len(appids), 100):
+        if cancelled and cancelled():
+            break
         chunk = appids[n:n + 100]
         q = json.dumps({"ids": [{"appid": i} for i in chunk], "context": {"language": "english", "country_code": "US"},
                         "data_request": {"include_assets": True}})
@@ -317,7 +330,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
-    cancelled() -> True stops early.  Returns {"ok", "skipped", "missing": [(appid, name)], "cancelled"}.
+    cancelled() -> True stops early.
+    Returns {"ok", "skipped", "missing": [(appid, name)], "cancelled", "files": [cover paths of this run]}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
@@ -328,8 +342,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         ids = [i for i in ids if i in set(only)]
     if log:
         log("Looking up %d apps on Steam's store..." % len(ids))
-    info = store_items(ids, log)
-    res = {"ok": 0, "skipped": 0, "missing": [], "cancelled": False}
+    info = store_items(ids, log, cancelled)
+    res = {"ok": 0, "skipped": 0, "missing": [], "cancelled": False, "files": []}
     total = len(ids)
 
     def report(done, appid, name, status):
@@ -349,6 +363,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         if os.path.exists(dest) and not force:
             res["ok"] += 1
+            res["files"].append(dest)
             report(n, appid, name, "exists")
             continue
         urls, auto = portrait_candidates(appid, it)
@@ -375,6 +390,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         try:
             build_cover(tmp, dest, frame)
             res["ok"] += 1
+            res["files"].append(dest)
             report(n, appid, name, "ok")
         except Exception as e:
             res["missing"].append((appid, name))
@@ -395,13 +411,14 @@ def find_covers(covers_dir):
     return [os.path.join(cdir, f) for f in sorted(os.listdir(cdir)) if appid_of(f)]
 
 
-def apply_covers(steam, covers_dir, user=None):
+def apply_covers(steam, covers_dir, user=None, files=None):
     """Copy covers into Steam's grid folder as <appid>p.png. Always makes a backup first.
 
+    `files`: apply only these cover files (default: every cover in covers_dir).
     Returns {"account", "grid", "applied", "replaced", "backup"}.
     The caller closes Steam beforehand (see close_steam)."""
     grid = grid_dir(steam, user)
-    covers = find_covers(covers_dir)
+    covers = list(files) if files else find_covers(covers_dir)
     if not covers:
         raise SteamcaseError("No covers found in %s. Make them first." % covers_dir)
     os.makedirs(grid, exist_ok=True)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """steamcase GUI: three steps, no terminal.  Run:  python gui.py"""
-import os, re, sys, time, webbrowser
+import os, queue, re, subprocess, sys, threading, time, webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -47,8 +47,13 @@ def downloads_dir():
 
 
 class App(tk.Tk):
-    def __init__(self, downloads=None):
+    def __init__(self, downloads=None, covers_dir=None):
         super().__init__()
+        self.covers_dir = covers_dir or sc.default_covers_dir()
+        self.cover_files = []             # covers built by the last run; step 3 applies exactly these
+        self.running = False
+        self.events = queue.Queue()
+        self.cancel_flag = threading.Event()
         self.downloads = downloads or downloads_dir()
         self.started = time.time()
         self._seen = {}                   # path -> (size, mtime) from the last poll, to wait for a finished download
@@ -72,9 +77,18 @@ class App(tk.Tk):
         self._build_step3(self.step3)
         self.refresh_step1()
         self._set_state(self.step3, False)
-        self.after(1500, self.watch_downloads)
+        self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events)]
         self.update_idletasks()                       # size the window to its content
         self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
+
+    def destroy(self):
+        self.cancel_flag.set()
+        for t in getattr(self, "_timers", []):
+            try:
+                self.after_cancel(t)
+            except tk.TclError:
+                pass
+        super().destroy()
 
     # ----- look -----
     def _style(self):
@@ -164,7 +178,8 @@ class App(tk.Tk):
             self.step1_status.configure(text="Using installed games only.", fg=ACCENT)
         elif not self.library_path:
             self.step1_status.configure(text="Waiting for userdata.json…", fg=MUTED)
-        self._set_state(self.step2, ready)
+        self._set_state(self.step2, ready and not self.running)
+        self.btn_cancel.configure(state="normal" if self.running else "disabled")
 
     def watch_downloads(self):
         """Every 1.5 s: look for a new, finished, valid userdata*.json in Downloads."""
@@ -183,7 +198,7 @@ class App(tk.Tk):
                     self._seen[p] = sig
         except OSError:
             pass
-        self.after(1500, self.watch_downloads)
+        self._timers[0] = self.after(1500, self.watch_downloads)
 
     # ----- step 2 -----
     def _build_step2(self, body):
@@ -194,12 +209,92 @@ class App(tk.Tk):
         info.pack(side="left", padx=6)
         Tooltip(info, sc.AUTO_ART_HELP)
         r = self._row(body)
-        ttk.Button(r, text="Make covers", style="Accent.TButton", command=lambda: self._todo("Make covers", 3)).pack(side="left")
-        ttk.Button(r, text="Cancel", command=lambda: self._todo("Cancel", 3)).pack(side="left", padx=8)
+        self.btn_make = ttk.Button(r, text="Make covers", style="Accent.TButton", command=self.start_make)
+        self.btn_make.pack(side="left")
+        self.btn_cancel = ttk.Button(r, text="Cancel", command=self.cancel_make, state="disabled")
+        self.btn_cancel.pack(side="left", padx=8)
+        self.btn_folder = ttk.Button(r, text="Open covers folder", command=self.open_covers_folder)
         self.progress = ttk.Progressbar(body, mode="determinate")
         self.progress.pack(fill="x", pady=(8, 2))
         self.step2_status = tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w")
         self.step2_status.pack(fill="x")
+
+    def start_make(self):
+        if self.running:
+            return
+        lib = None if self.installed_only.get() else self.library_path
+        self.running = True
+        self.cancel_flag.clear()
+        self.cover_files = []
+        self.progress.configure(value=0, maximum=1)
+        self.step2_status.configure(text="Looking up your games on Steam…", fg=MUTED)
+        self.btn_folder.pack_forget()
+        self._set_state(self.step1, False)
+        self._set_state(self.step3, False)
+        self.refresh_step1()
+        skip = self.skip_auto.get()
+        threading.Thread(target=self._worker, args=(lib, skip), daemon=True).start()
+
+    def _worker(self, lib, skip):
+        """Runs off the UI thread; talks to the UI only through self.events."""
+        try:
+            steam = sc.steam_dir()
+            games = sc.load_games(steam, lib)
+            if not games:
+                raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
+            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip,
+                                 progress=lambda *a: self.events.put(("progress",) + a),
+                                 cancelled=self.cancel_flag.is_set)
+            self.events.put(("done", res))
+        except sc.SteamcaseError as e:
+            self.events.put(("error", str(e)))
+        except Exception as e:                      # never leave the UI stuck in "running"
+            self.events.put(("error", "Unexpected problem: %s" % e))
+
+    def poll_events(self):
+        try:
+            while True:
+                ev = self.events.get_nowait()
+                if ev[0] == "progress":
+                    _, done, total, appid, name, status = ev
+                    self.progress.configure(maximum=max(total, 1), value=done)
+                    self.step2_status.configure(text="%d of %d · %s" % (done, total, name), fg=MUTED)
+                elif ev[0] == "done":
+                    self.finish_make(ev[1])
+                elif ev[0] == "error":
+                    self.running = False
+                    self.step2_status.configure(text=ev[1], fg="#ff7b72")
+                    self._set_state(self.step1, True)
+                    self.refresh_step1()
+                    messagebox.showerror("Could not make covers", ev[1])
+        except queue.Empty:
+            pass
+        self._timers[1] = self.after(100, self.poll_events)
+
+    def finish_make(self, res):
+        self.running = False
+        self.cover_files = res["files"]
+        n, miss = res["ok"], len(res["missing"])
+        text = "%s%d covers ready." % ("Stopped. " if res["cancelled"] else "Done. ", n)
+        if miss:
+            text += " %d %s no portrait on Steam." % (miss, "game has" if miss == 1 else "games have")
+        self.step2_status.configure(text=text, fg=ACCENT if n else MUTED)
+        self._set_state(self.step1, True)
+        self.refresh_step1()
+        if n:
+            self.btn_folder.pack(side="left")
+        self._set_state(self.step3, n > 0)
+
+    def cancel_make(self):
+        self.cancel_flag.set()
+        self.step2_status.configure(text="Stopping…", fg=MUTED)
+
+    def open_covers_folder(self):
+        os.makedirs(self.covers_dir, exist_ok=True)
+        if sys.platform.startswith("win"):
+            os.startfile(self.covers_dir)
+        else:
+            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", self.covers_dir])
 
     # ----- step 3 -----
     def _build_step3(self, body):
