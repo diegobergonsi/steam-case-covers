@@ -286,6 +286,8 @@ class App(tk.Tk):
                     self.step2_status.configure(text="%d of %d · %s" % (done, total, name if len(name) <= 60 else name[:57] + "…"), fg=MUTED)
                 elif ev[0] == "done":
                     self.finish_make(ev[1])
+                elif ev[0] == "reset_scan":
+                    self.on_reset_scan(ev[1], ev[2])
                 elif ev[0] == "step3_status":
                     self.say3(ev[1], MUTED)
                 elif ev[0] == "step3_done":
@@ -348,6 +350,9 @@ class App(tk.Tk):
         self.btn_apply.pack(side="left")
         self.btn_restore = RoundedButton(r, "Restore previous artwork", lambda: self.confirm_and_run("restore"))
         self.btn_restore.pack(side="left", padx=px(10))
+        r2 = self._row(body, pady=px(2))
+        self.btn_reset = RoundedButton(r2, "Reset to Steam's default art", self.start_reset)
+        self.btn_reset.pack(side="left")
         self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
 
     def say3(self, text, fg=MUTED):
@@ -357,6 +362,54 @@ class App(tk.Tk):
             self.step3_status.pack(fill="x", pady=(px(8), 0))
         elif not text:
             self.step3_status.pack_forget()
+
+    def has_grid_art(self):
+        """Cheap check (no image decoding): is there any <appid>p.png in Steam's grid folder?"""
+        try:
+            grid = sc.grid_dir(sc.steam_dir())
+            return os.path.isdir(grid) and any(sc._COVER_NAME.match(n) for n in os.listdir(grid))
+        except sc.SteamcaseError:
+            return False
+
+    def start_reset(self):
+        """Step 1 of 2: look for our covers (a few seconds, in the background). Step 2 asks, then removes them."""
+        if self.busy or self.running:
+            return
+        self.busy = True
+        self.refresh_step3()
+        self.say3("Looking for covers made by this app… (a few seconds)")
+        threading.Thread(target=self._scan_worker, daemon=True).start()
+
+    def _scan_worker(self):
+        try:
+            steam = sc.steam_dir()
+            names = sc.find_our_covers(steam, progress=lambda i, n: self.events.put(("step3_status", "Checking Steam's artwork… %d of %d" % (i, n))),
+                                       cancelled=self.cancel_flag.is_set)
+            who = sc.account_label(steam, sc.pick_account(steam))
+            self.events.put(("reset_scan", names, who))
+        except sc.SteamcaseError as e:
+            self.events.put(("step3_error", str(e)))
+        except Exception as e:
+            self.events.put(("step3_error", "Unexpected problem: %s" % e))
+
+    def on_reset_scan(self, names, who):
+        if not names:
+            self.busy = False
+            self.say3("No covers made by this app were found in “%s”. Nothing to reset." % who)
+            self.refresh_step3()
+            return
+        steam_on = sc.steam_running()
+        msg = ("%d covers made by this app will be removed from the Steam account “%s”. Steam goes back to its own default art for them.\n\n"
+               "Art you set yourself is not touched. A backup is kept, so “Restore previous artwork” brings the covers back.\n\n") % (len(names), who)
+        if steam_on:
+            msg += "Steam will be CLOSED automatically. Any running game stops and downloads pause. Save your game first.\n\n"
+        if not messagebox.askokcancel("Reset to Steam's default art", msg + "Continue?", icon="warning" if steam_on else "question"):
+            self.busy = False
+            self.say3("")
+            self.refresh_step3()
+            return
+        self.say3("Closing Steam…" if steam_on else "Working…")
+        threading.Thread(target=self._step3_worker, args=("reset", self.restart_steam.get(), names), daemon=True).start()
 
     def has_backup(self):
         try:
@@ -370,6 +423,7 @@ class App(tk.Tk):
         self.btn_apply.configure(state="normal" if can_apply else "disabled")
         self.btn_restore.configure(state="normal" if idle and self.has_backup() else "disabled")
         backup = self.has_backup()
+        self.btn_reset.configure(state="normal" if idle and self.has_grid_art() else "disabled")
         self.chk_restart.configure(state="normal" if idle and (can_apply or backup) else "disabled")
         # say why Restore is greyed out, and clear that note once it no longer applies
         hint = "Nothing to undo yet: “Restore previous artwork” works once you have used “Apply to Steam” in this app."
@@ -405,7 +459,7 @@ class App(tk.Tk):
         self.say3("Closing Steam…" if steam_on else "Working…", MUTED)
         threading.Thread(target=self._step3_worker, args=(mode, self.restart_steam.get()), daemon=True).start()
 
-    def _step3_worker(self, mode, restart):
+    def _step3_worker(self, mode, restart, names=None):
         say = lambda t: self.events.put(("step3_status", t))
         try:
             steam = sc.steam_dir()
@@ -421,6 +475,11 @@ class App(tk.Tk):
                         r["applied"], r["account_name"], r["replaced"], r["unchanged"], r["backup"])
                 else:
                     text = "Nothing to change: all %d covers were already in the Steam account “%s”." % (r["unchanged"], r["account_name"])
+            elif mode == "reset":
+                say("Removing our covers…")
+                r = sc.reset_to_default(steam, names=names)
+                text = "Done. %d covers removed from the Steam account “%s”: Steam shows its own default art again. Press “Restore previous artwork” to bring them back." % (
+                    r["removed"], r["account_name"])
             else:
                 backups = sc.list_backups(steam)
                 if not backups:

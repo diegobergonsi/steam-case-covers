@@ -124,6 +124,99 @@ class ApplyRestore(Base):
         self.assertEqual(len(sc.list_backups(self.steam)), 3)
 
 
+class Reset(Base):
+    """Removing our covers so Steam shows its own art again, without touching art the user set themselves."""
+
+    def real_cover(self, appid, color=(200, 60, 60)):
+        """A genuine steamcase cover, built by the app itself."""
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        src = os.path.join(self.tmp, "portrait_%d.png" % appid)
+        sc.Image.new("RGB", (600, 900), color).save(src)
+        out = os.path.join(self.grid, "%dp.png" % appid)
+        sc.build_cover(src, out, sc.Image.open(sc.FRAME).convert("RGBA"))
+        return out
+
+    def users_own_art(self, appid):
+        p = os.path.join(self.grid, "%dp.png" % appid)
+        sc.Image.new("RGBA", (600, 900), (30, 60, 90, 255)).save(p)         # same size, but not our frame
+        return p
+
+    def test_recognises_only_our_covers(self):
+        ours = self.real_cover(1)
+        mine = self.users_own_art(2)
+        jpg = os.path.join(self.grid, "3p.png")
+        sc.Image.new("RGB", (600, 900)).save(jpg, "JPEG")                  # a JPEG wearing a .png name
+        tampered = self.real_cover(4)
+        im = sc.Image.open(tampered).convert("RGBA")
+        im.putpixel((300, 40), (255, 0, 0, 255))
+        im.save(tampered)
+        self.assertEqual([sc.is_steamcase_cover(p) for p in (ours, mine, jpg, tampered)], [True, False, False, False])
+
+    def test_reset_removes_ours_keeps_the_users_art_and_can_be_undone(self):
+        for i in (1, 2, 3):
+            self.real_cover(i)
+        mine = self.users_own_art(9)
+        before = self.read(mine)
+        os.makedirs(os.path.join(self.tmp, "elsewhere"))
+        r = sc.reset_to_default(self.steam)
+        self.assertEqual(r["removed"], 3)
+        self.assertEqual(os.listdir(self.grid), ["9p.png"])
+        self.assertEqual(self.read(mine), before)
+        sc.restore_backup(self.steam, r["backup"])                          # undo
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png", "3p.png", "9p.png"])
+        self.assertTrue(all(sc.is_steamcase_cover(os.path.join(self.grid, "%dp.png" % i)) for i in (1, 2, 3)))
+
+    def test_reset_with_nothing_to_remove_makes_no_backup(self):
+        self.users_own_art(9)
+        r = sc.reset_to_default(self.steam)
+        self.assertEqual((r["removed"], r["backup"]), (0, None))
+        self.assertEqual(sc.list_backups(self.steam), [])
+
+    def test_reset_never_touches_symlinks_or_odd_names(self):
+        self.real_cover(5)
+        self.real_cover(6)
+        shutil.copy(os.path.join(self.grid, "6p.png"), os.path.join(self.grid, "6_hero.png"))      # not an <appid>p.png name
+        try:
+            os.symlink(os.path.join(self.grid, "5p.png"), os.path.join(self.grid, "7p.png"))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not allowed here")
+        r = sc.reset_to_default(self.steam)
+        self.assertEqual(r["removed"], 2)                                  # 5p.png and 6p.png only
+        self.assertEqual(sorted(os.listdir(self.grid)), ["6_hero.png", "7p.png"])
+        self.assertTrue(os.path.islink(os.path.join(self.grid, "7p.png")))
+
+    def test_reset_failure_puts_everything_back(self):
+        for i in (1, 2, 3):
+            self.real_cover(i)
+        real, calls = os.replace, {"n": 0}
+
+        def flaky(src, dst):
+            if os.path.dirname(src) == self.grid:
+                calls["n"] += 1
+                if calls["n"] == 2:
+                    raise PermissionError("locked")
+            return real(src, dst)
+        os.replace = flaky
+        try:
+            with self.assertRaises(sc.SteamcaseError):
+                sc.reset_to_default(self.steam)
+        finally:
+            os.replace = real
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png", "3p.png"])
+        self.assertEqual(sc.list_backups(self.steam), [])
+
+    def test_cli_reset(self):
+        self.real_cover(1)
+        self.users_own_art(2)
+        argv, sys.argv = sys.argv, ["steamcase", "reset", "--steam-dir", self.steam, "--yes"]
+        try:
+            sc.main()
+        finally:
+            sys.argv = argv
+        self.assertEqual(os.listdir(self.grid), ["2p.png"])
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]

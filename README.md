@@ -28,6 +28,8 @@ The app isn't code-signed (that costs money), which is why Windows and macOS war
 
 Changed your mind? "Restore previous artwork" undoes the last Apply. Press it again to go one step further back. Each Apply keeps a backup of only what it changed.
 
+Want Steam's own art back, with or without a backup? "Reset to Steam's default art" removes the covers this app made (it recognises them by their frame) and leaves any art you set yourself alone. It is undone the same way, with "Restore previous artwork".
+
 ## From source
 
 Needs Python 3.8+ and Pillow 10.3 or newer.
@@ -40,7 +42,7 @@ python steamcase.py -h            # or the command line
 
 Tests: `python -m unittest discover -s tests`.
 
-Command line, step by step: `python steamcase.py make --library userdata.json`, then `python steamcase.py apply --close-steam`.
+Command line, step by step: `python steamcase.py make --library userdata.json`, then `python steamcase.py apply --close-steam`. Undo with `python steamcase.py restore`, or go back to Steam's default art with `python steamcase.py reset`.
 
 ## Notes
 

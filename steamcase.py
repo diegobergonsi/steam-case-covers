@@ -580,6 +580,90 @@ class _Lock:
         shutil.rmtree(self.path, ignore_errors=True)
 
 
+_frame_ref = None
+
+
+def _frame_regions():
+    """The parts of a cover that are pure frame (banner on top, lip at the bottom), from frame.png."""
+    global _frame_ref
+    if _frame_ref is None:
+        fr = Image.open(FRAME).convert("RGBA")
+        top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
+        _frame_ref = (top, bot, fr.crop(top).tobytes(), fr.crop(bot).tobytes())
+    return _frame_ref
+
+
+def is_steamcase_cover(path):
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png exactly.
+    Art you set yourself never matches, so it is never mistaken for ours."""
+    try:
+        if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return False
+        top, bot, ref_top, ref_bot = _frame_regions()
+        with Image.open(path, formats=["PNG"]) as im:
+            if im.size != SIZE:
+                return False
+            im = im.convert("RGBA")
+        return im.crop(top).tobytes() == ref_top and im.crop(bot).tobytes() == ref_bot
+    except Exception:
+        return False
+
+
+def find_our_covers(steam, user=None, progress=None, cancelled=None):
+    """File names in Steam's grid folder (<appid>p.png) that are covers made by this app. Takes a few seconds for a big library."""
+    grid = grid_dir(steam, user)
+    names = sorted(n for n in os.listdir(grid) if _COVER_NAME.match(n)) if os.path.isdir(grid) else []
+    out = []
+    for i, n in enumerate(names, 1):
+        if cancelled and cancelled():
+            break
+        if is_steamcase_cover(os.path.join(grid, n)):
+            out.append(n)
+        if progress and (i % 20 == 0 or i == len(names)):
+            progress(i, len(names))
+    return out
+
+
+def reset_to_default(steam, user=None, names=None):
+    """Remove our covers from Steam's grid folder so Steam shows its own default art again.
+    Only files recognised as ours go; the files are moved into a normal backup, so restore_backup() undoes this.
+    `names`: result of an earlier find_our_covers() (default: scan now). Returns {"removed", "backup", "account", "account_name"}."""
+    grid = grid_dir(steam, user)
+    acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
+    info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
+    if names is None:
+        names = find_our_covers(steam, user)
+    names = [n for n in names if _COVER_NAME.match(n) and os.path.isfile(os.path.join(grid, n)) and not os.path.islink(os.path.join(grid, n))]
+    if not names:
+        return dict(info, removed=0, backup=None)
+    with _Lock(os.path.dirname(grid)):
+        base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
+        backup, k = base, 1
+        while True:
+            try:
+                os.makedirs(backup)
+                break
+            except FileExistsError:
+                k += 1
+                backup = "%s-%d" % (base, k)
+        moved = []
+        try:
+            with open(os.path.join(backup, "manifest.json"), "w") as fh:
+                json.dump({"added": [], "replaced": names}, fh)
+            for n in names:
+                os.replace(os.path.join(grid, n), os.path.join(backup, n))      # a move, not a copy: instant and no extra disk space
+                moved.append(n)
+        except OSError as e:
+            for n in moved:
+                try:
+                    os.replace(os.path.join(backup, n), os.path.join(grid, n))
+                except OSError:
+                    pass
+            shutil.rmtree(backup, ignore_errors=True)
+            raise SteamcaseError("Could not remove the covers (%s). Nothing was changed." % e)
+        return dict(info, removed=len(moved), backup=backup)
+
+
 def list_backups(steam, user=None):
     """Backup folders for this account, newest first."""
     cfg = os.path.dirname(grid_dir(steam, user))
@@ -620,7 +704,8 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
     if not os.path.exists(mf):
         raise SteamcaseError("That folder is not a steamcase backup: %s" % backup_dir)
     try:
-        m = json.load(open(mf))
+        with open(mf) as fh:
+            m = json.load(fh)
         names = [str(x) for x in m.get("replaced", []) + m.get("added", [])]
     except (OSError, ValueError, AttributeError, TypeError, RecursionError, MemoryError, UnicodeError):
         raise SteamcaseError("The backup's manifest is damaged.")
@@ -690,6 +775,29 @@ def cmd_run(args):
     cmd_apply(args)
 
 
+def cmd_reset(args):
+    steam = steam_dir(args.steam_dir)
+    print("Looking for covers made by this app (this can take a few seconds)...")
+    names = find_our_covers(steam, args.user)
+    if not names:
+        print("None found. Nothing to reset.")
+        return
+    print("%d covers made by this app will be removed; Steam goes back to its own default art for them. Your own custom art is not touched." % len(names))
+    if steam_running() and not args.yes:
+        if args.close_steam:
+            print("Closing Steam...")
+            if not close_steam(steam):
+                raise SteamcaseError("Steam did not close. Close it yourself and retry.")
+        else:
+            print("Steam seems to be running. Close it first, or pass --close-steam.")
+            if input("Continue anyway? [y/N] ").strip().lower() != "y":
+                raise SteamcaseError("Cancelled.")
+    elif not args.yes and input("Remove them? [y/N] ").strip().lower() != "y":
+        raise SteamcaseError("Cancelled.")
+    r = reset_to_default(steam, args.user, names)
+    print("Removed %d covers. Backup: %s\nTo bring them back: python steamcase.py restore" % (r["removed"], r["backup"]))
+
+
 def cmd_restore(args):
     steam = steam_dir(args.steam_dir)
     backups = list_backups(steam, args.user)
@@ -731,6 +839,7 @@ def main():
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
+    p = sub.add_parser("reset", help="remove our covers from Steam so it shows its default art again"); common(p, apply_=True); p.set_defaults(fn=cmd_reset)
     p = sub.add_parser("restore", help="undo an apply (newest backup by default)")
     p.add_argument("--steam-dir"); p.add_argument("--user"); p.add_argument("--yes", action="store_true")
     p.add_argument("--backup", help="backup folder name (see userdata/<id>/config/)")
