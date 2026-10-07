@@ -253,16 +253,16 @@ class Progress(Base):
         import io
         buf = io.BytesIO()
         sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
-        kinds = {1: 0, 2: 0, 3: 4, 4: 4, 5: 4, 6: 0}                 # 0 = game, 4 = DLC
+        kinds = {1: 0, 2: 0, 3: 4, 4: 4, 5: 4, 6: 0, 7: None, 8: None}        # 0 = game, 4 = DLC, None = Steam no longer lists it
         real_store, real_get = sc.store_items, sc.http_get
-        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": kinds[i], "name": "Item %d" % i, "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}} for i in ids}
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": kinds[i], "name": "Item %d" % i, "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}} for i in ids if kinds[i] is not None}
         sc.http_get = lambda url, tries=3: buf.getvalue()
         seen = []
         try:
             r = sc.make_covers({i: None for i in kinds}, os.path.join(self.tmp, "cv"), progress=lambda d, t, a, n, s: seen.append((d, t)))
         finally:
             sc.store_items, sc.http_get = real_store, real_get
-        self.assertEqual((r["ok"], r["not_games"]), (3, 3))
+        self.assertEqual((r["ok"], r["not_games"], r["unlisted"]), (3, 3, 2))
         self.assertEqual(seen[-1], (3, 3))                              # "3 of 3", not "6 of 6"
         self.assertTrue(all(t == 3 for _, t in seen))
 

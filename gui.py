@@ -344,8 +344,9 @@ class App(tk.Tk):
         text = "%s%d covers ready." % ("Stopped. " if res["cancelled"] else "Done. ", n)
         if miss:
             text += " %d %s no portrait on Steam." % (miss, "game has" if miss == 1 else "games have")
-        if res.get("not_games"):
-            text += " %d DLC, soundtracks and tools were skipped." % res["not_games"]
+        skipped = res.get("not_games", 0) + res.get("unlisted", 0)
+        if skipped:
+            text += " Skipped %d items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists)." % skipped
         if bad:
             text += " %d could not be downloaded (connection problem?): click “Make covers” again to retry only those." % bad
         self.step2_status.configure(text=text, fg=ACCENT if n and not bad else MUTED if not n else FG)
