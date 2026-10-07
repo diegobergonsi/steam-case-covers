@@ -3,6 +3,7 @@
 import os, queue, re, subprocess, sys, threading, time, webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import tkinter.font as tkfont
 
 import steamcase as sc
 
@@ -16,6 +17,9 @@ class Tooltip:
         self.widget, self.text, self.tip = widget, text, None
         widget.bind("<Enter>", self.show)
         widget.bind("<Leave>", self.hide)
+        widget.bind("<FocusIn>", self.show)        # keyboard users: Tab to the ? to read it
+        widget.bind("<FocusOut>", self.hide)
+        widget.bind("<Escape>", self.hide)
 
     def show(self, _e=None):
         if self.tip:
@@ -26,6 +30,9 @@ class Tooltip:
         self.tip.wm_geometry("+%d+%d" % (x, y))
         tk.Label(self.tip, text=self.text, justify="left", wraplength=340, bg="#0e1218", fg=FG,
                  relief="solid", borderwidth=1, padx=10, pady=8).pack()
+
+    def toggle(self, _e=None):
+        self.hide() if self.tip else self.show()
 
     def hide(self, _e=None):
         if self.tip:
@@ -66,7 +73,7 @@ class App(tk.Tk):
         self.skip_auto = tk.BooleanVar(value=False)
         self.restart_steam = tk.BooleanVar(value=True)
 
-        tk.Label(self, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 20, "bold")).pack(anchor="w", padx=24, pady=(20, 0))
+        tk.Label(self, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w", padx=24, pady=(20, 0))
         tk.Label(self, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED).pack(anchor="w", padx=24, pady=(0, 12))
 
         self.step1 = self._card("1", "Get your game list")
@@ -101,8 +108,13 @@ class App(tk.Tk):
 
     # ----- look -----
     def _style(self):
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
+            tkfont.nametofont(name).configure(size=11)          # a little larger than the 10 pt default
         s = ttk.Style(self)
         s.theme_use("clam")
+        s.configure("TButton", focuscolor="#ffffff")             # visible keyboard focus ring
+        s.configure("Accent.TButton", focuscolor="#0b141d")
+        s.configure("TCheckbutton", focuscolor="#ffffff")
         s.configure("TButton", padding=(14, 8))
         s.configure("Accent.TButton", background=ACCENT, foreground="#0b141d", padding=(14, 8))
         s.map("Accent.TButton", background=[("active", "#8fd3ff"), ("disabled", "#3a4a5a")])
@@ -116,7 +128,7 @@ class App(tk.Tk):
         head = tk.Frame(outer, bg=CARD)
         head.pack(fill="x")
         tk.Label(head, text=num, bg=ACCENT, fg="#0b141d", width=2, font=("TkDefaultFont", 12, "bold")).pack(side="left")
-        tk.Label(head, text=title, bg=CARD, fg=FG, font=("TkDefaultFont", 13, "bold")).pack(side="left", padx=10)
+        tk.Label(head, text=title, bg=CARD, fg=FG, font=("TkDefaultFont", 14, "bold")).pack(side="left", padx=10)
         body = tk.Frame(outer, bg=CARD)
         body.pack(fill="x", pady=(10, 0))
         body.outer = outer
@@ -214,9 +226,11 @@ class App(tk.Tk):
         self._note(body, "Downloads each game's artwork from Steam and builds the covers on your computer.")
         r = self._row(body)
         ttk.Checkbutton(r, text="Skip blurry auto-art", variable=self.skip_auto).pack(side="left")
-        info = tk.Label(r, text="?", bg=ACCENT, fg="#0b141d", width=2, cursor="question_arrow", font=("TkDefaultFont", 10, "bold"))
+        info = tk.Button(r, text="?", bg=ACCENT, fg="#0b141d", activebackground="#8fd3ff", relief="flat", width=2, takefocus=True,
+                         cursor="question_arrow", font=("TkDefaultFont", 11, "bold"), highlightthickness=2,
+                         highlightbackground=CARD, highlightcolor="#ffffff")
         info.pack(side="left", padx=6)
-        Tooltip(info, sc.AUTO_ART_HELP)
+        info.configure(command=Tooltip(info, sc.AUTO_ART_HELP).toggle)
         r = self._row(body)
         self.btn_make = ttk.Button(r, text="Make covers", style="Accent.TButton", command=self.start_make)
         self.btn_make.pack(side="left")
@@ -401,6 +415,16 @@ class App(tk.Tk):
             self.events.put(("step3_error", "Unexpected problem: %s" % e))
 
 
+def enable_dpi_awareness():
+    """Windows: without this, tkinter windows look blurry on high-DPI screens."""
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
+
 def selftest():
     """Headless check used by the build: Pillow, tkinter and the bundled frame all work. Exit code 0 = fine."""
     import tempfile
@@ -424,4 +448,5 @@ def selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         sys.exit(selftest())
+    enable_dpi_awareness()
     App().mainloop()

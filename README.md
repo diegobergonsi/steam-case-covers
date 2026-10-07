@@ -46,6 +46,7 @@ Command line, step by step: `python steamcase.py make --library userdata.json`, 
 - Custom art you set by hand in Steam overrides these covers.
 - Covers are local to the computer. Copy Steam's `userdata/<id>/config/grid` folder to use them elsewhere.
 - Run it in desktop mode on a Steam Deck.
+- The window works with the keyboard (Tab, Space, Enter), but screen readers aren't supported by the toolkit it uses.
 - Tested on Linux (SteamOS). Windows and macOS should work, but please open an issue if something breaks.
 - Covers contain publishers' art. Keep them for personal use.
 
