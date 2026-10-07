@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """steamcase GUI: three steps, no terminal.  Run:  python gui.py"""
-import os, sys, webbrowser
+import os, re, sys, time, webbrowser
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 import steamcase as sc
 
@@ -33,9 +33,25 @@ class Tooltip:
             self.tip = None
 
 
+def downloads_dir():
+    """The user's Downloads folder (honours the Linux XDG setting)."""
+    home = os.path.expanduser("~")
+    cfg = os.path.join(home, ".config", "user-dirs.dirs")
+    if os.path.exists(cfg):
+        m = re.search(r'XDG_DOWNLOAD_DIR="([^"]+)"', open(cfg, errors="replace").read())
+        if m:
+            p = m.group(1).replace("$HOME", home)
+            if os.path.isdir(p):
+                return p
+    return os.path.join(home, "Downloads")
+
+
 class App(tk.Tk):
-    def __init__(self):
+    def __init__(self, downloads=None):
         super().__init__()
+        self.downloads = downloads or downloads_dir()
+        self.started = time.time()
+        self._seen = {}                   # path -> (size, mtime) from the last poll, to wait for a finished download
         self.title("Steam Case Covers")
         self.configure(bg=BG)
         self._style()
@@ -54,8 +70,9 @@ class App(tk.Tk):
         self._build_step1(self.step1)
         self._build_step2(self.step2)
         self._build_step3(self.step3)
-        self._set_state(self.step2, False)
+        self.refresh_step1()
         self._set_state(self.step3, False)
+        self.after(1500, self.watch_downloads)
         self.update_idletasks()                       # size the window to its content
         self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
 
@@ -115,16 +132,58 @@ class App(tk.Tk):
 
     def open_download_page(self):
         webbrowser.open(sc.LIBRARY_JSON_URL)
-        self.step1_status.configure(text="Page opened. Save it as userdata.json (Ctrl+S)…")
+        self.step1_status.configure(text="Page opened. Save it as userdata.json (Ctrl+S) and I'll pick it up…", fg=MUTED)
 
     def browse(self):
-        self._todo("Browse for a file", 2)
+        path = filedialog.askopenfilename(title="Choose your userdata.json", initialdir=self.downloads if os.path.isdir(self.downloads) else None,
+                                          filetypes=[("userdata.json", "*.json"), ("All files", "*.*")])
+        if path:
+            self.load_library(path, ask=True)
+
+    def load_library(self, path, ask=False):
+        """Check the file and use it. Returns True on success. With ask=True, errors pop up."""
+        try:
+            n = len(sc.owned_ids(path))
+        except sc.SteamcaseError as e:
+            if ask:
+                messagebox.showerror("That file doesn't look right", str(e))
+            return False
+        self.library_path = path
+        self.installed_only.set(False)
+        self.step1_status.configure(text="Got it: %s (%d items in your library)." % (os.path.basename(path), n), fg=ACCENT)
+        self.refresh_step1()
+        return True
 
     def on_installed_only(self):
-        ok = self.installed_only.get()
-        self.step1_status.configure(text="Using installed games only." if ok else "Waiting for userdata.json…", fg=ACCENT if ok else MUTED)
-        self._set_state(self.step2, ok)
-        self._set_state(self.step1, True)
+        self.refresh_step1()
+
+    def refresh_step1(self):
+        """Step 2 unlocks once we have a library file or the user chose installed games only."""
+        ready = self.installed_only.get() or bool(self.library_path)
+        if self.installed_only.get():
+            self.step1_status.configure(text="Using installed games only.", fg=ACCENT)
+        elif not self.library_path:
+            self.step1_status.configure(text="Waiting for userdata.json…", fg=MUTED)
+        self._set_state(self.step2, ready)
+
+    def watch_downloads(self):
+        """Every 1.5 s: look for a new, finished, valid userdata*.json in Downloads."""
+        try:
+            if not self.library_path and os.path.isdir(self.downloads):
+                for fn in os.listdir(self.downloads):
+                    if not (fn.lower().startswith("userdata") and fn.lower().endswith(".json")):
+                        continue
+                    p = os.path.join(self.downloads, fn)
+                    st = os.stat(p)
+                    if st.st_mtime < self.started:
+                        continue
+                    sig = (st.st_size, st.st_mtime)
+                    if self._seen.get(p) == sig and self.load_library(p):      # unchanged since last poll = finished
+                        break
+                    self._seen[p] = sig
+        except OSError:
+            pass
+        self.after(1500, self.watch_downloads)
 
     # ----- step 2 -----
     def _build_step2(self, body):
