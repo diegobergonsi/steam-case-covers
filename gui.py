@@ -76,7 +76,8 @@ class App(tk.Tk):
         self._build_step2(self.step2)
         self._build_step3(self.step3)
         self.refresh_step1()
-        self._set_state(self.step3, False)
+        self.busy = False                 # step 3 (apply/restore) in progress
+        self.refresh_step3()
         self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events)]
         self.update_idletasks()                       # size the window to its content
         self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
@@ -230,8 +231,8 @@ class App(tk.Tk):
         self.step2_status.configure(text="Looking up your games on Steam…", fg=MUTED)
         self.btn_folder.pack_forget()
         self._set_state(self.step1, False)
-        self._set_state(self.step3, False)
         self.refresh_step1()
+        self.refresh_step3()
         skip = self.skip_auto.get()
         threading.Thread(target=self._worker, args=(lib, skip), daemon=True).start()
 
@@ -261,6 +262,17 @@ class App(tk.Tk):
                     self.step2_status.configure(text="%d of %d · %s" % (done, total, name), fg=MUTED)
                 elif ev[0] == "done":
                     self.finish_make(ev[1])
+                elif ev[0] == "step3_status":
+                    self.step3_status.configure(text=ev[1], fg=MUTED)
+                elif ev[0] == "step3_done":
+                    self.busy = False
+                    self.step3_status.configure(text=ev[1], fg=ACCENT)
+                    self.refresh_step3()
+                elif ev[0] == "step3_error":
+                    self.busy = False
+                    self.step3_status.configure(text=ev[1], fg="#ff7b72")
+                    self.refresh_step3()
+                    messagebox.showerror("Could not finish", ev[1])
                 elif ev[0] == "error":
                     self.running = False
                     self.step2_status.configure(text=ev[1], fg="#ff7b72")
@@ -283,7 +295,7 @@ class App(tk.Tk):
         self.refresh_step1()
         if n:
             self.btn_folder.pack(side="left")
-        self._set_state(self.step3, n > 0)
+        self.refresh_step3()
 
     def cancel_make(self):
         self.cancel_flag.set()
@@ -301,16 +313,84 @@ class App(tk.Tk):
         self._note(body, "Warning: this step closes Steam automatically (any running game or download stops). "
                          "Your current artwork is backed up first, so you can undo it.")
         r = self._row(body)
-        ttk.Checkbutton(r, text="Start Steam again when finished", variable=self.restart_steam).pack(side="left")
+        self.chk_restart = ttk.Checkbutton(r, text="Start Steam again when finished", variable=self.restart_steam)
+        self.chk_restart.pack(side="left")
         r = self._row(body)
-        ttk.Button(r, text="Apply to Steam", style="Accent.TButton", command=lambda: self._todo("Apply to Steam", 4)).pack(side="left")
-        ttk.Button(r, text="Restore previous artwork", command=lambda: self._todo("Restore backup", 4)).pack(side="left", padx=8)
-        self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w")
+        self.btn_apply = ttk.Button(r, text="Apply to Steam", style="Accent.TButton", command=lambda: self.confirm_and_run("apply"))
+        self.btn_apply.pack(side="left")
+        self.btn_restore = ttk.Button(r, text="Restore previous artwork", command=lambda: self.confirm_and_run("restore"))
+        self.btn_restore.pack(side="left", padx=8)
+        self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=640)
         self.step3_status.pack(fill="x", pady=(6, 0))
 
-    # ----- stubs -----
-    def _todo(self, what, milestone):
-        messagebox.showinfo("Not built yet", "%s comes in milestone %d." % (what, milestone))
+    def has_backup(self):
+        try:
+            return bool(sc.list_backups(sc.steam_dir()))
+        except sc.SteamcaseError:
+            return False
+
+    def refresh_step3(self):
+        idle = not self.running and not self.busy
+        can_apply = idle and bool(self.cover_files)
+        self.btn_apply.configure(state="normal" if can_apply else "disabled")
+        self.btn_restore.configure(state="normal" if idle and self.has_backup() else "disabled")
+        self.chk_restart.configure(state="normal" if idle else "disabled")
+
+    def confirm_and_run(self, mode):
+        if self.busy or self.running:
+            return
+        steam_on = sc.steam_running()
+        if mode == "apply":
+            title, ok_text = "Add covers to Steam", "%d covers will be added to Steam." % len(self.cover_files)
+            undo = "Your current artwork is backed up first, and you can undo this with “Restore previous artwork”."
+        else:
+            title, ok_text = "Restore previous artwork", "Your artwork from before the last Apply will be put back."
+            undo = "The covers added by that Apply are removed."
+        if steam_on:
+            msg = ("%s\n\nSteam will be CLOSED automatically. Any running game stops and downloads pause. "
+                   "Save your game first.\n\n%s\n\nContinue?") % (ok_text, undo)
+        else:
+            msg = "%s\n\n%s\n\nContinue?" % (ok_text, undo)
+        if not messagebox.askokcancel(title, msg, icon="warning" if steam_on else "question"):
+            return
+        self.busy = True
+        self.refresh_step3()
+        self.step3_status.configure(text="Closing Steam…" if steam_on else "Working…", fg=MUTED)
+        threading.Thread(target=self._step3_worker, args=(mode, self.restart_steam.get()), daemon=True).start()
+
+    def _step3_worker(self, mode, restart):
+        say = lambda t: self.events.put(("step3_status", t))
+        try:
+            steam = sc.steam_dir()
+            if sc.steam_running():
+                say("Closing Steam…")
+                if not sc.close_steam(steam):
+                    raise sc.SteamcaseError("Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again.")
+            if mode == "apply":
+                say("Backing up and copying covers…")
+                r = sc.apply_covers(steam, self.covers_dir, files=self.cover_files)
+                text = "Done. %d covers added to account %s (%d replaced older art). Backup saved in: %s" % (
+                    r["applied"], r["account"], r["replaced"], r["backup"])
+            else:
+                backups = sc.list_backups(steam)
+                if not backups:
+                    raise sc.SteamcaseError("No backup found.")
+                n = sc.restore_backup(steam, backups[0])
+                text = "Restored your previous artwork (%d files)." % n
+            if restart:
+                say("Starting Steam…")
+                try:
+                    sc.start_steam(steam)
+                    text += " Steam is starting."
+                except sc.SteamcaseError as e:
+                    text += " Could not start Steam (%s). Please open it yourself." % e
+            else:
+                text += " Start Steam to see the change."
+            self.events.put(("step3_done", text))
+        except sc.SteamcaseError as e:
+            self.events.put(("step3_error", str(e)))
+        except Exception as e:
+            self.events.put(("step3_error", "Unexpected problem: %s" % e))
 
 
 if __name__ == "__main__":
