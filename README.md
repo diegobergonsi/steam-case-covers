@@ -10,7 +10,7 @@ Covers I already made are on SteamGridDB: <https://www.steamgriddb.com/profile/7
 
 ## Use
 
-Needs Python 3.8+ and Pillow.
+Needs Python 3.8+ and Pillow. On macOS/Linux use `python3` instead of `python`.
 
 ```bash
 python -m pip install pillow
@@ -38,6 +38,7 @@ Other commands and options: `python steamcase.py -h`.
 - Custom art set by hand in Steam overrides these covers.
 - Covers are local to the machine. Copy the `grid` folder to use them elsewhere.
 - Steam Deck: use Desktop Mode, and install Pillow in a venv (`python -m venv .venv`).
+- Tested on Linux (SteamOS). Windows and macOS should work, but please open an issue if something breaks.
 - Covers contain publishers' art. Keep them for personal use.
 
 MIT license. Third-party files and trademarks: [THIRD_PARTY.md](THIRD_PARTY.md).

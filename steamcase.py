@@ -9,12 +9,16 @@
 Needs Python 3.8+ and Pillow (pip install pillow). No Steam API key, no account login.
 Covers are built on your machine from the artwork Steam itself serves for your games.
 """
-import argparse, glob, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
+import argparse, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
 
 try:
     from PIL import Image
 except ImportError:
     sys.exit("Pillow is missing. Install it with:  python -m pip install pillow")
+
+for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; never crash a legacy console
+    if hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8", errors="replace")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAME = os.path.join(HERE, "assets", "frame.png")
@@ -41,7 +45,11 @@ def http_get(url, tries=3):
 
 
 def slug(name):
-    return re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_") or "game"
+    return re.sub(r"[^\w]+", "_", name).strip("_") or "game"
+
+
+def read_text(path):
+    return open(path, encoding="utf-8-sig", errors="replace").read()
 
 
 def vdf_values(text, key):
@@ -57,9 +65,15 @@ def steam_dir(override=None):
     if sys.platform.startswith("win"):
         try:
             import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as k:
-                cands.append(winreg.QueryValueEx(k, "SteamPath")[0])
-        except Exception:
+            for hive, sub, val in ((winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+                                   (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+                                   (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath")):
+                try:
+                    with winreg.OpenKey(hive, sub) as k:
+                        cands.append(winreg.QueryValueEx(k, val)[0])
+                except OSError:
+                    pass
+        except ImportError:
             pass
         cands += [r"C:\Program Files (x86)\Steam", r"C:\Program Files\Steam"]
     elif sys.platform == "darwin":
@@ -78,7 +92,7 @@ def library_paths(steam):
     paths = [steam]
     vdf = os.path.join(steam, "steamapps", "libraryfolders.vdf")
     if os.path.exists(vdf):
-        for p in vdf_values(open(vdf, errors="replace").read(), "path"):
+        for p in vdf_values(read_text(vdf), "path"):
             p = p.replace("\\\\", "\\")
             if os.path.isdir(p) and os.path.realpath(p) not in [os.path.realpath(x) for x in paths]:
                 paths.append(p)
@@ -88,8 +102,13 @@ def library_paths(steam):
 def installed_games(steam):
     games = {}
     for lib in library_paths(steam):
-        for f in glob.glob(os.path.join(lib, "steamapps", "appmanifest_*.acf")):
-            t = open(f, errors="replace").read()
+        apps = os.path.join(lib, "steamapps")
+        if not os.path.isdir(apps):
+            continue
+        for fn in os.listdir(apps):
+            if not (fn.startswith("appmanifest_") and fn.endswith(".acf")):
+                continue
+            t = read_text(os.path.join(apps, fn))
             i, n = vdf_values(t, "appid"), vdf_values(t, "name")
             if i and n and not TOOL_NAMES.match(n[0]):
                 games[int(i[0])] = n[0]
@@ -118,7 +137,7 @@ def pick_account(steam, forced=None):
     recent = None
     lu = os.path.join(steam, "config", "loginusers.vdf")
     if os.path.exists(lu):
-        for m in re.finditer(r'"(\d{17})"\s*\{(.*?)\}', open(lu, errors="replace").read(), re.S):
+        for m in re.finditer(r'"(\d{17})"\s*\{(.*?)\}', read_text(lu), re.S):
             if re.search(r'"MostRecent"\s+"1"', m.group(2)):
                 recent = str(int(m.group(1)) - STEAMID64_BASE)
     if recent in accs:
@@ -169,7 +188,8 @@ def portrait_candidates(appid, item):
 
 # ---------- drawing ----------
 def build_cover(portrait_path, out_path, frame):
-    art = Image.open(portrait_path).convert("RGBA")
+    with Image.open(portrait_path) as im:
+        art = im.convert("RGBA")
     x0, y0, x1, y1 = WINDOW
     ww, wh = x1 - x0, y1 - y0
     s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
@@ -264,7 +284,8 @@ def cmd_apply(args):
     steam = steam_dir(args.steam_dir)
     acc = pick_account(steam, args.user)
     grid = os.path.join(steam, "userdata", acc, "config", "grid")
-    covers = [f for f in glob.glob(os.path.join(os.path.abspath(args.covers), "*.png")) if re.search(r"_(\d+)\.png$", f)]
+    cdir = os.path.abspath(args.covers)
+    covers = [os.path.join(cdir, f) for f in (os.listdir(cdir) if os.path.isdir(cdir) else []) if re.search(r"_(\d+)\.png$", f)]
     if not covers:
         sys.exit("No covers found in %s. Run 'make' first." % args.covers)
     print("Steam account folder:", acc, "\nGrid folder:", grid, "\nCovers to apply:", len(covers))
