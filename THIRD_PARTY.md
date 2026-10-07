@@ -1,0 +1,22 @@
+# Third-party material and trademarks
+
+This project is **not affiliated with, endorsed by, or sponsored by Valve Corporation, Microsoft, or any game publisher.**
+
+## Trademarks
+- **Steam** and the Steam logo are trademarks and/or registered trademarks of Valve Corporation.
+- **Windows** and the Windows logo are trademarks of the Microsoft group of companies.
+- **Linux** is a trademark of Linus Torvalds. The penguin is "Tux".
+
+These marks appear in `assets/frame.png` only to mimic a physical box and show platform support. They remain the property of their owners. If you are a rights holder and want something changed, open an issue.
+
+## Included files
+| File | Source | License |
+|---|---|---|
+| `tools/src/steam_logo.svg` | SVG Repo ("steam" icon) | See the page it was downloaded from; Steam's logo is Valve's trademark |
+| `tools/src/tux.svg` | KDE Breeze icon theme (`preferences-system-linux`) | LGPL-3.0-or-later |
+| `tools/src/fonts/NunitoSans.ttf` | Nunito Sans, Google Fonts | SIL Open Font License 1.1 (`tools/src/fonts/OFL.txt`) |
+
+The font and the SVG sources are only used by `tools/build_frame.py` to render `assets/frame.png`. They are not needed to run `steamcase.py`.
+
+## Game artwork
+No game artwork is included in this repository. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.

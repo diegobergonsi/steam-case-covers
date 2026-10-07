@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+covers/
+grid_backup*/
+userdata*.json
+*.key
+.env
