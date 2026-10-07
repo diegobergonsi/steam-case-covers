@@ -6,6 +6,8 @@ Everything runs locally. No login, no API key, no uploads. Art comes from Steam'
 
 Not affiliated with Valve, Microsoft or any publisher. See [THIRD_PARTY.md](THIRD_PARTY.md).
 
+Covers I already made are on SteamGridDB: <https://www.steamgriddb.com/profile/76561198040695197/grids/1>. You can download them from there instead of generating your own.
+
 ## Use
 
 Needs Python 3.8+ and Pillow.
