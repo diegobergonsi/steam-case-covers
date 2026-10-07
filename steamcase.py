@@ -108,6 +108,8 @@ def pick_account(steam, forced=None):
     base = os.path.join(steam, "userdata")
     accs = [d for d in os.listdir(base) if d.isdigit() and d != "0"] if os.path.isdir(base) else []
     if forced:
+        if not str(forced).isdigit():
+            sys.exit("--user must be the numeric folder name inside userdata/, e.g. 12345678")
         return str(forced)
     if not accs:
         sys.exit("No account folders in %s. Log in to Steam once, then retry (or use --user)." % base)
