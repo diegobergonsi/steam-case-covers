@@ -401,5 +401,27 @@ class App(tk.Tk):
             self.events.put(("step3_error", "Unexpected problem: %s" % e))
 
 
+def selftest():
+    """Headless check used by the build: Pillow, tkinter and the bundled frame all work. Exit code 0 = fine."""
+    import tempfile
+    from PIL import Image
+    try:
+        assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
+        with tempfile.TemporaryDirectory() as d:
+            src, out = os.path.join(d, "p.png"), os.path.join(d, "c.png")
+            Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
+            sc.build_cover(src, out, Image.open(sc.FRAME).convert("RGBA"))
+            im = Image.open(out)
+            assert im.size == (600, 900), "bad size %s" % (im.size,)
+            assert im.getpixel((300, 500))[:3] == (200, 60, 60), "art window not filled"
+        print("selftest ok")
+        return 0
+    except Exception as e:
+        print("selftest FAILED:", e)
+        return 1
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        sys.exit(selftest())
     App().mainloop()

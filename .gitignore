@@ -5,3 +5,5 @@ grid_backup*/
 userdata*.json
 *.key
 .env
+build/
+dist/

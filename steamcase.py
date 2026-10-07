@@ -23,7 +23,7 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
     if _s is not None and hasattr(_s, "reconfigure"):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
 WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y0, x1, y1)
 SIZE = (600, 900)
