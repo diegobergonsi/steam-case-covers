@@ -6,7 +6,7 @@ from tkinter import messagebox, filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-from widgets import (BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, px, set_scale)
+from widgets import (BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, px, set_scale)
 
 
 def downloads_dir():
@@ -23,7 +23,7 @@ def downloads_dir():
 
 
 class App(tk.Tk):
-    def __init__(self, downloads=None, covers_dir=None):
+    def __init__(self, downloads=None, covers_dir=None, screen_h=None):
         super().__init__()
         self.covers_dir = covers_dir or sc.default_covers_dir()
         self.cover_files = []             # covers built by the last run; step 3 applies exactly these
@@ -37,7 +37,7 @@ class App(tk.Tk):
         self._seen = {}                   # path -> (size, mtime) from the last poll, to wait for a finished download
         self.title("Steam Case Covers")
         try:                                           # window / taskbar icon
-            self._icon = tk.PhotoImage(file=os.path.join(sc.HERE, "assets", "icon.png"))
+            self._icon = tk.PhotoImage(master=self, file=os.path.join(sc.HERE, "assets", "icon.png"))
             self.iconphoto(True, self._icon)
         except tk.TclError:
             pass
@@ -50,7 +50,10 @@ class App(tk.Tk):
         self.skip_auto = tk.BooleanVar(value=False)
         self.restart_steam = tk.BooleanVar(value=True)
 
-        head = tk.Frame(self, bg=BG)
+        self.scroller = ScrollFrame(self)
+        self.scroller.pack(fill="both", expand=True)
+        self.holder = self.scroller.inner
+        head = tk.Frame(self.holder, bg=BG)
         head.pack(fill="x", padx=px(28), pady=(px(24), px(14)))
         if getattr(self, "_icon", None):
             self._icon_small = self._icon.subsample(4 if px(1) == 1 else 3)
@@ -70,8 +73,11 @@ class App(tk.Tk):
         self.refresh_step3()
         self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events)]
         self.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.update_idletasks()                       # size the window to its content
-        self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
+        self.update_idletasks()                       # fit the content, but never taller than the screen (Steam Deck: 800 px)
+        want_w, want_h = self.holder.winfo_reqwidth(), self.holder.winfo_reqheight()
+        room = (screen_h or self.winfo_screenheight()) - px(110)               # title bar + taskbar
+        self.geometry("%dx%d" % (want_w + px(14), min(want_h, max(room, px(420)))))
+        self.minsize(want_w, px(380))
 
     def on_close(self):
         if self.busy:
@@ -95,7 +101,7 @@ class App(tk.Tk):
             tkfont.nametofont(name).configure(size=11)          # a little larger than the 10 pt default
 
     def _card(self, num, title):
-        card = Card(self)
+        card = Card(self.holder)
         card.pack(fill="x", padx=px(28), pady=px(7))
         head = tk.Frame(card.body, bg=CARD)
         head.pack(fill="x")
@@ -234,7 +240,7 @@ class App(tk.Tk):
         self.btn_folder = RoundedButton(r, "Open covers folder", self.open_covers_folder)
         self.progress = Bar(body)
         self.progress.pack(fill="x", pady=(px(10), px(6)))
-        self.step2_status = tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w")
+        self.step2_status = tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
         self.step2_status.pack(fill="x")
 
     def start_make(self):
@@ -277,7 +283,7 @@ class App(tk.Tk):
                 if ev[0] == "progress":
                     _, done, total, appid, name, status = ev
                     self.progress.configure(maximum=max(total, 1), value=done)
-                    self.step2_status.configure(text="%d of %d · %s" % (done, total, name), fg=MUTED)
+                    self.step2_status.configure(text="%d of %d · %s" % (done, total, name if len(name) <= 60 else name[:57] + "…"), fg=MUTED)
                 elif ev[0] == "done":
                     self.finish_make(ev[1])
                 elif ev[0] == "step3_status":
@@ -305,11 +311,13 @@ class App(tk.Tk):
     def finish_make(self, res):
         self.running = False
         self.cover_files = res["files"]
-        n, miss = res["ok"], len(res["missing"])
+        n, miss, bad = res["ok"], len(res["missing"]), len(res["failed"])
         text = "%s%d covers ready." % ("Stopped. " if res["cancelled"] else "Done. ", n)
         if miss:
             text += " %d %s no portrait on Steam." % (miss, "game has" if miss == 1 else "games have")
-        self.step2_status.configure(text=text, fg=ACCENT if n else MUTED)
+        if bad:
+            text += " %d could not be downloaded (connection problem?): click “Make covers” again to retry only those." % bad
+        self.step2_status.configure(text=text, fg=ACCENT if n and not bad else MUTED if not n else FG)
         self._set_state(self.step1, True)
         self.refresh_step1()
         if n:
@@ -400,14 +408,20 @@ class App(tk.Tk):
             if mode == "apply":
                 say("Backing up and copying covers…")
                 r = sc.apply_covers(steam, self.covers_dir, files=self.cover_files)
-                text = "Done. %d covers added to the Steam account “%s” (%d replaced older art). Backup saved in: %s" % (
-                    r["applied"], r["account_name"], r["replaced"], r["backup"])
+                if r["applied"]:
+                    text = "Done. %d covers added to the Steam account “%s” (%d replaced older art, %d already up to date). Backup saved in: %s" % (
+                        r["applied"], r["account_name"], r["replaced"], r["unchanged"], r["backup"])
+                else:
+                    text = "Nothing to change: all %d covers were already in the Steam account “%s”." % (r["unchanged"], r["account_name"])
             else:
                 backups = sc.list_backups(steam)
                 if not backups:
                     raise sc.SteamcaseError("No backup found.")
                 n = sc.restore_backup(steam, backups[0])
+                left = len(sc.list_backups(steam))
                 text = "Restored your previous artwork (%d files)." % n
+                if left:
+                    text += " %d older backup%s left: press Restore again to go one step further back." % (left, "" if left == 1 else "s")
             if restart:
                 say("Starting Steam…")
                 try:

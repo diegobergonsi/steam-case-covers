@@ -293,3 +293,66 @@ class Card(tk.Canvas):
         self.delete("bg")
         round_rect(self, 1, 1, w - 1, h - 1, px(18), fill=CARD, outline=LINE, tags="bg")
         self.tag_lower("bg")
+
+
+class ScrollFrame(tk.Frame):
+    """Vertical scroller for small screens (Steam Deck: 800 px high). Put content in .inner.
+    The scrollbar only appears when the content does not fit. Mouse wheel and Tab both scroll."""
+
+    def __init__(self, parent, bg=BG):
+        super().__init__(parent, bg=bg)
+        self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0)
+        self.bar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview, width=px(12), relief="flat", borderwidth=0,
+                                highlightthickness=0, troughcolor=BG, bg=LINE, activebackground=ACCENT)
+        self.inner = tk.Frame(self.canvas, bg=bg)
+        self._win = self.canvas.create_window(0, 0, window=self.inner, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.bar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner.bind("<Configure>", lambda e: self._update())
+        self.canvas.bind("<Configure>", self._on_canvas)
+        top = self.winfo_toplevel()
+        top.bind_all("<MouseWheel>", self._wheel, add="+")                       # Windows, macOS
+        top.bind_all("<Button-4>", lambda e: self._scroll(-1), add="+")          # Linux
+        top.bind_all("<Button-5>", lambda e: self._scroll(1), add="+")
+        top.bind_all("<FocusIn>", self._focus, add="+")                          # Tab into something off-screen: scroll to it
+
+    def _on_canvas(self, e):
+        self.canvas.itemconfigure(self._win, width=e.width)
+        self._update()
+
+    def _update(self):
+        need = self.inner.winfo_reqheight() > self.canvas.winfo_height() > 1
+        self.canvas.configure(scrollregion=(0, 0, 1, self.inner.winfo_reqheight()))
+        if need and not self.bar.winfo_ismapped():
+            self.bar.pack(side="right", fill="y")
+        elif not need and self.bar.winfo_ismapped():
+            self.bar.pack_forget()
+            self.canvas.yview_moveto(0)
+
+    def scrollable(self):
+        return self.bar.winfo_ismapped()
+
+    def _scroll(self, units):
+        if self.scrollable():
+            self.canvas.yview_scroll(units, "units")
+
+    def _wheel(self, e):
+        self._scroll(-1 if e.delta > 0 else 1)
+
+    def _focus(self, e):
+        w = e.widget
+        if not self.scrollable() or not isinstance(w, tk.Widget):
+            return
+        try:
+            if not str(w).startswith(str(self.inner)):
+                return
+            top = w.winfo_rooty() - self.inner.winfo_rooty()
+            bottom = top + w.winfo_height()
+            view_h, total = self.canvas.winfo_height(), self.inner.winfo_reqheight()
+            y0 = self.canvas.canvasy(0)
+            if top < y0 + px(10):
+                self.canvas.yview_moveto(max(0, (top - px(24)) / total))
+            elif bottom > y0 + view_h - px(10):
+                self.canvas.yview_moveto(min(1, (bottom - view_h + px(24)) / total))
+        except tk.TclError:
+            pass
