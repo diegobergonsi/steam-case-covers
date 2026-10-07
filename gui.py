@@ -355,11 +355,15 @@ class App(tk.Tk):
         if self.busy or self.running:
             return
         steam_on = sc.steam_running()
+        try:
+            who = sc.account_label(sc.steam_dir(), sc.pick_account(sc.steam_dir()))
+        except sc.SteamcaseError:
+            who = "your Steam account"
         if mode == "apply":
-            title, ok_text = "Add covers to Steam", "%d covers will be added to Steam." % len(self.cover_files)
+            title, ok_text = "Add covers to Steam", "%d covers will be added to the Steam account “%s”." % (len(self.cover_files), who)
             undo = "Your current artwork is backed up first, and you can undo this with “Restore previous artwork”."
         else:
-            title, ok_text = "Restore previous artwork", "Your artwork from before the last Apply will be put back."
+            title, ok_text = "Restore previous artwork", "Your artwork from before the last Apply will be put back on the Steam account “%s”." % who
             undo = "The covers added by that Apply are removed."
         if steam_on:
             msg = ("%s\n\nSteam will be CLOSED automatically. Any running game stops and downloads pause. "
@@ -384,8 +388,8 @@ class App(tk.Tk):
             if mode == "apply":
                 say("Backing up and copying covers…")
                 r = sc.apply_covers(steam, self.covers_dir, files=self.cover_files)
-                text = "Done. %d covers added to account %s (%d replaced older art). Backup saved in: %s" % (
-                    r["applied"], r["account"], r["replaced"], r["backup"])
+                text = "Done. %d covers added to the Steam account “%s” (%d replaced older art). Backup saved in: %s" % (
+                    r["applied"], r["account_name"], r["replaced"], r["backup"])
             else:
                 backups = sc.list_backups(steam)
                 if not backups:

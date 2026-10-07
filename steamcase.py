@@ -196,6 +196,19 @@ def pick_account(steam, forced=None):
     return max(accs, key=lambda a: os.path.getmtime(os.path.join(base, a)))
 
 
+def account_label(steam, acc):
+    """Human name for a userdata folder id: Steam display name, else login name, else the number."""
+    lu = os.path.join(steam, "config", "loginusers.vdf")
+    if os.path.exists(lu):
+        for m in re.finditer(r'"(\d{17})"\s*\{(.*?)\}', read_text(lu), re.S):
+            if str(int(m.group(1)) - STEAMID64_BASE) == str(acc):
+                names = vdf_values(m.group(2), "PersonaName") + vdf_values(m.group(2), "AccountName")
+                for n in names:
+                    if n.strip():
+                        return n.strip()
+    return str(acc)
+
+
 def grid_dir(steam, user=None):
     return os.path.join(steam, "userdata", pick_account(steam, user), "config", "grid")
 
@@ -420,7 +433,7 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     """Copy covers into Steam's grid folder as <appid>p.png. Always makes a backup first.
 
     `files`: apply only these cover files (default: every cover in covers_dir).
-    Returns {"account", "grid", "applied", "replaced", "backup"}.
+    Returns {"account", "account_name", "grid", "applied", "replaced", "backup"}.
     The caller closes Steam beforehand (see close_steam)."""
     grid = grid_dir(steam, user)
     covers = list(files) if files else find_covers(covers_dir)
@@ -445,7 +458,8 @@ def apply_covers(steam, covers_dir, user=None, files=None):
         except Exception:
             pass
         raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
-    return {"account": os.path.basename(os.path.dirname(os.path.dirname(grid))), "grid": grid,
+    acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
+    return {"account": acc, "account_name": account_label(steam, acc), "grid": grid,
             "applied": len(covers), "replaced": len(replaced), "backup": backup}
 
 
@@ -518,7 +532,7 @@ def cmd_apply(args):
             if input("Copy anyway? [y/N] ").strip().lower() != "y":
                 raise SteamcaseError("Cancelled.")
     r = apply_covers(steam, args.covers, args.user)
-    print("Steam account folder:", r["account"], "\nGrid folder:", r["grid"])
+    print("Steam account:", r["account_name"], "(folder %s)" % r["account"], "\nGrid folder:", r["grid"])
     print("Applied %d covers (%d replaced older files). Backup: %s" % (r["applied"], r["replaced"], r["backup"]))
     print("Start Steam to see them. A custom artwork set by hand in Steam may override these.")
     print("To undo: python steamcase.py restore")
