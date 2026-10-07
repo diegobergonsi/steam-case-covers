@@ -338,7 +338,9 @@ def build_cover(portrait_path, out_path, frame):
     art = art.crop((cx, cy, cx + ww, cy + wh))
     canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     canvas.paste(art, (x0, y0))
-    Image.alpha_composite(canvas, frame).save(out_path, optimize=True)
+    part = out_path + ".part"                      # write aside, then rename: a crash never leaves a half-written cover
+    Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True)
+    os.replace(part, out_path)
 
 
 # ---------- make ----------
@@ -379,15 +381,15 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "skipped")
             continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
+        urls, auto = portrait_candidates(appid, it)
+        if auto and skip_auto_art:                 # checked first: also drops covers built by an earlier run without this option
+            res["skipped"] += 1
+            report(n, appid, name, "skipped")
+            continue
         if os.path.exists(dest) and not force:
             res["ok"] += 1
             res["files"].append(dest)
             report(n, appid, name, "exists")
-            continue
-        urls, auto = portrait_candidates(appid, it)
-        if auto and skip_auto_art:
-            res["skipped"] += 1
-            report(n, appid, name, "skipped")
             continue
         tmp = os.path.join(out, ".tmp_%d" % appid)
         got = False
