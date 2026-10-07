@@ -38,6 +38,8 @@ python gui.py                     # the window
 python steamcase.py -h            # or the command line
 ```
 
+Tests: `python -m unittest discover -s tests`.
+
 Command line, step by step: `python steamcase.py make --library userdata.json`, then `python steamcase.py apply --close-steam`.
 
 ## Notes

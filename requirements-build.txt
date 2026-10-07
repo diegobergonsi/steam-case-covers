@@ -1,0 +1,3 @@
+# exact versions used for release builds (reproducible, no surprise upgrades)
+pillow==12.3.0
+pyinstaller==6.22.3
