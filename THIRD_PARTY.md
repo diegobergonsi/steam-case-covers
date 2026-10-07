@@ -21,7 +21,9 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 The font and the SVG sources are only used by `tools/build_frame.py` and `tools/build_icon.py` to render `assets/frame.png` and the icons. They are not needed to run the app.
 
 ## Game artwork
-No game artwork is included in this repository. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.
+The preview image at the top of the README (`assets/preview.png`) shows covers of a few games (SnowRunner, Coral Island, Clair Obscur: Expedition 33, Fallout 4 and V Rising) only to show what the app produces. That artwork, and the games' names and logos, belong to their publishers and developers. They are not covered by this project's license. If a rights holder objects, the image will be removed.
+
+Apart from that image, no game artwork is included. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.
 
 ## Release builds
 The downloadable apps bundle Python (PSF License), Pillow (HPND License) and Tcl/Tk (BSD-style license), and are built with PyInstaller (GPL-2.0 with a bootloader exception that allows distributing the built apps under other licenses).

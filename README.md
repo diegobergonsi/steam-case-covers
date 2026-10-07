@@ -1,3 +1,5 @@
+![steam-case-covers: Steam library covers inside a physical case, on a fan of five game boxes](assets/preview.png)
+
 # steam-case-covers
 
 Gives every game in your Steam library a "physical copy" cover: the game's art inside a blue case with a Steam banner.
