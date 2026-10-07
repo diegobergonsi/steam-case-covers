@@ -137,7 +137,7 @@ class App(tk.Tk):
         ready = self.installed_only.get() or bool(self.library_path)
         s1 = "done" if ready else "active"
         s2 = "locked" if not ready else "done" if self.cover_files else "active"
-        s3 = "locked" if not self.cover_files else "done" if self.applied else "active"
+        s3 = "done" if self.cover_files and self.applied else "active" if (self.cover_files or self.has_backup()) else "locked"   # Restore alone also unlocks it
         for body, status in ((self.step1, s1), (self.step2, s2), (self.step3, s3)):
             body.badge.set(status)
             body.title_lbl.configure(fg=FAINT if status == "locked" else FG)
@@ -369,7 +369,14 @@ class App(tk.Tk):
         can_apply = idle and bool(self.cover_files)
         self.btn_apply.configure(state="normal" if can_apply else "disabled")
         self.btn_restore.configure(state="normal" if idle and self.has_backup() else "disabled")
-        self.chk_restart.configure(state="normal" if idle and (can_apply or self.has_backup()) else "disabled")
+        backup = self.has_backup()
+        self.chk_restart.configure(state="normal" if idle and (can_apply or backup) else "disabled")
+        # say why Restore is greyed out, and clear that note once it no longer applies
+        hint = "Nothing to undo yet: “Restore previous artwork” works once you have used “Apply to Steam” in this app."
+        if idle and not can_apply and not backup and not self.step3_status.cget("text"):
+            self.say3(hint, FAINT)
+        elif self.step3_status.cget("text") == hint and (can_apply or backup):
+            self.say3("")
         self.update_steps()
 
     def confirm_and_run(self, mode):
