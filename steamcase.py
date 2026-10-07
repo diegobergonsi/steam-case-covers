@@ -450,8 +450,9 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
-    Returns {"ok", "skipped", "missing": [(appid, name)] (Steam has no art), "failed": [(appid, name)] (download problem),
-    "cancelled", "files": [cover paths of this run]}.
+    progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
+    Returns {"ok", "skipped", "not_games" (DLC, tools...), "missing": [(appid, name)] (Steam has no art),
+    "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run]}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
@@ -467,7 +468,17 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
         raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
-    res = {"ok": 0, "skipped": 0, "missing": [], "failed": [], "cancelled": False, "files": []}
+    res = {"ok": 0, "skipped": 0, "not_games": 0, "missing": [], "failed": [], "cancelled": False, "files": []}
+    todo = []                                   # only items that can become a cover count towards the progress
+    for appid in ids:
+        it = info.get(appid) or {}
+        name = games[appid] or it.get("name") or str(appid)
+        if it.get("type", 0) not in (0, None) or TOOL_NAMES.match(name):
+            res["skipped"] += 1
+            res["not_games"] += 1               # DLC, soundtracks, tools, demos
+        else:
+            todo.append(appid)
+    ids = todo
     total = len(ids)
 
     def report(done, appid, name, status):
