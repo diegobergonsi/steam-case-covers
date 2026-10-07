@@ -144,15 +144,27 @@ class App(tk.Tk):
         r = self._row(body)
         RoundedButton(r, "Download your userdata.json", self.open_download_page, primary=True).pack(side="left")
         RoundedButton(r, "Browse…", self.browse).pack(side="left", padx=px(10))
+        RoundedButton(r, "Copy link", self.copy_link).pack(side="left")
         r = self._row(body)
         self.sw_installed = Switch(r, "Only my installed games (no file needed)", self.installed_only, self.on_installed_only)
         self.sw_installed.pack(side="left")
-        self.step1_status = tk.Label(body, text="Waiting for userdata.json…", bg=CARD, fg=MUTED, anchor="w")
+        self.step1_status = tk.Label(body, text="Waiting for userdata.json…", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
         self.step1_status.pack(fill="x", pady=(px(8), 0))
 
     def open_download_page(self):
-        webbrowser.open(sc.LIBRARY_JSON_URL)
-        self.step1_status.configure(text="Page opened. Save it as userdata.json (Ctrl+S) and I'll pick it up…", fg=MUTED)
+        try:
+            webbrowser.open(sc.LIBRARY_JSON_URL)
+        except Exception:
+            pass
+        # webbrowser cannot tell us whether a browser really opened, so always show the way out
+        self.step1_status.configure(text="Opening your browser… Save the page as userdata.json (Ctrl+S) and I'll pick it up. "
+                                         "Nothing opened? Click “Copy link” and paste it into your browser.", fg=MUTED)
+
+    def copy_link(self):
+        self.clipboard_clear()
+        self.clipboard_append(sc.LIBRARY_JSON_URL)
+        self.update()                               # keeps the text on the clipboard on some systems
+        self.step1_status.configure(text="Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (Ctrl+S).", fg=ACCENT)
 
     def browse(self):
         path = filedialog.askopenfilename(title="Choose your userdata.json", initialdir=self.downloads if os.path.isdir(self.downloads) else None,
@@ -412,6 +424,17 @@ class App(tk.Tk):
             self.events.put(("step3_error", "Unexpected problem: %s" % e))
 
 
+def restore_child_env():
+    """Packaged Linux app: PyInstaller points LD_LIBRARY_PATH at its bundled libraries (OpenSSL...).
+    Programs we launch (xdg-open, kde-open, flatpak, Steam) would load those and crash, so undo it."""
+    if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
+        orig = os.environ.get("LD_LIBRARY_PATH_ORIG")
+        if orig is None:
+            os.environ.pop("LD_LIBRARY_PATH", None)
+        else:
+            os.environ["LD_LIBRARY_PATH"] = orig
+
+
 def enable_dpi_awareness():
     """Windows: without this, tkinter windows look blurry on high-DPI screens."""
     if sys.platform.startswith("win"):
@@ -429,6 +452,9 @@ def selftest():
     try:
         assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
         assert os.path.exists(os.path.join(sc.HERE, "assets", "icon.png")), "icon missing"
+        restore_child_env()
+        if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
+            assert getattr(sys, "_MEIPASS", "\0") not in os.environ.get("LD_LIBRARY_PATH", ""), "child programs would inherit the bundled libraries"
         with tempfile.TemporaryDirectory() as d:
             src, out = os.path.join(d, "p.png"), os.path.join(d, "c.png")
             Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
@@ -446,5 +472,6 @@ def selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         sys.exit(selftest())
+    restore_child_env()
     enable_dpi_awareness()
     App().mainloop()
