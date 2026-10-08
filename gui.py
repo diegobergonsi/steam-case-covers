@@ -506,7 +506,8 @@ class App(tk.Tk):
             if sc.steam_running():
                 say("Closing Steam…")
                 if not sc.close_steam(steam):
-                    raise sc.SteamcaseError("Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again.")
+                    raise sc.SteamcaseError("Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again."
+                                            + (" If macOS asked for permission, allow it first and then press the button again." if sys.platform == "darwin" else ""))
             if mode == "apply":
                 say("Backing up and copying covers…")
                 r = sc.apply_covers(steam, self.covers_dir, files=self.cover_files)
