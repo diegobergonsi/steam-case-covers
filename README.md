@@ -152,8 +152,7 @@ If you find a security problem, please [report it privately](SECURITY.md).
 
 ✅ Linux and SteamOS (Steam in `~/.local/share/Steam`) <br>
 ✅ Windows: tested by the author's colleague on a real PC, and the automated tests pass <br>
-🟡 macOS: tested on one Apple Silicon Mac (best effort) <br>
-🟡 Flatpak and Snap installs of Steam are found automatically but have not been tried
+🟡 macOS: tested on one Apple Silicon Mac (best effort)
 
 > [!NOTE]
 > If something doesn't work on your system, please [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) with your system and what you saw. Feedback from Windows and macOS is especially welcome.
