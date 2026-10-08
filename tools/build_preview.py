@@ -44,11 +44,12 @@ def main(covers_dir, out, ids):
             sys.exit("No cover for app %s in %s" % (ids[i], covers_dir))
         im = Image.open(found[0]).convert("RGBA")
         im = im.resize((round(im.width * h / im.height), h), Image.LANCZOS).rotate(angles[i], resample=Image.BICUBIC, expand=True)
-        shadow = Image.new("RGBA", im.size, (0, 0, 0, 0))
-        shadow.putalpha(im.getchannel("A").point(lambda a: int(a * 0.4)))
-        shadow = Image.merge("RGBA", (Image.new("L", im.size, 0),) * 3 + (shadow.getchannel("A"),)).filter(ImageFilter.GaussianBlur(14))
-        pos = (xs[i] + 40 - im.width // 2, 345 + abs(angles[i]) * 2 - im.height // 2)
-        bg.alpha_composite(shadow, (pos[0] - 8, pos[1] + 14))
+        pad = 50                                                # room for the blur, or it is cut off in a hard edge
+        alpha = Image.new("L", (im.width + 2 * pad, im.height + 2 * pad), 0)
+        alpha.paste(im.getchannel("A").point(lambda a: int(a * 0.4)), (pad, pad))
+        shadow = Image.merge("RGBA", (Image.new("L", alpha.size, 0),) * 3 + (alpha,)).filter(ImageFilter.GaussianBlur(14))
+        pos = (xs[i] + 40 - im.width // 2, 295 + abs(angles[i]) * 2 - im.height // 2)
+        bg.alpha_composite(shadow, (pos[0] - 8 - pad, pos[1] + 14 - pad))
         bg.alpha_composite(im, pos)
 
     d = ImageDraw.Draw(bg)
@@ -61,7 +62,7 @@ def main(covers_dir, out, ids):
     d.text((72, 275), "Give every game in your Steam", font=sub, fill=(199, 213, 224))
     d.text((72, 322), "library a physical case cover.", font=sub, fill=(199, 213, 224))
     d.text((72, 410), "Local  ·  No API key  ·  No uploads", font=font(28, "SemiBold"), fill=(102, 192, 244))
-    d.text((72, 560), "Windows · macOS · Linux · Steam Deck", font=font(22, "Regular"), fill=(138, 160, 178))
+    d.text((72, 470), "Windows · macOS · Linux · Steam Deck", font=font(22, "Regular"), fill=(138, 160, 178))
     bg.convert("RGB").save(out, optimize=True)
     print("wrote", out, os.path.getsize(out), "bytes")
 
