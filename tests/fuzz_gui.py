@@ -10,7 +10,7 @@ action it checks that nothing crashed, nothing is stuck, the buttons match the s
     python tests/fuzz_gui.py [--seeds N] [--steps N] [--sandbox]
 
 Exit code 0 = every run was clean."""
-import argparse, io, json, os, random, re, shutil, sys, tempfile, threading, time, traceback
+import argparse, faulthandler, io, json, os, random, re, shutil, sys, tempfile, threading, time, traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gui, widgets, steamcase as sc
@@ -239,6 +239,7 @@ def run_one(seed, steps, sandbox):
 
 
 def main():
+    faulthandler.dump_traceback_later(420, exit=True)  # a hang prints where it stuck instead of running forever
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--steps", type=int, default=120)
