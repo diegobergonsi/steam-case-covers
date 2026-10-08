@@ -62,12 +62,18 @@ class Tooltip:
     """Help bubble: hover, or Tab to the widget. Escape closes it."""
 
     def __init__(self, widget, text):
-        self.widget, self.text, self.tip = widget, text, None
-        for ev, fn in (("<Enter>", self.show), ("<Leave>", self.hide), ("<FocusIn>", self.show),
+        self.widget, self.text, self.tip, self._job = widget, text, None, None
+        for ev, fn in (("<Enter>", self.schedule), ("<Leave>", self.hide), ("<FocusIn>", self.schedule),
                        ("<FocusOut>", self.hide), ("<Escape>", self.hide)):
             widget.bind(ev, fn, add="+")
 
+    def schedule(self, _e=None):
+        # Short delay, cancelled by hide(): stops a popup that steals focus from flickering on and off forever.
+        if self._job is None and not self.tip:
+            self._job = self.widget.after(120, self.show)
+
     def show(self, _e=None):
+        self._job = None
         if self.tip:
             return
         x, y = self.widget.winfo_rootx() + px(24), self.widget.winfo_rooty() + self.widget.winfo_height() + px(6)
@@ -79,6 +85,9 @@ class Tooltip:
         tk.Label(frame, text=self.text, justify="left", wraplength=px(360), bg="#0b1017", fg=FG, padx=px(12), pady=px(10)).pack()
 
     def hide(self, _e=None):
+        if self._job is not None:
+            self.widget.after_cancel(self._job)
+            self._job = None
         if self.tip:
             self.tip.destroy()
             self.tip = None
