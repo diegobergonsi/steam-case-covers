@@ -372,6 +372,18 @@ class Attacks(Base):
         with self.assertRaises(sc.SteamcaseError):
             sc.owned_ids(p)
 
+    def test_a_library_saved_while_logged_out_gets_a_clear_message(self):
+        p = os.path.join(self.tmp, "loggedout.json")
+        json.dump({"rgWishlist": [], "rgOwnedPackages": [], "rgOwnedApps": [], "rgFollowedApps": []}, open(p, "w"))
+        with self.assertRaises(sc.SteamcaseError) as cm:
+            sc.owned_ids(p)
+        self.assertIn("not logged in", str(cm.exception))
+
+    def test_download_button_opens_the_login_page_that_redirects_to_the_data(self):
+        self.assertIn("/login/", sc.LIBRARY_LOGIN_URL)
+        self.assertIn("redir=dynamicstore%2Fuserdata%2F", sc.LIBRARY_LOGIN_URL)
+        self.assertTrue(sc.LIBRARY_LOGIN_URL.startswith("https://store.steampowered.com/"))
+
     def test_invalid_app_ids_are_dropped(self):
         p = os.path.join(self.tmp, "ids.json")
         json.dump({"rgOwnedApps": [-5, 0, 10 ** 30, 413150]}, open(p, "w"))

@@ -24,6 +24,7 @@ def downloads_dir():
     return os.path.join(home, "Downloads")
 
 
+SAVE_KEY = "Cmd+S" if sys.platform == "darwin" else "Ctrl+S"
 messagebox = Messages()                      # themed dialogs; App sets the parent window
 
 
@@ -61,6 +62,8 @@ class App(tk.Tk):
         self.cancel_flag = threading.Event()
         self.downloads = downloads or downloads_dir()
         self.started = time.time()
+        self._reported = {}               # path -> signature of the files we already complained about
+        self._last_error = ""
         self._seen = {}                   # path -> (size, mtime) from the last poll, to wait for a finished download
         self.title("Steam Case Covers")
         messagebox.parent = self
@@ -172,9 +175,9 @@ class App(tk.Tk):
 
     # ----- step 1 -----
     def _build_step1(self, body):
-        self._note(body, "Steam keeps your full game list on a web page. Click the button, log in if asked, "
-                         "then press Ctrl+S and save the page (keep the name userdata.json). "
-                         "This app will notice the file by itself.")
+        self._note(body, "Steam keeps your full game list on a web page. Click the button and log in to Steam if it asks. "
+                         "You'll land on a page of plain text: press %s and save it (keep the name userdata.json). "
+                         "This app will notice the file by itself." % SAVE_KEY)
         r = self._row(body)
         RoundedButton(r, "Download your userdata.json", self.open_download_page, primary=True).pack(side="left")
         RoundedButton(r, "Browse…", self.browse).pack(side="left", padx=px(10))
@@ -187,18 +190,18 @@ class App(tk.Tk):
 
     def open_download_page(self):
         try:
-            webbrowser.open(sc.LIBRARY_JSON_URL)
+            webbrowser.open(sc.LIBRARY_LOGIN_URL)
         except Exception:
             pass
         # webbrowser cannot tell us whether a browser really opened, so always show the way out
-        self.step1_status.configure(text="Opening your browser… Save the page as userdata.json (Ctrl+S) and I'll pick it up. "
-                                         "Nothing opened? Click “Copy link” and paste it into your browser.", fg=MUTED)
+        self.step1_status.configure(text="Opening your browser… Log in to Steam if it asks. You'll then see a page of plain text: save it as userdata.json (%s) and I'll pick it up. "
+                                         "Nothing opened? Click “Copy link” and paste it into your browser." % SAVE_KEY, fg=MUTED)
 
     def copy_link(self):
         self.clipboard_clear()
-        self.clipboard_append(sc.LIBRARY_JSON_URL)
+        self.clipboard_append(sc.LIBRARY_LOGIN_URL)
         self.update()                               # keeps the text on the clipboard on some systems
-        self.step1_status.configure(text="Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (Ctrl+S).", fg=ACCENT)
+        self.step1_status.configure(text="Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (%s)." % SAVE_KEY, fg=ACCENT)
 
     def browse(self):
         path = pick_file("Choose your userdata.json", self.downloads)
@@ -210,6 +213,7 @@ class App(tk.Tk):
         try:
             n = len(sc.owned_ids(path))
         except sc.SteamcaseError as e:
+            self._last_error = str(e)
             if ask:
                 messagebox.showerror("That file doesn't look right", str(e))
             return False
@@ -245,8 +249,12 @@ class App(tk.Tk):
                     if st.st_mtime < self.started:
                         continue
                     sig = (st.st_size, st.st_mtime)
-                    if self._seen.get(p) == sig and self.load_library(p):      # unchanged since last poll = finished
-                        break
+                    if self._seen.get(p) == sig:                                # unchanged since last poll = finished
+                        if self.load_library(p):
+                            break
+                        if self._reported.get(p) != sig and self._last_error:      # say why, once (e.g. saved while logged out)
+                            self._reported[p] = sig
+                            self.step1_status.configure(text="%s: %s" % (fn, self._last_error), fg=RED)
                     self._seen[p] = sig
         except OSError:
             pass
