@@ -65,6 +65,8 @@ macOS blocks apps that don't come from a paid Apple developer, and this one is f
 
 The Open Anyway button only stays for about an hour after the block. If it's missing, double-click the app again and look again. On macOS 14 or older you can instead right-click the app and choose **Open**.
 
+If the app then bounces in the Dock forever and no window appears, **restart your Mac** and open it again. (macOS sometimes gets stuck checking a downloaded app after Open Anyway; a restart clears it.)
+
 If macOS says the app is **"damaged" and offers to move it to the Trash**, it isn't damaged: that is the same block. Don't trash it. Open **Terminal** and run this (change the path if the app isn't in Downloads), then open the app again:
 
 ```bash
@@ -178,7 +180,7 @@ Run `python steamcase.py -h` for all options, such as `--only`, `--skip-auto-art
 <details>
 <summary><b>It says my game list has no games in it</b></summary>
 
-You weren't logged in to Steam in your browser when you saved the page. Steam doesn't show an error in that case; it gives an empty list. Click **Download your userdata.json** again: it opens Steam's login page first, so log in there, then save the page you land on.
+You weren't logged in to Steam in your browser when you saved the page. Steam doesn't show an error in that case; it gives an empty list. Click **Download your userdata.json** again: it opens Steam's login page first, so log in there, then save the page you land on. If that page shows no games even though you just logged in, refresh it (F5, or Cmd+R on a Mac) before saving.
 
 </details>
 
