@@ -1,5 +1,5 @@
 # Keeps the pinned GitHub Actions (by commit) and the Python build tools up to date.
-# Dependabot opens a pull request for each update; the release workflow runs the tests on it.
+# Dependabot opens a pull request for each update; the Checks workflow (tests, security scan, fuzzer) runs on it.
 version: 2
 updates:
   - package-ecosystem: github-actions
