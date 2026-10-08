@@ -98,7 +98,7 @@ python -m pip install -r requirements.txt
 python gui.py
 ```
 
-On macOS and Linux, use `python3` instead of `python`. Run the tests with `python -m unittest discover -s tests`.
+On macOS and Linux, use `python3` instead of `python`. Run the tests with `python -m unittest discover -s tests`. A random-click robot that tries to break the window needs a display: `python tests/fuzz_gui.py` (on a server: `xvfb-run -a python tests/fuzz_gui.py`).
 
 </details>
 

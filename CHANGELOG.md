@@ -3,6 +3,9 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Downloads are only ever made over https, including after a redirect.
+- Automatic checks on every change and weekly: tests on Windows, macOS and Linux, a security scan, a dependency check and a random-click robot that tries to break the window.
+- Signed build provenance for release files, issue templates and this changelog.
 - macOS: Apply tells the user to allow the permission prompt macOS shows the first time it closes Steam.
 - README: the Terminal command is now the main macOS instruction; macOS is marked best effort.
 
