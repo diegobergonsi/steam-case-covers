@@ -48,6 +48,11 @@ jobs:
       - name: Selftest (built app) - macOS
         if: runner.os == 'macOS'
         run: |
+          # Apple Silicon refuses unsigned programs, and a downloaded unsigned app is reported as "damaged".
+          # An ad-hoc signature (free, no Apple account) turns that into the normal "unidentified developer" prompt.
+          xattr -cr dist/SteamCaseCovers.app
+          codesign --force --deep --sign - dist/SteamCaseCovers.app
+          codesign --verify --deep --strict --verbose=2 dist/SteamCaseCovers.app
           dist/SteamCaseCovers.app/Contents/MacOS/SteamCaseCovers --selftest
           ditto -c -k --keepParent dist/SteamCaseCovers.app ${{ matrix.asset }}
       - name: Selftest (built app) - Linux
