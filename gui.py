@@ -514,6 +514,8 @@ class App(tk.Tk):
                 if r["applied"]:
                     text = "Done. %d covers added to the Steam account “%s” (%d replaced older art, %d already up to date). Backup saved in: %s" % (
                         r["applied"], r["account_name"], r["replaced"], r["unchanged"], r["backup"])
+                    if r["jpg_moved"]:
+                        text += " Art you had set by hand in Steam (%d games) was moved into the backup; Restore brings it back." % r["jpg_moved"]
                 else:
                     text = "Nothing to change: all %d covers were already in the Steam account “%s”." % (r["unchanged"], r["account_name"])
             elif mode == "reset":

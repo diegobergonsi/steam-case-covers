@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Fixed Apply having no effect on games where you had set custom artwork by hand in Steam: Steam shows that `.jpg` before our cover. Apply now moves it into the backup (Restore puts it back).
 
 ## [0.9.9] - 2026-10-08
 - Tooltips wait a moment before showing, so a popup that takes the focus cannot flicker on and off.

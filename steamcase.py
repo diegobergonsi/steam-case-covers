@@ -621,7 +621,8 @@ def apply_covers(steam, covers_dir, user=None, files=None):
 
     `files`: apply only these cover files (default: every cover in covers_dir).
     Only files that differ are written (and backed up); if nothing differs there is no backup and "backup" is None.
-    Returns {"account", "account_name", "grid", "applied", "unchanged", "replaced", "backup"}.
+    Steam shows <appid>p.jpg before <appid>p.png (tested), so a leftover .jpg (art set by hand in Steam) is moved into the backup too.
+    Returns {"account", "account_name", "grid", "applied", "unchanged", "replaced", "jpg_moved", "backup"}.
     The caller closes Steam beforehand (see close_steam)."""
     grid = grid_dir(steam, user)
     covers = list(files) if files else find_covers(covers_dir)
@@ -634,19 +635,25 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     with _Lock(os.path.dirname(grid)):
         acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
         info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
-        work, added, replaced = [], [], []
+        work, added, replaced, moved = [], [], [], []
         for f in covers:
             n = "%sp.png" % appid_of(f)
             dest = os.path.join(grid, n)
+            j = "%sp.jpg" % appid_of(f)
+            if _is_plain_file(os.path.join(grid, j)):
+                moved.append(j)                                  # it would hide our cover: Steam prefers .jpg
+            same = os.path.exists(dest) and filecmp.cmp(f, dest, shallow=False)
+            if same:
+                if j in moved:
+                    work.append((None, n))                       # our cover is there, only the .jpg has to go
+                continue                                         # identical already: no need to touch or back it up
             if os.path.exists(dest):
-                if filecmp.cmp(f, dest, shallow=False):
-                    continue                                     # identical already: no need to touch or back it up
                 replaced.append(n)
             else:
                 added.append(n)
             work.append((f, n))
         if not work:
-            return dict(info, applied=0, unchanged=len(covers), replaced=0, backup=None)
+            return dict(info, applied=0, unchanged=len(covers), replaced=0, jpg_moved=0, backup=None)
         base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
         backup, k = base, 1
         while True:
@@ -660,17 +667,20 @@ def apply_covers(steam, covers_dir, user=None, files=None):
             for n in replaced:
                 shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
             with open(os.path.join(backup, "manifest.json"), "w") as fh:     # written before copying, so a rollback always works
-                json.dump({"added": added, "replaced": replaced}, fh)
+                json.dump({"added": added, "replaced": replaced, "moved": moved}, fh)
+            for j in moved:
+                os.replace(os.path.join(grid, j), os.path.join(backup, j))   # a move: the user's own art is kept, not deleted
             for f, n in work:
-                _safe_copy(f, os.path.join(grid, n))
+                if f:
+                    _safe_copy(f, os.path.join(grid, n))
         except OSError as e:
             try:
-                _undo(grid, backup, {"added": added, "replaced": replaced})     # leave Steam's art exactly as it was (we already hold the lock)
+                _undo(grid, backup, {"added": added, "replaced": replaced, "moved": moved})     # leave Steam's art exactly as it was (we already hold the lock)
             except Exception:
                 pass
             shutil.rmtree(backup, ignore_errors=True)                           # a failed run must not leave a backup behind
             raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
-        return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), backup=backup)
+        return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), jpg_moved=len(moved), backup=backup)
 
 
 class _Lock:
@@ -804,16 +814,26 @@ def _undo(grid, backup_dir, m):
         if os.path.lexists(p):
             os.remove(p)                                             # removes a symlink itself, never what it points to
             n += 1
+    for name in m.get("moved", []):
+        src = os.path.join(backup_dir, name)
+        if _JPG_NAME.match(name) and _is_plain_file(src):
+            os.replace(src, os.path.join(grid, name))                # hand-made art goes back where it was
+            n += 1
     return n
 
 
 _COVER_NAME = re.compile(r"^[0-9]{1,10}p\.png$")
+_JPG_NAME = re.compile(r"^[0-9]{1,10}p\.jpg$")
+
+
+def _is_plain_file(path):
+    return os.path.isfile(path) and not os.path.islink(path)
 
 
 def restore_backup(steam, backup_dir, user=None, keep=False):
     """Undo one apply: put replaced files back and remove the ones that were added. Returns files touched.
     The backup is deleted afterwards (so the next restore goes one step further back) unless keep=True.
-    Only real steamcase backups inside this account's config folder are accepted, and only files named <appid>p.png are touched."""
+    Only real steamcase backups inside this account's config folder are accepted, and only files named <appid>p.png (or <appid>p.jpg, put back from the backup) are touched."""
     grid = grid_dir(steam, user)
     cfg = os.path.realpath(os.path.dirname(grid))
     real = os.path.realpath(backup_dir)
@@ -826,9 +846,10 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
         with open(mf) as fh:
             m = json.load(fh)
         names = [str(x) for x in m.get("replaced", []) + m.get("added", [])]
+        jpgs = [str(x) for x in m.get("moved", [])]
     except (OSError, ValueError, AttributeError, TypeError, RecursionError, MemoryError, UnicodeError):
         raise SteamcaseError("The backup's manifest is damaged.")
-    if not all(_COVER_NAME.match(n) for n in names):
+    if not all(_COVER_NAME.match(n) for n in names) or not all(_JPG_NAME.match(n) for n in jpgs):
         raise SteamcaseError("The backup's manifest lists unexpected files; refusing to use it.")
     with _Lock(cfg):
         n = _undo(grid, real, m)
@@ -884,7 +905,9 @@ def cmd_apply(args):
         print("Applied %d covers (%d replaced older files, %d already up to date). Backup: %s" % (r["applied"], r["replaced"], r["unchanged"], r["backup"]))
     else:
         print("Nothing to change: all %d covers were already in Steam." % r["unchanged"])
-    print("Start Steam to see them. A custom artwork set by hand in Steam may override these.")
+    if r["jpg_moved"]:
+        print("Art you had set by hand in Steam (%d games) was moved into the backup; restore brings it back." % r["jpg_moved"])
+    print("Start Steam to see them.")
     print("To undo: python steamcase.py restore")
 
 

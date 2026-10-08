@@ -126,6 +126,66 @@ class ApplyRestore(Base):
         self.assertEqual(len(sc.list_backups(self.steam)), 3)
 
 
+    def put(self, name, data=b"HAND-MADE"):
+        with open(os.path.join(self.grid, name), "wb") as f:
+            f.write(data)
+
+    def test_a_hand_made_jpg_is_moved_to_the_backup_and_comes_back_on_restore(self):
+        self.put("1p.jpg")
+        self.put("2p.jpg")                                          # a game we do not cover: must stay
+        r = sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        self.assertEqual(r["jpg_moved"], 1)
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.jpg"])
+        sc.restore_backup(self.steam, r["backup"])
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.jpg", "2p.jpg"])
+        self.assertEqual(self.read(self.grid, "1p.jpg"), b"HAND-MADE")
+
+    def test_a_jpg_added_after_our_cover_is_still_moved(self):
+        fs = [self.cover(1)]
+        sc.apply_covers(self.steam, self.covers, files=fs)
+        self.put("1p.jpg")                                          # the png is identical, the jpg alone hides it
+        r = sc.apply_covers(self.steam, self.covers, files=fs)
+        self.assertEqual((r["jpg_moved"], r["replaced"]), (1, 0))
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png"])
+        self.assertTrue(r["backup"])
+
+    def test_a_symlinked_jpg_is_left_alone(self):
+        target = os.path.join(self.tmp, "elsewhere.jpg")
+        with open(target, "wb") as f:
+            f.write(b"X")
+        os.symlink(target, os.path.join(self.grid, "1p.jpg"))
+        r = sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        self.assertEqual(r["jpg_moved"], 0)
+        self.assertTrue(os.path.islink(os.path.join(self.grid, "1p.jpg")))
+
+    def test_failed_apply_puts_the_jpg_back(self):
+        self.put("1p.jpg")
+        fs = [self.cover(1), self.cover(2)]
+        real = shutil.copy2
+
+        def flaky(src, dst, **k):
+            if os.path.dirname(dst) == self.grid:
+                raise PermissionError("read-only")
+            return real(src, dst, **k)
+        shutil.copy2 = flaky
+        try:
+            with self.assertRaises(sc.SteamcaseError):
+                sc.apply_covers(self.steam, self.covers, files=fs)
+        finally:
+            shutil.copy2 = real
+        self.assertEqual(os.listdir(self.grid), ["1p.jpg"])
+        self.assertEqual(self.read(self.grid, "1p.jpg"), b"HAND-MADE")
+        self.assertEqual(sc.list_backups(self.steam), [])
+
+    def test_restore_refuses_a_manifest_that_moves_odd_names(self):
+        r = sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        mf = os.path.join(r["backup"], "manifest.json")
+        with open(mf, "w") as f:
+            json.dump({"added": [], "replaced": [], "moved": ["../../evil.jpg"]}, f)
+        with self.assertRaises(sc.SteamcaseError):
+            sc.restore_backup(self.steam, r["backup"])
+
+
 class Reset(Base):
     """Removing our covers so Steam shows its own art again, without touching art the user set themselves."""
 
