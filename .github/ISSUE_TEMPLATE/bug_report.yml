@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping. Windows and macOS reports are especially welcome: the author has only run the app on SteamOS so far.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: The release you downloaded, for example v0.9.8 (see the Releases page or the file you downloaded).
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: Your system
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel, run from source)
+        - Linux
+        - SteamOS / Steam Deck
+        - Flatpak
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: steam
+    attributes:
+      label: How is Steam installed?
+      description: For example "normal installer", "native on Linux", "Flatpak", "Snap".
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Which step (1 game list, 2 make covers, 3 apply), what you clicked and what you saw. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: network
+    attributes:
+      label: Output of the network check (if Step 2 fails)
+      description: |
+        Run the app from a terminal with `--check-network` and paste what it prints, for example
+        `./SteamCaseCovers-linux --check-network` or `SteamCaseCovers.exe --check-network`.
+      render: text
