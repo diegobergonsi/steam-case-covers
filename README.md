@@ -56,7 +56,16 @@ If "Windows protected your PC" appears, click **More info**, then **Run anyway**
 <details>
 <summary><b>macOS</b></summary>
 
-Download `SteamCaseCovers-macos.zip` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases), unzip it, then right-click the app and choose **Open**.
+Download `SteamCaseCovers-macos.zip` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases), double-click it to unzip, then double-click the app.
+
+macOS blocks apps that don't come from a paid Apple developer, and this one is free software, so the first time it says it can't verify the app. To allow it, open **System Settings**, then **Privacy & Security**, scroll down to the message about SteamCaseCovers and click **Open Anyway**. (On macOS 14 or older you can instead right-click the app and choose **Open**.)
+
+If macOS says the app is **"damaged" and offers to move it to the Trash**, it isn't damaged: that is the same block. Don't trash it. Open **Terminal** and run this (change the path if the app isn't in Downloads), then open the app again:
+
+```bash
+xattr -dr com.apple.quarantine ~/Downloads/SteamCaseCovers.app
+codesign --force --deep --sign - ~/Downloads/SteamCaseCovers.app
+```
 
 The build is for Apple Silicon (M1 or newer). On an Intel Mac, run it [from source](#from-source).
 
@@ -96,7 +105,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 
 ## How it works
 
-1. **Get your game list.** Click **Download your userdata.json**, log in to Steam if asked, then press Ctrl+S and save the page. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step.
+1. **Get your game list.** Click **Download your userdata.json**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step. On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
 2. **Make the covers.** Click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped.
 3. **Add them to Steam.** Click **Apply to Steam**.
 
@@ -160,6 +169,13 @@ python steamcase.py reset                          # back to Steam's default art
 Run `python steamcase.py -h` for all options, such as `--only`, `--skip-auto-art`, `--steam-dir` and `--user`.
 
 ## FAQ
+
+<details>
+<summary><b>It says my game list has no games in it</b></summary>
+
+You weren't logged in to Steam in your browser when you saved the page. Steam doesn't show an error in that case; it gives an empty list. Click **Download your userdata.json** again: it opens Steam's login page first, so log in there, then save the page you land on.
+
+</details>
 
 <details>
 <summary><b>Why do some covers look blurry?</b></summary>
