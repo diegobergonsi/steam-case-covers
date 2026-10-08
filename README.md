@@ -42,6 +42,12 @@ Steam shows your library as tall portrait cards. This tool puts each game's own 
 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
+<p align="center">
+  <img src="assets/steam-library.png" width="460" alt="A Steam library with the covers installed: every game is a blue case with a Steam banner and platform badges">
+  <br>
+  <em>How the covers look inside Steam.</em>
+</p>
+
 ## Install
 
 <details>
