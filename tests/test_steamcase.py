@@ -219,6 +219,27 @@ class Reset(Base):
         self.assertEqual(os.listdir(self.grid), ["2p.png"])
 
 
+class SteamProcess(Base):
+    def _ps(self, output):
+        real = sc.subprocess.run
+        sc.subprocess.run = lambda *a, **k: type("R", (), {"stdout": output})()
+        try:
+            return sc.steam_running()
+        finally:
+            sc.subprocess.run = real
+
+    @unittest.skipIf(sys.platform.startswith("win"), "uses ps output")
+    def test_steam_is_found_by_short_name_on_linux(self):
+        self.assertTrue(self._ps("systemd\nsteam\nbash\n"))
+        self.assertFalse(self._ps("systemd\nbash\nsteamos-manager\n"))
+
+    @unittest.skipIf(sys.platform.startswith("win"), "uses ps output")
+    def test_steam_is_found_by_full_path_on_macos(self):
+        self.assertTrue(self._ps("/sbin/launchd\n/Applications/Steam.app/Contents/MacOS/steam_osx\n"))
+        self.assertTrue(self._ps("/usr/bin/foo\n/Users/me/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS/steamwebhelper\n"))
+        self.assertFalse(self._ps("/sbin/launchd\n/Applications/Safari.app/Contents/MacOS/Safari\n/usr/bin/steamer\n"))
+
+
 class Network(Base):
     def test_trusted_certificates_are_loaded(self):
         self.assertGreater(sc._ssl_context().cert_store_stats()["x509_ca"], 0)

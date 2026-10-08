@@ -327,9 +327,18 @@ def steam_running():
             out = subprocess.run([_tool("tasklist")], capture_output=True, text=True).stdout.lower()
             return "steam.exe" in out
         out = subprocess.run([_tool("ps"), "-A", "-o", "comm="], capture_output=True, text=True).stdout.lower()
-        return any(l.strip() in ("steam", "steam_osx", "steamwebhelper") for l in out.splitlines())
+        # Linux prints just the name ("steam"); macOS prints the whole path (".../Steam.app/Contents/MacOS/steam_osx")
+        return any(os.path.basename(l.strip()) in ("steam", "steam_osx", "steamwebhelper") for l in out.splitlines())
     except Exception:
         return False
+
+
+def _mac_steam_binary():
+    for base in ("/Applications", os.path.expanduser("~/Applications")):
+        p = os.path.join(base, "Steam.app", "Contents", "MacOS", "steam_osx")
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def _steam_launcher(steam):
@@ -358,7 +367,11 @@ def close_steam(steam, timeout=60):
     cmd = _steam_launcher(steam)
     try:
         if sys.platform == "darwin":
-            subprocess.Popen([_tool("osascript"), "-e", 'quit app "Steam"'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            exe = _mac_steam_binary()
+            if exe:                                                  # Steam's own "-shutdown" (works without any permission prompt)
+                subprocess.Popen([exe, "-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                subprocess.Popen([_tool("osascript"), "-e", 'quit app "Steam"'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif cmd:
             subprocess.Popen(cmd + ["-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
