@@ -56,25 +56,17 @@ If "Windows protected your PC" appears, click **More info**, then **Run anyway**
 <details>
 <summary><b>macOS</b></summary>
 
-Download `SteamCaseCovers-macos.zip` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases), double-click it to unzip, then double-click the app.
-
-macOS blocks apps that don't come from a paid Apple developer, and this one is free software. The first time, it shows **"SteamCaseCovers" Not Opened: Apple could not verify it is free of malware**, with two buttons. Click **Done** (not Move to Trash). Then:
-
-1. Open **System Settings**, then **Privacy & Security**.
-2. Scroll down to the **Security** section. Next to the message about SteamCaseCovers, click **Open Anyway** and confirm with your password or Touch ID.
-
-The Open Anyway button only stays for about an hour after the block. If it's missing, double-click the app again and look again. On macOS 14 or older you can instead right-click the app and choose **Open**.
-
-If the app then bounces in the Dock forever and no window appears, **restart your Mac** and open it again. (macOS sometimes gets stuck checking a downloaded app after Open Anyway; a restart clears it.)
-
-If macOS says the app is **"damaged" and offers to move it to the Trash**, it isn't damaged: that is the same block. Don't trash it. Open **Terminal** and run this (change the path if the app isn't in Downloads), then open the app again:
+Download `SteamCaseCovers-macos.zip` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases) and double-click it to unzip. **Before you open the app**, run this in **Terminal** (change the path if the app isn't in Downloads), then double-click the app:
 
 ```bash
 xattr -dr com.apple.quarantine ~/Downloads/SteamCaseCovers.app
-codesign --force --deep --sign - ~/Downloads/SteamCaseCovers.app
 ```
 
-The build is for Apple Silicon (M1 or newer). On an Intel Mac, run it [from source](#from-source).
+Why: macOS blocks any app that doesn't come from a paid Apple developer (about 99 USD a year, which a free project can't justify). That command removes the "downloaded from the internet" mark, so macOS opens the app normally. The app isn't harmful or damaged, and its source code is here for anyone to read.
+
+If you open the app first instead, macOS shows **"SteamCaseCovers" Not Opened: Apple could not verify it is free of malware**. Click **Done** (not Move to Trash), then open **System Settings**, **Privacy & Security**, scroll to **Security**, and click **Open Anyway** next to the SteamCaseCovers message (it stays for about an hour; double-click the app again to bring it back). If the app then bounces in the Dock forever with no window, **restart your Mac** and use the Terminal command above instead. On macOS 14 or older you can also right-click the app and choose **Open**.
+
+macOS support is **best effort**: the author has only tested it on an Apple Silicon MacBook Air. The build is for Apple Silicon (M1 or newer). On an Intel Mac, run it [from source](#from-source).
 
 </details>
 
