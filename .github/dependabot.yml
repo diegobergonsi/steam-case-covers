@@ -1,0 +1,16 @@
+# Keeps the pinned GitHub Actions (by commit) and the Python build tools up to date.
+# Dependabot opens a pull request for each update; the release workflow runs the tests on it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
