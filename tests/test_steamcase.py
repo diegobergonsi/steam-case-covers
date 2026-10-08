@@ -177,6 +177,28 @@ class ApplyRestore(Base):
         self.assertEqual(self.read(self.grid, "1p.jpg"), b"HAND-MADE")
         self.assertEqual(sc.list_backups(self.steam), [])
 
+    def test_if_the_rollback_itself_fails_the_backup_is_kept(self):
+        self.put("1p.jpg")
+        real_copy, real_undo = shutil.copy2, sc._undo
+
+        def broken(src, dst, **k):
+            if os.path.dirname(dst) == self.grid:
+                raise PermissionError("read-only")
+            return real_copy(src, dst, **k)
+
+        def undo_fails(*a, **k):
+            raise PermissionError("cannot put it back")
+        shutil.copy2, sc._undo = broken, undo_fails
+        try:
+            with self.assertRaises(sc.SteamcaseError) as ctx:
+                sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        finally:
+            shutil.copy2, sc._undo = real_copy, real_undo
+        backups = sc.list_backups(self.steam)
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(self.read(backups[0], "1p.jpg"), b"HAND-MADE")      # the user's art survived
+        self.assertIn("safe in the backup", str(ctx.exception))
+
     def test_restore_refuses_a_manifest_that_moves_odd_names(self):
         r = sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
         mf = os.path.join(r["backup"], "manifest.json")

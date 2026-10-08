@@ -726,7 +726,8 @@ def apply_covers(steam, covers_dir, user=None, files=None):
             try:
                 _undo(grid, backup, {"added": added, "replaced": replaced, "moved": moved})     # leave Steam's art exactly as it was (we already hold the lock)
             except Exception:
-                pass
+                raise SteamcaseError("Could not write to Steam's artwork folder (%s), and the old artwork could not be put back. "
+                                     "It is safe in the backup folder %s (use Restore, or copy the files back by hand)." % (e, backup))
             shutil.rmtree(backup, ignore_errors=True)                           # a failed run must not leave a backup behind
             raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
         return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), jpg_moved=len(moved), backup=backup)

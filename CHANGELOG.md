@@ -4,6 +4,11 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-08
+First stable release. Windows is now tested on a real PC.
+- If Apply fails and the old artwork cannot be put back, the backup is kept and the message says where it is, instead of the backup being deleted.
+- Reviewed the new code (the `.jpg` move, the update check, network, process control and Reset) before this release.
+
 ## [0.9.11] - 2026-10-08
 - A "Check for updates" button in the window and a `--version` option. It only asks GitHub when you click, tells you if a newer version exists and offers to open the download page; nothing is downloaded or installed. Release builds carry their version number.
 
