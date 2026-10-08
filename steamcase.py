@@ -39,9 +39,12 @@ CDN = "https://shared.fastly.steamstatic.com/store_item_assets/"
 OLD_CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/%d/library_600x900_2x.jpg"
 STORE_API = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1?"
 LIBRARY_JSON_URL = "https://store.steampowered.com/dynamicstore/userdata/"
-# The data page returns an EMPTY list (not an error) when you are logged out. Opening Steam's login page with a
-# redirect target means: logged in already -> straight to the data; not logged in -> log in, then the data.
-LIBRARY_LOGIN_URL = "https://store.steampowered.com/login/?redir=dynamicstore%2Fuserdata%2F&redir_ssl=1"
+# The data page returns an EMPTY list (not an error) when you are logged out, and Steam lets the browser keep that
+# answer for an hour (Cache-Control: max-age=3600). So the button opens Steam's login page with a redirect to the
+# data page, using a NEW address every time (?cb=...): logged in already -> straight to the data; logged out -> log in,
+# then fresh data, never the cached empty copy.
+def library_login_url():
+    return "https://store.steampowered.com/login/?redir=dynamicstore%2Fuserdata%2F%3Fcb%3D" + uuid.uuid4().hex[:10] + "&redir_ssl=1"
 MAX_DOWNLOAD = 25 * 1024 * 1024          # a cover portrait is ~1 MB; anything bigger is not one
 MAX_LIBRARY_FILE = 20 * 1024 * 1024      # a real library list is a few KB
 MAX_APPS = 100_000                       # a real library has at most a few thousand apps
@@ -253,7 +256,8 @@ def owned_ids(json_path):
     ids = d.get("rgOwnedApps") if isinstance(d, dict) else None
     if isinstance(ids, list) and not ids and "rgOwnedPackages" in d:
         raise SteamcaseError("That file has no games in it. This usually means you were not logged in to Steam in your browser when you saved it. "
-                             "Click “Download your userdata.json” again, log in when Steam asks, then save the page.")
+                             "Click “Download your userdata.json” again, log in when Steam asks, then save the page. "
+                             "If the page you see shows no games even though you are logged in, refresh it (F5, or Cmd+R on a Mac) before saving.")
     if not ids or not isinstance(ids, list):
         raise SteamcaseError("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam." % LIBRARY_JSON_URL)
     if len(ids) > MAX_APPS:

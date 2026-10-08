@@ -190,7 +190,7 @@ class App(tk.Tk):
 
     def open_download_page(self):
         try:
-            webbrowser.open(sc.LIBRARY_LOGIN_URL)
+            webbrowser.open(sc.library_login_url())
         except Exception:
             pass
         # webbrowser cannot tell us whether a browser really opened, so always show the way out
@@ -199,7 +199,7 @@ class App(tk.Tk):
 
     def copy_link(self):
         self.clipboard_clear()
-        self.clipboard_append(sc.LIBRARY_LOGIN_URL)
+        self.clipboard_append(sc.library_login_url())
         self.update()                               # keeps the text on the clipboard on some systems
         self.step1_status.configure(text="Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (%s)." % SAVE_KEY, fg=ACCENT)
 

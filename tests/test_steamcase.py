@@ -379,10 +379,12 @@ class Attacks(Base):
             sc.owned_ids(p)
         self.assertIn("not logged in", str(cm.exception))
 
-    def test_download_button_opens_the_login_page_that_redirects_to_the_data(self):
-        self.assertIn("/login/", sc.LIBRARY_LOGIN_URL)
-        self.assertIn("redir=dynamicstore%2Fuserdata%2F", sc.LIBRARY_LOGIN_URL)
-        self.assertTrue(sc.LIBRARY_LOGIN_URL.startswith("https://store.steampowered.com/"))
+    def test_download_button_opens_the_login_page_with_a_fresh_address_each_time(self):
+        a, b = sc.library_login_url(), sc.library_login_url()
+        self.assertNotEqual(a, b)                                          # never the browser's cached (logged-out) copy
+        for u in (a, b):
+            self.assertTrue(u.startswith("https://store.steampowered.com/login/?redir=dynamicstore%2Fuserdata%2F%3Fcb%3D"))
+            self.assertTrue(u.endswith("&redir_ssl=1"))
 
     def test_invalid_app_ids_are_dropped(self):
         p = os.path.join(self.tmp, "ids.json")
