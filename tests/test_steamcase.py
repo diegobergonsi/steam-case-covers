@@ -423,12 +423,40 @@ class Attacks(Base):
                 pass
         srv = socketserver.TCPServer(("127.0.0.1", 0), H)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
+        sc.ALLOW_LOCAL_HTTP = True
         try:
             with self.assertRaises(sc.SteamcaseError):
                 sc.http_get("http://127.0.0.1:%d/x" % srv.server_address[1], tries=1)
         finally:
+            sc.ALLOW_LOCAL_HTTP = False
             srv.shutdown()
             srv.server_close()
+
+    def test_only_https_addresses_are_ever_opened(self):
+        for bad in ("file:///etc/passwd", "http://store.steampowered.com/x", "ftp://example.com/a", "http://127.0.0.1:1/x", "//example.com/x", "javascript:alert(1)"):
+            with self.assertRaises(sc.SteamcaseError, msg=bad):
+                sc.http_get(bad, tries=1)
+
+    def test_a_redirect_to_a_plain_http_page_is_refused(self):
+        class R(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", "http://example.invalid/downgraded")
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+        srv = socketserver.TCPServer(("127.0.0.1", 0), R)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        sc.ALLOW_LOCAL_HTTP = True
+        try:
+            with self.assertRaises(sc.SteamcaseError) as cm:
+                sc.http_get("http://127.0.0.1:%d/x" % srv.server_address[1], tries=1)
+        finally:
+            sc.ALLOW_LOCAL_HTTP = False
+            srv.shutdown()
+            srv.server_close()
+        self.assertIn("not https", str(cm.exception))
 
     def test_decompression_bomb_image_is_refused(self):
         if sc.Image is None:

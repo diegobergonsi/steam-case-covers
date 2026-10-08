@@ -120,6 +120,33 @@ def check_network():
         return False, explain_error(e)
 
 
+ALLOW_LOCAL_HTTP = False         # only the tests switch this on (they talk to a throw-away local server)
+_opener = None
+
+
+class _HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _require_https(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _require_https(url):
+    """Every address the app opens must be https (no file:// and no unencrypted http://)."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme == "https":
+        return
+    if ALLOW_LOCAL_HTTP and parts.scheme == "http" and parts.hostname in ("127.0.0.1", "localhost"):
+        return
+    raise SteamcaseError("Refusing to open an address that is not https: %s" % url[:80])
+
+
+def _get_opener():
+    global _opener
+    if _opener is None:
+        _opener = urllib.request.build_opener(_HttpsOnlyRedirects, urllib.request.HTTPSHandler(context=_ssl_context()))
+    return _opener
+
+
 def _read_capped(resp):
     size = resp.headers.get("Content-Length")
     if size and size.isdigit() and int(size) > MAX_DOWNLOAD:
@@ -133,8 +160,9 @@ def _read_capped(resp):
 def http_get(url, tries=3):
     for i in range(tries):
         try:
+            _require_https(url)
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 steamcase"})
-            with urllib.request.urlopen(req, timeout=30, context=_ssl_context()) as r:
+            with _get_opener().open(req, timeout=30) as r:
                 return _read_capped(r)
         except SteamcaseError:
             raise
