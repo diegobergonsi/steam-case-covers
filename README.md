@@ -133,6 +133,7 @@ Changed your mind?
 ✅ Cancel anytime; run again to continue <br>
 ✅ Optional "skip blurry auto-art" for games Steam has no real portrait for <br>
 ✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
+✅ A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 ✅ Free software: no ads, no account, no telemetry
 
 ## Safety

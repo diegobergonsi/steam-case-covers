@@ -7,3 +7,4 @@ userdata*.json
 .env
 build/
 dist/
+assets/version.txt

@@ -186,6 +186,59 @@ class ApplyRestore(Base):
             sc.restore_backup(self.steam, r["backup"])
 
 
+class UpdateCheck(unittest.TestCase):
+    def releases(self, *rows):
+        real = sc.http_get
+        sc.http_get = lambda url, tries=3: json.dumps(list(rows)).encode()
+        self.addCleanup(setattr, sc, "http_get", real)
+
+    def test_newer_release_is_found_and_the_link_is_built_by_us(self):
+        self.releases({"tag_name": "v0.9.10", "html_url": "https://evil.example/x"}, {"tag_name": "v0.9.9"})
+        r = sc.check_for_update("v0.9.9")
+        self.assertEqual((r["latest"], r["newer"]), ("v0.9.10", True))
+        self.assertEqual(r["url"], "https://github.com/diegobergonsi/steam-case-covers/releases/tag/v0.9.10")
+
+    def test_versions_compare_as_numbers_not_text(self):
+        self.releases({"tag_name": "v0.9.10"}, {"tag_name": "v0.9.9"})
+        self.assertFalse(sc.check_for_update("v0.9.10")["newer"])
+        self.assertTrue(sc.check_for_update("v0.9.9")["newer"])
+        self.assertFalse(sc.check_for_update("v1.0.0")["newer"])
+
+    def test_drafts_and_odd_tags_are_ignored(self):
+        self.releases({"tag_name": "v9.9.9", "draft": True}, {"tag_name": "v1.0.0/../x"}, {"tag_name": "nightly"},
+                      {"tag_name": 7}, "junk", None, {"tag_name": "v0.9.8"})
+        self.assertEqual(sc.check_for_update("v0.9.8")["latest"], "v0.9.8")
+
+    def test_a_source_run_has_no_version_to_compare(self):
+        self.releases({"tag_name": "v0.9.10"})
+        r = sc.check_for_update("dev")
+        self.assertEqual((r["latest"], r["newer"]), ("v0.9.10", None))
+
+    def test_bad_answers_and_network_errors_become_a_clear_error(self):
+        for body in (b"not json", b"{}", b"[]", b"[" * 100000):
+            real = sc.http_get
+            sc.http_get = lambda url, tries=3, b=body: b
+            try:
+                with self.assertRaises(sc.SteamcaseError):
+                    sc.check_for_update("v0.9.9")
+            finally:
+                sc.http_get = real
+
+        def down(url, tries=3):
+            raise OSError("no route")
+        real, sc.http_get = sc.http_get, down
+        try:
+            with self.assertRaises(sc.SteamcaseError):
+                sc.check_for_update("v0.9.9")
+        finally:
+            sc.http_get = real
+
+    def test_a_stamped_version_must_look_like_a_tag(self):
+        self.assertEqual(sc.version_tuple("v0.9.10"), (0, 9, 10))
+        for bad in ("dev", "0.9.10", "v1.0", "v1.0.0-rc1", "v1.0.0\nx", "", None, 5):
+            self.assertIsNone(sc.version_tuple(bad))
+
+
 class Reset(Base):
     """Removing our covers so Steam shows its own art again, without touching art the user set themselves."""
 

@@ -31,6 +31,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-build.txt
+      - name: Stamp the version into the build
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "$TAG" > assets/version.txt
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Selftest (source)

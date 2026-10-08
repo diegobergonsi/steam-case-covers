@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- A "Check for updates" button in the window and a `--version` option. It only asks GitHub when you click, tells you if a newer version exists and offers to open the download page; nothing is downloaded or installed. Release builds carry their version number.
 
 ## [0.9.10] - 2026-10-08
 - Fixed Apply having no effect on games where you had set custom artwork by hand in Steam: Steam shows that `.jpg` before our cover. Apply now moves it into the backup (Restore puts it back).

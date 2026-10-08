@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 # PyInstaller recipe. Build with:  pyinstaller steamcase.spec
-import sys
+import os, sys
 
-a = Analysis(["gui.py"], datas=[("assets/frame.png", "assets"), ("assets/icon.png", "assets")], excludes=["numpy", "matplotlib", "scipy", "pandas"])
+# assets/version.txt only exists in release builds (the workflow writes the tag into it); source runs report "dev"
+a = Analysis(["gui.py"], datas=[("assets/frame.png", "assets"), ("assets/icon.png", "assets")] + ([("assets/version.txt", "assets")] if os.path.exists("assets/version.txt") else []), excludes=["numpy", "matplotlib", "scipy", "pandas"])
 pyz = PYZ(a.pure)
 
 if sys.platform == "darwin":                       # macOS: folder-based .app (single-file .app is discouraged)

@@ -176,6 +176,55 @@ def http_get(url, tries=3):
             time.sleep(1.5 * (i + 1))
 
 
+REPO = "diegobergonsi/steam-case-covers"
+_TAG = re.compile(r"^v([0-9]{1,4})\.([0-9]{1,4})\.([0-9]{1,4})$")
+
+
+def _read_version():
+    """The release tag stamped into this build (assets/version.txt, written by the release workflow); "dev" for source runs."""
+    try:
+        with open(os.path.join(HERE, "assets", "version.txt"), encoding="ascii") as fh:
+            v = fh.read(40).strip()
+        return v if _TAG.match(v) else "dev"
+    except Exception:
+        return "dev"
+
+
+APP_VERSION = _read_version()
+
+
+def version_tuple(tag):
+    m = _TAG.match(tag) if isinstance(tag, str) else None
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def check_for_update(current=None):
+    """Ask GitHub for the newest published release (pre-releases count). Returns
+    {"current", "latest", "newer", "url"}; "newer" is None when this build carries no version number (run from source).
+    The page address is built here from a tag that matched a strict pattern, never taken from the server's answer.
+    Nothing is downloaded or installed. Raises SteamcaseError when GitHub cannot be reached or answers nonsense."""
+    current = APP_VERSION if current is None else current
+    try:
+        data = json.loads(http_get("https://api.github.com/repos/%s/releases?per_page=30" % REPO, tries=2).decode("utf-8", "replace"))
+    except SteamcaseError:
+        raise
+    except (ValueError, RecursionError, MemoryError, UnicodeError):
+        raise SteamcaseError("GitHub's answer was not understood. Try again later.")
+    except Exception as e:
+        raise SteamcaseError("Could not reach GitHub: %s" % explain_error(e))
+    best = None
+    for r in data if isinstance(data, list) else []:
+        tag = r.get("tag_name") if isinstance(r, dict) and not r.get("draft") else None
+        v = version_tuple(tag)
+        if v and (best is None or v > best[0]):
+            best = (v, tag)
+    if not best:
+        raise SteamcaseError("No releases found on GitHub.")
+    mine = version_tuple(current)
+    return {"current": current, "latest": best[1], "newer": None if mine is None else best[0] > mine,
+            "url": "https://github.com/%s/releases/tag/%s" % (REPO, best[1])}
+
+
 def _tmp(path, tag="tmp"):
     """A temp file name next to `path` that no other run can share."""
     return "%s.%d.%s.%s" % (path, os.getpid(), uuid.uuid4().hex[:8], tag)
@@ -959,6 +1008,7 @@ def cmd_restore(args):
 
 def main():
     ap = argparse.ArgumentParser(description="Steam 'physical case' covers for your library.")
+    ap.add_argument("--version", action="version", version="steam-case-covers %s" % APP_VERSION)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p, make=False, apply_=False):

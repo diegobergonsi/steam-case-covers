@@ -93,6 +93,8 @@ class App(tk.Tk):
         titles.pack(side="left")
         tk.Label(titles, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
         tk.Label(titles, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED).pack(anchor="w")
+        self.btn_update = RoundedButton(head, "Check for updates", self.check_update, bg=BG)
+        self.btn_update.pack(side="right")
 
         self.step1 = self._card("1", "Get your game list")
         self.step2 = self._card("2", "Make the covers")
@@ -311,6 +313,34 @@ class App(tk.Tk):
         except Exception as e:                      # never leave the UI stuck in "running"
             self.events.put(("error", "Unexpected problem: %s" % e))
 
+    def check_update(self):
+        """Asks GitHub whether a newer release exists. Only on click; nothing is downloaded or installed."""
+        self.btn_update.configure(state="disabled")
+        threading.Thread(target=self._update_worker, daemon=True).start()
+
+    def _update_worker(self):
+        try:
+            self.events.put(("update", sc.check_for_update()))
+        except sc.SteamcaseError as e:
+            self.events.put(("update_error", str(e)))
+        except Exception as e:
+            self.events.put(("update_error", "Unexpected problem: %s" % e))
+
+    def show_update(self, r):
+        self.btn_update.configure(state="normal")
+        if r["newer"] is False:
+            messagebox.showinfo("No update needed", "You have the latest version (%s)." % r["current"])
+            return
+        if r["newer"]:
+            text = "A newer version is available: %s (you have %s).\n\nOpen the download page in your browser? Nothing is installed automatically." % (r["latest"], r["current"])
+        else:
+            text = "The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare.\n\nOpen the download page?" % r["latest"]
+        if messagebox.askokcancel("Update available", text, ok="Open page", cancel="Not now"):
+            try:
+                webbrowser.open(r["url"])
+            except Exception:
+                pass
+
     def poll_events(self):
         try:
             while True:
@@ -321,6 +351,11 @@ class App(tk.Tk):
                     self.step2_status.configure(text="%d of %d · %s" % (done, total, name if len(name) <= 60 else name[:57] + "…"), fg=MUTED)
                 elif ev[0] == "done":
                     self.finish_make(ev[1])
+                elif ev[0] == "update":
+                    self.show_update(ev[1])
+                elif ev[0] == "update_error":
+                    self.btn_update.configure(state="normal")
+                    messagebox.showerror("Could not check for updates", ev[1])
                 elif ev[0] == "reset_scan":
                     self.on_reset_scan(ev[1], ev[2])
                 elif ev[0] == "step3_status":
@@ -597,6 +632,9 @@ def selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         sys.exit(selftest())
+    if "--version" in sys.argv:
+        print("steam-case-covers %s" % sc.APP_VERSION)
+        sys.exit(0)
     if "--check-network" in sys.argv:                     # for bug reports: does this computer reach Steam?
         ok, msg = sc.check_network()
         print(("network ok: " if ok else "network FAILED: ") + msg)
