@@ -81,14 +81,16 @@ macOS support is **best effort**: the author has only tested it on an Apple Sili
 <details>
 <summary><b>Linux and Steam Deck</b></summary>
 
-Download `SteamCaseCovers-linux` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases), make it executable, and run it:
+On a Steam Deck, switch to **Desktop Mode** first. The app needs a desktop window, so it doesn't run in Gaming Mode.
+
+Download `SteamCaseCovers-linux` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases) and open it. On a Steam Deck a small pop-up appears: click **Launch** and the app opens.
+
+If your file manager doesn't run it, make it executable and start it from a terminal:
 
 ```bash
 chmod +x SteamCaseCovers-linux
 ./SteamCaseCovers-linux
 ```
-
-On a Steam Deck, switch to **Desktop Mode** first. The app needs a desktop window, so it doesn't run in Gaming Mode.
 
 </details>
 
