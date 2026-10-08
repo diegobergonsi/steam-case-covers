@@ -58,7 +58,12 @@ If "Windows protected your PC" appears, click **More info**, then **Run anyway**
 
 Download `SteamCaseCovers-macos.zip` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases), double-click it to unzip, then double-click the app.
 
-macOS blocks apps that don't come from a paid Apple developer, and this one is free software, so the first time it says it can't verify the app. To allow it, open **System Settings**, then **Privacy & Security**, scroll down to the message about SteamCaseCovers and click **Open Anyway**. (On macOS 14 or older you can instead right-click the app and choose **Open**.)
+macOS blocks apps that don't come from a paid Apple developer, and this one is free software. The first time, it shows **"SteamCaseCovers" Not Opened: Apple could not verify it is free of malware**, with two buttons. Click **Done** (not Move to Trash). Then:
+
+1. Open **System Settings**, then **Privacy & Security**.
+2. Scroll down to the **Security** section. Next to the message about SteamCaseCovers, click **Open Anyway** and confirm with your password or Touch ID.
+
+The Open Anyway button only stays for about an hour after the block. If it's missing, double-click the app again and look again. On macOS 14 or older you can instead right-click the app and choose **Open**.
 
 If macOS says the app is **"damaged" and offers to move it to the Trash**, it isn't damaged: that is the same block. Don't trash it. Open **Terminal** and run this (change the path if the app isn't in Downloads), then open the app again:
 
