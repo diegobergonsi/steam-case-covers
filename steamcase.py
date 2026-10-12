@@ -380,6 +380,15 @@ def pick_account(steam, forced=None):
     return max(accs, key=lambda a: os.path.getmtime(os.path.join(base, a)))
 
 
+def list_accounts(steam):
+    """[(folder id, display name)] for every Steam account that has a userdata folder, the one pick_account() would choose first."""
+    base = os.path.join(steam, "userdata")
+    accs = [d for d in os.listdir(base) if re.fullmatch(r"[0-9]+", d) and d != "0"] if os.path.isdir(base) else []
+    first = pick_account(steam) if accs else None
+    accs.sort(key=lambda a: (a != first, a))
+    return [(a, account_label(steam, a)) for a in accs]
+
+
 def account_label(steam, acc):
     """Human name for a userdata folder id: Steam display name, else login name, else the number."""
     lu = os.path.join(steam, "config", "loginusers.vdf")
@@ -688,12 +697,11 @@ def apply_covers(steam, covers_dir, user=None, files=None):
         for f in covers:
             n = "%sp.png" % appid_of(f)
             dest = os.path.join(grid, n)
-            j = "%sp.jpg" % appid_of(f)
-            if _is_plain_file(os.path.join(grid, j)):
-                moved.append(j)                                  # it would hide our cover: Steam prefers .jpg
+            js = ["%sp.%s" % (appid_of(f), e) for e in OTHER_EXT if _is_plain_file(os.path.join(grid, "%sp.%s" % (appid_of(f), e)))]
+            moved += js                                          # they would hide our cover: Steam prefers them over .png
             same = os.path.exists(dest) and filecmp.cmp(f, dest, shallow=False)
             if same:
-                if j in moved:
+                if js:
                     work.append((None, n))                       # our cover is there, only the .jpg has to go
                 continue                                         # identical already: no need to touch or back it up
             if os.path.exists(dest):
@@ -803,17 +811,33 @@ def find_our_covers(steam, user=None, progress=None, cancelled=None):
     return out
 
 
-def reset_to_default(steam, user=None, names=None):
+def find_other_art(steam, user=None, ours=()):
+    """Custom portraits in the grid folder that this app did not make: art from SteamGridDB, from Steam's own menu, other formats.
+    Returns (png names, jpg/jpeg/webp names)."""
+    grid = grid_dir(steam, user)
+    if not os.path.isdir(grid):
+        return [], []
+    files = [n for n in os.listdir(grid) if _is_plain_file(os.path.join(grid, n))]
+    return sorted(n for n in files if _COVER_NAME.match(n) and n not in ours), sorted(n for n in files if _JPG_NAME.match(n))
+
+
+def reset_to_default(steam, user=None, names=None, everything=False):
     """Remove our covers from Steam's grid folder so Steam shows its own default art again.
     Only files recognised as ours go; the files are moved into a normal backup, so restore_backup() undoes this.
-    `names`: result of an earlier find_our_covers() (default: scan now). Returns {"removed", "backup", "account", "account_name"}."""
+    `names`: result of an earlier find_our_covers() (default: scan now).
+    `everything`: also remove every other custom portrait (SteamGridDB, set by hand in Steam, any format), so no custom art is left.
+    Returns {"removed", "backup", "account", "account_name"}."""
     grid = grid_dir(steam, user)
     acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
     info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
     if names is None:
         names = find_our_covers(steam, user)
-    names = [n for n in names if _COVER_NAME.match(n) and os.path.isfile(os.path.join(grid, n)) and not os.path.islink(os.path.join(grid, n))]
-    if not names:
+    names = [n for n in names if _COVER_NAME.match(n) and _is_plain_file(os.path.join(grid, n))]
+    other = []
+    if everything:
+        extra_png, other = find_other_art(steam, user, names)
+        names += extra_png
+    if not names and not other:
         return dict(info, removed=0, backup=None)
     with _Lock(os.path.dirname(grid)):
         base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
@@ -828,8 +852,8 @@ def reset_to_default(steam, user=None, names=None):
         moved = []
         try:
             with open(os.path.join(backup, "manifest.json"), "w") as fh:
-                json.dump({"added": [], "replaced": names}, fh)
-            for n in names:
+                json.dump({"added": [], "replaced": names, "moved": other}, fh)
+            for n in names + other:
                 os.replace(os.path.join(grid, n), os.path.join(backup, n))      # a move, not a copy: instant and no extra disk space
                 moved.append(n)
         except OSError as e:
@@ -873,7 +897,8 @@ def _undo(grid, backup_dir, m):
 
 
 _COVER_NAME = re.compile(r"^[0-9]{1,10}p\.png$")
-_JPG_NAME = re.compile(r"^[0-9]{1,10}p\.jpg$")
+_JPG_NAME = re.compile(r"^[0-9]{1,10}p\.(jpg|jpeg|webp)$")      # art set from Steam's menu or by SteamGridDB; Steam shows these before our .png
+OTHER_EXT = ("jpg", "jpeg", "webp")
 
 
 def _is_plain_file(path):
@@ -971,10 +996,18 @@ def cmd_reset(args):
     steam = steam_dir(args.steam_dir)
     print("Looking for covers made by this app (this can take a few seconds)...")
     names = find_our_covers(steam, args.user)
-    if not names:
+    if args.everything:
+        extra, other = find_other_art(steam, args.user, names)
+        print("%d covers made by this app and %d custom portraits from other sources (SteamGridDB, set by hand) will be removed; Steam goes back to its own default art." % (len(names), len(extra) + len(other)))
+        names = names + extra
+        if not names and not other:
+            print("Nothing to reset.")
+            return
+    elif not names:
         print("None found. Nothing to reset.")
         return
-    print("%d covers made by this app will be removed; Steam goes back to its own default art for them. Your own custom art is not touched." % len(names))
+    else:
+        print("%d covers made by this app will be removed; Steam goes back to its own default art for them. Your own custom art is not touched. (--everything also removes art from other sources.)" % len(names))
     if steam_running() and not args.yes:
         if args.close_steam:
             print("Closing Steam...")
@@ -986,7 +1019,7 @@ def cmd_reset(args):
                 raise SteamcaseError("Cancelled.")
     elif not args.yes and input("Remove them? [y/N] ").strip().lower() != "y":
         raise SteamcaseError("Cancelled.")
-    r = reset_to_default(steam, args.user, names)
+    r = reset_to_default(steam, args.user, names, args.everything)
     print("Removed %d covers. Backup: %s\nTo bring them back: python steamcase.py restore" % (r["removed"], r["backup"]))
 
 
@@ -1032,7 +1065,8 @@ def main():
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
-    p = sub.add_parser("reset", help="remove our covers from Steam so it shows its default art again"); common(p, apply_=True); p.set_defaults(fn=cmd_reset)
+    p = sub.add_parser("reset", help="remove our covers from Steam so it shows its default art again"); common(p, apply_=True)
+    p.add_argument("--everything", action="store_true", help="also remove custom portraits from other sources (SteamGridDB, set by hand)"); p.set_defaults(fn=cmd_reset)
     p = sub.add_parser("restore", help="undo an apply (newest backup by default)")
     p.add_argument("--steam-dir"); p.add_argument("--user"); p.add_argument("--yes", action="store_true")
     p.add_argument("--backup", help="backup folder name (see userdata/<id>/config/)")

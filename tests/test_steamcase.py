@@ -140,6 +140,39 @@ class ApplyRestore(Base):
         self.assertEqual(sorted(os.listdir(self.grid)), ["1p.jpg", "2p.jpg"])
         self.assertEqual(self.read(self.grid, "1p.jpg"), b"HAND-MADE")
 
+    def test_webp_and_jpeg_art_is_moved_too(self):
+        self.put("1p.webp")
+        self.put("2p.jpeg")
+        r = sc.apply_covers(self.steam, self.covers, files=[self.cover(1), self.cover(2)])
+        self.assertEqual(r["jpg_moved"], 2)
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png"])
+        sc.restore_backup(self.steam, r["backup"])
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.webp", "2p.jpeg"])
+
+    def test_reset_everything_removes_other_art_and_restore_brings_it_back(self):
+        self.put("1p.png", b"SGDB")                                 # not ours: no frame
+        self.put("2p.webp")
+        self.put("3p.jpg")
+        self.put("3_hero.jpg")                                      # other art kinds are never touched
+        r = sc.reset_to_default(self.steam, names=[], everything=True)
+        self.assertEqual(r["removed"], 3)
+        self.assertEqual(os.listdir(self.grid), ["3_hero.jpg"])
+        sc.restore_backup(self.steam, r["backup"])
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.webp", "3_hero.jpg", "3p.jpg"])
+        self.assertEqual(self.read(self.grid, "1p.png"), b"SGDB")
+
+    def test_plain_reset_leaves_other_art(self):
+        self.put("2p.webp")
+        r = sc.reset_to_default(self.steam, names=[])
+        self.assertEqual(r["removed"], 0)
+        self.assertEqual(os.listdir(self.grid), ["2p.webp"])
+
+    def test_list_accounts_puts_the_chosen_one_first(self):
+        os.makedirs(os.path.join(self.steam, "userdata", "5"))
+        os.makedirs(os.path.join(self.steam, "userdata", "0"))     # Steam's placeholder folder is not an account
+        self.assertEqual(sorted(a for a, _ in sc.list_accounts(self.steam)), ["111", "5"])
+        self.assertEqual(sc.list_accounts(self.steam)[0][0], sc.pick_account(self.steam))
+
     def test_a_jpg_added_after_our_cover_is_still_moved(self):
         fs = [self.cover(1)]
         sc.apply_covers(self.steam, self.covers, files=fs)
