@@ -75,6 +75,7 @@ def run_one(seed, steps, sandbox):
         return state["closes"]
     sc.close_steam, sc.start_steam = fake_close, (lambda s: None)
     gui.messagebox.askokcancel = lambda t, m, **k: answers["ok"]
+    gui.messagebox.choose = lambda t, m, buttons, icon="question": rnd.choice([b[1] for b in buttons]) if answers["ok"] else None
     gui.messagebox.showerror = lambda t, m: notes.append("popup:" + m[:60])
     gui.messagebox.showinfo = lambda t, m: None
     gui.pick_file = lambda title, initialdir: picks["file"]

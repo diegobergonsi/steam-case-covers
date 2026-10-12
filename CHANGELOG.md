@@ -3,6 +3,10 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Layout follows the real text size, so the window is no longer clipped on screens with large text or 225% zoom.
+- With two or more Steam accounts the window shows which account will be changed and has a "Change account" button. Apply, Restore and Reset use that choice.
+- "Reset to Steam's default art" can also remove custom portraits that this app did not make (SteamGridDB, set by hand, `.jpg`, `.jpeg`, `.webp`). It asks first and keeps a backup; `reset --everything` does the same on the command line. Apply now also moves `.jpeg` and `.webp` art out of the way.
+- Interface: a live Steam-is-open warning in step 3, a preview of finished covers, locked steps fold to one line, one main button at a time, better contrast, bigger click targets, clearer wording ("Download your game list", "Skip blurry covers"). Windows no longer waits on a process list when you click.
 
 ## [1.0.0] - 2026-10-08
 First stable release. Windows is now tested on a real PC.

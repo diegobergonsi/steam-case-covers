@@ -8,7 +8,7 @@ from tkinter import filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-from widgets import (BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, px, set_scale)
+from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, px, set_scale)
 
 
 def downloads_dir():
@@ -50,6 +50,11 @@ def pick_file(title, initialdir):
     return filedialog.askopenfilename(title=title, initialdir=start, filetypes=[("userdata.json", "*.json"), ("All files", "*.*")])
 
 
+def _short(name, n=28):
+    """Long account names must not push the buttons off the window."""
+    return name if len(name) <= n else name[:n - 1] + "…"
+
+
 class App(tk.Tk):
     def __init__(self, downloads=None, covers_dir=None, screen_h=None):
         super().__init__()
@@ -76,6 +81,11 @@ class App(tk.Tk):
         self._style()
         set_scale(self)
 
+        self.steam_on = False             # kept fresh by a background thread: asking the OS for processes can take long on Windows
+        self._quit = threading.Event()
+        threading.Thread(target=self._watch_steam, daemon=True).start()
+        self._collapse = False            # folding locked steps starts after the window has been sized for all of them
+        self.account = None               # Steam account folder chosen by the user (None: the one Steam used last)
         self.library_path = None          # chosen userdata.json
         self.installed_only = tk.BooleanVar(value=False)
         self.skip_auto = tk.BooleanVar(value=False)
@@ -93,7 +103,7 @@ class App(tk.Tk):
         titles.pack(side="left")
         tk.Label(titles, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
         tk.Label(titles, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED).pack(anchor="w")
-        self.btn_update = RoundedButton(head, "Check for updates", self.check_update, bg=BG)
+        self.btn_update = RoundedButton(head, "Check for updates", self.check_update, bg=BG, quiet=True)
         self.btn_update.pack(side="right")
 
         self.step1 = self._card("1", "Get your game list")
@@ -104,13 +114,24 @@ class App(tk.Tk):
         self._build_step3(self.step3)
         self.refresh_step1()
         self.refresh_step3()
-        self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events)]
+        self._timers = [self.after(1500, self.watch_downloads), self.after(100, self.poll_events), None]
+        self._tick_steam_note()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.update_idletasks()                       # fit the content, but never taller than the screen (Steam Deck: 800 px)
         want_w, want_h = self.holder.winfo_reqwidth(), self.holder.winfo_reqheight()
         room = (screen_h or self.winfo_screenheight()) - px(110)               # title bar + taskbar
         self.geometry("%dx%d" % (want_w + px(14), min(want_h, max(room, px(420)))))
         self.minsize(want_w, px(380))
+        self._collapse = True
+        self.update_steps()
+
+    def _watch_steam(self):
+        while not self._quit.is_set():
+            try:
+                self.steam_on = bool(sc.steam_running())
+            except Exception:
+                pass
+            self._quit.wait(3)
 
     def on_close(self):
         if self.busy:
@@ -121,6 +142,7 @@ class App(tk.Tk):
 
     def destroy(self):
         self.cancel_flag.set()
+        self._quit.set()
         for t in getattr(self, "_timers", []):
             try:
                 self.after_cancel(t)
@@ -142,14 +164,16 @@ class App(tk.Tk):
         badge.pack(side="left")
         title_lbl = tk.Label(head, text=title, bg=CARD, fg=FG, font=("TkDefaultFont", 14, "bold"))
         title_lbl.pack(side="left", padx=px(12))
+        hint = tk.Label(head, text="", bg=CARD, fg=FAINT)
+        hint.pack(side="left")
         body = tk.Frame(card.body, bg=CARD)
         body.pack(fill="x", pady=(px(12), 0))
-        body.badge, body.title_lbl = badge, title_lbl
+        body.badge, body.title_lbl, body.hint, body.folded = badge, title_lbl, hint, False
         return body
 
-    def _row(self, parent, pady=px(4)):
+    def _row(self, parent, pady=None):
         r = tk.Frame(parent, bg=CARD)
-        r.pack(fill="x", pady=pady)
+        r.pack(fill="x", pady=px(4) if pady is None else pady)       # px() here, not as a default: defaults run before the scale is known
         return r
 
     def _note(self, parent, text):
@@ -170,24 +194,32 @@ class App(tk.Tk):
         ready = self.installed_only.get() or bool(self.library_path)
         s1 = "done" if ready else "active"
         s2 = "locked" if not ready else "done" if self.cover_files else "active"
-        s3 = "done" if self.cover_files and self.applied else "active" if (self.cover_files or self.has_backup()) else "locked"   # Restore alone also unlocks it
-        for body, status in ((self.step1, s1), (self.step2, s2), (self.step3, s3)):
+        s3 = "done" if self.cover_files and self.applied else "active" if (self.cover_files or self.has_backup() or self.has_grid_art()) else "locked"   # Restore or Reset alone also unlock it
+        for body, status, why in ((self.step1, s1, ""), (self.step2, s2, "Finish step 1 first"), (self.step3, s3, "Make the covers first")):
             body.badge.set(status)
             body.title_lbl.configure(fg=FAINT if status == "locked" else FG)
+            fold = self._collapse and status == "locked"          # a step you cannot use yet is one line, not a wall of greyed-out controls
+            if fold != body.folded:
+                body.folded = fold
+                if fold:
+                    body.pack_forget()
+                else:
+                    body.pack(fill="x", pady=(px(12), 0))
+            body.hint.configure(text="· " + why if fold else "")
 
     # ----- step 1 -----
     def _build_step1(self, body):
-        self._note(body, "Steam keeps your full game list on a web page. Click the button and log in to Steam if it asks. "
-                         "You'll land on a page of plain text: press %s and save it (keep the name userdata.json). "
-                         "This app will notice the file by itself." % SAVE_KEY)
+        self._note(body, "Steam keeps your game list on a web page. Click the button and log in if it asks. "
+                         "A page of text appears: press %s and save it, keeping the name userdata.json. "
+                         "This app notices the file by itself." % SAVE_KEY)
         r = self._row(body)
-        RoundedButton(r, "Download your userdata.json", self.open_download_page, primary=True).pack(side="left")
-        RoundedButton(r, "Browse…", self.browse).pack(side="left", padx=px(10))
-        RoundedButton(r, "Copy link", self.copy_link).pack(side="left")
+        RoundedButton(r, "Download your game list", self.open_download_page, primary=True).pack(side="left")
+        RoundedButton(r, "Browse…", self.browse, quiet=True).pack(side="left", padx=px(10))
+        RoundedButton(r, "Copy link", self.copy_link, quiet=True).pack(side="left")
         r = self._row(body)
         self.sw_installed = Switch(r, "Only my installed games (no file needed)", self.installed_only, self.on_installed_only)
         self.sw_installed.pack(side="left")
-        self.step1_status = tk.Label(body, text="Waiting for userdata.json…", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
+        self.step1_status = tk.Label(body, text="Waiting for the saved game list (userdata.json)…", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
         self.step1_status.pack(fill="x", pady=(px(8), 0))
 
     def open_download_page(self):
@@ -266,7 +298,7 @@ class App(tk.Tk):
     def _build_step2(self, body):
         self._note(body, "Downloads each game's artwork from Steam and builds the covers on your computer.")
         r = self._row(body)
-        self.sw_skip = Switch(r, "Skip blurry auto-art", self.skip_auto)
+        self.sw_skip = Switch(r, "Skip blurry covers", self.skip_auto)
         self.sw_skip.pack(side="left")
         InfoBadge(r, sc.AUTO_ART_HELP).pack(side="left", padx=px(6))
         r = self._row(body, pady=px(6))
@@ -279,6 +311,31 @@ class App(tk.Tk):
         self.progress.pack(fill="x", pady=(px(10), px(6)))
         self.step2_status = tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
         self.step2_status.pack(fill="x")
+        self.preview = tk.Frame(body, bg=CARD)            # a few finished covers: the payoff of this step
+        self._thumbs = []
+
+    def _show_preview(self):
+        for w in self.preview.winfo_children():
+            w.destroy()
+        self._thumbs = []
+        files = [f for f in self.cover_files if os.path.exists(f)]
+        if not files or sc.Image is None:
+            return
+        step = max(1, len(files) // 5)
+        for f in files[::step][:5]:
+            try:
+                import base64, io
+                with sc.Image.open(f) as im:
+                    im = im.convert("RGBA").resize((px(76), px(114)), sc.Image.LANCZOS)
+                buf = io.BytesIO()
+                im.save(buf, "PNG")
+                img = tk.PhotoImage(master=self, data=base64.b64encode(buf.getvalue()))
+            except Exception:
+                continue                                  # a preview is a nicety: never let it break the step
+            self._thumbs.append(img)
+            tk.Label(self.preview, image=img, bg=CARD).pack(side="left", padx=(0, px(10)))
+        if self._thumbs:
+            self.preview.pack(fill="x", pady=(px(12), 0))
 
     def start_make(self):
         if self.running:
@@ -291,6 +348,7 @@ class App(tk.Tk):
         self.progress.configure(value=0, maximum=1)
         self.step2_status.configure(text="Looking up your games on Steam…", fg=MUTED)
         self.btn_folder.pack_forget()
+        self.preview.pack_forget()
         self._set_state(self.step1, False)
         self.refresh_step1()
         self.refresh_step3()
@@ -357,7 +415,7 @@ class App(tk.Tk):
                     self.btn_update.configure(state="normal")
                     messagebox.showerror("Could not check for updates", ev[1])
                 elif ev[0] == "reset_scan":
-                    self.on_reset_scan(ev[1], ev[2])
+                    self.on_reset_scan(ev[1], ev[2], ev[3])
                 elif ev[0] == "step3_status":
                     self.say3(ev[1], MUTED)
                 elif ev[0] == "step3_done":
@@ -397,6 +455,7 @@ class App(tk.Tk):
         self.refresh_step1()
         if n:
             self.btn_folder.pack(side="left", padx=px(10))
+            self._show_preview()
         self.refresh_step3()
 
     def cancel_make(self):
@@ -406,15 +465,24 @@ class App(tk.Tk):
     def open_covers_folder(self):
         folder = os.path.abspath(self.covers_dir)
         os.makedirs(folder, exist_ok=True)
-        if sys.platform.startswith("win"):
-            os.startfile(folder)
-        else:
-            subprocess.Popen([sc._tool("open" if sys.platform == "darwin" else "xdg-open"), folder])
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(folder)
+            else:
+                subprocess.Popen([sc._tool("open" if sys.platform == "darwin" else "xdg-open"), folder])
+        except (OSError, sc.SteamcaseError):
+            messagebox.showinfo("Covers folder", "Could not open the folder. It is here:\n\n%s" % folder)
 
     # ----- step 3 -----
     def _build_step3(self, body):
-        self._note(body, "Warning: this step closes Steam automatically (any running game or download stops). "
-                         "Your current artwork is backed up first, so you can undo it.")
+        self.steam_note = tk.Label(body, text="", bg=CARD, anchor="w", justify="left", wraplength=px(620))
+        self.steam_note.pack(fill="x", pady=(0, px(6)))
+        self._steam_note_state = None
+        self.acc_row = self._row(body)
+        self.acc_label = tk.Label(self.acc_row, text="", bg=CARD, fg=FG, anchor="w", wraplength=px(380), justify="left")
+        self.acc_label.pack(side="left")
+        self.btn_account = RoundedButton(self.acc_row, "Change account", self.choose_account)
+        self.refresh_account()
         r = self._row(body)
         self.chk_restart = Switch(r, "Start Steam again when finished", self.restart_steam)
         self.chk_restart.pack(side="left")
@@ -424,9 +492,65 @@ class App(tk.Tk):
         self.btn_restore = RoundedButton(r, "Restore previous artwork", lambda: self.confirm_and_run("restore"))
         self.btn_restore.pack(side="left", padx=px(10))
         r2 = self._row(body, pady=px(2))
-        self.btn_reset = RoundedButton(r2, "Reset to Steam's default art", self.start_reset)
+        self.btn_reset = RoundedButton(r2, "Reset to Steam's default art", self.start_reset, quiet=True)
         self.btn_reset.pack(side="left")
         self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
+
+    def _tick_steam_note(self):
+        """The warning follows reality: amber while Steam is open (Apply will close it), calm when it is already closed."""
+        if self.steam_on != self._steam_note_state:
+            self._steam_note_state = self.steam_on
+            if self.steam_on:
+                self.steam_note.configure(fg=AMBER, font=("TkDefaultFont", 11, "bold"),
+                                          text="Steam is open. These buttons close it: any running game stops and downloads pause. Save your game first.")
+            else:
+                self.steam_note.configure(fg=MUTED, font=("TkDefaultFont", 11),
+                                          text="Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it.")
+        self._timers[2] = self.after(1000, self._tick_steam_note)
+
+    def _acc(self):
+        """Account folder to use: the user's choice if it still exists, else None (the engine picks the last one Steam used)."""
+        try:
+            if self.account and self.account not in [a for a, _ in sc.list_accounts(sc.steam_dir())]:
+                self.account = None
+        except sc.SteamcaseError:
+            self.account = None
+        return self.account
+
+    def refresh_account(self):
+        """Show which Steam account will be changed; with two or more accounts also offer a button to choose."""
+        try:
+            steam = sc.steam_dir()
+            accounts = sc.list_accounts(steam)
+            acc = self._acc() or sc.pick_account(steam)
+            who = sc.account_label(steam, acc)
+        except (sc.SteamcaseError, OSError):
+            accounts, who = [], ""
+        self.acc_label.configure(text="Steam account: %s" % _short(who) if who else "")
+        if len(accounts) > 1:
+            self.btn_account.pack(side="left", padx=px(12))
+        else:
+            self.btn_account.pack_forget()
+        if not who:
+            self.acc_row.pack_forget()
+
+    def choose_account(self):
+        if self.busy or self.running:
+            return
+        try:
+            steam = sc.steam_dir()
+            accounts = sc.list_accounts(steam)
+        except sc.SteamcaseError as e:
+            messagebox.showerror("Steam account", str(e))
+            return
+        picked = messagebox.choose("Which Steam account gets the covers?",
+                                   [("Apply, Restore and Reset will change only this account's artwork.", "main")],
+                                   [("Cancel", None, False)] + [(_short(label if not label.isdigit() else "Account %s" % label), a, a == (self._acc() or accounts[0][0])) for a, label in accounts])
+        if picked:
+            self.account = picked
+            self.refresh_account()
+            self.say3("")
+            self.refresh_step3()
 
     def say3(self, text, fg=MUTED):
         """Step 3 message; the line only takes space while it has something to say."""
@@ -439,8 +563,8 @@ class App(tk.Tk):
     def has_grid_art(self):
         """Cheap check (no image decoding): is there any <appid>p.png in Steam's grid folder?"""
         try:
-            grid = sc.grid_dir(sc.steam_dir())
-            return os.path.isdir(grid) and any(sc._COVER_NAME.match(n) for n in os.listdir(grid))
+            grid = sc.grid_dir(sc.steam_dir(), self._acc())
+            return os.path.isdir(grid) and any(sc._COVER_NAME.match(n) or sc._JPG_NAME.match(n) for n in os.listdir(grid))
         except sc.SteamcaseError:
             return False
 
@@ -456,44 +580,61 @@ class App(tk.Tk):
     def _scan_worker(self):
         try:
             steam = sc.steam_dir()
-            names = sc.find_our_covers(steam, progress=lambda i, n: self.events.put(("step3_status", "Checking Steam's artwork… %d of %d" % (i, n))),
+            acc = self._acc()
+            names = sc.find_our_covers(steam, acc, progress=lambda i, n: self.events.put(("step3_status", "Checking Steam's artwork… %d of %d" % (i, n))),
                                        cancelled=self.cancel_flag.is_set)
-            who = sc.account_label(steam, sc.pick_account(steam))
-            self.events.put(("reset_scan", names, who))
+            who = sc.account_label(steam, sc.pick_account(steam, acc))
+            extra, other = sc.find_other_art(steam, acc, names)
+            self.events.put(("reset_scan", names, who, len(extra) + len(other)))
         except sc.SteamcaseError as e:
             self.events.put(("step3_error", str(e)))
         except Exception as e:
             self.events.put(("step3_error", "Unexpected problem: %s" % e))
 
-    def on_reset_scan(self, names, who):
-        if not names:
+    def on_reset_scan(self, names, who, other=0):
+        """`other`: custom portraits this app did not make (SteamGridDB, set by hand). They only go if the user says so."""
+        if not names and not other:
             self.busy = False
-            self.say3("No covers made by this app were found in “%s”. Nothing to reset." % who)
+            self.say3("No custom covers were found in “%s”. Nothing to reset." % who)
             self.refresh_step3()
             return
-        steam_on = sc.steam_running()
-        paras = [("%d covers made by this app will be removed from the Steam account “%s”. Steam goes back to its own default art for them." % (len(names), who), "main"),
-                 ("Art you set yourself is not touched. A backup is kept, so “Restore previous artwork” brings the covers back.", "muted")]
+        steam_on = self.steam_on
+        paras = [("%d covers made by this app will be removed from the Steam account “%s”. Steam goes back to its own default art for them." % (len(names), who), "main")] if names else []
+        if other:
+            paras.append(("Found %d more custom covers that this app did not make (from SteamGridDB or set by hand in Steam)." % other, "main"))
+        paras.append(("A backup is kept, so “Restore previous artwork” brings everything back.", "muted"))
         if steam_on:
             paras.append(("Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.", "warn"))
-        if not messagebox.askokcancel("Reset to Steam's default art", paras, icon="warning" if steam_on else "question",
-                                      ok="Close Steam and reset" if steam_on else "Reset"):
+        icon = "warning" if steam_on else "question"
+        close = "Close Steam and " if steam_on else ""
+        if other:
+            buttons = [("Cancel", None, False)]
+            if names:
+                buttons.append((close + "remove only ours" if steam_on else "Remove only ours", "ours", True))
+            buttons.append((close + "remove all" if steam_on else "Remove all", "all", not names))      # Enter picks the safer one when there is a choice
+            choice = messagebox.choose("Reset to Steam's default art", paras, buttons, icon)
+        else:
+            ok = messagebox.askokcancel("Reset to Steam's default art", paras, icon=icon, ok="Close Steam and reset" if steam_on else "Reset")
+            choice = "ours" if ok else None
+        if not choice:
             self.busy = False
             self.say3("")
             self.refresh_step3()
             return
         self.say3("Closing Steam…" if steam_on else "Working…")
-        threading.Thread(target=self._step3_worker, args=("reset", self.restart_steam.get(), names), daemon=True).start()
+        threading.Thread(target=self._step3_worker, args=("reset", self.restart_steam.get(), names, choice == "all"), daemon=True).start()
 
     def has_backup(self):
         try:
-            return bool(sc.list_backups(sc.steam_dir()))
+            return bool(sc.list_backups(sc.steam_dir(), self._acc()))
         except sc.SteamcaseError:
             return False
 
     def refresh_step3(self):
         idle = not self.running and not self.busy
         can_apply = idle and bool(self.cover_files)
+        self.btn_make.primary = not self.cover_files
+        self.btn_make.draw()
         self.btn_apply.configure(state="normal" if can_apply else "disabled")
         self.btn_restore.configure(state="normal" if idle and self.has_backup() else "disabled")
         backup = self.has_backup()
@@ -510,9 +651,9 @@ class App(tk.Tk):
     def confirm_and_run(self, mode):
         if self.busy or self.running:
             return
-        steam_on = sc.steam_running()
+        steam_on = self.steam_on
         try:
-            who = sc.account_label(sc.steam_dir(), sc.pick_account(sc.steam_dir()))
+            who = sc.account_label(sc.steam_dir(), sc.pick_account(sc.steam_dir(), self._acc()))
         except sc.SteamcaseError:
             who = "your Steam account"
         if mode == "apply":
@@ -534,10 +675,11 @@ class App(tk.Tk):
         self.say3("Closing Steam…" if steam_on else "Working…", MUTED)
         threading.Thread(target=self._step3_worker, args=(mode, self.restart_steam.get()), daemon=True).start()
 
-    def _step3_worker(self, mode, restart, names=None):
+    def _step3_worker(self, mode, restart, names=None, everything=False):
         say = lambda t: self.events.put(("step3_status", t))
         try:
             steam = sc.steam_dir()
+            acc = self._acc()
             if sc.steam_running():
                 say("Closing Steam…")
                 if not sc.close_steam(steam):
@@ -545,7 +687,7 @@ class App(tk.Tk):
                                             + (" If macOS asked for permission, allow it first and then press the button again." if sys.platform == "darwin" else ""))
             if mode == "apply":
                 say("Backing up and copying covers…")
-                r = sc.apply_covers(steam, self.covers_dir, files=self.cover_files)
+                r = sc.apply_covers(steam, self.covers_dir, acc, files=self.cover_files)
                 if r["applied"]:
                     text = "Done. %d covers added to the Steam account “%s” (%d replaced older art, %d already up to date). Backup saved in: %s" % (
                         r["applied"], r["account_name"], r["replaced"], r["unchanged"], r["backup"])
@@ -555,15 +697,15 @@ class App(tk.Tk):
                     text = "Nothing to change: all %d covers were already in the Steam account “%s”." % (r["unchanged"], r["account_name"])
             elif mode == "reset":
                 say("Removing our covers…")
-                r = sc.reset_to_default(steam, names=names)
+                r = sc.reset_to_default(steam, acc, names, everything)
                 text = "Done. %d covers removed from the Steam account “%s”: Steam shows its own default art again. Press “Restore previous artwork” to bring them back." % (
                     r["removed"], r["account_name"])
             else:
-                backups = sc.list_backups(steam)
+                backups = sc.list_backups(steam, acc)
                 if not backups:
                     raise sc.SteamcaseError("No backup found.")
-                n = sc.restore_backup(steam, backups[0])
-                left = len(sc.list_backups(steam))
+                n = sc.restore_backup(steam, backups[0], acc)
+                left = len(sc.list_backups(steam, acc))
                 text = "Restored your previous artwork (%d files)." % n
                 if left:
                     text += " %d older backup%s left: press Restore again to go one step further back." % (left, "" if left == 1 else "s")

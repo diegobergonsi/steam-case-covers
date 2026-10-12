@@ -9,17 +9,21 @@ import tkinter as tk
 import tkinter.font as tkfont
 
 BG, CARD, CARD2 = "#11151c", "#182433", "#22344a"
-LINE, FG, MUTED, FAINT = "#2c4259", "#e6edf3", "#93a7bb", "#5d7185"
+LINE, FG, MUTED, FAINT = "#2c4259", "#e6edf3", "#93a7bb", "#7d92a8"      # FAINT: 4.5:1 on CARD, it carries real text (locked steps, hints)
+EDGE = "#5d7a96"           # outline of controls and off switches: 3:1 against CARD, so the control is visible without its label
 ACCENT, ACCENT_H, ACCENT_D, DARK = "#66c0f4", "#8fd3ff", "#45a5dc", "#0b141d"
 GREEN, RED = "#5ba32b", "#ff7b72"
 
 _scale = 1.0
+REF_LINE = 21.0        # line height of the 11 pt default font on a 96 dpi screen
 
 
 def set_scale(root):
     """Call once after creating the root window: sizes follow the screen's DPI."""
     global _scale
-    _scale = max(1.0, root.winfo_fpixels("1i") / 96.0)
+    # Also follow the real text size: a desktop can scale fonts (e.g. 225 % zoom) without telling Tk its DPI, which clipped every label.
+    text = tkfont.Font(root=root, font="TkDefaultFont").metrics("linespace") / REF_LINE
+    _scale = max(1.0, root.winfo_fpixels("1i") / 96.0, text)
 
 
 def px(n):
@@ -97,9 +101,9 @@ class InfoBadge(tk.Canvas):
     """Round "i" badge with a Tooltip."""
 
     def __init__(self, parent, text, bg=CARD):
-        s = px(28)
+        s = px(36)
         super().__init__(parent, width=s, height=s, bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
-        self.disc = self.create_oval(px(4), px(4), s - px(4), s - px(4), fill=ACCENT, outline="")
+        self.disc = self.create_oval(px(8), px(8), s - px(8), s - px(8), fill=ACCENT, outline="")
         self.create_text(s // 2, s // 2, text="i", fill=DARK, font=("TkDefaultFont", 11, "bold"))
         self.ring = None
         self.bind("<Enter>", lambda e: self.itemconfigure(self.disc, fill=ACCENT_H), add="+")
@@ -110,8 +114,8 @@ class InfoBadge(tk.Canvas):
         Tooltip(self, text)
 
     def _focus_in(self, _e):
-        s = px(28)
-        self.ring = self.create_oval(px(1), px(1), s - px(1), s - px(1), outline="#ffffff", width=2)
+        s = px(36)
+        self.ring = self.create_oval(px(5), px(5), s - px(5), s - px(5), outline="#ffffff", width=2)
 
     def _focus_out(self, _e):
         if self.ring:
@@ -122,10 +126,12 @@ class InfoBadge(tk.Canvas):
 class RoundedButton(_Stateful):
     """Pill button. primary=True is the filled accent button; otherwise an outline button."""
 
-    def __init__(self, parent, text, command=None, primary=False, state="normal", bg=CARD):
+    def __init__(self, parent, text, command=None, primary=False, state="normal", bg=CARD, quiet=False):
+        """quiet=True: no outline, muted text; for rare or secondary actions that must not compete with the main one."""
         self._font = tkfont.Font(font="TkDefaultFont")
         self._font.configure(weight="bold")
-        super().__init__(parent, width=self._font.measure(text) + px(46), height=px(42), bg=bg,
+        self.quiet, self._bg = quiet, bg
+        super().__init__(parent, width=self._font.measure(text) + px(46), height=max(px(46), self._font.metrics("linespace") + px(18)), bg=bg,
                          highlightthickness=0, takefocus=True, cursor="hand2")
         self._init_state(state)
         self.text, self.command, self.primary = text, command, primary
@@ -144,9 +150,12 @@ class RoundedButton(_Stateful):
         if self.primary:
             fill = (ACCENT_D if self._down else ACCENT_H if self._hover else ACCENT) if on else "#26384b"
             outline, fg = fill, DARK if on else FAINT
+        elif self.quiet:
+            fill = (LINE if self._down else CARD2 if self._hover else self._bg) if on else self._bg
+            outline, fg = fill, (FG if self._hover else MUTED) if on else FAINT
         else:
             fill = (LINE if self._down else "#2b405a" if self._hover else CARD2) if on else CARD
-            outline, fg = (LINE if on else "#223244"), FG if on else FAINT
+            outline, fg = (EDGE if on else "#223244"), FG if on else FAINT
         if self._focus and on:
             round_rect(self, 1, 1, w - 1, h - 1, h // 2, outline="#ffffff", width=2, fill="")
         round_rect(self, 4, 4, w - 4, h - 4, h // 2, fill=fill, outline=outline, width=1)
@@ -179,7 +188,7 @@ class Switch(_Stateful):
 
     def __init__(self, parent, text, variable, command=None, state="normal", bg=CARD):
         self._font = tkfont.Font(font="TkDefaultFont")
-        super().__init__(parent, width=px(58) + self._font.measure(text) + px(6), height=px(32), bg=bg,
+        super().__init__(parent, width=px(58) + self._font.measure(text) + px(6), height=max(px(40), self._font.metrics("linespace") + px(8)), bg=bg,
                          highlightthickness=0, takefocus=True, cursor="hand2")
         self._init_state(state)
         self.text, self.variable, self.command = text, variable, command
@@ -187,6 +196,7 @@ class Switch(_Stateful):
         variable.trace_add("write", lambda *a: self.draw())
         self.bind("<Button-1>", self._click)
         self.bind("<space>", self._key)
+        self.bind("<Return>", self._key)
         self.bind("<FocusIn>", lambda e: self._set_focus(True))
         self.bind("<FocusOut>", lambda e: self._set_focus(False))
         self.configure(cursor="hand2" if state == "normal" else "arrow")
@@ -202,7 +212,7 @@ class Switch(_Stateful):
         tw, th = px(44), px(24)
         x, y = px(3), (h - th) // 2
         on, val = self.enabled, bool(self.variable.get())
-        track = (ACCENT if val else "#3a4f66") if on else ("#2a5a78" if val else "#26384b")
+        track = (ACCENT if val else "#4f6882") if on else ("#2a5a78" if val else "#26384b")
         if self._focus and on:
             round_rect(self, x - 3, y - 3, x + tw + 3, y + th + 3, th // 2 + 3, outline="#ffffff", width=2, fill="")
         round_rect(self, x, y, x + tw, y + th, th // 2, fill=track, outline=track)
@@ -313,8 +323,8 @@ class ScrollFrame(tk.Frame):
     def __init__(self, parent, bg=BG):
         super().__init__(parent, bg=bg)
         self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0)
-        self.bar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview, width=px(12), relief="flat", borderwidth=0,
-                                highlightthickness=0, troughcolor=BG, bg=LINE, activebackground=ACCENT)
+        self.bar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview, width=px(16), relief="flat", borderwidth=0,
+                                highlightthickness=0, takefocus=0, troughcolor=BG, bg=LINE, activebackground=ACCENT)
         self.inner = tk.Frame(self.canvas, bg=bg)
         self._win = self.canvas.create_window(0, 0, window=self.inner, anchor="nw")
         self.canvas.configure(yscrollcommand=self.bar.set)
@@ -483,6 +493,10 @@ class Messages:
 
     def askokcancel(self, title, message, icon="question", ok="OK", cancel="Cancel", **_):
         return bool(self._run(title, message, icon, ((cancel, False, False), (ok, True, True)), False))
+
+    def choose(self, title, message, buttons, icon="question"):
+        """One button per (label, value, primary); returns the chosen value, or None on Escape."""
+        return self._run(title, message, icon, buttons, None)
 
     def showinfo(self, title, message, **_):
         self._run(title, message, "info", (("OK", True, True),), True)
