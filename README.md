@@ -116,7 +116,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 
 1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step. On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
 2. **Make the covers.** Click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped.
-3. **Add them to Steam.** Click **Apply to Steam**.
+3. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; click **Change account** to pick another.
 
 > [!WARNING]
 > Step 3 **closes Steam for you** (any running game stops and downloads pause), adds the covers, and starts Steam again. Save your game first. The app asks before it does anything.
@@ -124,7 +124,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 Changed your mind?
 
 * **Restore previous artwork** undoes the last Apply. Press it again to go one step further back.
-* **Reset to Steam's default art** removes the covers this app made and leaves any art you set yourself alone. It works even if you have no backup. It's undone with Restore.
+* **Reset to Steam's default art** removes the covers this app made. It works even if you have no backup. If it also finds custom art that this app did not make (from SteamGridDB, or set by hand in Steam), it asks whether to remove that too: **Remove only ours** keeps it, **Remove all** brings back Steam's own art everywhere. Restore undoes either.
 
 ## Features
 
@@ -133,14 +133,15 @@ Changed your mind?
 ✅ One click to install them: Steam is closed gracefully, backed up, updated and restarted <br>
 ✅ Undo, step by step, and a reset to Steam's default art <br>
 ✅ Cancel anytime; run again to continue <br>
-✅ Optional "skip blurry auto-art" for games Steam has no real portrait for <br>
+✅ Optional "skip blurry covers" for games Steam has no real portrait for <br>
+✅ Several Steam accounts on one computer: you choose which one gets the covers <br>
 ✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
 ✅ A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 ✅ Free software: no ads, no account, no telemetry
 
 ## Safety
 
-* It only ever touches the `<appid>p.png` files in your Steam account's `config/grid` folder. It never touches your games or saves.
+* It only ever touches the portrait files (`<appid>p.png`, and `.jpg`, `.jpeg` or `.webp` ones that would hide a cover) in your Steam account's `config/grid` folder. Anything it moves is kept in the backup. It never touches your games or saves.
 * Before every change it makes a backup of exactly what it changes, writes files atomically, and rolls back if anything fails.
 * Two open windows can't change Steam's folder at the same time.
 * It never logs in, never asks for a password or API key, never uploads anything and never runs with elevated rights.
@@ -166,6 +167,7 @@ python steamcase.py make --library userdata.json   # build covers
 python steamcase.py apply --close-steam            # install them
 python steamcase.py restore                        # undo the last apply
 python steamcase.py reset                          # back to Steam's default art
+python steamcase.py reset --everything             # ...also removing art from other sources
 ```
 
 | Command | What it does |
@@ -175,9 +177,9 @@ python steamcase.py reset                          # back to Steam's default art
 | `apply` | Copy covers into Steam, with a backup |
 | `run` | `make` then `apply` |
 | `restore` | Undo the last apply (run again to go further back) |
-| `reset` | Remove the covers this app made from Steam |
+| `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
 
-Run `python steamcase.py -h` for all options, such as `--only`, `--skip-auto-art`, `--steam-dir` and `--user`.
+Run `python steamcase.py -h` for all options, such as `--only`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
 ## FAQ
 
@@ -198,7 +200,7 @@ Many older or smaller games have no real portrait on Steam. Steam builds a stand
 <details>
 <summary><b>I set custom art by hand in Steam. Will these replace it?</b></summary>
 
-Custom art set by hand in Steam's own menu can override these covers. If a game still shows its old art, reset it there (right-click the game, **Manage**, **Set custom artwork**).
+Steam shows art you set by hand (or got from SteamGridDB) before these covers. **Apply to Steam** moves such art for the covered games into the backup, so the case is shown, and **Restore** brings it back. To clear all of it and get Steam's own art, use **Reset to Steam's default art** and choose **Remove all**.
 
 </details>
 
