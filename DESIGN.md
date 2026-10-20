@@ -18,6 +18,14 @@ colors:
   caution-amber: "#f0b429"
   error-coral: "#ff7b72"
   focus-ring: "#ffffff"
+  raised-hover: "#2b405a"
+  disabled-fill: "#26384b"
+  disabled-edge: "#223244"
+  disabled-track-on: "#2a5a78"
+  disabled-knob: "#8a9bab"
+  progress-track: "#0c1219"
+  progress-edge: "#1f2e3f"
+  tooltip-ground: "#0b1017"
 typography:
   title:
     fontFamily: "system default (Tk default font)"
@@ -108,7 +116,13 @@ A Steam-night palette: a blue-black ground, navy cards, one sky-blue action colo
 - **Done Green** (#5ba32b): completed step badge.
 - **Caution Amber** (#f0b429): warnings, such as Steam still running.
 - **Error Coral** (#ff7b72): errors.
-- **Focus White** (#ffffff): keyboard focus ring and switch knob.
+- **Focus White** (#ffffff): keyboard focus ring, switch knob and done-badge tick.
+
+### Control states
+- **Raised Hover** (#2b405a): hover fill of an outlined button.
+- **Disabled Fill / Edge** (#26384b / #223244), **Disabled Track On** (#2a5a78), **Disabled Knob** (#8a9bab): disabled controls stay visible but clearly unavailable; exempt from the 3:1 edge rule.
+- **Progress Track / Edge** (#0c1219 / #1f2e3f): empty bar; the fill and the status text carry the value.
+- **Tooltip Ground** (#0b1017): help bubble background.
 
 ### Named Rules
 **The One Voice Rule.** Sky blue marks the single action or state that matters right now. If two things on screen are bright blue and neither is progress, one of them is wrong.
@@ -133,7 +147,7 @@ A Steam-night palette: a blue-black ground, navy cards, one sky-blue action colo
 
 ## Layout
 
-A single vertical column inside a scroll frame, with a 28px gutter and 14px between cards (7px above and below each). A header (icon, title, one-line tagline, a quiet "Check for updates") sits above three cards in fixed order. The scrollbar appears only when content does not fit, so the Steam Deck's 800px-high screen and small windows keep every control reachable by mouse wheel or Tab. All measures go through the DPI-aware `px()` helper. Inside a card: instruction text first, then a row of buttons, then switches, then a status line; rows are separated by about 4 to 8px.
+A single vertical column inside a scroll frame, with a 28px gutter and 14px between cards (7px above and below each). A header (icon, title, one-line tagline, a quiet "Check for updates") sits above three cards in fixed order. The scrollbar appears only when content does not fit, so the Steam Deck's 800px-high screen and small windows keep every control reachable by mouse wheel or Tab. The window is fluid down to about 520px wide (scaled): text wraps to the card width, button rows wrap onto a second line (the `Flow` widget), and the header's update button drops under the title. Touch drag on the content scrolls it. All measures go through the DPI-aware `px()` helper. Inside a card: instruction text first, then a row of buttons, then switches, then a status line; rows are separated by about 4 to 8px.
 
 ## Elevation & Depth
 
@@ -151,12 +165,13 @@ Soft and pill-shaped. Cards use an 18px radius with a hairline outline. Buttons,
 ### Buttons
 - **Shape:** fully rounded pill, at least 46px tall (scaled), text bold.
 - **Primary:** Sky Blue fill, Ink on Blue text. Hover lifts to #8fd3ff, press deepens to #45a5dc.
-- **Quiet:** Card Raised fill with Control Edge outline and Text color; hover #2b405a, pressed Hairline.
+- **Outlined:** Card Raised fill with Control Edge outline and Text color; hover Raised Hover, pressed Hairline.
+- **Quiet (text-only, by design):** no fill and no outline at rest, Text Muted label (6.3:1 on the card); hover fills Card Raised and lifts the label to Text, pressed Hairline. For rare or secondary actions (Browse…, Copy link, Check for updates, Reset) that must not compete with the primary.
 - **Disabled:** Card fill, faint outline and faint text, so it reads as present but unavailable (for example Cancel).
 - **Focus:** a 2px white ring outside the pill.
 
 ### Switches
-- Pill track (Sky Blue when on, #4f6882 when off), round knob (white on, #8a9bab off), the label to the right. Same white focus ring.
+- Pill track (Sky Blue when on, Control Edge when off, 3.5:1 on the card), round knob (white on, #8a9bab off), the label to the right. Same white focus ring.
 
 ### Cards
 - 18px radius, Card Navy fill, Hairline outline, 22px by 18px inner padding. The body grows with its content. A step badge and bold title open each card.
@@ -179,10 +194,10 @@ Soft and pill-shaped. Cards use an 18px radius with a hairline outline. Buttons,
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep one sky-blue primary action visible per card and use quiet pills for everything else.
+- **Do** keep one sky-blue primary action visible per card and use outlined or quiet buttons for everything else.
 - **Do** put a plain-English sentence above the controls in every card, in Text Muted.
 - **Do** route every measure through `px()` and the real font line height.
-- **Do** keep control outlines at 3:1 against the card (Control Edge) and show a white ring on keyboard focus.
+- **Do** keep outlines and switch tracks of enabled controls at 3:1 against the card (Control Edge) and show a white ring on keyboard focus. Quiet text buttons are the one deliberate exception.
 - **Do** keep status colors for status only: green done, amber caution, coral error.
 
 ### Don't:

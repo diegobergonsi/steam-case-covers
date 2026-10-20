@@ -243,6 +243,126 @@
           "#d5d5d5",
           "#f2f2f2"
         ]
+      },
+      "raised-hover": {
+        "role": "neutral",
+        "displayName": "Raised Hover",
+        "canonical": "#2b405a",
+        "tonalRamp": [
+          "#192534",
+          "#2c415b",
+          "#3e5d83",
+          "#5179aa",
+          "#7797be",
+          "#9fb5d1",
+          "#c6d4e4",
+          "#eef2f7"
+        ]
+      },
+      "disabled-fill": {
+        "role": "neutral",
+        "displayName": "Disabled Fill",
+        "canonical": "#26384b",
+        "tonalRamp": [
+          "#1a2633",
+          "#2d4359",
+          "#416080",
+          "#557da7",
+          "#7a9abc",
+          "#a1b7cf",
+          "#c7d5e3",
+          "#eef2f6"
+        ]
+      },
+      "disabled-edge": {
+        "role": "neutral",
+        "displayName": "Disabled Edge",
+        "canonical": "#223244",
+        "tonalRamp": [
+          "#1a2533",
+          "#2d425a",
+          "#405f81",
+          "#547ba8",
+          "#7999bc",
+          "#a0b7d0",
+          "#c7d4e3",
+          "#eef2f7"
+        ]
+      },
+      "disabled-track-on": {
+        "role": "neutral",
+        "displayName": "Disabled Track On",
+        "canonical": "#2a5a78",
+        "tonalRamp": [
+          "#142b39",
+          "#234b64",
+          "#326b8f",
+          "#418cba",
+          "#6ba6cb",
+          "#96c0da",
+          "#c1dae9",
+          "#ecf4f8"
+        ]
+      },
+      "disabled-knob": {
+        "role": "neutral",
+        "displayName": "Disabled Knob",
+        "canonical": "#8a9bab",
+        "tonalRamp": [
+          "#20262d",
+          "#38444e",
+          "#516170",
+          "#697e92",
+          "#8a9bab",
+          "#acb8c4",
+          "#ced5dc",
+          "#f0f2f4"
+        ]
+      },
+      "progress-track": {
+        "role": "neutral",
+        "displayName": "Progress Track",
+        "canonical": "#0c1219",
+        "tonalRamp": [
+          "#192534",
+          "#2c425b",
+          "#3f5e82",
+          "#527aaa",
+          "#7898be",
+          "#9fb6d1",
+          "#c6d4e4",
+          "#eef2f7"
+        ]
+      },
+      "progress-edge": {
+        "role": "neutral",
+        "displayName": "Progress Edge",
+        "canonical": "#1f2e3f",
+        "tonalRamp": [
+          "#192533",
+          "#2c425a",
+          "#405e81",
+          "#537ba8",
+          "#7999bd",
+          "#a0b6d0",
+          "#c7d4e3",
+          "#eef2f7"
+        ]
+      },
+      "tooltip-ground": {
+        "role": "neutral",
+        "displayName": "Tooltip Ground",
+        "canonical": "#0b1017",
+        "tonalRamp": [
+          "#192434",
+          "#2c3f5b",
+          "#3e5b83",
+          "#5176aa",
+          "#7795be",
+          "#9fb4d1",
+          "#c6d3e4",
+          "#eef2f7"
+        ]
       }
     },
     "typographyMeta": {
@@ -286,12 +406,20 @@
       "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-primary{background:#66c0f4;color:#0b141d}.ds-primary:hover{background:#8fd3ff}.ds-primary:active{background:#45a5dc}.ds-primary:focus-visible{outline:2px solid #fff;outline-offset:2px}"
     },
     {
-      "name": "Quiet Button",
+      "name": "Outlined Button",
       "kind": "button",
       "refersTo": "button-quiet",
-      "description": "Secondary actions beside the primary.",
+      "description": "Secondary action with a visible edge.",
       "html": "<button class=\"ds-btn ds-quiet\">Open covers folder</button>",
       "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-quiet{background:#22344a;color:#e6edf3;box-shadow:inset 0 0 0 1px #5d7a96}.ds-quiet:hover{background:#2b405a}.ds-quiet:active{background:#2c4259}.ds-quiet:focus-visible{outline:2px solid #fff;outline-offset:2px}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "",
+      "description": "Text-only action for rare or secondary tasks; fills on hover.",
+      "html": "<button class=\"ds-btn ds-qt\">Browse\u2026</button>",
+      "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-qt{background:transparent;color:#93a7bb}.ds-qt:hover{background:#22344a;color:#e6edf3}.ds-qt:active{background:#2c4259}.ds-qt:focus-visible{outline:2px solid #fff;outline-offset:2px}"
     },
     {
       "name": "Switch",
@@ -299,7 +427,7 @@
       "refersTo": "",
       "description": "Pill toggle with label to the right.",
       "html": "<label class=\"ds-sw\"><span class=\"ds-track\"><span class=\"ds-knob\"></span></span>Skip blurry covers</label>",
-      "css": ".ds-sw{display:flex;align-items:center;gap:10px;color:#e6edf3;font:15px system-ui,sans-serif}.ds-track{width:44px;height:24px;border-radius:9999px;background:#66c0f4;position:relative}.ds-knob{position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}"
+      "css": ".ds-sw{display:flex;align-items:center;gap:10px;color:#e6edf3;font:15px system-ui,sans-serif}.ds-track{width:44px;height:24px;border-radius:9999px;background:#5d7a96;position:relative}.ds-knob{position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}"
     },
     {
       "name": "Card",
@@ -351,10 +479,10 @@
       }
     ],
     "dos": [
-      "Do keep one sky-blue primary action visible per card and use quiet pills for everything else.",
+      "Do keep one sky-blue primary action visible per card and use outlined or quiet buttons for everything else.",
       "Do put a plain-English sentence above the controls in every card, in Text Muted.",
       "Do route every measure through px() and the real font line height.",
-      "Do keep control outlines at 3:1 against the card (Control Edge) and show a white ring on keyboard focus.",
+      "Do keep outlines and switch tracks of enabled controls at 3:1 against the card (Control Edge) and show a white ring on keyboard focus. Quiet text buttons are the one deliberate exception.",
       "Do keep status colors for status only: green done, amber caution, coral error."
     ],
     "donts": [

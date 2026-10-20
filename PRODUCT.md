@@ -20,7 +20,7 @@ Everything runs on the user's computer: no login, no API key, no uploads. Art co
 
 ## Operating Context
 
-Desktop app (tkinter window with three steps, custom Canvas widgets in `widgets.py`), packaged with PyInstaller for three OSes and released by GitHub Actions. Works against the user's real Steam folder (`userdata/<id>/config/grid`), supports multiple accounts via an account picker, can Reset including art from other sources. Must work on Steam Deck screens, high-DPI displays and small screens.
+Desktop app (tkinter window with three steps, custom Canvas widgets in `widgets.py`), packaged with PyInstaller for three OSes and released by GitHub Actions. Works against the user's real Steam folder (`userdata/<id>/config/grid`), supports multiple accounts via an account picker, can Reset including art from other sources. Must work on Steam Deck screens, high-DPI displays and small screens. Handheld users (Steam Deck and similar) really do use the touchscreen, so touch is a first-class input: targets of 44px or more, no hover-only behavior, and drag-to-scroll.
 
 ## Capabilities and Constraints
 
@@ -49,4 +49,4 @@ Real assets in `assets/`: `preview.png`, `screenshot.png`, `steam-library.png`, 
 
 ## Accessibility & Inclusion
 
-Keyboard use, high-DPI layout and small-screen (Steam Deck) handling must keep working.
+Keyboard use, touch use on handhelds, high-DPI layout and small-screen (Steam Deck) handling must keep working.
