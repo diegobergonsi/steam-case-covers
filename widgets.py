@@ -12,9 +12,16 @@ BG, CARD, CARD2 = "#11151c", "#182433", "#22344a"
 LINE, FG, MUTED, FAINT = "#2c4259", "#e6edf3", "#93a7bb", "#7d92a8"      # FAINT: 4.5:1 on CARD, it carries real text (locked steps, hints)
 EDGE = "#5d7a96"           # outline of controls and off switches: 3:1 against CARD, so the control is visible without its label
 ACCENT, ACCENT_H, ACCENT_D, DARK = "#66c0f4", "#8fd3ff", "#45a5dc", "#0b141d"
-GREEN, RED = "#5ba32b", "#ff7b72"
+GREEN, RED, AMBER = "#5ba32b", "#ff7b72", "#f0b429"
+RING = "#ffffff"           # keyboard focus ring and the on-state knob
+RAISED_H = "#2b405a"       # hover fill of an outlined button
+OFF_FILL, OFF_EDGE = "#26384b", "#223244"            # disabled controls: present, but clearly unavailable (exempt from the 3:1 rule)
+OFF_TRACK_ON, OFF_KNOB = "#2a5a78", "#8a9bab"        # disabled switch, on and off knob
+INSET, INSET_EDGE = "#0c1219", "#1f2e3f"             # progress track
+TIP_BG = "#0b1017"
 
 _scale = 1.0
+_dragging = False       # True while a finger/mouse drag is scrolling the page: controls under it must not fire a click
 REF_LINE = 21.0        # line height of the 11 pt default font on a 96 dpi screen
 
 
@@ -86,7 +93,7 @@ class Tooltip:
         self.tip.wm_geometry("+%d+%d" % (x, y))
         frame = tk.Frame(self.tip, bg=ACCENT, padx=1, pady=1)
         frame.pack()
-        tk.Label(frame, text=self.text, justify="left", wraplength=px(360), bg="#0b1017", fg=FG, padx=px(12), pady=px(10)).pack()
+        tk.Label(frame, text=self.text, justify="left", wraplength=px(360), bg=TIP_BG, fg=FG, padx=px(12), pady=px(10)).pack()
 
     def hide(self, _e=None):
         if self._job is not None:
@@ -101,9 +108,9 @@ class InfoBadge(tk.Canvas):
     """Round "i" badge with a Tooltip."""
 
     def __init__(self, parent, text, bg=CARD):
-        s = px(36)
+        s = px(48)             # touch target: the visible disc stays small, the hit area does not
         super().__init__(parent, width=s, height=s, bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
-        self.disc = self.create_oval(px(8), px(8), s - px(8), s - px(8), fill=ACCENT, outline="")
+        self.disc = self.create_oval(px(14), px(14), s - px(14), s - px(14), fill=ACCENT, outline="")
         self.create_text(s // 2, s // 2, text="i", fill=DARK, font=("TkDefaultFont", 11, "bold"))
         self.ring = None
         self.bind("<Enter>", lambda e: self.itemconfigure(self.disc, fill=ACCENT_H), add="+")
@@ -114,8 +121,8 @@ class InfoBadge(tk.Canvas):
         Tooltip(self, text)
 
     def _focus_in(self, _e):
-        s = px(36)
-        self.ring = self.create_oval(px(5), px(5), s - px(5), s - px(5), outline="#ffffff", width=2)
+        s = px(48)
+        self.ring = self.create_oval(px(11), px(11), s - px(11), s - px(11), outline=RING, width=2)
 
     def _focus_out(self, _e):
         if self.ring:
@@ -148,16 +155,16 @@ class RoundedButton(_Stateful):
         w, h = int(super().cget("width")), int(super().cget("height"))
         on = self.enabled
         if self.primary:
-            fill = (ACCENT_D if self._down else ACCENT_H if self._hover else ACCENT) if on else "#26384b"
+            fill = (ACCENT_D if self._down else ACCENT_H if self._hover else ACCENT) if on else OFF_FILL
             outline, fg = fill, DARK if on else FAINT
         elif self.quiet:
             fill = (LINE if self._down else CARD2 if self._hover else self._bg) if on else self._bg
             outline, fg = fill, (FG if self._hover else MUTED) if on else FAINT
         else:
-            fill = (LINE if self._down else "#2b405a" if self._hover else CARD2) if on else CARD
-            outline, fg = (EDGE if on else "#223244"), FG if on else FAINT
+            fill = (LINE if self._down else RAISED_H if self._hover else CARD2) if on else CARD
+            outline, fg = (EDGE if on else OFF_EDGE), FG if on else FAINT
         if self._focus and on:
-            round_rect(self, 1, 1, w - 1, h - 1, h // 2, outline="#ffffff", width=2, fill="")
+            round_rect(self, 1, 1, w - 1, h - 1, h // 2, outline=RING, width=2, fill="")
         round_rect(self, 4, 4, w - 4, h - 4, h // 2, fill=fill, outline=outline, width=1)
         self.create_text(w // 2, h // 2, text=self.text, font=self._font, fill=fg)
 
@@ -172,7 +179,7 @@ class RoundedButton(_Stateful):
     def _focus_out(self, _e): self._focus = False; self.draw()
 
     def _release(self, e):
-        was = self._down
+        was = self._down and not _dragging
         self._down = False
         self.draw()
         if was and 0 <= e.x <= self.winfo_width() and 0 <= e.y <= self.winfo_height():
@@ -188,13 +195,15 @@ class Switch(_Stateful):
 
     def __init__(self, parent, text, variable, command=None, state="normal", bg=CARD):
         self._font = tkfont.Font(font="TkDefaultFont")
-        super().__init__(parent, width=px(58) + self._font.measure(text) + px(6), height=max(px(40), self._font.metrics("linespace") + px(8)), bg=bg,
+        super().__init__(parent, width=px(58) + self._font.measure(text) + px(6), height=max(px(48), self._font.metrics("linespace") + px(8)), bg=bg,
                          highlightthickness=0, takefocus=True, cursor="hand2")
         self._init_state(state)
         self.text, self.variable, self.command = text, variable, command
         self._focus = False
         variable.trace_add("write", lambda *a: self.draw())
-        self.bind("<Button-1>", self._click)
+        self._armed = False
+        self.bind("<ButtonPress-1>", self._click)
+        self.bind("<ButtonRelease-1>", self._release)
         self.bind("<space>", self._key)
         self.bind("<Return>", self._key)
         self.bind("<FocusIn>", lambda e: self._set_focus(True))
@@ -212,13 +221,13 @@ class Switch(_Stateful):
         tw, th = px(44), px(24)
         x, y = px(3), (h - th) // 2
         on, val = self.enabled, bool(self.variable.get())
-        track = (ACCENT if val else "#4f6882") if on else ("#2a5a78" if val else "#26384b")
+        track = (ACCENT if val else EDGE) if on else (OFF_TRACK_ON if val else OFF_FILL)
         if self._focus and on:
-            round_rect(self, x - 3, y - 3, x + tw + 3, y + th + 3, th // 2 + 3, outline="#ffffff", width=2, fill="")
+            round_rect(self, x - 3, y - 3, x + tw + 3, y + th + 3, th // 2 + 3, outline=RING, width=2, fill="")
         round_rect(self, x, y, x + tw, y + th, th // 2, fill=track, outline=track)
         k = th - px(6)
         kx = x + tw - k - px(3) if val else x + px(3)
-        self.create_oval(kx, y + px(3), kx + k, y + px(3) + k, fill="#ffffff" if on else "#8a9bab", outline="")
+        self.create_oval(kx, y + px(3), kx + k, y + px(3) + k, fill=RING if on else OFF_KNOB, outline="")
         self.create_text(px(58), h // 2, text=self.text, anchor="w", font=self._font, fill=FG if on else FAINT)
 
     def toggle(self):
@@ -229,7 +238,12 @@ class Switch(_Stateful):
 
     def _click(self, _e):
         self.focus_set()
-        self.toggle()
+        self._armed = True
+
+    def _release(self, e):
+        armed, self._armed = self._armed, False
+        if armed and not _dragging and 0 <= e.x <= self.winfo_width() and 0 <= e.y <= self.winfo_height():
+            self.toggle()
 
     def _key(self, _e):
         self.toggle()
@@ -263,7 +277,7 @@ class Bar(tk.Canvas):
         w, h = self.winfo_width(), int(super().cget("height"))
         if w < 4:
             return
-        round_rect(self, 0, 0, w, h, h // 2, fill="#0c1219", outline="#1f2e3f")
+        round_rect(self, 0, 0, w, h, h // 2, fill=INSET, outline=INSET_EDGE)
         if self._value > 0:
             fw = max(h, int(w * min(self._value / self._max, 1)))
             round_rect(self, 0, 0, fw, h, h // 2, fill=ACCENT, outline=ACCENT)
@@ -283,7 +297,7 @@ class StepBadge(tk.Canvas):
         s = self.s
         if status == "done":
             self.create_oval(2, 2, s - 2, s - 2, fill=GREEN, outline=GREEN)
-            self.create_line(s * .30, s * .52, s * .45, s * .67, s * .72, s * .36, fill="#ffffff", width=max(2, px(3)),
+            self.create_line(s * .30, s * .52, s * .45, s * .67, s * .72, s * .36, fill=RING, width=max(2, px(3)),
                              capstyle="round", joinstyle="round")
         elif status == "active":
             self.create_oval(2, 2, s - 2, s - 2, fill=ACCENT, outline=ACCENT)
@@ -316,6 +330,51 @@ class Card(tk.Canvas):
         self.tag_lower("bg")
 
 
+class Flow(tk.Frame):
+    """Left-to-right row of widgets that wraps onto the next line when the window gets narrow.
+    Children are created with this frame as parent and registered with add(widget, gap)."""
+
+    def __init__(self, parent, bg=CARD):
+        super().__init__(parent, bg=bg)
+        self._items, self._placed = [], None
+        self.bind("<Configure>", self._layout)
+
+    def add(self, widget, gap=0):
+        if all(w is not widget for w, _ in self._items):
+            self._items.append((widget, gap))
+        self._layout()
+
+    def remove(self, widget):
+        self._items = [(w, g) for w, g in self._items if w is not widget]
+        widget.grid_forget()
+        self._placed = None
+        self._layout()
+
+    def clear(self):
+        for w, _ in self._items:
+            w.grid_forget()
+        self._items, self._placed = [], None
+
+    def _layout(self, _e=None):
+        width = self.winfo_width()
+        if width < 2:
+            width = 10 ** 6                      # not on screen yet: ask for a single line
+        x = row = col = 0
+        plan = []
+        for w, gap in self._items:
+            need = w.winfo_reqwidth() + (gap if col else 0)
+            if col and x + need > width:
+                row, col, x, need = row + 1, 0, 0, w.winfo_reqwidth()
+            plan.append((w, row, col, gap if col else 0))
+            x += need
+            col += 1
+        if plan == self._placed:
+            return
+        self._placed = plan
+        for w, r, c, g in plan:
+            w.grid(row=r, column=c, padx=(g, 0), pady=(0 if r == 0 else px(4), 0), sticky="w")
+
+
 class ScrollFrame(tk.Frame):
     """Vertical scroller for small screens (Steam Deck: 800 px high). Put content in .inner.
     The scrollbar only appears when the content does not fit. Mouse wheel and Tab both scroll."""
@@ -336,6 +395,10 @@ class ScrollFrame(tk.Frame):
         top.bind_all("<Button-4>", lambda e: self._scroll(-1), add="+")          # Linux
         top.bind_all("<Button-5>", lambda e: self._scroll(1), add="+")
         top.bind_all("<FocusIn>", self._focus, add="+")                          # Tab into something off-screen: scroll to it
+        self._drag = None                                                        # touch: a finger drag arrives as mouse press, motion, release
+        top.bind_all("<ButtonPress-1>", self._drag_start, add="+")
+        top.bind_all("<B1-Motion>", self._drag_move, add="+")
+        top.bind_all("<ButtonRelease-1>", self._drag_end, add="+")
 
     def _on_canvas(self, e):
         self.canvas.itemconfigure(self._win, width=e.width)
@@ -360,6 +423,28 @@ class ScrollFrame(tk.Frame):
     def _wheel(self, e):
         self._scroll(-1 if e.delta > 0 else 1)
 
+    def _drag_start(self, e):
+        self._drag = None
+        if self.scrollable() and isinstance(e.widget, tk.Widget) and str(e.widget).startswith(str(self.inner)):
+            self._drag = (e.y_root, self.canvas.canvasy(0), False)
+
+    def _drag_move(self, e):
+        global _dragging
+        if not self._drag:
+            return
+        y0, view0, moving = self._drag
+        if not moving and abs(e.y_root - y0) < px(10):
+            return                                  # still a tap: leave the control under the finger alone
+        _dragging = True
+        self._drag = (y0, view0, True)
+        total = self.inner.winfo_reqheight()
+        self.canvas.yview_moveto(max(0, min(1, (view0 + y0 - e.y_root) / total)))
+
+    def _drag_end(self, _e):
+        global _dragging
+        self._drag = None
+        _dragging = False
+
     def _focus(self, e):
         w = e.widget
         if not self.scrollable() or not isinstance(w, tk.Widget):
@@ -380,8 +465,6 @@ class ScrollFrame(tk.Frame):
 
 
 # ----- dialogs ---------------------------------------------------------------------------------------------
-
-AMBER = "#f0b429"
 
 
 class _Glyph(tk.Canvas):

@@ -132,11 +132,11 @@ def run_one(seed, steps, sandbox):
                 app.btn_make.invoke()
             return "make + cancel at a random instant"
         if r < .10:
-            app.sw_installed.event_generate("<Button-1>"); return "toggle installed"
+            app.sw_installed.event_generate("<ButtonPress-1>"); app.sw_installed.event_generate("<ButtonRelease-1>", x=5, y=5); return "toggle installed"
         if r < .13:
-            app.sw_skip.event_generate("<Button-1>"); return "toggle skip"
+            app.sw_skip.event_generate("<ButtonPress-1>"); app.sw_skip.event_generate("<ButtonRelease-1>", x=5, y=5); return "toggle skip"
         if r < .16:
-            app.chk_restart.event_generate("<Button-1>"); return "toggle restart"
+            app.chk_restart.event_generate("<ButtonPress-1>"); app.chk_restart.event_generate("<ButtonRelease-1>", x=5, y=5); return "toggle restart"
         if r < .26:
             app.btn_make.event_generate("<ButtonPress-1>"); app.btn_make.event_generate("<ButtonRelease-1>", x=5, y=5); return "click make"
         if r < .30:

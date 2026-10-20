@@ -8,7 +8,7 @@ from tkinter import filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, px, set_scale)
+from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, px, set_scale)
 
 
 def downloads_dir():
@@ -91,20 +91,23 @@ class App(tk.Tk):
         self.skip_auto = tk.BooleanVar(value=False)
         self.restart_steam = tk.BooleanVar(value=True)
 
+        self._wrapped, self._wrap_width, self._head_narrow = [], 0, False
         self.scroller = ScrollFrame(self)
         self.scroller.pack(fill="both", expand=True)
         self.holder = self.scroller.inner
         head = tk.Frame(self.holder, bg=BG)
         head.pack(fill="x", padx=px(28), pady=(px(24), px(14)))
+        head.columnconfigure(1, weight=1)
         if getattr(self, "_icon", None):
             self._icon_small = self._icon.subsample(4 if px(1) == 1 else 3)
-            tk.Label(head, image=self._icon_small, bg=BG).pack(side="left", padx=(0, px(16)))
+            tk.Label(head, image=self._icon_small, bg=BG).grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, px(16)))
         titles = tk.Frame(head, bg=BG)
-        titles.pack(side="left")
+        titles.grid(row=0, column=1, sticky="w")
         tk.Label(titles, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
-        tk.Label(titles, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED).pack(anchor="w")
+        self._tagline = tk.Label(titles, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED, justify="left", anchor="w")
+        self._tagline.pack(anchor="w")
         self.btn_update = RoundedButton(head, "Check for updates", self.check_update, bg=BG, quiet=True)
-        self.btn_update.pack(side="right")
+        self.btn_update.grid(row=0, column=2, sticky="e")
 
         self.step1 = self._card("1", "Get your game list")
         self.step2 = self._card("2", "Make the covers")
@@ -121,7 +124,9 @@ class App(tk.Tk):
         want_w, want_h = self.holder.winfo_reqwidth(), self.holder.winfo_reqheight()
         room = (screen_h or self.winfo_screenheight()) - px(110)               # title bar + taskbar
         self.geometry("%dx%d" % (want_w + px(14), min(want_h, max(room, px(420)))))
-        self.minsize(want_w, px(380))
+        self.minsize(px(520), px(240))       # layout reflows below this width; short enough to try the scroller on any screen
+        self.holder.bind("<Configure>", self._rewrap, add="+")
+        self._rewrap()
         self._collapse = True
         self.update_steps()
 
@@ -176,8 +181,36 @@ class App(tk.Tk):
         r.pack(fill="x", pady=px(4) if pady is None else pady)       # px() here, not as a default: defaults run before the scale is known
         return r
 
+    def _flow(self, parent, pady=None):
+        r = Flow(parent, bg=CARD)
+        r.pack(fill="x", pady=px(4) if pady is None else pady)
+        return r
+
+    def _wrap(self, label, cap=None):
+        """Register a label whose wrap width follows the window (and never exceeds cap)."""
+        label.configure(wraplength=cap or px(620))      # first size; _rewrap takes over once the window is on screen
+        self._wrapped.append((label, cap))
+        return label
+
+    def _rewrap(self, _e=None):
+        width = self.holder.winfo_width()
+        if width < 2 or width == self._wrap_width:
+            return
+        self._wrap_width = width
+        room = max(px(200), width - px(2 * 28) - px(44) - px(4))
+        for label, cap in self._wrapped:
+            label.configure(wraplength=min(room, cap) if cap else room)
+        narrow = width < px(640)                    # the header's button drops under the title instead of squeezing it
+        if narrow != self._head_narrow:
+            self._head_narrow = narrow
+            if narrow:
+                self.btn_update.grid_configure(row=1, column=1, sticky="w", pady=(px(8), 0))
+            else:
+                self.btn_update.grid_configure(row=0, column=2, sticky="e", pady=0)
+        self._tagline.configure(wraplength=max(px(160), width - px(2 * 28) - px(80)))
+
     def _note(self, parent, text):
-        tk.Label(parent, text=text, bg=CARD, fg=MUTED, justify="left", wraplength=px(620), anchor="w").pack(fill="x", pady=(0, px(6)))
+        self._wrap(tk.Label(parent, text=text, bg=CARD, fg=MUTED, justify="left", anchor="w")).pack(fill="x", pady=(0, px(6)))
 
     def _set_state(self, body, enabled):
         st = "normal" if enabled else "disabled"
@@ -212,14 +245,14 @@ class App(tk.Tk):
         self._note(body, "Steam keeps your game list on a web page. Click the button and log in if it asks. "
                          "A page of text appears: press %s and save it, keeping the name userdata.json. "
                          "This app notices the file by itself." % SAVE_KEY)
-        r = self._row(body)
-        RoundedButton(r, "Download your game list", self.open_download_page, primary=True).pack(side="left")
-        RoundedButton(r, "Browse…", self.browse, quiet=True).pack(side="left", padx=px(10))
-        RoundedButton(r, "Copy link", self.copy_link, quiet=True).pack(side="left")
+        r = self._flow(body)
+        r.add(RoundedButton(r, "Download your game list", self.open_download_page, primary=True))
+        r.add(RoundedButton(r, "Browse…", self.browse, quiet=True), px(10))
+        r.add(RoundedButton(r, "Copy link", self.copy_link, quiet=True), px(10))
         r = self._row(body)
         self.sw_installed = Switch(r, "Only my installed games (no file needed)", self.installed_only, self.on_installed_only)
         self.sw_installed.pack(side="left")
-        self.step1_status = tk.Label(body, text="Waiting for the saved game list (userdata.json)…", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
+        self.step1_status = self._wrap(tk.Label(body, text="Waiting for the saved game list (userdata.json)…", bg=CARD, fg=MUTED, anchor="w", justify="left"))
         self.step1_status.pack(fill="x", pady=(px(8), 0))
 
     def open_download_page(self):
@@ -301,20 +334,21 @@ class App(tk.Tk):
         self.sw_skip = Switch(r, "Skip blurry covers", self.skip_auto)
         self.sw_skip.pack(side="left")
         InfoBadge(r, sc.AUTO_ART_HELP).pack(side="left", padx=px(6))
-        r = self._row(body, pady=px(6))
+        self.row_make = r = self._flow(body, pady=px(6))
         self.btn_make = RoundedButton(r, "Make covers", self.start_make, primary=True)
-        self.btn_make.pack(side="left")
+        r.add(self.btn_make)
         self.btn_cancel = RoundedButton(r, "Cancel", self.cancel_make, state="disabled")
-        self.btn_cancel.pack(side="left", padx=px(10))
+        r.add(self.btn_cancel, px(10))
         self.btn_folder = RoundedButton(r, "Open covers folder", self.open_covers_folder)
         self.progress = Bar(body)
         self.progress.pack(fill="x", pady=(px(10), px(6)))
-        self.step2_status = tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
+        self.step2_status = self._wrap(tk.Label(body, text="Not started.", bg=CARD, fg=MUTED, anchor="w", justify="left"))
         self.step2_status.pack(fill="x")
-        self.preview = tk.Frame(body, bg=CARD)            # a few finished covers: the payoff of this step
+        self.preview = Flow(body, bg=CARD)                # a few finished covers: the payoff of this step
         self._thumbs = []
 
     def _show_preview(self):
+        self.preview.clear()
         for w in self.preview.winfo_children():
             w.destroy()
         self._thumbs = []
@@ -333,7 +367,7 @@ class App(tk.Tk):
             except Exception:
                 continue                                  # a preview is a nicety: never let it break the step
             self._thumbs.append(img)
-            tk.Label(self.preview, image=img, bg=CARD).pack(side="left", padx=(0, px(10)))
+            self.preview.add(tk.Label(self.preview, image=img, bg=CARD), px(10))
         if self._thumbs:
             self.preview.pack(fill="x", pady=(px(12), 0))
 
@@ -454,7 +488,7 @@ class App(tk.Tk):
         self._set_state(self.step1, True)
         self.refresh_step1()
         if n:
-            self.btn_folder.pack(side="left", padx=px(10))
+            self.row_make.add(self.btn_folder, px(10))
             self._show_preview()
         self.refresh_step3()
 
@@ -475,26 +509,26 @@ class App(tk.Tk):
 
     # ----- step 3 -----
     def _build_step3(self, body):
-        self.steam_note = tk.Label(body, text="", bg=CARD, anchor="w", justify="left", wraplength=px(620))
+        self.steam_note = self._wrap(tk.Label(body, text="", bg=CARD, anchor="w", justify="left"))
         self.steam_note.pack(fill="x", pady=(0, px(6)))
         self._steam_note_state = None
-        self.acc_row = self._row(body)
-        self.acc_label = tk.Label(self.acc_row, text="", bg=CARD, fg=FG, anchor="w", wraplength=px(380), justify="left")
-        self.acc_label.pack(side="left")
+        self.acc_row = self._flow(body)
+        self.acc_label = self._wrap(tk.Label(self.acc_row, text="", bg=CARD, fg=FG, anchor="w", justify="left"), cap=px(380))
+        self.acc_row.add(self.acc_label)
         self.btn_account = RoundedButton(self.acc_row, "Change account", self.choose_account)
         self.refresh_account()
         r = self._row(body)
         self.chk_restart = Switch(r, "Start Steam again when finished", self.restart_steam)
         self.chk_restart.pack(side="left")
-        r = self._row(body, pady=px(6))
+        r = self._flow(body, pady=px(6))
         self.btn_apply = RoundedButton(r, "Apply to Steam", lambda: self.confirm_and_run("apply"), primary=True)
-        self.btn_apply.pack(side="left")
+        r.add(self.btn_apply)
         self.btn_restore = RoundedButton(r, "Restore previous artwork", lambda: self.confirm_and_run("restore"))
-        self.btn_restore.pack(side="left", padx=px(10))
+        r.add(self.btn_restore, px(10))
         r2 = self._row(body, pady=px(2))
         self.btn_reset = RoundedButton(r2, "Reset to Steam's default art", self.start_reset, quiet=True)
         self.btn_reset.pack(side="left")
-        self.step3_status = tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left", wraplength=px(620))
+        self.step3_status = self._wrap(tk.Label(body, text="", bg=CARD, fg=MUTED, anchor="w", justify="left"))
 
     def _tick_steam_note(self):
         """The warning follows reality: amber while Steam is open (Apply will close it), calm when it is already closed."""
@@ -528,9 +562,9 @@ class App(tk.Tk):
             accounts, who = [], ""
         self.acc_label.configure(text="Steam account: %s" % _short(who) if who else "")
         if len(accounts) > 1:
-            self.btn_account.pack(side="left", padx=px(12))
+            self.acc_row.add(self.btn_account, px(12))
         else:
-            self.btn_account.pack_forget()
+            self.acc_row.remove(self.btn_account)
         if not who:
             self.acc_row.pack_forget()
 
