@@ -4,6 +4,12 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-20
+- Touch works on handhelds: dragging the content scrolls the window (a drag never presses the button under your finger), the info badge and switches are bigger to tap, and a switch now changes when you lift your finger.
+- The window follows how you resize it: text and button rows wrap, the header's "Check for updates" button moves under the title when narrow, and the window can be made much narrower and shorter than before.
+- Buttons, switches, badges and the progress bar are drawn with smooth, perfectly round edges. Switches that are off now have enough contrast to see.
+- "Check for updates" now says it opens this project's release page on GitHub (with the link) and that nothing is downloaded or installed unless you do it yourself there.
+
 ## [1.1.0] - 2026-10-12
 - Layout follows the real text size, so the window is no longer clipped on screens with large text or 225% zoom.
 - With two or more Steam accounts the window shows which account will be changed and has a "Change account" button. Apply, Restore and Reset use that choice.
