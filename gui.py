@@ -424,10 +424,13 @@ class App(tk.Tk):
             messagebox.showinfo("No update needed", "You have the latest version (%s)." % r["current"])
             return
         if r["newer"]:
-            text = "A newer version is available: %s (you have %s).\n\nOpen the download page in your browser? Nothing is installed automatically." % (r["latest"], r["current"])
+            head = "A newer version is available: %s (you have %s)." % (r["latest"], r["current"])
         else:
-            text = "The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare.\n\nOpen the download page?" % r["latest"]
-        if messagebox.askokcancel("Update available", text, ok="Open page", cancel="Not now"):
+            head = "The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare." % r["latest"]
+        text = [(head, "main"),
+                ("“Open GitHub page” opens this project's release page on GitHub in your web browser:\n%s" % r["url"], "muted"),
+                ("Nothing is downloaded or installed unless you choose to do it yourself on that page.", "note")]
+        if messagebox.askokcancel("Update available", text, ok="Open GitHub page", cancel="Not now"):
             try:
                 webbrowser.open(r["url"])
             except Exception:

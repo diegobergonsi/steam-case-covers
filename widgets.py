@@ -535,7 +535,7 @@ class _Glyph(tk.Canvas):
 class Dialog(tk.Toplevel):
     """A modal message window in the app's own style (replaces the plain system message boxes).
 
-    paragraphs: list of (text, style), style in "main", "muted", "warn".
+    paragraphs: list of (text, style), style in "main", "muted", "note", "warn".
     buttons:    list of (label, value, primary); the primary one has the focus, so Enter confirms.
     Escape or closing the window returns `cancel_value`."""
 
@@ -563,8 +563,8 @@ class Dialog(tk.Toplevel):
         body = tk.Frame(frame, bg=CARD)
         body.pack(fill="x", pady=(px(16), px(6)))
         for text, style in paragraphs:
-            fg, font = {"main": (FG, "TkDefaultFont"), "muted": (MUTED, "TkDefaultFont")}.get(style, (AMBER, "TkDefaultFont"))
-            tk.Label(body, text=text, bg=CARD, fg=fg, font=(font, 11, "bold") if style == "warn" else (font, 11),
+            fg = {"main": FG, "muted": MUTED, "note": ACCENT}.get(style, AMBER)       # note: good news, in the accent color; anything else is a warning
+            tk.Label(body, text=text, bg=CARD, fg=fg, font=("TkDefaultFont", 11, "bold") if style in ("warn", "note") else ("TkDefaultFont", 11),
                      justify="left", wraplength=px(470), anchor="w").pack(fill="x", pady=(0, px(10)))
         row = tk.Frame(frame, bg=CARD)
         row.pack(fill="x", pady=(px(8), 0))
