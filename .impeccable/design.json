@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-20T18:59:53.253831+00:00",
+  "title": "Design System: Steam Case Covers",
+  "extensions": {
+    "colorMeta": {
+      "night-ground": {
+        "role": "neutral",
+        "displayName": "Night Ground",
+        "canonical": "#11151c",
+        "tonalRamp": [
+          "#1d2430",
+          "#333f54",
+          "#495a78",
+          "#5f759c",
+          "#8294b3",
+          "#a7b3c9",
+          "#cbd2df",
+          "#eff1f5"
+        ]
+      },
+      "card-navy": {
+        "role": "neutral",
+        "displayName": "Card Navy",
+        "canonical": "#182433",
+        "tonalRamp": [
+          "#182534",
+          "#2b415c",
+          "#3e5d83",
+          "#5079ab",
+          "#7797bf",
+          "#9eb5d2",
+          "#c6d3e4",
+          "#eef2f7"
+        ]
+      },
+      "card-raised": {
+        "role": "neutral",
+        "displayName": "Card Raised",
+        "canonical": "#22344a",
+        "tonalRamp": [
+          "#182534",
+          "#2a415c",
+          "#3d5d84",
+          "#4f79ac",
+          "#7697c0",
+          "#9eb5d2",
+          "#c6d4e5",
+          "#eef2f7"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#2c4259",
+        "tonalRamp": [
+          "#192633",
+          "#2d435a",
+          "#406081",
+          "#537da8",
+          "#799abd",
+          "#a0b7d0",
+          "#c7d5e3",
+          "#eef2f7"
+        ]
+      },
+      "control-edge": {
+        "role": "neutral",
+        "displayName": "Control Edge",
+        "canonical": "#5d7a96",
+        "tonalRamp": [
+          "#1d262f",
+          "#344453",
+          "#4a6177",
+          "#607e9b",
+          "#839bb2",
+          "#a7b8c9",
+          "#cbd5df",
+          "#eff2f5"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "#e6edf3",
+        "tonalRamp": [
+          "#192734",
+          "#2c455b",
+          "#3f6382",
+          "#5281aa",
+          "#789ebe",
+          "#9fbad1",
+          "#c6d6e4",
+          "#eef3f7"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Text Muted",
+        "canonical": "#93a7bb",
+        "tonalRamp": [
+          "#1e262f",
+          "#344353",
+          "#4b6176",
+          "#617e9a",
+          "#849bb2",
+          "#a8b8c8",
+          "#ccd5df",
+          "#eff2f5"
+        ]
+      },
+      "text-faint": {
+        "role": "neutral",
+        "displayName": "Text Faint",
+        "canonical": "#7d92a8",
+        "tonalRamp": [
+          "#1f262e",
+          "#364351",
+          "#4d6074",
+          "#657d97",
+          "#879aaf",
+          "#aab8c6",
+          "#cdd5dd",
+          "#f0f2f5"
+        ]
+      },
+      "sky-blue": {
+        "role": "primary",
+        "displayName": "Sky Blue",
+        "canonical": "#66c0f4",
+        "tonalRamp": [
+          "#052f47",
+          "#09537e",
+          "#0d77b4",
+          "#119bea",
+          "#44b2f2",
+          "#7ac8f5",
+          "#b1dff9",
+          "#e7f5fd"
+        ]
+      },
+      "sky-blue-hover": {
+        "role": "primary",
+        "displayName": "Sky Blue Lifted",
+        "canonical": "#8fd3ff",
+        "tonalRamp": [
+          "#002e4c",
+          "#005287",
+          "#0075c1",
+          "#0099fb",
+          "#37b0ff",
+          "#71c7ff",
+          "#abdeff",
+          "#e5f5ff"
+        ]
+      },
+      "sky-blue-pressed": {
+        "role": "primary",
+        "displayName": "Sky Blue Deep",
+        "canonical": "#45a5dc",
+        "tonalRamp": [
+          "#0c2d40",
+          "#155071",
+          "#1f72a2",
+          "#2895d4",
+          "#56addf",
+          "#87c5e9",
+          "#b8ddf2",
+          "#eaf5fb"
+        ]
+      },
+      "ink-on-blue": {
+        "role": "neutral",
+        "displayName": "Ink on Blue",
+        "canonical": "#0b141d",
+        "tonalRamp": [
+          "#152637",
+          "#254362",
+          "#35618c",
+          "#457eb6",
+          "#6e9bc8",
+          "#98b8d8",
+          "#c2d5e8",
+          "#edf2f8"
+        ]
+      },
+      "done-green": {
+        "role": "status",
+        "displayName": "Done Green",
+        "canonical": "#5ba32b",
+        "tonalRamp": [
+          "#223d10",
+          "#3c6b1c",
+          "#559928",
+          "#6fc734",
+          "#8fd560",
+          "#b0e18f",
+          "#d0eebd",
+          "#f1faeb"
+        ]
+      },
+      "caution-amber": {
+        "role": "status",
+        "displayName": "Caution Amber",
+        "canonical": "#f0b429",
+        "tonalRamp": [
+          "#473305",
+          "#7e5b09",
+          "#b4820d",
+          "#eba910",
+          "#f2bd44",
+          "#f6d07a",
+          "#fae4b1",
+          "#fdf7e7"
+        ]
+      },
+      "error-coral": {
+        "role": "status",
+        "displayName": "Error Coral",
+        "canonical": "#ff7b72",
+        "tonalRamp": [
+          "#4c0500",
+          "#870900",
+          "#c10c00",
+          "#fb1000",
+          "#ff4337",
+          "#ff7a71",
+          "#ffb1ab",
+          "#ffe7e5"
+        ]
+      },
+      "focus-ring": {
+        "role": "neutral",
+        "displayName": "Focus White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#434343",
+          "#616161",
+          "#7e7e7e",
+          "#9b9b9b",
+          "#b8b8b8",
+          "#d5d5d5",
+          "#f2f2f2"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Title",
+        "purpose": "App name in the header."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Dialog titles."
+      },
+      "card-title": {
+        "displayName": "Card title",
+        "purpose": "Step names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Instructions and status lines."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Button text and warnings."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      {
+        "name": "deck-height",
+        "value": "800px (window scrolls when content does not fit)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action that matters in the current step.",
+      "html": "<button class=\"ds-btn ds-primary\">Make covers</button>",
+      "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-primary{background:#66c0f4;color:#0b141d}.ds-primary:hover{background:#8fd3ff}.ds-primary:active{background:#45a5dc}.ds-primary:focus-visible{outline:2px solid #fff;outline-offset:2px}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary actions beside the primary.",
+      "html": "<button class=\"ds-btn ds-quiet\">Open covers folder</button>",
+      "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-quiet{background:#22344a;color:#e6edf3;box-shadow:inset 0 0 0 1px #5d7a96}.ds-quiet:hover{background:#2b405a}.ds-quiet:active{background:#2c4259}.ds-quiet:focus-visible{outline:2px solid #fff;outline-offset:2px}"
+    },
+    {
+      "name": "Switch",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Pill toggle with label to the right.",
+      "html": "<label class=\"ds-sw\"><span class=\"ds-track\"><span class=\"ds-knob\"></span></span>Skip blurry covers</label>",
+      "css": ".ds-sw{display:flex;align-items:center;gap:10px;color:#e6edf3;font:15px system-ui,sans-serif}.ds-track{width:44px;height:24px;border-radius:9999px;background:#66c0f4;position:relative}.ds-knob{position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A step container with badge, title and instruction.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-head\"><span class=\"ds-badge\">3</span><b>Add them to Steam</b></div><p>Your current artwork is backed up first, so you can undo it.</p></div>",
+      "css": ".ds-card{background:#182433;border:1px solid #2c4259;border-radius:18px;padding:18px 22px;color:#e6edf3;font:15px system-ui,sans-serif}.ds-head{display:flex;align-items:center;gap:12px;font-size:19px}.ds-badge{width:32px;height:32px;border-radius:50%;background:#66c0f4;color:#0b141d;display:grid;place-items:center;font-weight:700}.ds-card p{color:#93a7bb;margin:12px 0 0}"
+    },
+    {
+      "name": "Progress Bar",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Pill track with sky-blue fill.",
+      "html": "<div class=\"ds-bar\"><div class=\"ds-fill\"></div></div>",
+      "css": ".ds-bar{height:12px;border-radius:9999px;background:#0c1219;border:1px solid #1f2e3f;overflow:hidden}.ds-fill{width:62%;height:100%;background:#66c0f4}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Shelf",
+    "overview": "The window is a dark cabinet that holds three labelled stations and gets out of the way. The covers are the only things allowed to be colorful; the interface around them is deep blue-black, one step lighter for cards, with a single sky-blue voice for the action that matters now.",
+    "keyCharacteristics": [
+      "Dark tonal layering, no shadows.",
+      "One accent (sky blue); green, amber and coral appear only as status.",
+      "Fully rounded controls, softly rounded cards.",
+      "Text-forward: every card opens with a sentence of instruction.",
+      "Accessible by construction: visible control edges, white keyboard focus ring, scroll fallback on small screens."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Sky blue marks the single action or state that matters right now.",
+        "section": "colors"
+      },
+      {
+        "name": "The Covers Are Colorful Rule",
+        "body": "The interface stays in the navy family so the cover thumbnails are the most saturated thing on screen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Scale With The System Rule",
+        "body": "Layout measures are derived from the real font line height and screen DPI (px()), never fixed pixels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "No drop shadows, glows, or gradients in the window.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep one sky-blue primary action visible per card and use quiet pills for everything else.",
+      "Do put a plain-English sentence above the controls in every card, in Text Muted.",
+      "Do route every measure through px() and the real font line height.",
+      "Do keep control outlines at 3:1 against the card (Control Edge) and show a white ring on keyboard focus.",
+      "Do keep status colors for status only: green done, amber caution, coral error."
+    ],
+    "donts": [
+      "Don't add shadows, gradients, glows or decorative illustration to the window.",
+      "Don't put the Steam logo in the app icon or window chrome; it belongs only inside the covers.",
+      "Don't introduce a second accent color or a custom typeface.",
+      "Don't use jargon or hide recovery: backups and undo stay stated up front.",
+      "Don't fix pixel sizes or let the layout depend on a large screen; the Deck's 800px height must still work."
+    ]
+  }
+}
