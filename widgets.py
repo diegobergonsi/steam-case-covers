@@ -5,8 +5,15 @@
 Everything here is drawn on a Canvas because the built-in widgets cannot be rounded.
 All of them take Tab focus, show a white focus ring, and react to Space / Enter.
 """
+import base64
+import io
 import tkinter as tk
 import tkinter.font as tkfont
+
+try:
+    from PIL import Image, ImageDraw
+except ImportError:                       # the app still works without Pillow, with rougher corners
+    Image = ImageDraw = None
 
 BG, CARD, CARD2 = "#11151c", "#182433", "#22344a"
 LINE, FG, MUTED, FAINT = "#2c4259", "#e6edf3", "#93a7bb", "#7d92a8"      # FAINT: 4.5:1 on CARD, it carries real text (locked steps, hints)
@@ -37,11 +44,45 @@ def px(n):
     return int(round(n * _scale))
 
 
-def round_rect(c, x1, y1, x2, y2, r, **kw):
+def _rgb(color):
+    return None if not color else tuple(int(color[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
+
+
+_png_cache = {}
+
+
+def _shape_png(w, h, r, fill, outline, width):
+    """Anti-aliased rounded rectangle as base64 PNG: drawn at 2x to 4x size, then scaled down. Tk's canvas does not smooth its own shapes."""
+    key = (w, h, r, fill, outline, width)
+    data = _png_cache.get(key)
+    if data is None:
+        k = 4 if w * h < 90000 else 2
+        im = Image.new("RGBA", (w * k, h * k), (0, 0, 0, 0))
+        ImageDraw.Draw(im).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=r * k, fill=_rgb(fill),
+                                             outline=_rgb(outline) if outline else None, width=max(1, width * k))
+        buf = io.BytesIO()
+        im.resize((w, h), Image.LANCZOS).save(buf, "PNG")
+        data = base64.b64encode(buf.getvalue())
+        if len(_png_cache) > 400:
+            _png_cache.clear()
+        _png_cache[key] = data
+    return data
+
+
+def round_rect(c, x1, y1, x2, y2, r, fill="", outline="", width=1, tags=()):
+    """Draw a rounded rectangle (a pill when r is half the height). Smooth when Pillow is available."""
     r = max(1, min(r, (x2 - x1) // 2, (y2 - y1) // 2))
-    pts = [x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2,
-           x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
-    return c.create_polygon(pts, smooth=True, **kw)
+    w, h = int(x2 - x1), int(y2 - y1)
+    if Image is None or w < 2 or h < 2:
+        pts = [x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2,
+               x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
+        return c.create_polygon(pts, smooth=True, fill=fill, outline=outline, width=width, tags=tags)
+    img = tk.PhotoImage(master=c, data=_shape_png(w, h, r, fill, outline, width))
+    keep = c.__dict__.setdefault("_shape_imgs", [])
+    keep.append(img)                                  # Tk drops an image nobody references
+    if len(keep) > 60:
+        del keep[:30]
+    return c.create_image(int(x1), int(y1), image=img, anchor="nw", tags=tags)
 
 
 class _Stateful(tk.Canvas):
@@ -110,19 +151,25 @@ class InfoBadge(tk.Canvas):
     def __init__(self, parent, text, bg=CARD):
         s = px(48)             # touch target: the visible disc stays small, the hit area does not
         super().__init__(parent, width=s, height=s, bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
-        self.disc = self.create_oval(px(14), px(14), s - px(14), s - px(14), fill=ACCENT, outline="")
+        self._paint(ACCENT)
         self.create_text(s // 2, s // 2, text="i", fill=DARK, font=("TkDefaultFont", 11, "bold"))
         self.ring = None
-        self.bind("<Enter>", lambda e: self.itemconfigure(self.disc, fill=ACCENT_H), add="+")
-        self.bind("<Leave>", lambda e: self.itemconfigure(self.disc, fill=ACCENT), add="+")
+        self.bind("<Enter>", lambda e: self._paint(ACCENT_H), add="+")
+        self.bind("<Leave>", lambda e: self._paint(ACCENT), add="+")
         self.bind("<FocusIn>", self._focus_in, add="+")
         self.bind("<FocusOut>", self._focus_out, add="+")
         self.bind("<Button-1>", lambda e: self.focus_set())
         Tooltip(self, text)
 
+    def _paint(self, fill):
+        s = px(48)
+        self.delete("disc")
+        round_rect(self, px(14), px(14), s - px(14), s - px(14), s, fill=fill, tags="disc")
+        self.tag_lower("disc")
+
     def _focus_in(self, _e):
         s = px(48)
-        self.ring = self.create_oval(px(11), px(11), s - px(11), s - px(11), outline=RING, width=2)
+        self.ring = round_rect(self, px(11), px(11), s - px(11), s - px(11), s, outline=RING, width=2)
 
     def _focus_out(self, _e):
         if self.ring:
@@ -227,7 +274,7 @@ class Switch(_Stateful):
         round_rect(self, x, y, x + tw, y + th, th // 2, fill=track, outline=track)
         k = th - px(6)
         kx = x + tw - k - px(3) if val else x + px(3)
-        self.create_oval(kx, y + px(3), kx + k, y + px(3) + k, fill=RING if on else OFF_KNOB, outline="")
+        round_rect(self, kx, y + px(3), kx + k, y + px(3) + k, k, fill=RING if on else OFF_KNOB)
         self.create_text(px(58), h // 2, text=self.text, anchor="w", font=self._font, fill=FG if on else FAINT)
 
     def toggle(self):
@@ -296,14 +343,14 @@ class StepBadge(tk.Canvas):
         self.delete("all")
         s = self.s
         if status == "done":
-            self.create_oval(2, 2, s - 2, s - 2, fill=GREEN, outline=GREEN)
+            round_rect(self, 2, 2, s - 2, s - 2, s, fill=GREEN, outline=GREEN)
             self.create_line(s * .30, s * .52, s * .45, s * .67, s * .72, s * .36, fill=RING, width=max(2, px(3)),
                              capstyle="round", joinstyle="round")
         elif status == "active":
-            self.create_oval(2, 2, s - 2, s - 2, fill=ACCENT, outline=ACCENT)
+            round_rect(self, 2, 2, s - 2, s - 2, s, fill=ACCENT, outline=ACCENT)
             self.create_text(s // 2, s // 2, text=self.number, fill=DARK, font=("TkDefaultFont", 13, "bold"))
         else:
-            self.create_oval(2, 2, s - 2, s - 2, fill=CARD, outline=LINE, width=2)
+            round_rect(self, 2, 2, s - 2, s - 2, s, fill=CARD, outline=LINE, width=2)
             self.create_text(s // 2, s // 2, text=self.number, fill=FAINT, font=("TkDefaultFont", 13, "bold"))
 
 
@@ -476,7 +523,7 @@ class _Glyph(tk.Canvas):
         s = px(48)
         super().__init__(parent, width=s, height=s, bg=CARD, highlightthickness=0)
         color = self.COLORS.get(kind, ACCENT)
-        self.create_oval(2, 2, s - 2, s - 2, fill=color, outline=color)
+        round_rect(self, 2, 2, s - 2, s - 2, s, fill=color, outline=color)
         if kind == "error":
             a, b = s * .34, s * .66
             self.create_line(a, a, b, b, fill=DARK, width=max(3, px(4)), capstyle="round")
