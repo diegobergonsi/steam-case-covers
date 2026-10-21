@@ -387,6 +387,28 @@ class Reset(Base):
         self.assertEqual(os.listdir(self.grid), ["2p.png"])
 
 
+class ReplaceRetry(Base):
+    def test_replace_waits_out_a_brief_lock_but_not_a_permanent_one(self):
+        src, dst = os.path.join(self.tmp, "a"), os.path.join(self.tmp, "b")
+        open(src, "w").write("x")
+        real, calls = os.replace, []
+
+        def flaky(a, b):
+            calls.append(1)
+            if len(calls) < 3:
+                raise PermissionError("locked")
+            return real(a, b)
+        os.replace = flaky
+        try:
+            sc._replace(src, dst)
+            self.assertEqual((len(calls), os.path.exists(dst)), (3, True))
+            os.replace = lambda a, b: (_ for _ in ()).throw(PermissionError("locked"))
+            with self.assertRaises(PermissionError):
+                sc._replace(dst, src, tries=2)
+        finally:
+            os.replace = real
+
+
 class SteamProcess(Base):
     def _ps(self, output):
         real = sc.subprocess.run

@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Windows: a cover could occasionally fail to save when antivirus or a second copy of the app held the file for a moment. Saving now waits and retries a few times.
 - Windows: fixed a black window that flashed every few seconds and took the focus. The app checks whether Steam is running with `tasklist`, which opened a console window each time; it now runs hidden.
 
 ## [1.2.0] - 2026-10-20

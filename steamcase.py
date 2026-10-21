@@ -225,6 +225,19 @@ def check_for_update(current=None):
             "url": "https://github.com/%s/releases/tag/%s" % (REPO, best[1])}
 
 
+def _replace(src, dst, tries=6):
+    """os.replace, retried a few times. On Windows it fails for a moment when something else (antivirus, a second copy of this app)
+    has the destination open; waiting a little almost always clears it."""
+    for n in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if n == tries - 1:
+                raise
+            time.sleep(0.05 * (n + 1))
+
+
 def _tmp(path, tag="tmp"):
     """A temp file name next to `path` that no other run can share."""
     return "%s.%d.%s.%s" % (path, os.getpid(), uuid.uuid4().hex[:8], tag)
@@ -554,7 +567,7 @@ def build_cover(portrait_path, out_path, frame):
     canvas.paste(art, (x0, y0))
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True)
-    os.replace(part, out_path)
+    _replace(part, out_path)
 
 
 # ---------- make ----------
@@ -665,7 +678,7 @@ def _safe_copy(src, dst):
     tmp = _tmp(dst)
     try:
         shutil.copy2(src, tmp)
-        os.replace(tmp, dst)
+        _replace(tmp, dst)
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
