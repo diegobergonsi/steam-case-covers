@@ -3,8 +3,11 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+
+## [1.2.1] - 2026-10-21
 - Windows: a cover could occasionally fail to save when antivirus or a second copy of the app held the file for a moment. Saving now waits and retries a few times.
 - Windows: fixed a black window that flashed every few seconds and took the focus. The app checks whether Steam is running with `tasklist`, which opened a console window each time; it now runs hidden.
+- Behind the scenes: an automatic Windows check now fails if the app ever opens a console window, and the release build uses newer GitHub artifact actions.
 
 ## [1.2.0] - 2026-10-20
 - Touch works on handhelds: dragging the content scrolls the window (a drag never presses the button under your finger), the info badge and switches are bigger to tap, and a switch now changes when you lift your finger.
