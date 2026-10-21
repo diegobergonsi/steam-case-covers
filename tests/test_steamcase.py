@@ -396,6 +396,18 @@ class SteamProcess(Base):
         finally:
             sc.subprocess.run = real
 
+    def test_tasklist_runs_without_a_console_window_on_windows(self):
+        """A black console window used to flash every 3 seconds (and take the focus) because tasklist was started with a console."""
+        seen = {}
+        real_run, real_platform, real_flag = sc.subprocess.run, sc.sys.platform, sc._NO_WINDOW
+        sc.subprocess.run = lambda *a, **k: seen.update(k) or type("R", (), {"stdout": "steam.exe"})()
+        sc.sys.platform, sc._NO_WINDOW = "win32", 0x08000000
+        try:
+            self.assertTrue(sc.steam_running())
+        finally:
+            sc.subprocess.run, sc.sys.platform, sc._NO_WINDOW = real_run, real_platform, real_flag
+        self.assertEqual(seen.get("creationflags"), 0x08000000)
+
     @unittest.skipIf(sys.platform.startswith("win"), "uses ps output")
     def test_steam_is_found_by_short_name_on_linux(self):
         self.assertTrue(self._ps("systemd\nsteam\nbash\n"))

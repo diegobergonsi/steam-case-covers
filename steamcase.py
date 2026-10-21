@@ -407,10 +407,14 @@ def grid_dir(steam, user=None):
 
 
 # ---------- Steam process ----------
+# On Windows a windowed app has no console, so every console program it starts (tasklist) would flash a black window and take the focus.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)         # 0 on Linux and macOS, where the attribute does not exist
+
+
 def steam_running():
     try:
         if sys.platform.startswith("win"):
-            out = subprocess.run([_tool("tasklist")], capture_output=True, text=True).stdout.lower()
+            out = subprocess.run([_tool("tasklist")], capture_output=True, text=True, creationflags=_NO_WINDOW).stdout.lower()
             return "steam.exe" in out
         out = subprocess.run([_tool("ps"), "-A", "-o", "comm="], capture_output=True, text=True).stdout.lower()
         # Linux prints just the name ("steam"); macOS prints the whole path (".../Steam.app/Contents/MacOS/steam_osx")
