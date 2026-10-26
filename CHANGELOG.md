@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- An info badge (“i”) next to "Only my installed games" explains that games shared through Family Sharing, and games that are not installed, need your game list. The README says so too, and shows a new screenshot with the green family corner.
 
 ## [1.3.0] - 2026-10-26
 - Choose the colour of the cases. Step 2 has a colour slider, six ready-made swatches and a live preview. Changing the colour asks before it replaces the covers you already made; covers made in another colour are rebuilt and the others are kept. Only the original blue is checked for readable text. The window remembers the colour of the covers you already made. A swipe that starts on the slider scrolls the page; only a tap or a sideways drag changes the colour. `make --hue DEGREES` does the same on the command line, and without `--hue` it keeps the colour of the covers already in the folder. The green family corner stays green in every colour, and Reset recognizes covers of any colour.
