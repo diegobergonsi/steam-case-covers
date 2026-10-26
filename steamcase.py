@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, json, os, re, shutil, socket, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, filecmp, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image
@@ -32,6 +32,9 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
 
 HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
+FRAME_FAMILY = os.path.join(HERE, "assets", "frame_family.png")      # frame.png plus the green corner for games from the Steam Family library
+FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
+FAMILY_ICON_CONTRAST = 4.5                  # WCAG AA for normal text; the icon must never fall below it
 WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y0, x1, y1)
 SIZE = (600, 900)
 STEAMID64_BASE = 76561197960265728
@@ -49,6 +52,8 @@ MAX_DOWNLOAD = 25 * 1024 * 1024          # a cover portrait is ~1 MB; anything b
 MAX_LIBRARY_FILE = 20 * 1024 * 1024      # a real library list is a few KB
 MAX_APPS = 100_000                       # a real library has at most a few thousand apps
 MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompression bombs
+MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
+_PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
@@ -333,16 +338,21 @@ def installed_games(steam):
     return games
 
 
-def owned_ids(json_path):
+def _load_library_json(json_path):
     path = os.path.expanduser(json_path)
     try:
         if os.path.getsize(path) > MAX_LIBRARY_FILE:
             raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
-        d = json.load(open(path, encoding="utf-8-sig"))
+        with open(path, encoding="utf-8-sig") as f:
+            return json.load(f)
     except SteamcaseError:
         raise
     except (OSError, ValueError, RecursionError, MemoryError, UnicodeError) as e:
         raise SteamcaseError("Could not read %s as a game list (%s)." % (os.path.basename(path), type(e).__name__))
+
+
+def owned_ids(json_path):
+    d = _load_library_json(json_path)
     ids = d.get("rgOwnedApps") if isinstance(d, dict) else None
     if isinstance(ids, list) and not ids and "rgOwnedPackages" in d:
         raise SteamcaseError("That file has no games in it. This usually means you were not logged in to Steam in your browser when you saved it. "
@@ -362,13 +372,119 @@ def owned_ids(json_path):
     return out
 
 
-def load_games(steam, library_json=None):
-    """{appid: name or None}: installed games, plus every owned app when library_json is given."""
+def owned_packages(json_path):
+    """Package ids from the library file ('rgOwnedPackages'). Free, bundled and old games belong to a package without being in 'rgOwnedApps'.
+    [] when the file has none."""
+    d = _load_library_json(json_path)
+    ids = d.get("rgOwnedPackages") if isinstance(d, dict) else None
+    if not isinstance(ids, list):
+        return []
+    return [i for i in ids if type(i) is int and 0 <= i < 2 ** 32][:MAX_APPS]
+
+
+def _read_binary_kv(data, pos, depth=0):
+    """One Valve binary key-value tree starting at data[pos]: (dict, position after it). Raises on anything it does not understand."""
+    if depth > 8:
+        raise ValueError("tree too deep")
+    out = {}
+    while True:
+        kind = data[pos]
+        pos += 1
+        if kind == 8:
+            return out, pos
+        end = data.index(b"\0", pos)
+        key = data[pos:end].decode("utf-8", "replace")
+        pos = end + 1
+        if kind == 0:
+            out[key], pos = _read_binary_kv(data, pos, depth + 1)
+        elif kind == 1:
+            end = data.index(b"\0", pos)
+            out[key] = data[pos:end].decode("utf-8", "replace")
+            pos = end + 1
+        elif kind in (2, 4, 5):
+            out[key] = struct.unpack_from("<i", data, pos)[0]
+            pos += 4
+        elif kind in (3, 6):
+            out[key] = struct.unpack_from("<I" if kind == 6 else "<f", data, pos)[0]
+            pos += 4
+        elif kind in (7, 10):
+            out[key] = struct.unpack_from("<Q", data, pos)[0]
+            pos += 8
+        else:
+            raise ValueError("unknown value type %d" % kind)
+
+
+def package_apps(steam, package_ids):
+    """Every app id inside the given packages, read from Steam's own appcache/packageinfo.vdf.
+    None when that file is missing, not in a layout we know, or not about these packages (fewer than 90% of them are in it, as when Steam is
+    logged into another account): callers then treat ownership as unknown."""
+    path = os.path.join(steam, "appcache", "packageinfo.vdf")
+    wanted = set(package_ids)
+    try:
+        if os.path.getsize(path) > MAX_PACKAGEINFO:
+            return None
+        with open(path, "rb") as f:
+            data = f.read()
+        magic = struct.unpack_from("<I", data, 0)[0]
+        if magic not in _PACKAGEINFO_MAGICS:
+            return None
+        pos, apps, seen = 8, set(), 0              # magic and universe come first, then one entry per package
+        while True:
+            pid = struct.unpack_from("<I", data, pos)[0]
+            pos += 4
+            if pid == 0xFFFFFFFF:
+                return apps if seen >= 0.9 * len(wanted) else None
+            pos += 24 + (8 if magic == 0x06565528 else 0)        # hash (20), change number (4), and a token (8) in the newer header
+            tree, pos = _read_binary_kv(data, pos)
+            entry = tree.get(str(pid))
+            if pid in wanted and isinstance(entry, dict):
+                seen += 1
+                ids = entry.get("appids")
+                if isinstance(ids, dict):
+                    apps.update(v for v in ids.values() if type(v) is int and 0 < v < 2 ** 32)
+    except (OSError, ValueError, struct.error, IndexError, RecursionError, MemoryError):
+        return None
+
+
+def find_family(steam, owned, package_ids):
+    """App ids that are in your Steam library through Family Sharing: Steam keeps art for them (appcache/librarycache) or they are installed,
+    but they are neither in your owned apps nor inside one of your owned packages (free, bundled and old games are, so they are yours).
+    Empty when ownership cannot be told (no package data): then nothing is guessed."""
+    if not package_ids:
+        return set()
+    mine = package_apps(steam, package_ids)
+    if mine is None:
+        return set()
+    found = set(installed_games(steam))
+    cache = os.path.join(steam, "appcache", "librarycache")
+    try:
+        for n in os.listdir(cache):
+            p = os.path.join(cache, n)
+            if re.fullmatch(r"[0-9]{1,10}", n) and os.path.isdir(p) and not os.path.islink(p):
+                found.add(int(n))
+    except OSError:
+        pass
+    return set(sorted(i for i in found - mine - set(owned) if 0 < i < 2 ** 32)[:MAX_APPS])
+
+
+def load_library(steam, library_json=None):
+    """(games, family): games is {appid: name or None} for installed games, every owned app when library_json is given, and your family games;
+    family is the set of those that came from the Steam Family library (always empty without library_json: ownership is unknown then)."""
     games = installed_games(steam)
+    family = set()
     if library_json:
-        for i in owned_ids(library_json):
+        owned = owned_ids(library_json)
+        for i in owned:
             games.setdefault(i, None)
-    return games
+        family = find_family(steam, owned, owned_packages(library_json))
+        for i in family:
+            games.setdefault(i, None)
+    return games, family
+
+
+def load_games(steam, library_json=None):
+    """{appid: name or None}: installed games, plus every owned app (and family game) when library_json is given."""
+    return load_library(steam, library_json)[0]
 
 
 def pick_account(steam, forced=None):
@@ -571,19 +687,23 @@ def build_cover(portrait_path, out_path, frame):
 
 
 # ---------- make ----------
-def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None):
+def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
+    family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
-    "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run]}.
+    "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
+    "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set)}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     os.makedirs(out, exist_ok=True)
     frame = Image.open(FRAME).convert("RGBA")
+    family = set(family or ())
+    frame_family = Image.open(FRAME_FAMILY).convert("RGBA") if family else None
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -594,7 +714,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
         raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
-    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": []}
+    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0}
     todo = []                                   # only items that can become a cover count towards the progress
     for appid in ids:
         it = info.get(appid) or {}
@@ -657,8 +777,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "failed" if neterr else "noart")
             continue
         try:
-            build_cover(tmp, dest, frame)
+            is_family = appid in family
+            build_cover(tmp, dest, frame_family if is_family else frame)
             res["ok"] += 1
+            res["family"] += is_family
             res["files"].append(dest)
             report(n, appid, name, "ok")
         except Exception as e:
@@ -793,22 +915,25 @@ def _frame_regions():
     if _frame_ref is None:
         fr = Image.open(FRAME).convert("RGBA")
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
-        _frame_ref = (top, bot, fr.crop(top).tobytes(), fr.crop(bot).tobytes())
+        tops = [fr.crop(top).tobytes()]
+        if os.path.exists(FRAME_FAMILY):                    # the family frame differs from the plain one only in the corner triangle
+            tops.append(Image.open(FRAME_FAMILY).convert("RGBA").crop(top).tobytes())
+        _frame_ref = (top, bot, tuple(tops), fr.crop(bot).tobytes())
     return _frame_ref
 
 
 def is_steamcase_cover(path):
-    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png exactly.
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png (or frame_family.png) exactly.
     Art you set yourself never matches, so it is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return False
-        top, bot, ref_top, ref_bot = _frame_regions()
+        top, bot, ref_tops, ref_bot = _frame_regions()
         with Image.open(path, formats=["PNG"]) as im:
             if im.size != SIZE:
                 return False
             im = im.convert("RGBA")
-        return im.crop(top).tobytes() == ref_top and im.crop(bot).tobytes() == ref_bot
+        return im.crop(top).tobytes() in ref_tops and im.crop(bot).tobytes() == ref_bot
     except Exception:
         return False
 
@@ -953,27 +1078,32 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
 # ---------- command line ----------
 def _collect(args):
     steam = steam_dir(args.steam_dir)
-    return steam, load_games(steam, args.library)
+    games, family = load_library(steam, args.library)
+    return steam, games, family
 
 
 def cmd_list(args):
-    steam, games = _collect(args)
+    steam, games, family = _collect(args)
     print("Steam folder:", steam)
     rows = list_games(games, print)
     for appid, name in rows:
-        print(appid, name)
+        print("%d %s%s" % (appid, name, "  (family)" if appid in family else ""))
     print("\n%d games%s" % (len(rows), "" if args.library else "  (installed only; add --library userdata.json for your whole library)"))
+    shared = sum(1 for appid, _ in rows if appid in family)
+    if shared:
+        print("%d from your Steam Family library" % shared)
 
 
 def cmd_make(args):
-    steam, games = _collect(args)
+    steam, games, family = _collect(args)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print)
-    print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"])))
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family)
+    print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
+          + (" | %d from your Steam Family library" % res["family"] if res["family"] else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:

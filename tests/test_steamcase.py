@@ -729,5 +729,289 @@ class Attacks(Base):
         self.assertIsNone(sc.appid_of("Game_0.png"))
 
 
+def write_packageinfo(path, packages, magic=0x06565528):
+    """A packageinfo.vdf in Steam's real layout: header, then one binary key-value tree per package, then 0xFFFFFFFF."""
+    def kv(d):
+        out = b""
+        for k, v in d.items():
+            key = k.encode() + b"\0"
+            out += (b"\x00" + key + kv(v)) if isinstance(v, dict) else (b"\x02" + key + struct.pack("<i", v))
+        return out + b"\x08"
+    body = struct.pack("<II", magic, 1)
+    for pid, apps in packages.items():
+        body += struct.pack("<I", pid) + b"\0" * 20 + struct.pack("<I", 7)
+        if magic >= 0x06565528:
+            body += b"\0" * 8
+        body += kv({str(pid): {"packageid": pid, "appids": {str(i): a for i, a in enumerate(apps)}}})
+    with open(path, "wb") as f:
+        f.write(body + struct.pack("<I", 0xFFFFFFFF))
+
+
+class FamilyOwnership(Base):
+    """Which apps are yours, through packages as well as through the owned-apps list."""
+
+    def packageinfo(self, packages, **kw):
+        os.makedirs(os.path.join(self.steam, "appcache"), exist_ok=True)
+        path = os.path.join(self.steam, "appcache", "packageinfo.vdf")
+        write_packageinfo(path, packages, **kw)
+        return path
+
+    def test_package_apps_reads_the_apps_of_the_listed_packages(self):
+        self.packageinfo({0: [570, 340], 7: [100], 8: [200]})
+        self.assertEqual(sc.package_apps(self.steam, [0, 7]), {570, 340, 100})
+
+    def test_package_apps_also_reads_the_older_header_without_a_token(self):
+        self.packageinfo({0: [570], 7: [100]}, magic=0x06565527)
+        self.assertEqual(sc.package_apps(self.steam, [0, 7]), {570, 100})
+
+    def test_package_apps_is_none_when_the_file_is_missing_truncated_garbage_or_huge(self):
+        self.assertIsNone(sc.package_apps(self.steam, [0]))                       # no file
+        path = self.packageinfo({0: [570], 7: [100]})
+        good = self.read(path)
+        for bad in (good[:len(good) // 2], os.urandom(4096), struct.pack("<II", 0x12345678, 1) + good[8:]):
+            with open(path, "wb") as f:
+                f.write(bad)
+            self.assertIsNone(sc.package_apps(self.steam, [0, 7]))
+        with open(path, "wb") as f:
+            f.write(good)
+        real = sc.MAX_PACKAGEINFO
+        sc.MAX_PACKAGEINFO = 10
+        self.addCleanup(setattr, sc, "MAX_PACKAGEINFO", real)
+        self.assertIsNone(sc.package_apps(self.steam, [0, 7]))                    # over the size cap
+
+    def test_package_apps_is_none_when_the_file_lacks_most_of_your_packages(self):
+        # e.g. Steam is logged into another account, or its appcache was just cleared: the file parses but is not about you
+        self.packageinfo({})
+        self.assertIsNone(sc.package_apps(self.steam, [0, 5]))
+        self.packageinfo({i: [100 + i] for i in range(8)})
+        self.assertIsNone(sc.package_apps(self.steam, list(range(10))))             # 8 of 10 found
+        self.packageinfo({i: [100 + i] for i in range(10)})
+        self.assertEqual(sc.package_apps(self.steam, list(range(10))), {100 + i for i in range(10)})
+
+    def test_package_apps_refuses_a_file_over_16_mb(self):
+        # a real packageinfo.vdf is a few hundred KB; a huge one could only make us use a lot of memory
+        path = self.packageinfo({0: [570]})
+        self.assertEqual(sc.package_apps(self.steam, [0]), {570})
+        with open(path, "ab") as f:
+            f.write(b"\0" * (17 * 1024 * 1024))                                      # padding after the end marker, which the parser would ignore
+        self.assertIsNone(sc.package_apps(self.steam, [0]))
+
+    def test_package_apps_survives_a_tree_of_an_odd_shape(self):
+        path = self.packageinfo({})
+        tree = b"\x01" + b"7\0" + b"x\0" + b"\x08"                                   # {"7": "x"}: a string where a section belongs
+        with open(path, "wb") as f:
+            f.write(struct.pack("<II", 0x06565528, 1) + struct.pack("<I", 7) + b"\0" * 32 + tree + struct.pack("<I", 0xFFFFFFFF))
+        self.assertIsNone(sc.package_apps(self.steam, [7]))                         # no AttributeError, and nothing found for package 7
+
+    def test_owned_packages_reads_the_list_and_tolerates_a_missing_key(self):
+        lib = os.path.join(self.tmp, "userdata.json")
+        with open(lib, "w") as f:
+            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0, 5, "x", -1, 2 ** 40]}, f)
+        self.assertEqual(sc.owned_packages(lib), [0, 5])
+        with open(lib, "w") as f:
+            json.dump({"rgOwnedApps": [1]}, f)
+        self.assertEqual(sc.owned_packages(lib), [])
+
+    # ---- finding the family games ----
+    def cache(self, *names):
+        for n in names:
+            os.makedirs(os.path.join(self.steam, "appcache", "librarycache", str(n)))
+
+    def manifest(self, appid, name):
+        apps = os.path.join(self.steam, "steamapps")
+        os.makedirs(apps, exist_ok=True)
+        with open(os.path.join(apps, "appmanifest_%d.acf" % appid), "w") as f:
+            f.write('"AppState"\n{\n\t"appid"\t\t"%d"\n\t"name"\t\t"%s"\n}\n' % (appid, name))
+
+    def library(self, apps, packages=None):
+        path = os.path.join(self.tmp, "userdata.json")
+        d = {"rgOwnedApps": apps}
+        if packages is not None:
+            d["rgOwnedPackages"] = packages
+        with open(path, "w") as f:
+            json.dump(d, f)
+        return path
+
+    def test_a_cached_app_you_do_not_own_is_family(self):
+        self.packageinfo({0: [1]})
+        self.cache(1, 2)
+        self.assertEqual(sc.find_family(self.steam, [1], [0]), {2})
+
+    def test_an_owned_app_is_never_family_even_if_cached(self):
+        self.packageinfo({0: []})
+        self.cache(1)
+        self.assertEqual(sc.find_family(self.steam, [1], [0]), set())
+
+    def test_apps_inside_owned_packages_are_yours_not_family(self):
+        self.packageinfo({0: [570]})
+        self.cache(570, 3981100)
+        self.assertEqual(sc.find_family(self.steam, [], [0]), {3981100})
+
+    def test_an_installed_app_you_do_not_own_is_family(self):
+        self.packageinfo({0: []})
+        self.manifest(674750, "Zombie")
+        self.assertEqual(sc.find_family(self.steam, [], [0]), {674750})
+
+    def test_without_readable_package_data_nothing_is_family(self):
+        self.cache(2)
+        self.assertEqual(sc.find_family(self.steam, [1], [0]), set())              # no packageinfo.vdf
+        self.packageinfo({0: [1]})
+        self.assertEqual(sc.find_family(self.steam, [1], []), set())               # library file without rgOwnedPackages
+
+    def test_odd_cache_folders_are_ignored(self):
+        self.packageinfo({0: []})
+        self.cache("abc", "٣", "0", "99999999999")
+        target = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(target)
+        try:
+            os.symlink(target, os.path.join(self.steam, "appcache", "librarycache", "5"))
+        except (OSError, NotImplementedError):
+            pass                                                                    # no symlinks here (Windows without privilege): the rest still counts
+        self.assertEqual(sc.find_family(self.steam, [], [0]), set())
+
+    def test_load_library_adds_family_games_and_installed_only_mode_adds_none(self):
+        self.packageinfo({0: [1]})
+        self.cache(1, 2)
+        lib = self.library([1], [0])
+        games, family = sc.load_library(self.steam, lib)
+        self.assertEqual(family, {2})
+        self.assertEqual(games, {1: None, 2: None})
+        games, family = sc.load_library(self.steam, None)
+        self.assertEqual(family, set())
+        self.assertNotIn(2, games)
+
+
+def _luminance(rgb):
+    c = [v / 255 for v in rgb[:3]]
+    c = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def contrast(a, b):
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+class FamilyFrame(unittest.TestCase):
+    """The frame for family games: the normal frame plus a green corner triangle with the family icon."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
+        self.family = sc.Image.open(sc.FRAME_FAMILY).convert("RGBA")
+
+    def test_family_frame_equals_the_plain_frame_outside_the_corner(self):
+        self.assertEqual(self.family.size, sc.SIZE)
+        for box in ((220, 0, 600, 900), (0, 220, 220, 900)):
+            self.assertEqual(self.family.crop(box).tobytes(), self.plain.crop(box).tobytes())
+
+    def test_the_corner_is_green_and_follows_the_case_shape(self):
+        r, g, b, a = self.family.getpixel((8, 8))
+        self.assertEqual(a, 255)
+        self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (r, g, b))
+        self.assertEqual(self.family.getpixel((0, 0))[3], 0)                  # the case's rounded corner stays transparent
+        self.assertEqual(self.family.getpixel((150, 150)), self.plain.getpixel((150, 150)))     # past the diagonal the art window is untouched (it keeps the faint gloss)
+
+    def test_the_icon_is_white_and_readable_on_the_triangle(self):
+        self.assertGreaterEqual(contrast((255, 255, 255), sc.FAMILY_COLOR), sc.FAMILY_ICON_CONTRAST)
+        self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
+
+
+class FamilyCovers(Base):
+    """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (100, 150), (200, 60, 60)).save(buf, format="JPEG")
+        jpeg = buf.getvalue()
+        real = (sc.store_items, sc.http_get)
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": "Game %d" % i} for i in ids}
+        sc.http_get = lambda url, tries=3: jpeg
+        self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
+
+    def corner(self, path):
+        return sc.Image.open(path).convert("RGBA").getpixel((8, 8))[:3]
+
+    def is_green(self, rgb):
+        return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
+
+    def test_family_games_get_the_family_frame_and_others_the_plain_one(self):
+        res = sc.make_covers({1: None, 2: None}, self.covers, family={2})
+        self.assertTrue(self.is_green(self.corner(os.path.join(self.covers, "Game_2_2.png"))))
+        self.assertFalse(self.is_green(self.corner(os.path.join(self.covers, "Game_1_1.png"))))
+        self.assertEqual(res["family"], 1)
+
+    def test_an_existing_plain_cover_is_kept_for_a_game_that_is_now_family(self):
+        sc.make_covers({2: None}, self.covers)
+        path = os.path.join(self.covers, "Game_2_2.png")
+        before = self.read(path)
+        res = sc.make_covers({2: None}, self.covers, family={2})
+        self.assertEqual(self.read(path), before)
+        self.assertEqual(res["family"], 0)                                   # nothing was drawn with the family frame this time
+        res = sc.make_covers({2: None}, self.covers, family={2}, force=True)
+        self.assertTrue(self.is_green(self.corner(path)))
+        self.assertEqual(res["family"], 1)
+
+    def test_reset_recognises_plain_covers_family_covers_and_not_look_alikes(self):
+        sc.make_covers({1: None, 2: None}, self.covers, family={2})
+        plain, family = os.path.join(self.covers, "Game_1_1.png"), os.path.join(self.covers, "Game_2_2.png")
+        self.assertTrue(sc.is_steamcase_cover(plain))
+        self.assertTrue(sc.is_steamcase_cover(family))
+        look_alike = os.path.join(self.tmp, "lookalike.png")
+        img = sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255))
+        img.paste(sc.FAMILY_COLOR + (255,), (0, 0, 100, 100))                # a green corner on someone else's art
+        img.save(look_alike)
+        self.assertFalse(sc.is_steamcase_cover(look_alike))
+        tampered = os.path.join(self.tmp, "tampered.png")
+        img = sc.Image.open(family).convert("RGBA")
+        img.putpixel((400, 10), (1, 2, 3, 255))                              # one banner pixel outside the corner
+        img.save(tampered)
+        self.assertFalse(sc.is_steamcase_cover(tampered))
+
+    # ---- command line ----
+    def fake_library(self, with_family):
+        """Steam with one owned game (1) and, if asked, one game that is only in the cache (2); returns the library file."""
+        os.makedirs(os.path.join(self.steam, "appcache", "librarycache", "2" if with_family else "1"), exist_ok=True)
+        write_packageinfo(os.path.join(self.steam, "appcache", "packageinfo.vdf"), {0: [1]})
+        path = os.path.join(self.tmp, "userdata.json")
+        with open(path, "w") as f:
+            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0]}, f)
+        return path
+
+    def run_cli(self, *args):
+        import contextlib, io
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["steamcase"] + list(args)
+        try:
+            with contextlib.redirect_stdout(out):
+                sc.main()
+        finally:
+            sys.argv = argv
+        return out.getvalue()
+
+    def test_list_marks_family_games(self):
+        lib = self.fake_library(True)
+        text = self.run_cli("list", "--steam-dir", self.steam, "--library", lib)
+        lines = text.splitlines()
+        self.assertIn("2 Game 2  (family)", lines)
+        self.assertIn("1 Game 1", lines)
+        self.assertIn("1 from your Steam Family library", text)
+
+    def test_make_summary_mentions_family_only_when_there_are_some(self):
+        lib = self.fake_library(True)
+        out = os.path.join(self.tmp, "out")
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)
+        self.assertIn("1 from your Steam Family library", text)
+        self.assertTrue(self.is_green(self.corner(os.path.join(out, "Game_2_2.png"))))
+        os.remove(os.path.join(self.steam, "appcache", "packageinfo.vdf"))            # ownership unknown: nothing is family
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out2"))
+        self.assertNotIn("Family library", text)
+
+
 if __name__ == "__main__":
     unittest.main()

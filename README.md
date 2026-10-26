@@ -135,6 +135,7 @@ Changed your mind?
 ✅ Cancel anytime; run again to continue <br>
 ✅ Optional "skip blurry covers" for games Steam has no real portrait for <br>
 ✅ Several Steam accounts on one computer: you choose which one gets the covers <br>
+✅ Games shared through Steam Family Sharing get covers too, with a green corner and a family icon so you can tell them apart. The app finds them in Steam's own files on your computer, with nothing extra to download. This is only tested on a small family, so please open an issue if games are missing from a big shared library. Save your game list again after you buy games, so the new ones are not mistaken for family games <br>
 ✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
 ✅ A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 ✅ Free software: no ads, no account, no telemetry
