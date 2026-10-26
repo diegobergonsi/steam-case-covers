@@ -440,13 +440,45 @@ def package_apps(steam, package_ids):
         return None
 
 
-def load_games(steam, library_json=None):
-    """{appid: name or None}: installed games, plus every owned app when library_json is given."""
+def find_family(steam, owned, package_ids):
+    """App ids that are in your Steam library through Family Sharing: Steam keeps art for them (appcache/librarycache) or they are installed,
+    but they are neither in your owned apps nor inside one of your owned packages (free, bundled and old games are, so they are yours).
+    Empty when ownership cannot be told (no package data): then nothing is guessed."""
+    if not package_ids:
+        return set()
+    mine = package_apps(steam, package_ids)
+    if mine is None:
+        return set()
+    found = set(installed_games(steam))
+    cache = os.path.join(steam, "appcache", "librarycache")
+    try:
+        for n in os.listdir(cache):
+            p = os.path.join(cache, n)
+            if re.fullmatch(r"[0-9]{1,10}", n) and os.path.isdir(p) and not os.path.islink(p):
+                found.add(int(n))
+    except OSError:
+        pass
+    return set(sorted(i for i in found - mine - set(owned) if 0 < i < 2 ** 32)[:MAX_APPS])
+
+
+def load_library(steam, library_json=None):
+    """(games, family): games is {appid: name or None} for installed games, every owned app when library_json is given, and your family games;
+    family is the set of those that came from the Steam Family library (always empty without library_json: ownership is unknown then)."""
     games = installed_games(steam)
+    family = set()
     if library_json:
-        for i in owned_ids(library_json):
+        owned = owned_ids(library_json)
+        for i in owned:
             games.setdefault(i, None)
-    return games
+        family = find_family(steam, owned, owned_packages(library_json))
+        for i in family:
+            games.setdefault(i, None)
+    return games, family
+
+
+def load_games(steam, library_json=None):
+    """{appid: name or None}: installed games, plus every owned app (and family game) when library_json is given."""
+    return load_library(steam, library_json)[0]
 
 
 def pick_account(steam, forced=None):

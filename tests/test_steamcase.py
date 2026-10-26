@@ -788,6 +788,74 @@ class FamilyOwnership(Base):
             json.dump({"rgOwnedApps": [1]}, f)
         self.assertEqual(sc.owned_packages(lib), [])
 
+    # ---- finding the family games ----
+    def cache(self, *names):
+        for n in names:
+            os.makedirs(os.path.join(self.steam, "appcache", "librarycache", str(n)))
+
+    def manifest(self, appid, name):
+        apps = os.path.join(self.steam, "steamapps")
+        os.makedirs(apps, exist_ok=True)
+        with open(os.path.join(apps, "appmanifest_%d.acf" % appid), "w") as f:
+            f.write('"AppState"\n{\n\t"appid"\t\t"%d"\n\t"name"\t\t"%s"\n}\n' % (appid, name))
+
+    def library(self, apps, packages=None):
+        path = os.path.join(self.tmp, "userdata.json")
+        d = {"rgOwnedApps": apps}
+        if packages is not None:
+            d["rgOwnedPackages"] = packages
+        with open(path, "w") as f:
+            json.dump(d, f)
+        return path
+
+    def test_a_cached_app_you_do_not_own_is_family(self):
+        self.packageinfo({0: [1]})
+        self.cache(1, 2)
+        self.assertEqual(sc.find_family(self.steam, [1], [0]), {2})
+
+    def test_an_owned_app_is_never_family_even_if_cached(self):
+        self.packageinfo({0: []})
+        self.cache(1)
+        self.assertEqual(sc.find_family(self.steam, [1], [0]), set())
+
+    def test_apps_inside_owned_packages_are_yours_not_family(self):
+        self.packageinfo({0: [570]})
+        self.cache(570, 3981100)
+        self.assertEqual(sc.find_family(self.steam, [], [0]), {3981100})
+
+    def test_an_installed_app_you_do_not_own_is_family(self):
+        self.packageinfo({0: []})
+        self.manifest(674750, "Zombie")
+        self.assertEqual(sc.find_family(self.steam, [], [0]), {674750})
+
+    def test_without_readable_package_data_nothing_is_family(self):
+        self.cache(2)
+        self.assertEqual(sc.find_family(self.steam, [1], [0]), set())              # no packageinfo.vdf
+        self.packageinfo({0: [1]})
+        self.assertEqual(sc.find_family(self.steam, [1], []), set())               # library file without rgOwnedPackages
+
+    def test_odd_cache_folders_are_ignored(self):
+        self.packageinfo({0: []})
+        self.cache("abc", "٣", "0", "99999999999")
+        target = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(target)
+        try:
+            os.symlink(target, os.path.join(self.steam, "appcache", "librarycache", "5"))
+        except (OSError, NotImplementedError):
+            pass                                                                    # no symlinks here (Windows without privilege): the rest still counts
+        self.assertEqual(sc.find_family(self.steam, [], [0]), set())
+
+    def test_load_library_adds_family_games_and_installed_only_mode_adds_none(self):
+        self.packageinfo({0: [1]})
+        self.cache(1, 2)
+        lib = self.library([1], [0])
+        games, family = sc.load_library(self.steam, lib)
+        self.assertEqual(family, {2})
+        self.assertEqual(games, {1: None, 2: None})
+        games, family = sc.load_library(self.steam, None)
+        self.assertEqual(family, set())
+        self.assertNotIn(2, games)
+
 
 if __name__ == "__main__":
     unittest.main()
