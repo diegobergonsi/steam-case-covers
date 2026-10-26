@@ -32,6 +32,9 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
 
 HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
+FRAME_FAMILY = os.path.join(HERE, "assets", "frame_family.png")      # frame.png plus the green corner for games from the Steam Family library
+FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
+FAMILY_ICON_CONTRAST = 4.5                  # WCAG AA for normal text; the icon must never fall below it
 WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y0, x1, y1)
 SIZE = (600, 900)
 STEAMID64_BASE = 76561197960265728

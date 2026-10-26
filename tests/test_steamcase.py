@@ -857,5 +857,42 @@ class FamilyOwnership(Base):
         self.assertNotIn(2, games)
 
 
+def _luminance(rgb):
+    c = [v / 255 for v in rgb[:3]]
+    c = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def contrast(a, b):
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+class FamilyFrame(unittest.TestCase):
+    """The frame for family games: the normal frame plus a green corner triangle with the family icon."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
+        self.family = sc.Image.open(sc.FRAME_FAMILY).convert("RGBA")
+
+    def test_family_frame_equals_the_plain_frame_outside_the_corner(self):
+        self.assertEqual(self.family.size, sc.SIZE)
+        for box in ((220, 0, 600, 900), (0, 220, 220, 900)):
+            self.assertEqual(self.family.crop(box).tobytes(), self.plain.crop(box).tobytes())
+
+    def test_the_corner_is_green_and_follows_the_case_shape(self):
+        r, g, b, a = self.family.getpixel((8, 8))
+        self.assertEqual(a, 255)
+        self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (r, g, b))
+        self.assertEqual(self.family.getpixel((0, 0))[3], 0)                  # the case's rounded corner stays transparent
+        self.assertEqual(self.family.getpixel((150, 150)), self.plain.getpixel((150, 150)))     # past the diagonal the art window is untouched (it keeps the faint gloss)
+
+    def test_the_icon_is_white_and_readable_on_the_triangle(self):
+        self.assertGreaterEqual(contrast((255, 255, 255), sc.FAMILY_COLOR), sc.FAMILY_ICON_CONTRAST)
+        self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
+
+
 if __name__ == "__main__":
     unittest.main()
