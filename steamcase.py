@@ -33,6 +33,7 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
 
 HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
+DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
@@ -697,6 +698,25 @@ def case_color(hue):
 HUE_CHUNK = "steamcase-hue"
 
 
+def _compose(art, frame):
+    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this."""
+    x0, y0, x1, y1 = WINDOW
+    ww, wh = x1 - x0, y1 - y0
+    s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
+    art = art.resize((max(ww, round(art.width * s)), max(wh, round(art.height * s))), Image.LANCZOS)
+    cx, cy = (art.width - ww) // 2, (art.height - wh) // 2
+    art = art.crop((cx, cy, cx + ww, cy + wh))
+    canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+    canvas.paste(art, (x0, y0))
+    return Image.alpha_composite(canvas, frame)
+
+
+def preview_cover(hue=0, family=False):
+    """What a cover looks like in this case colour, made from the default art that ships with the app (the window shows it before any game's art exists)."""
+    with Image.open(DEFAULT_ART) as im:
+        return _compose(im.convert("RGBA"), load_frame(hue, family))
+
+
 def cover_hue(path):
     """The case colour (degrees turned from the original blue) a cover was made in, read from its PNG header without decoding the picture.
     Covers made before colours existed have no such note and count as 0. None if this is not a readable PNG file of ours-sized."""
@@ -717,18 +737,11 @@ def build_cover(portrait_path, out_path, frame, hue=0):
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
-    x0, y0, x1, y1 = WINDOW
-    ww, wh = x1 - x0, y1 - y0
-    s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
-    art = art.resize((max(ww, round(art.width * s)), max(wh, round(art.height * s))), Image.LANCZOS)
-    cx, cy = (art.width - ww) // 2, (art.height - wh) // 2
-    art = art.crop((cx, cy, cx + ww, cy + wh))
-    canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-    canvas.paste(art, (x0, y0))
+    cover = _compose(art, frame)
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
-    Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True, pnginfo=note)
+    cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
 

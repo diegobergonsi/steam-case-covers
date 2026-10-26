@@ -1152,5 +1152,26 @@ class MakeInColour(StoreMocks):
         self.assertFalse(sc.covers_in_other_colour(self.covers, 134))
 
 
+class PreviewCover(Base):
+    """The preview in the window is built exactly like a real cover, from the default art that ships with the app."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_the_default_art_ships_and_is_a_portrait(self):
+        with sc.Image.open(sc.DEFAULT_ART) as im:
+            self.assertEqual(im.size, (600, 900))
+
+    def test_preview_cover_is_exactly_what_a_real_cover_would_be(self):
+        for hue, family in ((134, False), (0, True), (276, True)):
+            out = os.path.join(self.tmp, "real.png")
+            sc.build_cover(sc.DEFAULT_ART, out, sc.load_frame(hue, family), hue)
+            real, preview = sc.Image.open(out).convert("RGBA"), sc.preview_cover(hue, family)
+            self.assertEqual(real.size, preview.size)
+            self.assertIsNone(sc.ImageChops.difference(real, preview).getbbox(), (hue, family))
+
+
 if __name__ == "__main__":
     unittest.main()

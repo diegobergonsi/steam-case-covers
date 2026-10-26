@@ -11,6 +11,8 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 
 `assets/family_corner.png` is a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
 
+`assets/default_art.png` (source: `tools/src/default_art.svg`) is original artwork drawn for this project and released under the project's licence. It is not taken from any game and is only used to preview the case colour.
+
 ## Included files
 | File | Source | License |
 |---|---|---|
