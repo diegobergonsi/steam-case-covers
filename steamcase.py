@@ -733,12 +733,13 @@ def build_cover(portrait_path, out_path, frame, hue=0):
 
 
 # ---------- make ----------
-def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None):
+def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
     family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
+    hue: degrees to turn the case colour from the original blue (0). A cover that exists in another colour is rebuilt, one in this colour is kept.
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
@@ -747,9 +748,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     os.makedirs(out, exist_ok=True)
-    frame = Image.open(FRAME).convert("RGBA")
+    hue %= 360
+    frame = load_frame(hue)
     family = set(family or ())
-    frame_family = load_frame(0, True) if family else None
+    frame_family = load_frame(hue, True) if family else None
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -796,7 +798,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        if os.path.exists(dest) and not force:
+        if os.path.exists(dest) and not force and cover_hue(dest) == hue:
             res["ok"] += 1
             res["files"].append(dest)
             report(n, appid, name, "exists")
@@ -824,7 +826,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(tmp, dest, frame_family if is_family else frame)
+            build_cover(tmp, dest, frame_family if is_family else frame, hue)
             res["ok"] += 1
             res["family"] += is_family
             res["files"].append(dest)
@@ -841,6 +843,18 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
+def covers_in_other_colour(covers_dir, hue):
+    """True if the covers folder already holds a cover made in a different case colour than `hue` (stops at the first one)."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None and cover_hue(os.path.join(covers_dir, n)) not in (None, hue % 360):
+            return True
+    return False
+
+
 def _safe_copy(src, dst):
     """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
     tmp = _tmp(dst)

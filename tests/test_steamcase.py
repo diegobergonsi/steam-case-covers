@@ -918,8 +918,8 @@ class FamilyFrame(unittest.TestCase):
         self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
 
 
-class FamilyCovers(Base):
-    """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
+class StoreMocks(Base):
+    """A fake store and a fake download (a small red JPEG), for tests that make covers."""
 
     def setUp(self):
         super().setUp()
@@ -939,6 +939,10 @@ class FamilyCovers(Base):
 
     def is_green(self, rgb):
         return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
+
+
+class FamilyCovers(StoreMocks):
+    """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
 
     def test_family_games_get_the_family_frame_and_others_the_plain_one(self):
         res = sc.make_covers({1: None, 2: None}, self.covers, family={2})
@@ -1099,6 +1103,53 @@ class CoverColourFiles(Base):
             tampered = os.path.join(self.tmp, "t.png")
             img.save(tampered)
             self.assertFalse(sc.is_steamcase_cover(tampered), hue)
+
+
+class MakeInColour(StoreMocks):
+    """make_covers in a chosen case colour."""
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_covers_are_made_in_the_chosen_hue(self):
+        sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertEqual(sc.cover_hue(self.cover(1)), 134)
+        self.assertEqual(sc.Image.open(self.cover(1)).convert("RGBA").getpixel((7, 450)), sc.load_frame(134).getpixel((7, 450)))
+
+    def test_an_existing_cover_in_another_colour_is_rebuilt_and_one_in_the_same_colour_is_kept(self):
+        sc.make_covers({1: None}, self.covers)
+        before = self.read(self.cover(1))
+        res = sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertNotEqual(self.read(self.cover(1)), before)
+        self.assertEqual((sc.cover_hue(self.cover(1)), res["ok"]), (134, 1))
+        again = self.read(self.cover(1))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, hue=134, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual(self.read(self.cover(1)), again)
+        self.assertEqual(statuses, ["exists"])
+
+    def test_a_mixed_folder_is_fixed_by_the_next_run(self):
+        sc.make_covers({1: None, 2: None}, self.covers)
+        sc.make_covers({1: None, 2: None}, self.covers, only=[1], hue=134)            # a run that stopped halfway through a colour change
+        self.assertEqual((sc.cover_hue(self.cover(1)), sc.cover_hue(self.cover(2))), (134, 0))
+        sc.make_covers({1: None, 2: None}, self.covers, hue=134)
+        self.assertEqual((sc.cover_hue(self.cover(1)), sc.cover_hue(self.cover(2))), (134, 134))
+
+    def test_family_covers_keep_a_green_corner_in_a_custom_colour(self):
+        sc.make_covers({1: None, 2: None}, self.covers, family={2}, hue=134)
+        self.assertTrue(self.is_green(self.corner(self.cover(2))))
+        self.assertFalse(self.is_green(self.corner(self.cover(1))))
+
+    def test_covers_in_other_colour(self):
+        self.assertFalse(sc.covers_in_other_colour(os.path.join(self.tmp, "nowhere"), 134))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134))                    # empty folder
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 0))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 360))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 134))
+        sc.Image.new("RGBA", sc.SIZE).save(os.path.join(self.covers, "notes.png"))      # not named like one of our covers: ignored
+        os.remove(self.cover(1))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134))
 
 
 if __name__ == "__main__":
