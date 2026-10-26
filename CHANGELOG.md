@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Documentation: the README has a new screenshot of the window (with the colour row and the info badge), describes the colour choice and the family-games limit in "How it works", and has new FAQ answers for family games that got no cover and for changing the colour later.
 
 ## [1.3.1] - 2026-10-26
 - An info badge (“i”) next to "Only my installed games" explains that games shared through Family Sharing, and games that are not installed, need your game list. The README says so too, and shows a new screenshot with the green family corner.
