@@ -8,7 +8,7 @@ from tkinter import filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, px, set_scale)
+from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, HueSlider, Swatch, px, set_scale)
 
 
 def downloads_dir():
@@ -89,6 +89,8 @@ class App(tk.Tk):
         self.library_path = None          # chosen userdata.json
         self.installed_only = tk.BooleanVar(value=False)
         self.skip_auto = tk.BooleanVar(value=False)
+        self.hue = tk.IntVar(value=0)     # case colour: degrees turned from the original blue
+        self._preview_job = None
         self.restart_steam = tk.BooleanVar(value=True)
 
         self._wrapped, self._wrap_width, self._head_narrow = [], 0, False
@@ -148,10 +150,12 @@ class App(tk.Tk):
     def destroy(self):
         self.cancel_flag.set()
         self._quit.set()
-        for t in getattr(self, "_timers", []):
+        for t in list(getattr(self, "_timers", [])) + [getattr(self, "_preview_job", None)]:
+            if not t:
+                continue
             try:
                 self.after_cancel(t)
-            except tk.TclError:
+            except (tk.TclError, ValueError):
                 pass
         super().destroy()
 
@@ -217,7 +221,7 @@ class App(tk.Tk):
 
         def walk(w):
             for c in w.winfo_children():
-                if isinstance(c, (RoundedButton, Switch)):
+                if isinstance(c, (RoundedButton, Switch, HueSlider, Swatch)):
                     c.configure(state=st)
                 walk(c)
         walk(body)
@@ -330,6 +334,7 @@ class App(tk.Tk):
     # ----- step 2 -----
     def _build_step2(self, body):
         self._note(body, "Downloads each game's artwork from Steam and builds the covers on your computer.")
+        self._build_colour(body)
         r = self._row(body)
         self.sw_skip = Switch(r, "Skip blurry covers", self.skip_auto)
         self.sw_skip.pack(side="left")
@@ -346,6 +351,57 @@ class App(tk.Tk):
         self.step2_status.pack(fill="x")
         self.preview = Flow(body, bg=CARD)                # a few finished covers: the payoff of this step
         self._thumbs = []
+
+    def _build_colour(self, body):
+        """Cover colour: a hue slider and ready-made swatches on the left, a live preview of a cover on the right (it wraps under on a narrow window)."""
+        box = self._flow(body, pady=px(6))
+        left = tk.Frame(box, bg=CARD)
+        head = tk.Frame(left, bg=CARD)
+        head.pack(fill="x")
+        tk.Label(head, text="Cover colour", bg=CARD, fg=FG, font=("TkDefaultFont", 11, "bold")).pack(side="left")
+        self.colour_name = tk.Label(head, text="Original", bg=CARD, fg=MUTED)
+        self.colour_name.pack(side="right")
+        self.slider = HueSlider(left, self.hue, sc.case_color)
+        self.slider.pack(fill="x", pady=(px(6), 0))
+        row = tk.Frame(left, bg=CARD)
+        row.pack(fill="x", pady=(px(6), 0))
+        self.swatches = []
+        for h in sc.HUE_SWATCHES:
+            s = Swatch(row, sc.case_color(h), lambda h=h: self.hue.get() == h, lambda h=h: self.hue.set(h))
+            s.pack(side="left", padx=(0, px(4)))
+            self.swatches.append(s)
+        self.colour_note = self._wrap(tk.Label(left, text="Only the original colour is checked for readable text.", bg=CARD, fg=FAINT, justify="left", anchor="w"), px(330))
+        self.colour_preview = tk.Label(box, bg=CARD)
+        box.add(left)
+        box.add(self.colour_preview, px(20))
+        self.hue.trace_add("write", self._colour_changed)
+        self._colour_changed()
+
+    def _colour_changed(self, *_):
+        hue = self.hue.get()
+        self.colour_name.configure(text="Original" if hue == 0 else "Custom")
+        for s in self.swatches:
+            s.draw()
+        if hue == 0:
+            self.colour_note.pack_forget()
+        else:
+            self.colour_note.pack(fill="x", pady=(px(6), 0))
+        if self._preview_job is None:                            # one redraw per burst of changes while the slider is dragged
+            self._preview_job = self.after_idle(self._draw_preview)
+
+    def _draw_preview(self):
+        self._preview_job = None
+        if sc.Image is None:
+            return
+        try:
+            import base64, io
+            im = sc.preview_cover(self.hue.get() % 360).resize((px(130), px(195)), sc.Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, "PNG")
+            self._colour_img = tk.PhotoImage(master=self, data=base64.b64encode(buf.getvalue()))
+            self.colour_preview.configure(image=self._colour_img)
+        except Exception:
+            pass                                                 # a preview is a nicety: never let it break the step
 
     def _show_preview(self):
         self.preview.clear()
@@ -374,6 +430,13 @@ class App(tk.Tk):
     def start_make(self):
         if self.running:
             return
+        hue = self.hue.get() % 360
+        if sc.covers_in_other_colour(self.covers_dir, hue):
+            if not messagebox.askokcancel("Change the colour of your covers?",
+                                          [("This replaces the covers you already made in another colour.", "main"),
+                                           ("Steam keeps showing your current art until you add the new covers in step 3.", "muted")],
+                                          ok="Replace them", cancel="Cancel"):
+                return
         lib = None if self.installed_only.get() else self.library_path
         self.running = True
         self.cancel_flag.clear()
@@ -387,16 +450,16 @@ class App(tk.Tk):
         self.refresh_step1()
         self.refresh_step3()
         skip = self.skip_auto.get()
-        threading.Thread(target=self._worker, args=(lib, skip), daemon=True).start()
+        threading.Thread(target=self._worker, args=(lib, skip, hue), daemon=True).start()
 
-    def _worker(self, lib, skip):
+    def _worker(self, lib, skip, hue=0):
         """Runs off the UI thread; talks to the UI only through self.events."""
         try:
             steam = sc.steam_dir()
             games, family = sc.load_library(steam, lib)
             if not games:
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
-            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family,
+            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family, hue=hue,
                                  progress=lambda *a: self.events.put(("progress",) + a),
                                  cancelled=self.cancel_flag.is_set)
             self.events.put(("done", res))
@@ -793,6 +856,8 @@ def selftest():
     try:
         assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
         assert os.path.exists(os.path.join(sc.HERE, "assets", "icon.png")), "icon missing"
+        assert os.path.exists(sc.FAMILY_CORNER), "family corner image missing: %s" % sc.FAMILY_CORNER
+        assert os.path.exists(sc.DEFAULT_ART), "default art missing: %s" % sc.DEFAULT_ART
         restore_child_env()
         assert sc._ssl_context().cert_store_stats()["x509_ca"] > 0, "no trusted certificates loaded: secure connections to Steam would fail"
         if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
@@ -804,6 +869,9 @@ def selftest():
             im = Image.open(out)
             assert im.size == (600, 900), "bad size %s" % (im.size,)
             assert im.getpixel((300, 500))[:3] == (200, 60, 60), "art window not filled"
+            assert sc.cover_hue(out) == 0, "the cover does not record its colour"
+            turned = sc.preview_cover(134)
+            assert turned.size == (600, 900) and turned.getpixel((7, 450)) != sc.preview_cover(0).getpixel((7, 450)), "the case colour cannot be changed"
         print("selftest ok")
         return 0
     except Exception as e:
