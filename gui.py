@@ -256,6 +256,7 @@ class App(tk.Tk):
         r = self._row(body)
         self.sw_installed = Switch(r, "Only my installed games (no file needed)", self.installed_only, self.on_installed_only)
         self.sw_installed.pack(side="left")
+        InfoBadge(r, sc.FAMILY_HELP).pack(side="left", padx=px(6))
         self.step1_status = self._wrap(tk.Label(body, text="Waiting for the saved game list (userdata.json)…", bg=CARD, fg=MUTED, anchor="w", justify="left"))
         self.step1_status.pack(fill="x", pady=(px(8), 0))
 

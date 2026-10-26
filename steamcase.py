@@ -67,6 +67,12 @@ AUTO_ART_HELP = (
     "middle of a blurred, stretched copy of itself, with lots of empty space. "
     "Tick this to skip those games and keep Steam's default art for them."
 )
+FAMILY_HELP = (
+    "Games shared with you through Steam Family Sharing are in your library, but they are not on your own game list and are often not installed. "
+    "With this switch on, only games installed on this computer get covers, so shared games that are not installed are left out. "
+    "To include them, turn this off and load your game list: the app then finds the shared games in Steam's own files "
+    "and marks their covers with a green corner."
+)
 
 
 def default_covers_dir():

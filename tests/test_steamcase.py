@@ -1285,5 +1285,15 @@ class ColourCli(StoreMocks):
             self.assertFalse(os.path.exists(out), bad)                                   # nothing was built
 
 
+class FamilyHelp(unittest.TestCase):
+    """The hover text next to "Only my installed games": it must say what the switch leaves out and how to get those games."""
+
+    def test_the_help_explains_family_games_and_the_game_list(self):
+        text = sc.FAMILY_HELP.lower()
+        for must in ("family", "game list", "installed", "green corner"):
+            self.assertIn(must, text)
+        self.assertLess(len(sc.FAMILY_HELP), 700)                                 # a tooltip, not a manual
+
+
 if __name__ == "__main__":
     unittest.main()
