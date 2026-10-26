@@ -684,19 +684,23 @@ def build_cover(portrait_path, out_path, frame):
 
 
 # ---------- make ----------
-def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None):
+def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
+    family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
-    "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run]}.
+    "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
+    "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set)}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     os.makedirs(out, exist_ok=True)
     frame = Image.open(FRAME).convert("RGBA")
+    family = set(family or ())
+    frame_family = Image.open(FRAME_FAMILY).convert("RGBA") if family else None
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -707,7 +711,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
         raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
-    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": []}
+    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0}
     todo = []                                   # only items that can become a cover count towards the progress
     for appid in ids:
         it = info.get(appid) or {}
@@ -770,8 +774,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "failed" if neterr else "noart")
             continue
         try:
-            build_cover(tmp, dest, frame)
+            is_family = appid in family
+            build_cover(tmp, dest, frame_family if is_family else frame)
             res["ok"] += 1
+            res["family"] += is_family
             res["files"].append(dest)
             report(n, appid, name, "ok")
         except Exception as e:
@@ -906,22 +912,25 @@ def _frame_regions():
     if _frame_ref is None:
         fr = Image.open(FRAME).convert("RGBA")
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
-        _frame_ref = (top, bot, fr.crop(top).tobytes(), fr.crop(bot).tobytes())
+        tops = [fr.crop(top).tobytes()]
+        if os.path.exists(FRAME_FAMILY):                    # the family frame differs from the plain one only in the corner triangle
+            tops.append(Image.open(FRAME_FAMILY).convert("RGBA").crop(top).tobytes())
+        _frame_ref = (top, bot, tuple(tops), fr.crop(bot).tobytes())
     return _frame_ref
 
 
 def is_steamcase_cover(path):
-    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png exactly.
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png (or frame_family.png) exactly.
     Art you set yourself never matches, so it is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return False
-        top, bot, ref_top, ref_bot = _frame_regions()
+        top, bot, ref_tops, ref_bot = _frame_regions()
         with Image.open(path, formats=["PNG"]) as im:
             if im.size != SIZE:
                 return False
             im = im.convert("RGBA")
-        return im.crop(top).tobytes() == ref_top and im.crop(bot).tobytes() == ref_bot
+        return im.crop(top).tobytes() in ref_tops and im.crop(bot).tobytes() == ref_bot
     except Exception:
         return False
 

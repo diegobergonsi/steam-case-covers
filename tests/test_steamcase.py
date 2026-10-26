@@ -894,5 +894,61 @@ class FamilyFrame(unittest.TestCase):
         self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
 
 
+class FamilyCovers(Base):
+    """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (100, 150), (200, 60, 60)).save(buf, format="JPEG")
+        jpeg = buf.getvalue()
+        real = (sc.store_items, sc.http_get)
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": "Game %d" % i} for i in ids}
+        sc.http_get = lambda url, tries=3: jpeg
+        self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
+
+    def corner(self, path):
+        return sc.Image.open(path).convert("RGBA").getpixel((8, 8))[:3]
+
+    def is_green(self, rgb):
+        return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
+
+    def test_family_games_get_the_family_frame_and_others_the_plain_one(self):
+        res = sc.make_covers({1: None, 2: None}, self.covers, family={2})
+        self.assertTrue(self.is_green(self.corner(os.path.join(self.covers, "Game_2_2.png"))))
+        self.assertFalse(self.is_green(self.corner(os.path.join(self.covers, "Game_1_1.png"))))
+        self.assertEqual(res["family"], 1)
+
+    def test_an_existing_plain_cover_is_kept_for_a_game_that_is_now_family(self):
+        sc.make_covers({2: None}, self.covers)
+        path = os.path.join(self.covers, "Game_2_2.png")
+        before = self.read(path)
+        res = sc.make_covers({2: None}, self.covers, family={2})
+        self.assertEqual(self.read(path), before)
+        self.assertEqual(res["family"], 0)                                   # nothing was drawn with the family frame this time
+        res = sc.make_covers({2: None}, self.covers, family={2}, force=True)
+        self.assertTrue(self.is_green(self.corner(path)))
+        self.assertEqual(res["family"], 1)
+
+    def test_reset_recognises_plain_covers_family_covers_and_not_look_alikes(self):
+        sc.make_covers({1: None, 2: None}, self.covers, family={2})
+        plain, family = os.path.join(self.covers, "Game_1_1.png"), os.path.join(self.covers, "Game_2_2.png")
+        self.assertTrue(sc.is_steamcase_cover(plain))
+        self.assertTrue(sc.is_steamcase_cover(family))
+        look_alike = os.path.join(self.tmp, "lookalike.png")
+        img = sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255))
+        img.paste(sc.FAMILY_COLOR + (255,), (0, 0, 100, 100))                # a green corner on someone else's art
+        img.save(look_alike)
+        self.assertFalse(sc.is_steamcase_cover(look_alike))
+        tampered = os.path.join(self.tmp, "tampered.png")
+        img = sc.Image.open(family).convert("RGBA")
+        img.putpixel((400, 10), (1, 2, 3, 255))                              # one banner pixel outside the corner
+        img.save(tampered)
+        self.assertFalse(sc.is_steamcase_cover(tampered))
+
+
 if __name__ == "__main__":
     unittest.main()
