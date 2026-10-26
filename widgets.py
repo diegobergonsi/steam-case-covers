@@ -297,6 +297,166 @@ class Switch(_Stateful):
         return "break"
 
 
+def hue_from_x(x, width, margin):
+    """Hue (0..359 degrees) for a pixel position on a slider track `width` wide whose ends are `margin` px inside the edges. Clamped."""
+    span = width - 2 * margin
+    if span <= 0:
+        return 0
+    return max(0, min(359, round((x - margin) * 359 / span)))
+
+
+def step_hue(hue, key, big=30):
+    """The hue after a key press on the slider: arrows move 1 degree, PageUp/PageDown `big`, Home is 0, End is 359; arrows wrap around."""
+    if key == "Home":
+        return 0
+    if key == "End":
+        return 359
+    delta = {"Left": -1, "Down": -1, "Right": 1, "Up": 1, "Prior": big, "Next": -big}.get(key)
+    return hue if delta is None else (hue + delta) % 360
+
+
+def _dim(color, amount=0.6, toward=CARD):
+    """A colour faded toward the card background: the look of a disabled control."""
+    a, b = _rgb(color), _rgb(toward)
+    return "#%02x%02x%02x" % tuple(round(x * (1 - amount) + y * amount) for x, y in zip(a[:3], b[:3]))
+
+
+def _rainbow_png(w, h, colors):
+    """A pill-shaped strip `w` x `h` whose column x is coloured colors[x], as base64 PNG (anti-aliased ends)."""
+    k = 3
+    strip = Image.new("RGB", (w, 1))
+    strip.putdata([_rgb(c)[:3] for c in colors])
+    big = strip.resize((w * k, h * k), Image.NEAREST).convert("RGBA")
+    mask = Image.new("L", (w * k, h * k), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=h * k // 2, fill=255)
+    big.putalpha(mask)
+    buf = io.BytesIO()
+    big.resize((w, h), Image.LANCZOS).save(buf, "PNG")
+    return base64.b64encode(buf.getvalue())
+
+
+class HueSlider(_Stateful):
+    """A rainbow slider that picks a hue, 0..359 degrees, into a tk.IntVar. `color_for(hue)` gives the '#rrggbb' to paint at that hue.
+    Mouse and touch drag it; arrows, PageUp/PageDown, Home and End work from the keyboard. A drag that starts here never scrolls the window."""
+    grabs_drag = True                      # ScrollFrame leaves drags that start on this widget alone
+
+    def __init__(self, parent, variable, color_for, command=None, state="normal", bg=CARD):
+        super().__init__(parent, width=px(260), height=px(52), bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
+        self._init_state(state)
+        self.variable, self.color_for, self.command, self._bg = variable, color_for, command, bg
+        self._focus = False
+        self._track, self._track_key = None, None
+        variable.trace_add("write", lambda *a: self.draw())
+        self.bind("<Configure>", lambda e: self.draw())
+        self.bind("<ButtonPress-1>", self._pointer)
+        self.bind("<B1-Motion>", self._pointer)
+        for key in ("Left", "Right", "Up", "Down", "Prior", "Next", "Home", "End"):
+            self.bind("<%s>" % key, self._key)
+        self.bind("<FocusIn>", lambda e: self._set_focus(True))
+        self.bind("<FocusOut>", lambda e: self._set_focus(False))
+        self.configure(cursor="hand2" if state == "normal" else "arrow")
+        self.draw()
+
+    def _geometry(self):
+        w = self.winfo_width() if self.winfo_width() > 1 else int(super().cget("width"))
+        return w, int(super().cget("height")), px(36), px(36) // 2 + px(8)           # width, height, thumb size, margin of the thumb's centre
+
+    def _set_focus(self, v):
+        self._focus = v
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        w, h, thumb, margin = self._geometry()
+        on = self.enabled
+        track_h = px(48)
+        key = (w, track_h, on)
+        if self._track_key != key:
+            colors = [self.color_for(hue_from_x(x, w, margin)) for x in range(w)]
+            if not on:
+                colors = [_dim(c) for c in colors]
+            self._track = tk.PhotoImage(master=self, data=_rainbow_png(w, track_h, colors)) if Image is not None else None
+            self._track_key = key
+        top = (h - track_h) // 2
+        if self._track is not None:
+            self.create_image(0, top, image=self._track, anchor="nw")
+        hue = max(0, min(359, int(self.variable.get())))
+        cx = margin + hue * (w - 2 * margin) / 359
+        cy = h // 2
+        if self._focus and on:
+            round_rect(self, cx - thumb // 2 - px(8), cy - thumb // 2 - px(8), cx + thumb // 2 + px(8), cy + thumb // 2 + px(8), thumb // 2 + px(8), outline=RING, width=2, fill="")
+        round_rect(self, cx - thumb // 2 - px(4), cy - thumb // 2 - px(4), cx + thumb // 2 + px(4), cy + thumb // 2 + px(4), thumb // 2 + px(4), fill=self._bg, outline=self._bg)
+        round_rect(self, cx - thumb // 2, cy - thumb // 2, cx + thumb // 2, cy + thumb // 2, thumb // 2, fill=RING if on else OFF_KNOB, outline=RING if on else OFF_KNOB)
+
+    def _set(self, hue):
+        if self.enabled and int(self.variable.get()) != hue:
+            self.variable.set(hue)
+            if self.command:
+                self.command()
+
+    def _pointer(self, e):
+        if not self.enabled:
+            return
+        self.focus_set()
+        w, _, _, margin = self._geometry()
+        self._set(hue_from_x(e.x, w, margin))
+
+    def _key(self, e):
+        if self.enabled:
+            self._set(step_hue(int(self.variable.get()), e.keysym))
+        return "break"
+
+
+class Swatch(_Stateful):
+    """A round colour button. `selected()` says whether to draw it as the chosen one; call draw() again when that changes."""
+
+    def __init__(self, parent, color, selected, command, state="normal", bg=CARD):
+        super().__init__(parent, width=px(52), height=px(52), bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
+        self._init_state(state)
+        self.color, self.selected, self.command = color, selected, command
+        self._focus = self._armed = False
+        self.bind("<ButtonPress-1>", self._click)
+        self.bind("<ButtonRelease-1>", self._release)
+        self.bind("<space>", self._key)
+        self.bind("<Return>", self._key)
+        self.bind("<FocusIn>", lambda e: self._set_focus(True))
+        self.bind("<FocusOut>", lambda e: self._set_focus(False))
+        self.configure(cursor="hand2" if state == "normal" else "arrow")
+        self.draw()
+
+    def _set_focus(self, v):
+        self._focus = v
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        w = int(super().cget("width"))
+        c, d, on = w // 2, px(40), self.enabled
+        if self._focus and on:
+            round_rect(self, c - d // 2 - px(6), c - d // 2 - px(6), c + d // 2 + px(6), c + d // 2 + px(6), d // 2 + px(6), outline=RING, width=2, fill="")
+        if self.selected() and on:
+            round_rect(self, c - d // 2 - px(4), c - d // 2 - px(4), c + d // 2 + px(4), c + d // 2 + px(4), d // 2 + px(4), outline=ACCENT, width=3, fill="")
+        color = self.color if on else _dim(self.color)
+        round_rect(self, c - d // 2, c - d // 2, c + d // 2, c + d // 2, d // 2, fill=color, outline=EDGE if on else OFF_EDGE, width=1)
+
+    def invoke(self):
+        if self.enabled and self.command:
+            self.command()
+
+    def _click(self, _e):
+        self.focus_set()
+        self._armed = True
+
+    def _release(self, e):
+        armed, self._armed = self._armed, False
+        if armed and not _dragging and 0 <= e.x <= self.winfo_width() and 0 <= e.y <= self.winfo_height():
+            self.invoke()
+
+    def _key(self, _e):
+        self.invoke()
+        return "break"
+
+
 class Bar(tk.Canvas):
     """Thin rounded progress bar. Use configure(value=..., maximum=...) like ttk.Progressbar."""
 
@@ -472,7 +632,7 @@ class ScrollFrame(tk.Frame):
 
     def _drag_start(self, e):
         self._drag = None
-        if self.scrollable() and isinstance(e.widget, tk.Widget) and str(e.widget).startswith(str(self.inner)):
+        if self.scrollable() and isinstance(e.widget, tk.Widget) and str(e.widget).startswith(str(self.inner)) and not getattr(e.widget, "grabs_drag", False):
             self._drag = (e.y_root, self.canvas.canvasy(0), False)
 
     def _drag_move(self, e):

@@ -1173,5 +1173,36 @@ class PreviewCover(Base):
             self.assertIsNone(sc.ImageChops.difference(real, preview).getbbox(), (hue, family))
 
 
+class HueMath(unittest.TestCase):
+    """The arithmetic behind the colour slider (the widget itself needs a display; see gui.py --selftest and the fuzzer)."""
+
+    def setUp(self):
+        try:
+            import widgets
+        except ImportError:
+            self.skipTest("tkinter missing")
+        self.w = widgets
+
+    def test_hue_from_x_maps_and_clamps(self):
+        f = self.w.hue_from_x
+        self.assertEqual(f(10, 410, 10), 0)
+        self.assertEqual(f(400, 410, 10), 359)
+        self.assertEqual(f(-50, 410, 10), 0)
+        self.assertEqual(f(9999, 410, 10), 359)
+        self.assertIn(f(205, 410, 10), (179, 180))                       # the middle of the track
+        self.assertEqual(f(5, 0, 0), 0)                                   # a track with no width: no division by zero
+        self.assertEqual(f(5, 20, 10), 0)                                 # margins eat the whole width
+
+    def test_step_hue_keys(self):
+        f = self.w.step_hue
+        self.assertEqual(f(0, "Left"), 359)
+        self.assertEqual(f(359, "Right"), 0)
+        self.assertEqual(f(10, "Prior"), 40)
+        self.assertEqual(f(10, "Next"), 340)
+        self.assertEqual(f(200, "Home"), 0)
+        self.assertEqual(f(10, "End"), 359)
+        self.assertEqual(f(77, "x"), 77)
+
+
 if __name__ == "__main__":
     unittest.main()
