@@ -3,6 +3,8 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+
+## [1.3.1] - 2026-10-26
 - An info badge (“i”) next to "Only my installed games" explains that games shared through Family Sharing, and games that are not installed, need your game list. The README says so too, and shows a new screenshot with the green family corner.
 
 ## [1.3.0] - 2026-10-26
