@@ -112,7 +112,7 @@ def run_one(seed, steps, sandbox):
 
         def walk(w):
             for c in w.winfo_children():
-                if isinstance(c, (widgets.RoundedButton, widgets.Switch, widgets.InfoBadge)):
+                if isinstance(c, (widgets.RoundedButton, widgets.Switch, widgets.InfoBadge, widgets.HueSlider, widgets.Swatch)):
                     out.append(c)
                 walk(c)
         walk(app)
@@ -185,8 +185,15 @@ def run_one(seed, steps, sandbox):
             return "tab"
         if r < .95:
             app.scroller.canvas.yview_moveto(rnd.random()); app.scroller._scroll(rnd.choice([-3, 3])); return "scroll"
-        if r < .97:
+        if r < .965:
             app.copy_link(); return "copy link"
+        if r < .98:
+            app.hue.set(rnd.randint(0, 359)); return "set colour"
+        if r < .99:
+            w = rnd.choice([app.slider] + app.swatches); w.focus_force()
+            w.event_generate(rnd.choice(["<Right>", "<Left>", "<Prior>", "<Next>", "<Home>", "<End>", "<space>"])); return "key on a colour control"
+        if r < .995:
+            rnd.choice(app.swatches).invoke(); return "click a swatch"
         with open(os.path.join(base, "dl", "userdata%s.json" % rnd.choice(["", " (1)"])), "w") as f:
             f.write(rnd.choice(['{"rgOwnedApps":[101,102]}', '{"rgOwnedApps":', "[", "\x00\x01"]))
         return "drop a file in Downloads"
@@ -203,6 +210,10 @@ def run_one(seed, steps, sandbox):
             bad.append("make enabled=%s but ready=%s" % (st(app.btn_make), ready))
         if (st(app.btn_apply) == "normal") != bool(app.cover_files):
             bad.append("apply enabled=%s but cover_files=%d" % (st(app.btn_apply), len(app.cover_files)))
+        if {st(w) for w in [app.slider] + app.swatches} != {st(app.sw_skip)}:
+            bad.append("colour controls are %s but the other step 2 controls are %s" % ({st(w) for w in [app.slider] + app.swatches}, st(app.sw_skip)))
+        if not 0 <= app.hue.get() < 360:
+            bad.append("hue out of range: %s" % app.hue.get())
         if threading.active_count() > base_threads + 1:
             bad.append("leaked threads: %d" % (threading.active_count() - base_threads))
         if os.path.isdir(grid):

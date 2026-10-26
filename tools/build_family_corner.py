@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""Maintainers only: render assets/frame_family.png, the frame for games from the Steam Family library.
-It is assets/frame.png with a green triangle in the top-left corner and a white three-person icon on it.
+"""Maintainers only: render assets/family_corner.png, the overlay for games from the Steam Family library:
+a green triangle in the top-left corner with a white three-person icon on it, transparent everywhere else.
+The app lays it over the (possibly recoloured) frame, so the corner stays green in every case colour.
 frame.png itself is never rewritten (covers made with it must stay recognisable). Needs rsvg-convert (librsvg) and Pillow."""
 import os, subprocess, tempfile
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FRAME = os.path.join(HERE, "..", "assets", "frame.png")
-OUT = os.path.join(HERE, "..", "assets", "frame_family.png")
+OUT = os.path.join(HERE, "..", "assets", "family_corner.png")
 
 GREEN = "#2e7d32"       # white on it: 5.1:1
 LEG = 205               # triangle legs, in cover pixels
@@ -39,6 +39,5 @@ with tempfile.TemporaryDirectory() as tmp:
     with open(src, "w") as f:
         f.write(svg)
     subprocess.run(["rsvg-convert", "-w", "600", "-h", "900", "-o", png, src], check=True)
-    overlay = Image.open(png).convert("RGBA")
-    Image.alpha_composite(Image.open(FRAME).convert("RGBA"), overlay).save(OUT, format="PNG", optimize=True)
+    Image.open(png).convert("RGBA").save(OUT, format="PNG", optimize=True)
 print("wrote", os.path.normpath(OUT))

@@ -9,7 +9,9 @@ This project is **not affiliated with, endorsed by, or sponsored by Valve Corpor
 
 These marks appear in `assets/frame.png` only to mimic a physical box and show platform support. They remain the property of their owners. If you are a rights holder and want something changed, open an issue.
 
-`assets/frame_family.png` adds a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
+`assets/family_corner.png` is a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
+
+`assets/default_art.png` (source: `tools/src/default_art.svg`) is original artwork drawn for this project and released under the project's licence. It is not taken from any game and is only used to preview the case colour.
 
 ## Included files
 | File | Source | License |
@@ -20,7 +22,7 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 
 `assets/icon.*` (the app icon, source in `tools/src/icon.svg`) is original artwork released under the same license as the code (GPL-3.0-or-later). It deliberately does not use the Steam logo.
 
-The font and the SVG sources are only used by `tools/build_frame.py` and `tools/build_icon.py` to render `assets/frame.png` and the icons. They are not needed to run the app.
+The font and the SVG sources are only used by `tools/build_frame.py`, `tools/build_icon.py` and `tools/build_default_art.py` to render `assets/frame.png`, the icons and `assets/default_art.png`. They are not needed to run the app.
 
 ## Game artwork
 The preview image at the top of the README (`assets/preview.png`) shows covers of a few games (SnowRunner, Coral Island, Clair Obscur: Expedition 33, Fallout 4 and V Rising) only to show what the app produces. That artwork, and the games' names and logos, belong to their publishers and developers. They are not covered by this project's license. If a rights holder objects, the image will be removed.

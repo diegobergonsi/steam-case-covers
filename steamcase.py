@@ -14,12 +14,13 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageChops
+    from PIL.PngImagePlugin import PngInfo
 except ImportError:
-    Image = None
+    Image = ImageChops = PngInfo = None
 
 try:
     import certifi                      # a bundled set of trusted certificates (the packaged app's own Python may not find the system's)
@@ -32,7 +33,9 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
 
 HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
-FRAME_FAMILY = os.path.join(HERE, "assets", "frame_family.png")      # frame.png plus the green corner for games from the Steam Family library
+DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
+FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
+HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
 FAMILY_ICON_CONTRAST = 4.5                  # WCAG AA for normal text; the icon must never fall below it
 WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y0, x1, y1)
@@ -666,13 +669,47 @@ def list_games(games, log=None):
 
 
 # ---------- drawing ----------
-def build_cover(portrait_path, out_path, frame):
-    if Image is None:
-        raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
-    with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
-        if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
-            raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
-        art = im.convert("RGBA")
+def hue_shift(hue):
+    """How far `hue` degrees turns Pillow's hue band (0..255). Neighbouring whole degrees can share a step (1 and 2 do): the covers are then identical."""
+    return round((hue % 360) * 256 / 360) % 256
+
+
+def same_colour(a, b):
+    """True if two case hues (degrees, or None when unknown) give the same colour."""
+    return a is not None and b is not None and hue_shift(a) == hue_shift(b)
+
+
+def recolor_frame(frame, hue):
+    """The frame with its hue turned by `hue` degrees. Saturation, brightness and transparency stay, so the shading and the white parts stay;
+    0 degrees returns the frame itself (the original blue, byte for byte)."""
+    shift = hue_shift(hue)
+    if not shift:
+        return frame
+    r, g, b, a = frame.split()
+    h, s, v = Image.merge("RGB", (r, g, b)).convert("HSV").split()
+    h = h.point(lambda x: (x + shift) % 256)
+    return Image.merge("RGBA", (*Image.merge("HSV", (h, s, v)).convert("RGB").split(), a))
+
+
+def load_frame(hue=0, family=False):
+    """The case frame in the wanted colour; with family=True the green corner of the Steam Family library is laid over it (never recoloured)."""
+    frame = recolor_frame(Image.open(FRAME).convert("RGBA"), hue)
+    if family:
+        frame = Image.alpha_composite(frame, Image.open(FAMILY_CORNER).convert("RGBA"))
+    return frame
+
+
+@functools.lru_cache(maxsize=None)
+def case_color(hue):
+    """'#rrggbb' of the case's middle colour (the original is #1636c8) turned by `hue` degrees: for painting swatches and the colour slider."""
+    return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue % 360).getpixel((0, 0))[:3]
+
+
+HUE_CHUNK = "steamcase-hue"
+
+
+def _compose(art, frame):
+    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this."""
     x0, y0, x1, y1 = WINDOW
     ww, wh = x1 - x0, y1 - y0
     s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
@@ -681,18 +718,54 @@ def build_cover(portrait_path, out_path, frame):
     art = art.crop((cx, cy, cx + ww, cy + wh))
     canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     canvas.paste(art, (x0, y0))
+    return Image.alpha_composite(canvas, frame)
+
+
+def preview_cover(hue=0, family=False):
+    """What a cover looks like in this case colour, made from the default art that ships with the app (the window shows it before any game's art exists)."""
+    with Image.open(DEFAULT_ART) as im:
+        return _compose(im.convert("RGBA"), load_frame(hue, family))
+
+
+def cover_hue(path):
+    """The case colour (degrees turned from the original blue) a cover was made in, read from its PNG header without decoding the picture.
+    Covers made before colours existed have no such note and count as 0. None if this is not a readable PNG, or if the note is not a whole number
+    from 0 to 359 (then the cover is rebuilt rather than taken for blue)."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return None
+        with Image.open(path, formats=["PNG"]) as im:
+            value = im.info.get(HUE_CHUNK)
+        if value is None:
+            return 0
+        return int(value) if isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", value) and int(value) < 360 else None
+    except Exception:
+        return None
+
+
+def build_cover(portrait_path, out_path, frame, hue=0):
+    if Image is None:
+        raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
+    with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
+        if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
+            raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
+        art = im.convert("RGBA")
+    cover = _compose(art, frame)
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
-    Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True)
+    note = PngInfo()
+    note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
+    cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
 
 # ---------- make ----------
-def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None):
+def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
     family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
+    hue: degrees to turn the case colour from the original blue (0). A cover that exists in another colour is rebuilt, one in this colour is kept.
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
@@ -701,9 +774,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     os.makedirs(out, exist_ok=True)
-    frame = Image.open(FRAME).convert("RGBA")
+    hue %= 360
+    frame = load_frame(hue)
     family = set(family or ())
-    frame_family = Image.open(FRAME_FAMILY).convert("RGBA") if family else None
+    frame_family = load_frame(hue, True) if family else None
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -750,7 +824,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        if os.path.exists(dest) and not force:
+        if os.path.exists(dest) and not force and same_colour(cover_hue(dest), hue):
             res["ok"] += 1
             res["files"].append(dest)
             report(n, appid, name, "exists")
@@ -778,7 +852,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(tmp, dest, frame_family if is_family else frame)
+            build_cover(tmp, dest, frame_family if is_family else frame, hue)
             res["ok"] += 1
             res["family"] += is_family
             res["files"].append(dest)
@@ -795,6 +869,34 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
+def covers_in_other_colour(covers_dir, hue):
+    """True if the covers folder already holds a cover made in a different case colour than `hue` (stops at the first one)."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            h = cover_hue(os.path.join(covers_dir, n))
+            if h is not None and not same_colour(h, hue):
+                return True
+    return False
+
+
+def existing_cover_hue(covers_dir):
+    """The case colour of the covers already in the folder (that of the first one by name), or None when there are none."""
+    try:
+        names = sorted(os.listdir(covers_dir))
+    except OSError:
+        return None
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            h = cover_hue(os.path.join(covers_dir, n))
+            if h is not None:
+                return h
+    return None
+
+
 def _safe_copy(src, dst):
     """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
     tmp = _tmp(dst)
@@ -909,22 +1011,43 @@ class _Lock:
 _frame_ref = None
 
 
+def _shape(strip):
+    """Saturation, brightness and transparency of a strip of a cover. The hue is left out on purpose: a recoloured case still counts as ours."""
+    r, g, b, a = strip.split()
+    _, s, v = Image.merge("RGB", (r, g, b)).convert("HSV").split()
+    return s, v, a
+
+
 def _frame_regions():
-    """The parts of a cover that are pure frame (banner on top, lip at the bottom), from frame.png."""
+    """The parts of a cover that are pure frame (banner on top, lip at the bottom), from frame.png and from the family frame.
+    Each reference is (shape, mask): mask is None, or marks the pixels worth comparing (the family corner's soft edge is left out: it
+    blends the green with the banner, so its saturation depends on the colour the case was turned to)."""
     global _frame_ref
     if _frame_ref is None:
-        fr = Image.open(FRAME).convert("RGBA")
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
-        tops = [fr.crop(top).tobytes()]
-        if os.path.exists(FRAME_FAMILY):                    # the family frame differs from the plain one only in the corner triangle
-            tops.append(Image.open(FRAME_FAMILY).convert("RGBA").crop(top).tobytes())
-        _frame_ref = (top, bot, tuple(tops), fr.crop(bot).tobytes())
+        plain, family = load_frame(0), load_frame(0, True)          # the family frame differs from the plain one only in the corner triangle
+        edge = Image.open(FAMILY_CORNER).convert("RGBA").getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0)
+        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None), (_shape(family.crop(top)), edge)), (_shape(plain.crop(bot)), None))
     return _frame_ref
 
 
+def _same_shape(a, ref):
+    """Same transparency exactly, and saturation and brightness within 2 levels (turning the hue moves them by at most 1)."""
+    (s, v, alpha), mask = ref
+    if a[2].tobytes() != alpha.tobytes():
+        return False
+    for x, y in ((a[0], s), (a[1], v)):
+        diff = ImageChops.difference(x, y)
+        if mask is not None:
+            diff = ImageChops.darker(diff, mask)
+        if diff.getextrema()[1] > 2:
+            return False
+    return True
+
+
 def is_steamcase_cover(path):
-    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png (or frame_family.png) exactly.
-    Art you set yourself never matches, so it is never mistaken for ours."""
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge have the shape of frame.png (or of the family frame),
+    whatever colour the case was turned to. Art you set yourself never matches, so it is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return False
@@ -933,7 +1056,8 @@ def is_steamcase_cover(path):
             if im.size != SIZE:
                 return False
             im = im.convert("RGBA")
-        return im.crop(top).tobytes() in ref_tops and im.crop(bot).tobytes() == ref_bot
+        banner = _shape(im.crop(top))
+        return any(_same_shape(banner, ref) for ref in ref_tops) and _same_shape(_shape(im.crop(bot)), ref_bot)
     except Exception:
         return False
 
@@ -1094,16 +1218,24 @@ def cmd_list(args):
         print("%d from your Steam Family library" % shared)
 
 
+def _hue_arg(text):
+    if not re.fullmatch(r"[0-9]{1,3}", text) or int(text) > 359:
+        raise argparse.ArgumentTypeError("%r is not a whole number from 0 to 359" % text)
+    return int(text)
+
+
 def cmd_make(args):
     steam, games, family = _collect(args)
+    hue = args.hue if args.hue is not None else (existing_cover_hue(os.path.abspath(args.out)) or 0)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
-          + (" | %d from your Steam Family library" % res["family"] if res["family"] else ""))
+          + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
+          + (" | in a custom colour" if hue else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
@@ -1209,6 +1341,9 @@ def main():
         common(p, make=True, apply_=(name == "run"))
         p.add_argument("--only", type=int, nargs="+", metavar="APPID", help="only these app IDs")
         p.add_argument("--force", action="store_true", help="rebuild covers that already exist")
+        p.add_argument("--hue", type=_hue_arg, default=None, metavar="DEGREES",
+                       help="turn the case colour by this many degrees, 0 to 359 (0 is the original blue; covers in another colour are rebuilt). "
+                            "Default: the colour of the covers already in the folder, else the original blue")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)

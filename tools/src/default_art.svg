@@ -1,0 +1,44 @@
+<!-- Original artwork drawn for steam-case-covers (GPL-3.0-or-later). Not taken from any game. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#1b1446"/><stop offset=".35" stop-color="#5a2a7a"/><stop offset=".6" stop-color="#d4547a"/><stop offset=".78" stop-color="#ff9a52"/><stop offset="1" stop-color="#ffd38a"/>
+  </linearGradient>
+  <radialGradient id="sun" cx=".5" cy=".5" r=".5">
+    <stop offset="0" stop-color="#fff6d6"/><stop offset=".45" stop-color="#ffd27a"/><stop offset="1" stop-color="#ffb04a" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a3a86"/><stop offset="1" stop-color="#b8527f"/></linearGradient>
+  <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a2a6e"/><stop offset="1" stop-color="#8a3f7a"/></linearGradient>
+  <linearGradient id="m3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1d52"/><stop offset="1" stop-color="#5a2f67"/></linearGradient>
+  <linearGradient id="m4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#150f30"/><stop offset="1" stop-color="#2a1a47"/></linearGradient>
+  <filter id="soft"><feGaussianBlur stdDeviation="1.2"/></filter>
+</defs>
+<rect width="600" height="900" fill="url(#sky)"/>
+<g fill="#fff" opacity=".85">
+  <circle cx="70" cy="60" r="1.6"/><circle cx="150" cy="120" r="1.2"/><circle cx="260" cy="40" r="1.8"/><circle cx="360" cy="95" r="1.2"/>
+  <circle cx="470" cy="55" r="1.6"/><circle cx="540" cy="130" r="1.2"/><circle cx="40" cy="170" r="1.2"/><circle cx="420" cy="170" r="1"/>
+  <circle cx="210" cy="190" r="1"/><circle cx="560" cy="210" r="1.4"/><circle cx="310" cy="150" r="1"/><circle cx="100" cy="240" r="1"/>
+</g>
+<circle cx="300" cy="560" r="190" fill="url(#sun)"/>
+<circle cx="300" cy="560" r="78" fill="#fff0c2"/>
+<path d="M0 600 L70 520 L130 570 L210 470 L290 585 L350 520 L430 600 L520 500 L600 580 L600 900 L0 900 Z" fill="url(#m1)"/>
+<path d="M0 660 L90 590 L170 640 L260 560 L340 650 L420 600 L510 665 L600 610 L600 900 L0 900 Z" fill="url(#m2)"/>
+<path d="M0 730 L110 660 L200 720 L300 650 L400 730 L500 670 L600 725 L600 900 L0 900 Z" fill="url(#m3)"/>
+<path d="M0 800 L120 760 L230 800 L330 750 L430 805 L600 770 L600 900 L0 900 Z" fill="url(#m4)"/>
+<!-- lone traveller on a ledge -->
+<path d="M110 900 L118 862 L150 850 L176 838 L212 836 L238 818 L266 806 L284 786 L318 782 L336 794 L362 800 L392 818 L424 824 L452 846 L488 856 L496 900 Z" fill="#0d0a22"/>
+<path d="M118 862 L150 850 L176 838 L212 836 L238 818 L266 806 L284 786 L318 782 L336 794 L362 800 L392 818 L424 824 L452 846 L488 856" fill="none" stroke="#5a3a78" stroke-width="2" stroke-linejoin="round" opacity=".8"/>
+<path d="M240 870 L262 840 M330 862 L350 826 M404 880 L420 846" stroke="#1d1438" stroke-width="3" stroke-linecap="round" fill="none"/>
+<g transform="translate(301 764)" fill="#0d0a22">
+  <ellipse cx="0" cy="-42" rx="9" ry="10"/>
+  <path d="M-12 -32 Q0 -38 12 -32 L18 14 Q0 22 -18 14 Z"/>
+  <path d="M-12 -30 L-52 8 Q-30 -4 -16 16 Z" opacity=".95"/>
+  <rect x="14" y="-30" width="3" height="52" rx="1.5"/>
+</g>
+<g fill="#ffd9a0" opacity=".9" filter="url(#soft)">
+  <circle cx="120" cy="700" r="3"/><circle cx="170" cy="660" r="2.4"/><circle cx="470" cy="690" r="3"/><circle cx="520" cy="640" r="2.2"/><circle cx="430" cy="730" r="2"/><circle cx="90" cy="760" r="2"/>
+</g>
+<text x="300" y="215" text-anchor="middle" font-family="Nunito Sans" font-weight="800" font-size="92" letter-spacing="6" fill="#fff6e0" stroke="#fff6e0" stroke-width="2">YOUR</text>
+<text x="300" y="300" text-anchor="middle" font-family="Nunito Sans" font-weight="800" font-size="92" letter-spacing="6" fill="#ffb04a" stroke="#ffb04a" stroke-width="2">GAME</text>
+<text x="300" y="338" text-anchor="middle" font-family="Nunito Sans" font-weight="700" font-size="20" letter-spacing="10" fill="#ffe3b8" opacity=".9">A JOURNEY BEGINS</text>
+</svg>

@@ -899,7 +899,7 @@ class FamilyFrame(unittest.TestCase):
         if sc.Image is None:
             self.skipTest("Pillow missing")
         self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
-        self.family = sc.Image.open(sc.FRAME_FAMILY).convert("RGBA")
+        self.family = sc.load_frame(0, True)
 
     def test_family_frame_equals_the_plain_frame_outside_the_corner(self):
         self.assertEqual(self.family.size, sc.SIZE)
@@ -918,8 +918,8 @@ class FamilyFrame(unittest.TestCase):
         self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
 
 
-class FamilyCovers(Base):
-    """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
+class StoreMocks(Base):
+    """A fake store and a fake download (a small red JPEG), for tests that make covers."""
 
     def setUp(self):
         super().setUp()
@@ -939,6 +939,31 @@ class FamilyCovers(Base):
 
     def is_green(self, rgb):
         return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
+
+    # ---- command line ----
+    def fake_library(self, with_family):
+        """Steam with one owned game (1) and, if asked, one game that is only in the cache (2); returns the library file."""
+        os.makedirs(os.path.join(self.steam, "appcache", "librarycache", "2" if with_family else "1"), exist_ok=True)
+        write_packageinfo(os.path.join(self.steam, "appcache", "packageinfo.vdf"), {0: [1]})
+        path = os.path.join(self.tmp, "userdata.json")
+        with open(path, "w") as f:
+            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0]}, f)
+        return path
+
+    def run_cli(self, *args):
+        import contextlib, io
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["steamcase"] + list(args)
+        try:
+            with contextlib.redirect_stdout(out):
+                sc.main()
+        finally:
+            sys.argv = argv
+        return out.getvalue()
+
+
+class FamilyCovers(StoreMocks):
+    """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
 
     def test_family_games_get_the_family_frame_and_others_the_plain_one(self):
         res = sc.make_covers({1: None, 2: None}, self.covers, family={2})
@@ -973,27 +998,6 @@ class FamilyCovers(Base):
         img.save(tampered)
         self.assertFalse(sc.is_steamcase_cover(tampered))
 
-    # ---- command line ----
-    def fake_library(self, with_family):
-        """Steam with one owned game (1) and, if asked, one game that is only in the cache (2); returns the library file."""
-        os.makedirs(os.path.join(self.steam, "appcache", "librarycache", "2" if with_family else "1"), exist_ok=True)
-        write_packageinfo(os.path.join(self.steam, "appcache", "packageinfo.vdf"), {0: [1]})
-        path = os.path.join(self.tmp, "userdata.json")
-        with open(path, "w") as f:
-            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0]}, f)
-        return path
-
-    def run_cli(self, *args):
-        import contextlib, io
-        out, argv = io.StringIO(), sys.argv
-        sys.argv = ["steamcase"] + list(args)
-        try:
-            with contextlib.redirect_stdout(out):
-                sc.main()
-        finally:
-            sys.argv = argv
-        return out.getvalue()
-
     def test_list_marks_family_games(self):
         lib = self.fake_library(True)
         text = self.run_cli("list", "--steam-dir", self.steam, "--library", lib)
@@ -1011,6 +1015,274 @@ class FamilyCovers(Base):
         os.remove(os.path.join(self.steam, "appcache", "packageinfo.vdf"))            # ownership unknown: nothing is family
         text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out2"))
         self.assertNotIn("Family library", text)
+
+
+class CoverColour(unittest.TestCase):
+    """Rotating the hue of the case: shape, white parts and transparency stay, the family corner stays green."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
+
+    def test_hue_zero_is_the_untouched_frame(self):
+        for hue in (0, 360, -360):
+            self.assertEqual(sc.load_frame(hue).tobytes(), self.plain.tobytes())
+
+    def test_a_rotated_frame_keeps_shape_white_and_alpha(self):
+        turned = sc.load_frame(134)
+        self.assertEqual(turned.getchannel("A").tobytes(), self.plain.getchannel("A").tobytes())
+        white = (255, 255, 255, 255)
+        self.assertEqual(list(turned.crop((0, 0, 600, 96)).getdata()).count(white), list(self.plain.crop((0, 0, 600, 96)).getdata()).count(white))
+        h0, s0, v0 = self.plain.convert("RGB").convert("HSV").getpixel((7, 450))
+        h1, s1, v1 = turned.convert("RGB").convert("HSV").getpixel((7, 450))
+        want = round(134 * 256 / 360)
+        self.assertLessEqual(min((h1 - h0 - want) % 256, (h0 + want - h1) % 256), 2)
+        self.assertLessEqual(abs(s1 - s0), 1)
+        self.assertLessEqual(abs(v1 - v0), 1)
+
+    def test_the_family_corner_stays_green_at_every_hue(self):
+        for hue in sc.HUE_SWATCHES:
+            r, g, b, a = sc.load_frame(hue, True).getpixel((8, 8))
+            self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (hue, (r, g, b)))
+            self.assertEqual(sc.load_frame(hue, True).getpixel((7, 450)), sc.load_frame(hue).getpixel((7, 450)))
+
+    def test_case_color_matches_the_rotated_frame(self):
+        import re
+        self.assertEqual(sc.case_color(0), "#1636c8")
+        for hue in sc.HUE_SWATCHES:
+            self.assertRegex(sc.case_color(hue), r"^#[0-9a-f]{6}$")
+
+
+class CoverColourFiles(Base):
+    """What is written into a cover file, and recognising covers of every colour."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.src = os.path.join(self.tmp, "portrait.png")
+        sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
+
+    def make(self, name, hue=0, family=False):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.src, out, sc.load_frame(hue, family), hue)
+        return out
+
+    def test_cover_hue_reads_the_recorded_hue_and_treats_old_covers_as_zero(self):
+        self.assertEqual(sc.cover_hue(self.make("a.png", 134)), 134)
+        self.assertEqual(sc.cover_hue(self.make("b.png", 360 + 5)), 5)                 # recorded already wrapped
+        old = os.path.join(self.tmp, "old.png")
+        sc.Image.new("RGBA", sc.SIZE).save(old)                                         # made before this feature: no hue chunk
+        self.assertEqual(sc.cover_hue(old), 0)
+        self.assertIsNone(sc.cover_hue(os.path.join(self.tmp, "missing.png")))
+        jpeg = os.path.join(self.tmp, "j.png")
+        sc.Image.new("RGB", (10, 10)).save(jpeg, format="JPEG")
+        self.assertIsNone(sc.cover_hue(jpeg))
+        link = os.path.join(self.tmp, "link.png")
+        try:
+            os.symlink(old, link)
+        except (OSError, NotImplementedError):
+            return                                                                      # no symlinks here (Windows without privilege)
+        self.assertIsNone(sc.cover_hue(link))
+
+    def test_an_unreadable_hue_note_is_not_taken_for_blue(self):
+        from PIL.PngImagePlugin import PngInfo
+        for value, want in (("0", 0), ("5", 5), ("359", 359), ("360", None), ("999", None), ("-5", None), ("12345", None), ("abc", None), ("", None), ("007", None), ("\u0663", None)):
+            note = PngInfo()
+            note.add_text("steamcase-hue", value)
+            path = os.path.join(self.tmp, "n.png")
+            sc.Image.new("RGBA", sc.SIZE).save(path, pnginfo=note)
+            self.assertEqual(sc.cover_hue(path), want, repr(value))
+
+    def test_covers_of_every_colour_are_recognised_and_look_alikes_are_not(self):
+        for hue in sc.HUE_SWATCHES:
+            for family in (False, True):
+                self.assertTrue(sc.is_steamcase_cover(self.make("c.png", hue, family)), (hue, family))
+        flat = os.path.join(self.tmp, "flat.png")
+        sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255)).save(flat)
+        self.assertFalse(sc.is_steamcase_cover(flat))
+        for hue in (0, 134):
+            real = self.make("r.png", hue)
+            grey = os.path.join(self.tmp, "grey.png")
+            sc.Image.open(real).convert("L").convert("RGBA").save(grey)
+            self.assertFalse(sc.is_steamcase_cover(grey), hue)
+            img = sc.Image.open(real).convert("RGBA")
+            img.putpixel((400, 10), (1, 2, 3, 255))
+            tampered = os.path.join(self.tmp, "t.png")
+            img.save(tampered)
+            self.assertFalse(sc.is_steamcase_cover(tampered), hue)
+
+
+class MakeInColour(StoreMocks):
+    """make_covers in a chosen case colour."""
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_covers_are_made_in_the_chosen_hue(self):
+        sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertEqual(sc.cover_hue(self.cover(1)), 134)
+        self.assertEqual(sc.Image.open(self.cover(1)).convert("RGBA").getpixel((7, 450)), sc.load_frame(134).getpixel((7, 450)))
+
+    def test_an_existing_cover_in_another_colour_is_rebuilt_and_one_in_the_same_colour_is_kept(self):
+        sc.make_covers({1: None}, self.covers)
+        before = self.read(self.cover(1))
+        res = sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertNotEqual(self.read(self.cover(1)), before)
+        self.assertEqual((sc.cover_hue(self.cover(1)), res["ok"]), (134, 1))
+        again = self.read(self.cover(1))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, hue=134, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual(self.read(self.cover(1)), again)
+        self.assertEqual(statuses, ["exists"])
+
+    def test_a_mixed_folder_is_fixed_by_the_next_run(self):
+        sc.make_covers({1: None, 2: None}, self.covers)
+        sc.make_covers({1: None, 2: None}, self.covers, only=[1], hue=134)            # a run that stopped halfway through a colour change
+        self.assertEqual((sc.cover_hue(self.cover(1)), sc.cover_hue(self.cover(2))), (134, 0))
+        sc.make_covers({1: None, 2: None}, self.covers, hue=134)
+        self.assertEqual((sc.cover_hue(self.cover(1)), sc.cover_hue(self.cover(2))), (134, 134))
+
+    def test_family_covers_keep_a_green_corner_in_a_custom_colour(self):
+        sc.make_covers({1: None, 2: None}, self.covers, family={2}, hue=134)
+        self.assertTrue(self.is_green(self.corner(self.cover(2))))
+        self.assertFalse(self.is_green(self.corner(self.cover(1))))
+
+    def test_hues_that_look_the_same_are_not_rebuilt(self):
+        # 1 and 2 degrees turn Pillow's 0..255 hue scale by the same step: the covers would come out identical
+        self.assertEqual(sc.hue_shift(1), sc.hue_shift(2))
+        self.assertNotEqual(sc.hue_shift(1), sc.hue_shift(3))
+        self.assertEqual(sc.hue_shift(0), sc.hue_shift(360))
+        sc.make_covers({1: None}, self.covers, hue=1)
+        before = self.read(self.cover(1))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, hue=2, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual((self.read(self.cover(1)), statuses), (before, ["exists"]))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 2))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 3))                      # a real step: rebuilt
+        sc.make_covers({1: None}, self.covers, hue=3)
+        self.assertEqual(sc.cover_hue(self.cover(1)), 3)
+
+    def test_existing_cover_hue_reads_the_colour_of_the_folder(self):
+        self.assertIsNone(sc.existing_cover_hue(os.path.join(self.tmp, "nowhere")))
+        self.assertIsNone(sc.existing_cover_hue(self.covers))                            # empty folder
+        sc.Image.new("RGBA", sc.SIZE).save(os.path.join(self.covers, "notes.png"))      # not named like one of our covers: ignored
+        self.assertIsNone(sc.existing_cover_hue(self.covers))
+        sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertEqual(sc.existing_cover_hue(self.covers), 134)
+        old = os.path.join(self.covers, "Old_2.png")                                     # made before colours existed: blue
+        sc.Image.new("RGBA", sc.SIZE).save(old)
+        self.assertEqual(sc.existing_cover_hue(self.covers), 134)                        # the first cover by name decides: Game_1_1.png
+
+    def test_covers_in_other_colour(self):
+        self.assertFalse(sc.covers_in_other_colour(os.path.join(self.tmp, "nowhere"), 134))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134))                    # empty folder
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 0))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 360))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 134))
+        sc.Image.new("RGBA", sc.SIZE).save(os.path.join(self.covers, "notes.png"))      # not named like one of our covers: ignored
+        os.remove(self.cover(1))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134))
+
+
+class PreviewCover(Base):
+    """The preview in the window is built exactly like a real cover, from the default art that ships with the app."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_the_default_art_ships_and_is_a_portrait(self):
+        with sc.Image.open(sc.DEFAULT_ART) as im:
+            self.assertEqual(im.size, (600, 900))
+
+    def test_preview_cover_is_exactly_what_a_real_cover_would_be(self):
+        for hue, family in ((134, False), (0, True), (276, True)):
+            out = os.path.join(self.tmp, "real.png")
+            sc.build_cover(sc.DEFAULT_ART, out, sc.load_frame(hue, family), hue)
+            real, preview = sc.Image.open(out).convert("RGBA"), sc.preview_cover(hue, family)
+            self.assertEqual(real.size, preview.size)
+            self.assertIsNone(sc.ImageChops.difference(real, preview).getbbox(), (hue, family))
+
+
+class HueMath(unittest.TestCase):
+    """The arithmetic behind the colour slider (the widget itself needs a display; see gui.py --selftest and the fuzzer)."""
+
+    def setUp(self):
+        try:
+            import widgets
+        except ImportError:
+            self.skipTest("tkinter missing")
+        self.w = widgets
+
+    def test_hue_from_x_maps_and_clamps(self):
+        f = self.w.hue_from_x
+        self.assertEqual(f(10, 410, 10), 0)
+        self.assertEqual(f(400, 410, 10), 359)
+        self.assertEqual(f(-50, 410, 10), 0)
+        self.assertEqual(f(9999, 410, 10), 359)
+        self.assertIn(f(205, 410, 10), (179, 180))                       # the middle of the track
+        self.assertEqual(f(5, 0, 0), 0)                                   # a track with no width: no division by zero
+        self.assertEqual(f(5, 20, 10), 0)                                 # margins eat the whole width
+
+    def test_drag_mode_tells_a_slide_from_a_swipe(self):
+        f = self.w.drag_mode
+        self.assertIsNone(f(0, 0, 6))                      # a tap or a tiny wobble: undecided
+        self.assertIsNone(f(5, -5, 6))
+        self.assertEqual(f(20, 4, 6), "horizontal")        # sliding the thumb
+        self.assertEqual(f(-20, -19, 6), "horizontal")     # a diagonal that is mostly sideways still slides
+        self.assertEqual(f(3, 25, 6), "vertical")          # a swipe to scroll the page
+        self.assertEqual(f(-7, -30, 6), "vertical")
+        self.assertEqual(f(10, 10, 6), "horizontal")       # a perfect diagonal goes to the slider (a tie never scrolls by accident)
+
+    def test_step_hue_keys(self):
+        f = self.w.step_hue
+        self.assertEqual(f(0, "Left"), 359)
+        self.assertEqual(f(359, "Right"), 0)
+        self.assertEqual(f(10, "Prior"), 40)
+        self.assertEqual(f(10, "Next"), 340)
+        self.assertEqual(f(200, "Home"), 0)
+        self.assertEqual(f(10, "End"), 359)
+        self.assertEqual(f(77, "x"), 77)
+
+
+class ColourCli(StoreMocks):
+    """--hue on the command line."""
+
+    def test_make_accepts_a_hue(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "134")
+        self.assertIn("in a custom colour", text)
+        self.assertEqual(sc.cover_hue(os.path.join(out, "Game_1_1.png")), 134)
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out0"))
+        self.assertNotIn("custom colour", text)
+
+    def test_make_without_hue_keeps_the_colour_of_the_covers_already_there(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "134")
+        path = os.path.join(out, "Game_1_1.png")
+        before = self.read(path)
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)          # no --hue: do not turn red covers blue
+        self.assertEqual(self.read(path), before)
+        self.assertIn("in a custom colour", text)
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "0")    # asking for blue explicitly does
+        self.assertEqual(sc.cover_hue(path), 0)
+
+    def test_a_bad_hue_is_refused_with_a_clear_message(self):
+        import contextlib, io
+        lib = self.fake_library(False)
+        for bad in ("400", "-1", "abc", "1.5", ""):
+            out = os.path.join(self.tmp, "out_" + (bad or "empty"))
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", bad)
+            self.assertIn("0 to 359", err.getvalue(), bad)
+            self.assertFalse(os.path.exists(out), bad)                                   # nothing was built
 
 
 if __name__ == "__main__":
