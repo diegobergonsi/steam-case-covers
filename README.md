@@ -38,7 +38,7 @@
 
 ## What is it?
 
-Steam shows your library as tall portrait cards. This tool puts each game's own artwork inside a blue "box" with a Steam banner and platform badges, like a boxed console game, and installs the result as your custom artwork.
+Steam shows your library as tall portrait cards. This tool puts each game's own artwork inside a "box" (blue by default, or any colour you pick) with a Steam banner and platform badges, like a boxed console game, and installs the result as your custom artwork.
 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
@@ -97,7 +97,7 @@ chmod +x SteamCaseCovers-linux
 <details id="from-source">
 <summary><b>From source (any system)</b></summary>
 
-If you'd rather not trust a download, run it from the code. It needs Python 3.8+ and Pillow 10.3 or newer.
+If you'd rather not trust a download, run it from the code. It needs Python 3 and Pillow 10.3 or newer (the release builds and the automated tests use Python 3.12; older versions down to 3.8 are expected to work but are not tested).
 
 ```bash
 git clone https://github.com/diegobergonsi/steam-case-covers
@@ -114,8 +114,8 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 
 ## How it works
 
-1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step. On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
-2. **Make the covers.** Click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped.
+1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
+2. **Make the covers.** Optionally pick the colour of the cases first: drag the colour slider or tap a swatch, and the preview shows the result. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour, the app asks before it replaces them.
 3. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; click **Change account** to pick another.
 
 > [!WARNING]
@@ -154,7 +154,7 @@ If you find a security problem, please [report it privately](SECURITY.md).
 ## Steam compatibility
 
 ✅ Linux and SteamOS (Steam in `~/.local/share/Steam`) <br>
-✅ Windows: tested by the author's colleague on a real PC, and the automated tests pass <br>
+✅ Windows: an early version (0.9.11) was tested by the author's colleague on a real PC; newer versions, including the colour slider and the family corner, are covered by the automated tests only <br>
 🟡 macOS: tested on one Apple Silicon Mac (best effort)
 
 > [!NOTE]
@@ -181,6 +181,8 @@ python steamcase.py reset --everything             # ...also removing art from o
 | `run` | `make` then `apply` |
 | `restore` | Undo the last apply (run again to go further back) |
 | `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
+
+`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue` (`--hue 0` asks for the original blue).
 
 Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
@@ -211,6 +213,20 @@ Steam shows art you set by hand (or got from SteamGridDB) before these covers. *
 <summary><b>Where are the covers stored?</b></summary>
 
 In your own user folder: `~/.local/share/steamcase/covers` on Linux, `%LOCALAPPDATA%\steamcase\covers` on Windows and `~/Library/Application Support/steamcase/covers` on macOS. Use **Open covers folder** in the app. Steam's copies live in `userdata/<id>/config/grid`; copy that folder to use the covers on another computer.
+
+</details>
+
+<details>
+<summary><b>A game from my family's library got no cover</b></summary>
+
+Games shared with you through Steam Family Sharing are not on your own game list, so the app has to compare Steam's own files with your list to tell them apart. Untick **Only my installed games** and load your game list (**Download your game list**, or **Browse…** to an older `userdata.json`: it does not need to contain the shared game). The shared games then get covers with a green corner. If the list is old, games you bought after saving it may be mistaken for shared ones, so save it again after you buy games. This is only tested on a small family: please [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) if games are missing.
+
+</details>
+
+<details>
+<summary><b>What happens if I change the colour after I made covers?</b></summary>
+
+When you click **Make covers**, the app asks before it replaces the covers you already made in another colour. If you say yes, it rebuilds them all in the new colour, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read.
 
 </details>
 

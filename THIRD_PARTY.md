@@ -25,7 +25,7 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 The font and the SVG sources are only used by `tools/build_frame.py`, `tools/build_icon.py` and `tools/build_default_art.py` to render `assets/frame.png`, the icons and `assets/default_art.png`. They are not needed to run the app.
 
 ## Game artwork
-The preview image at the top of the README (`assets/preview.png`) shows covers of a few games (SnowRunner, Coral Island, Clair Obscur: Expedition 33, Fallout 4 and V Rising), and the screenshot of a Steam library further down (`assets/steam-library.png`) shows covers of about twenty games, only to show what the app produces. That artwork, and the games' names and logos, belong to their publishers and developers. They are not covered by this project's license. If a rights holder objects, the image will be removed.
+The preview image at the top of the README (`assets/preview.png`) shows covers of a few games (SnowRunner, Coral Island, Clair Obscur: Expedition 33, Fallout 4 and V Rising), the screenshot of the app window (`assets/screenshot.png`) shows the same five, and the screenshot of a Steam library further down (`assets/steam-library.png`) shows covers of about twenty games, only to show what the app produces. That artwork, and the games' names and logos, belong to their publishers and developers. They are not covered by this project's license. If a rights holder objects, the image will be removed.
 
 Apart from those images, no game artwork is included. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.
 
