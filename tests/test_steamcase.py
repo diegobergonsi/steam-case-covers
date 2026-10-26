@@ -1140,6 +1140,17 @@ class MakeInColour(StoreMocks):
         self.assertTrue(self.is_green(self.corner(self.cover(2))))
         self.assertFalse(self.is_green(self.corner(self.cover(1))))
 
+    def test_existing_cover_hue_reads_the_colour_of_the_folder(self):
+        self.assertIsNone(sc.existing_cover_hue(os.path.join(self.tmp, "nowhere")))
+        self.assertIsNone(sc.existing_cover_hue(self.covers))                            # empty folder
+        sc.Image.new("RGBA", sc.SIZE).save(os.path.join(self.covers, "notes.png"))      # not named like one of our covers: ignored
+        self.assertIsNone(sc.existing_cover_hue(self.covers))
+        sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertEqual(sc.existing_cover_hue(self.covers), 134)
+        old = os.path.join(self.covers, "Old_2.png")                                     # made before colours existed: blue
+        sc.Image.new("RGBA", sc.SIZE).save(old)
+        self.assertEqual(sc.existing_cover_hue(self.covers), 134)                        # the first cover by name decides: Game_1_1.png
+
     def test_covers_in_other_colour(self):
         self.assertFalse(sc.covers_in_other_colour(os.path.join(self.tmp, "nowhere"), 134))
         self.assertFalse(sc.covers_in_other_colour(self.covers, 134))                    # empty folder
@@ -1193,6 +1204,16 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(5, 0, 0), 0)                                   # a track with no width: no division by zero
         self.assertEqual(f(5, 20, 10), 0)                                 # margins eat the whole width
 
+    def test_drag_mode_tells_a_slide_from_a_swipe(self):
+        f = self.w.drag_mode
+        self.assertIsNone(f(0, 0, 6))                      # a tap or a tiny wobble: undecided
+        self.assertIsNone(f(5, -5, 6))
+        self.assertEqual(f(20, 4, 6), "horizontal")        # sliding the thumb
+        self.assertEqual(f(-20, -19, 6), "horizontal")     # a diagonal that is mostly sideways still slides
+        self.assertEqual(f(3, 25, 6), "vertical")          # a swipe to scroll the page
+        self.assertEqual(f(-7, -30, 6), "vertical")
+        self.assertEqual(f(10, 10, 6), "horizontal")       # a perfect diagonal goes to the slider (a tie never scrolls by accident)
+
     def test_step_hue_keys(self):
         f = self.w.step_hue
         self.assertEqual(f(0, "Left"), 359)
@@ -1215,6 +1236,18 @@ class ColourCli(StoreMocks):
         self.assertEqual(sc.cover_hue(os.path.join(out, "Game_1_1.png")), 134)
         text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out0"))
         self.assertNotIn("custom colour", text)
+
+    def test_make_without_hue_keeps_the_colour_of_the_covers_already_there(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "134")
+        path = os.path.join(out, "Game_1_1.png")
+        before = self.read(path)
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)          # no --hue: do not turn red covers blue
+        self.assertEqual(self.read(path), before)
+        self.assertIn("in a custom colour", text)
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "0")    # asking for blue explicitly does
+        self.assertEqual(sc.cover_hue(path), 0)
 
     def test_a_bad_hue_is_refused_with_a_clear_message(self):
         import contextlib, io

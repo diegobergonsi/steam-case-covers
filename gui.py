@@ -374,12 +374,15 @@ class App(tk.Tk):
         self.colour_preview = tk.Label(box, bg=CARD)
         box.add(left)
         box.add(self.colour_preview, px(20))
+        found = sc.existing_cover_hue(self.covers_dir)          # reopening the app shows the colour of the covers you already made
+        if found:
+            self.hue.set(found)
         self.hue.trace_add("write", self._colour_changed)
         self._colour_changed()
 
     def _colour_changed(self, *_):
         hue = self.hue.get()
-        self.colour_name.configure(text="Original" if hue == 0 else "Custom")
+        self.colour_name.configure(text="Original" if hue == 0 else "Custom · %d°" % hue)
         for s in self.swatches:
             s.draw()
         if hue == 0:

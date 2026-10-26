@@ -305,6 +305,14 @@ def hue_from_x(x, width, margin):
     return max(0, min(359, round((x - margin) * 359 / span)))
 
 
+def drag_mode(dx, dy, threshold):
+    """What a pointer drag means once it has moved (dx, dy) pixels from where it started: None while it is still a tap, "horizontal" to slide the
+    thumb, "vertical" to scroll the page. A tie goes to the slider, so a sideways slide is never taken for a swipe."""
+    if max(abs(dx), abs(dy)) < threshold:
+        return None
+    return "horizontal" if abs(dx) >= abs(dy) else "vertical"
+
+
 def step_hue(hue, key, big=30):
     """The hue after a key press on the slider: arrows move 1 degree, PageUp/PageDown `big`, Home is 0, End is 359; arrows wrap around."""
     if key == "Home":
@@ -337,19 +345,21 @@ def _rainbow_png(w, h, colors):
 
 class HueSlider(_Stateful):
     """A rainbow slider that picks a hue, 0..359 degrees, into a tk.IntVar. `color_for(hue)` gives the '#rrggbb' to paint at that hue.
-    Mouse and touch drag it; arrows, PageUp/PageDown, Home and End work from the keyboard. A drag that starts here never scrolls the window."""
-    grabs_drag = True                      # ScrollFrame leaves drags that start on this widget alone
+    A tap or a sideways drag sets the hue; a mostly vertical swipe that starts on it scrolls the window instead (so a finger on its way to the
+    button below does not recolour the covers). Arrows, PageUp/PageDown, Home and End work from the keyboard."""
 
     def __init__(self, parent, variable, color_for, command=None, state="normal", bg=CARD):
         super().__init__(parent, width=px(260), height=px(52), bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
         self._init_state(state)
         self.variable, self.color_for, self.command, self._bg = variable, color_for, command, bg
         self._focus = False
+        self._start, self._mode = None, None                 # where the pointer went down, and what the drag turned out to be
         self._track, self._track_key = None, None
         variable.trace_add("write", lambda *a: self.draw())
         self.bind("<Configure>", lambda e: self.draw())
-        self.bind("<ButtonPress-1>", self._pointer)
-        self.bind("<B1-Motion>", self._pointer)
+        self.bind("<ButtonPress-1>", self._press)
+        self.bind("<B1-Motion>", self._motion)
+        self.bind("<ButtonRelease-1>", self._release)
         for key in ("Left", "Right", "Up", "Down", "Prior", "Next", "Home", "End"):
             self.bind("<%s>" % key, self._key)
         self.bind("<FocusIn>", lambda e: self._set_focus(True))
@@ -394,12 +404,32 @@ class HueSlider(_Stateful):
             if self.command:
                 self.command()
 
-    def _pointer(self, e):
-        if not self.enabled:
-            return
-        self.focus_set()
+    def _from_pointer(self, e):
         w, _, _, margin = self._geometry()
         self._set(hue_from_x(e.x, w, margin))
+
+    def _press(self, e):
+        if self.enabled:
+            self.focus_set()
+            self._start, self._mode = (e.x_root, e.y_root), None
+
+    def _motion(self, e):
+        if not (self.enabled and self._start):
+            return
+        if self._mode is None:
+            self._mode = drag_mode(e.x_root - self._start[0], e.y_root - self._start[1], px(6))
+        if self._mode == "horizontal":
+            self._from_pointer(e)
+
+    def _release(self, e):
+        tap = self.enabled and self._start and self._mode is None
+        self._start, self._mode = None, None
+        if tap:
+            self._from_pointer(e)
+
+    def claims_drag(self):
+        """True while a sideways drag is sliding the thumb: ScrollFrame must not also scroll."""
+        return self.enabled and self._mode == "horizontal"
 
     def _key(self, e):
         if self.enabled:
@@ -602,7 +632,7 @@ class ScrollFrame(tk.Frame):
         top.bind_all("<Button-4>", lambda e: self._scroll(-1), add="+")          # Linux
         top.bind_all("<Button-5>", lambda e: self._scroll(1), add="+")
         top.bind_all("<FocusIn>", self._focus, add="+")                          # Tab into something off-screen: scroll to it
-        self._drag = None                                                        # touch: a finger drag arrives as mouse press, motion, release
+        self._drag, self._drag_widget = None, None                               # touch: a finger drag arrives as mouse press, motion, release
         top.bind_all("<ButtonPress-1>", self._drag_start, add="+")
         top.bind_all("<B1-Motion>", self._drag_move, add="+")
         top.bind_all("<ButtonRelease-1>", self._drag_end, add="+")
@@ -632,12 +662,17 @@ class ScrollFrame(tk.Frame):
 
     def _drag_start(self, e):
         self._drag = None
-        if self.scrollable() and isinstance(e.widget, tk.Widget) and str(e.widget).startswith(str(self.inner)) and not getattr(e.widget, "grabs_drag", False):
+        if self.scrollable() and isinstance(e.widget, tk.Widget) and str(e.widget).startswith(str(self.inner)):
             self._drag = (e.y_root, self.canvas.canvasy(0), False)
+            self._drag_widget = e.widget
 
     def _drag_move(self, e):
         global _dragging
         if not self._drag:
+            return
+        claim = getattr(self._drag_widget, "claims_drag", None)
+        if claim and claim():                       # the widget is using this drag itself (the colour slider being slid sideways)
+            self._drag = None
             return
         y0, view0, moving = self._drag
         if not moving and abs(e.y_root - y0) < px(10):

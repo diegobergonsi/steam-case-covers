@@ -868,6 +868,20 @@ def covers_in_other_colour(covers_dir, hue):
     return False
 
 
+def existing_cover_hue(covers_dir):
+    """The case colour of the covers already in the folder (that of the first one by name), or None when there are none."""
+    try:
+        names = sorted(os.listdir(covers_dir))
+    except OSError:
+        return None
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            h = cover_hue(os.path.join(covers_dir, n))
+            if h is not None:
+                return h
+    return None
+
+
 def _safe_copy(src, dst):
     """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
     tmp = _tmp(dst)
@@ -1197,15 +1211,16 @@ def _hue_arg(text):
 
 def cmd_make(args):
     steam, games, family = _collect(args)
+    hue = args.hue if args.hue is not None else (existing_cover_hue(os.path.abspath(args.out)) or 0)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=args.hue)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
-          + (" | in a custom colour" if args.hue else ""))
+          + (" | in a custom colour" if hue else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
@@ -1311,8 +1326,9 @@ def main():
         common(p, make=True, apply_=(name == "run"))
         p.add_argument("--only", type=int, nargs="+", metavar="APPID", help="only these app IDs")
         p.add_argument("--force", action="store_true", help="rebuild covers that already exist")
-        p.add_argument("--hue", type=_hue_arg, default=0, metavar="DEGREES",
-                       help="turn the case colour by this many degrees, 0 to 359 (default 0: the original blue; covers in another colour are rebuilt)")
+        p.add_argument("--hue", type=_hue_arg, default=None, metavar="DEGREES",
+                       help="turn the case colour by this many degrees, 0 to 359 (0 is the original blue; covers in another colour are rebuilt). "
+                            "Default: the colour of the covers already in the folder, else the original blue")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
