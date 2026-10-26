@@ -899,7 +899,7 @@ class FamilyFrame(unittest.TestCase):
         if sc.Image is None:
             self.skipTest("Pillow missing")
         self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
-        self.family = sc.Image.open(sc.FRAME_FAMILY).convert("RGBA")
+        self.family = sc.load_frame(0, True)
 
     def test_family_frame_equals_the_plain_frame_outside_the_corner(self):
         self.assertEqual(self.family.size, sc.SIZE)
@@ -1011,6 +1011,43 @@ class FamilyCovers(Base):
         os.remove(os.path.join(self.steam, "appcache", "packageinfo.vdf"))            # ownership unknown: nothing is family
         text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out2"))
         self.assertNotIn("Family library", text)
+
+
+class CoverColour(unittest.TestCase):
+    """Rotating the hue of the case: shape, white parts and transparency stay, the family corner stays green."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
+
+    def test_hue_zero_is_the_untouched_frame(self):
+        for hue in (0, 360, -360):
+            self.assertEqual(sc.load_frame(hue).tobytes(), self.plain.tobytes())
+
+    def test_a_rotated_frame_keeps_shape_white_and_alpha(self):
+        turned = sc.load_frame(134)
+        self.assertEqual(turned.getchannel("A").tobytes(), self.plain.getchannel("A").tobytes())
+        white = (255, 255, 255, 255)
+        self.assertEqual(list(turned.crop((0, 0, 600, 96)).getdata()).count(white), list(self.plain.crop((0, 0, 600, 96)).getdata()).count(white))
+        h0, s0, v0 = self.plain.convert("RGB").convert("HSV").getpixel((7, 450))
+        h1, s1, v1 = turned.convert("RGB").convert("HSV").getpixel((7, 450))
+        want = round(134 * 256 / 360)
+        self.assertLessEqual(min((h1 - h0 - want) % 256, (h0 + want - h1) % 256), 2)
+        self.assertLessEqual(abs(s1 - s0), 1)
+        self.assertLessEqual(abs(v1 - v0), 1)
+
+    def test_the_family_corner_stays_green_at_every_hue(self):
+        for hue in sc.HUE_SWATCHES:
+            r, g, b, a = sc.load_frame(hue, True).getpixel((8, 8))
+            self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (hue, (r, g, b)))
+            self.assertEqual(sc.load_frame(hue, True).getpixel((7, 450)), sc.load_frame(hue).getpixel((7, 450)))
+
+    def test_case_color_matches_the_rotated_frame(self):
+        import re
+        self.assertEqual(sc.case_color(0), "#1636c8")
+        for hue in sc.HUE_SWATCHES:
+            self.assertRegex(sc.case_color(hue), r"^#[0-9a-f]{6}$")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image
@@ -32,7 +32,8 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
 
 HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
-FRAME_FAMILY = os.path.join(HERE, "assets", "frame_family.png")      # frame.png plus the green corner for games from the Steam Family library
+FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
+HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
 FAMILY_ICON_CONTRAST = 4.5                  # WCAG AA for normal text; the icon must never fall below it
 WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y0, x1, y1)
@@ -666,6 +667,32 @@ def list_games(games, log=None):
 
 
 # ---------- drawing ----------
+def recolor_frame(frame, hue):
+    """The frame with its hue turned by `hue` degrees. Saturation, brightness and transparency stay, so the shading and the white parts stay;
+    0 degrees returns the frame itself (the original blue, byte for byte)."""
+    shift = round((hue % 360) * 256 / 360) % 256                  # Pillow's hue band runs 0..255
+    if not shift:
+        return frame
+    r, g, b, a = frame.split()
+    h, s, v = Image.merge("RGB", (r, g, b)).convert("HSV").split()
+    h = h.point(lambda x: (x + shift) % 256)
+    return Image.merge("RGBA", (*Image.merge("HSV", (h, s, v)).convert("RGB").split(), a))
+
+
+def load_frame(hue=0, family=False):
+    """The case frame in the wanted colour; with family=True the green corner of the Steam Family library is laid over it (never recoloured)."""
+    frame = recolor_frame(Image.open(FRAME).convert("RGBA"), hue)
+    if family:
+        frame = Image.alpha_composite(frame, Image.open(FAMILY_CORNER).convert("RGBA"))
+    return frame
+
+
+@functools.lru_cache(maxsize=None)
+def case_color(hue):
+    """'#rrggbb' of the case's middle colour (the original is #1636c8) turned by `hue` degrees: for painting swatches and the colour slider."""
+    return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue % 360).getpixel((0, 0))[:3]
+
+
 def build_cover(portrait_path, out_path, frame):
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
@@ -703,7 +730,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     os.makedirs(out, exist_ok=True)
     frame = Image.open(FRAME).convert("RGBA")
     family = set(family or ())
-    frame_family = Image.open(FRAME_FAMILY).convert("RGBA") if family else None
+    frame_family = load_frame(0, True) if family else None
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -916,14 +943,13 @@ def _frame_regions():
         fr = Image.open(FRAME).convert("RGBA")
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
         tops = [fr.crop(top).tobytes()]
-        if os.path.exists(FRAME_FAMILY):                    # the family frame differs from the plain one only in the corner triangle
-            tops.append(Image.open(FRAME_FAMILY).convert("RGBA").crop(top).tobytes())
+        tops.append(load_frame(0, True).crop(top).tobytes())          # the family frame differs from the plain one only in the corner triangle
         _frame_ref = (top, bot, tuple(tops), fr.crop(bot).tobytes())
     return _frame_ref
 
 
 def is_steamcase_cover(path):
-    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png (or frame_family.png) exactly.
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png (or the family frame) exactly.
     Art you set yourself never matches, so it is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
