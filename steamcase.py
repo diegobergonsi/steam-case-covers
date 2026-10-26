@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, json, os, re, shutil, socket, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, filecmp, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image
@@ -49,6 +49,8 @@ MAX_DOWNLOAD = 25 * 1024 * 1024          # a cover portrait is ~1 MB; anything b
 MAX_LIBRARY_FILE = 20 * 1024 * 1024      # a real library list is a few KB
 MAX_APPS = 100_000                       # a real library has at most a few thousand apps
 MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompression bombs
+MAX_PACKAGEINFO = 64 * 1024 * 1024       # Steam's own package list is a few hundred KB
+_PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
@@ -333,16 +335,21 @@ def installed_games(steam):
     return games
 
 
-def owned_ids(json_path):
+def _load_library_json(json_path):
     path = os.path.expanduser(json_path)
     try:
         if os.path.getsize(path) > MAX_LIBRARY_FILE:
             raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
-        d = json.load(open(path, encoding="utf-8-sig"))
+        with open(path, encoding="utf-8-sig") as f:
+            return json.load(f)
     except SteamcaseError:
         raise
     except (OSError, ValueError, RecursionError, MemoryError, UnicodeError) as e:
         raise SteamcaseError("Could not read %s as a game list (%s)." % (os.path.basename(path), type(e).__name__))
+
+
+def owned_ids(json_path):
+    d = _load_library_json(json_path)
     ids = d.get("rgOwnedApps") if isinstance(d, dict) else None
     if isinstance(ids, list) and not ids and "rgOwnedPackages" in d:
         raise SteamcaseError("That file has no games in it. This usually means you were not logged in to Steam in your browser when you saved it. "
@@ -360,6 +367,77 @@ def owned_ids(json_path):
     if not out:
         raise SteamcaseError("The game list in that file is empty. Save %s while logged in to Steam." % LIBRARY_JSON_URL)
     return out
+
+
+def owned_packages(json_path):
+    """Package ids from the library file ('rgOwnedPackages'). Free, bundled and old games belong to a package without being in 'rgOwnedApps'.
+    [] when the file has none."""
+    d = _load_library_json(json_path)
+    ids = d.get("rgOwnedPackages") if isinstance(d, dict) else None
+    if not isinstance(ids, list):
+        return []
+    return [i for i in ids if type(i) is int and 0 <= i < 2 ** 32][:MAX_APPS]
+
+
+def _read_binary_kv(data, pos, depth=0):
+    """One Valve binary key-value tree starting at data[pos]: (dict, position after it). Raises on anything it does not understand."""
+    if depth > 8:
+        raise ValueError("tree too deep")
+    out = {}
+    while True:
+        kind = data[pos]
+        pos += 1
+        if kind == 8:
+            return out, pos
+        end = data.index(b"\0", pos)
+        key = data[pos:end].decode("utf-8", "replace")
+        pos = end + 1
+        if kind == 0:
+            out[key], pos = _read_binary_kv(data, pos, depth + 1)
+        elif kind == 1:
+            end = data.index(b"\0", pos)
+            out[key] = data[pos:end].decode("utf-8", "replace")
+            pos = end + 1
+        elif kind in (2, 4, 5):
+            out[key] = struct.unpack_from("<i", data, pos)[0]
+            pos += 4
+        elif kind in (3, 6):
+            out[key] = struct.unpack_from("<I" if kind == 6 else "<f", data, pos)[0]
+            pos += 4
+        elif kind in (7, 10):
+            out[key] = struct.unpack_from("<Q", data, pos)[0]
+            pos += 8
+        else:
+            raise ValueError("unknown value type %d" % kind)
+
+
+def package_apps(steam, package_ids):
+    """Every app id inside the given packages, read from Steam's own appcache/packageinfo.vdf.
+    None when that file is missing or not in a layout we know: callers then treat ownership as unknown."""
+    path = os.path.join(steam, "appcache", "packageinfo.vdf")
+    wanted = set(package_ids)
+    try:
+        if os.path.getsize(path) > MAX_PACKAGEINFO:
+            return None
+        with open(path, "rb") as f:
+            data = f.read()
+        magic = struct.unpack_from("<I", data, 0)[0]
+        if magic not in _PACKAGEINFO_MAGICS:
+            return None
+        pos, apps = 8, set()                       # magic and universe come first, then one entry per package
+        while True:
+            pid = struct.unpack_from("<I", data, pos)[0]
+            pos += 4
+            if pid == 0xFFFFFFFF:
+                return apps
+            pos += 24 + (8 if magic == 0x06565528 else 0)        # hash (20), change number (4), and a token (8) in the newer header
+            tree, pos = _read_binary_kv(data, pos)
+            if pid in wanted:
+                ids = (tree.get(str(pid)) or {}).get("appids")
+                if isinstance(ids, dict):
+                    apps.update(v for v in ids.values() if type(v) is int and 0 < v < 2 ** 32)
+    except (OSError, ValueError, struct.error, IndexError, RecursionError, MemoryError):
+        return None
 
 
 def load_games(steam, library_json=None):

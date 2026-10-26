@@ -729,5 +729,65 @@ class Attacks(Base):
         self.assertIsNone(sc.appid_of("Game_0.png"))
 
 
+def write_packageinfo(path, packages, magic=0x06565528):
+    """A packageinfo.vdf in Steam's real layout: header, then one binary key-value tree per package, then 0xFFFFFFFF."""
+    def kv(d):
+        out = b""
+        for k, v in d.items():
+            key = k.encode() + b"\0"
+            out += (b"\x00" + key + kv(v)) if isinstance(v, dict) else (b"\x02" + key + struct.pack("<i", v))
+        return out + b"\x08"
+    body = struct.pack("<II", magic, 1)
+    for pid, apps in packages.items():
+        body += struct.pack("<I", pid) + b"\0" * 20 + struct.pack("<I", 7)
+        if magic >= 0x06565528:
+            body += b"\0" * 8
+        body += kv({str(pid): {"packageid": pid, "appids": {str(i): a for i, a in enumerate(apps)}}})
+    with open(path, "wb") as f:
+        f.write(body + struct.pack("<I", 0xFFFFFFFF))
+
+
+class FamilyOwnership(Base):
+    """Which apps are yours, through packages as well as through the owned-apps list."""
+
+    def packageinfo(self, packages, **kw):
+        os.makedirs(os.path.join(self.steam, "appcache"), exist_ok=True)
+        path = os.path.join(self.steam, "appcache", "packageinfo.vdf")
+        write_packageinfo(path, packages, **kw)
+        return path
+
+    def test_package_apps_reads_the_apps_of_the_listed_packages(self):
+        self.packageinfo({0: [570, 340], 7: [100], 8: [200]})
+        self.assertEqual(sc.package_apps(self.steam, [0, 7]), {570, 340, 100})
+
+    def test_package_apps_also_reads_the_older_header_without_a_token(self):
+        self.packageinfo({0: [570], 7: [100]}, magic=0x06565527)
+        self.assertEqual(sc.package_apps(self.steam, [0, 7]), {570, 100})
+
+    def test_package_apps_is_none_when_the_file_is_missing_truncated_garbage_or_huge(self):
+        self.assertIsNone(sc.package_apps(self.steam, [0]))                       # no file
+        path = self.packageinfo({0: [570], 7: [100]})
+        good = self.read(path)
+        for bad in (good[:len(good) // 2], os.urandom(4096), struct.pack("<II", 0x12345678, 1) + good[8:]):
+            with open(path, "wb") as f:
+                f.write(bad)
+            self.assertIsNone(sc.package_apps(self.steam, [0, 7]))
+        with open(path, "wb") as f:
+            f.write(good)
+        real = sc.MAX_PACKAGEINFO
+        sc.MAX_PACKAGEINFO = 10
+        self.addCleanup(setattr, sc, "MAX_PACKAGEINFO", real)
+        self.assertIsNone(sc.package_apps(self.steam, [0, 7]))                    # over the size cap
+
+    def test_owned_packages_reads_the_list_and_tolerates_a_missing_key(self):
+        lib = os.path.join(self.tmp, "userdata.json")
+        with open(lib, "w") as f:
+            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0, 5, "x", -1, 2 ** 40]}, f)
+        self.assertEqual(sc.owned_packages(lib), [0, 5])
+        with open(lib, "w") as f:
+            json.dump({"rgOwnedApps": [1]}, f)
+        self.assertEqual(sc.owned_packages(lib), [])
+
+
 if __name__ == "__main__":
     unittest.main()
