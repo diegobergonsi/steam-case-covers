@@ -949,6 +949,45 @@ class FamilyCovers(Base):
         img.save(tampered)
         self.assertFalse(sc.is_steamcase_cover(tampered))
 
+    # ---- command line ----
+    def fake_library(self, with_family):
+        """Steam with one owned game (1) and, if asked, one game that is only in the cache (2); returns the library file."""
+        os.makedirs(os.path.join(self.steam, "appcache", "librarycache", "2" if with_family else "1"), exist_ok=True)
+        write_packageinfo(os.path.join(self.steam, "appcache", "packageinfo.vdf"), {0: [1]})
+        path = os.path.join(self.tmp, "userdata.json")
+        with open(path, "w") as f:
+            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0]}, f)
+        return path
+
+    def run_cli(self, *args):
+        import contextlib, io
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["steamcase"] + list(args)
+        try:
+            with contextlib.redirect_stdout(out):
+                sc.main()
+        finally:
+            sys.argv = argv
+        return out.getvalue()
+
+    def test_list_marks_family_games(self):
+        lib = self.fake_library(True)
+        text = self.run_cli("list", "--steam-dir", self.steam, "--library", lib)
+        lines = text.splitlines()
+        self.assertIn("2 Game 2  (family)", lines)
+        self.assertIn("1 Game 1", lines)
+        self.assertIn("1 from your Steam Family library", text)
+
+    def test_make_summary_mentions_family_only_when_there_are_some(self):
+        lib = self.fake_library(True)
+        out = os.path.join(self.tmp, "out")
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)
+        self.assertIn("1 from your Steam Family library", text)
+        self.assertTrue(self.is_green(self.corner(os.path.join(out, "Game_2_2.png"))))
+        os.remove(os.path.join(self.steam, "appcache", "packageinfo.vdf"))            # ownership unknown: nothing is family
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out2"))
+        self.assertNotIn("Family library", text)
+
 
 if __name__ == "__main__":
     unittest.main()

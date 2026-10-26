@@ -393,10 +393,10 @@ class App(tk.Tk):
         """Runs off the UI thread; talks to the UI only through self.events."""
         try:
             steam = sc.steam_dir()
-            games = sc.load_games(steam, lib)
+            games, family = sc.load_library(steam, lib)
             if not games:
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
-            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip,
+            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family,
                                  progress=lambda *a: self.events.put(("progress",) + a),
                                  cancelled=self.cancel_flag.is_set)
             self.events.put(("done", res))
@@ -482,6 +482,9 @@ class App(tk.Tk):
         text = "%s%d covers ready." % ("Stopped. " if res["cancelled"] else "Done. ", n)
         if miss:
             text += " %d %s no portrait on Steam." % (miss, "game has" if miss == 1 else "games have")
+        fam = res.get("family", 0)
+        if fam:
+            text += " %d of them %s and %s a green corner." % (fam, "is a family game" if fam == 1 else "are family games", "has" if fam == 1 else "have")
         skipped = res.get("not_games", 0) + res.get("unlisted", 0)
         if skipped:
             text += " Skipped %d items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists)." % skipped

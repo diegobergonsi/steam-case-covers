@@ -1075,27 +1075,32 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
 # ---------- command line ----------
 def _collect(args):
     steam = steam_dir(args.steam_dir)
-    return steam, load_games(steam, args.library)
+    games, family = load_library(steam, args.library)
+    return steam, games, family
 
 
 def cmd_list(args):
-    steam, games = _collect(args)
+    steam, games, family = _collect(args)
     print("Steam folder:", steam)
     rows = list_games(games, print)
     for appid, name in rows:
-        print(appid, name)
+        print("%d %s%s" % (appid, name, "  (family)" if appid in family else ""))
     print("\n%d games%s" % (len(rows), "" if args.library else "  (installed only; add --library userdata.json for your whole library)"))
+    shared = sum(1 for appid, _ in rows if appid in family)
+    if shared:
+        print("%d from your Steam Family library" % shared)
 
 
 def cmd_make(args):
-    steam, games = _collect(args)
+    steam, games, family = _collect(args)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print)
-    print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"])))
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family)
+    print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
+          + (" | %d from your Steam Family library" % res["family"] if res["family"] else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
