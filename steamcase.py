@@ -17,9 +17,10 @@ The functions below are the engine. The CLI at the bottom and gui.py both use th
 import argparse, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageChops
+    from PIL.PngImagePlugin import PngInfo
 except ImportError:
-    Image = None
+    Image = ImageChops = PngInfo = None
 
 try:
     import certifi                      # a bundled set of trusted certificates (the packaged app's own Python may not find the system's)
@@ -693,7 +694,23 @@ def case_color(hue):
     return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue % 360).getpixel((0, 0))[:3]
 
 
-def build_cover(portrait_path, out_path, frame):
+HUE_CHUNK = "steamcase-hue"
+
+
+def cover_hue(path):
+    """The case colour (degrees turned from the original blue) a cover was made in, read from its PNG header without decoding the picture.
+    Covers made before colours existed have no such note and count as 0. None if this is not a readable PNG file of ours-sized."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return None
+        with Image.open(path, formats=["PNG"]) as im:
+            value = im.info.get(HUE_CHUNK)
+        return int(value) % 360 if isinstance(value, str) and re.fullmatch(r"[0-9]{1,3}", value) else 0
+    except Exception:
+        return None
+
+
+def build_cover(portrait_path, out_path, frame, hue=0):
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
@@ -709,7 +726,9 @@ def build_cover(portrait_path, out_path, frame):
     canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     canvas.paste(art, (x0, y0))
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
-    Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True)
+    note = PngInfo()
+    note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
+    Image.alpha_composite(canvas, frame).save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
 
@@ -936,21 +955,43 @@ class _Lock:
 _frame_ref = None
 
 
+def _shape(strip):
+    """Saturation, brightness and transparency of a strip of a cover. The hue is left out on purpose: a recoloured case still counts as ours."""
+    r, g, b, a = strip.split()
+    _, s, v = Image.merge("RGB", (r, g, b)).convert("HSV").split()
+    return s, v, a
+
+
 def _frame_regions():
-    """The parts of a cover that are pure frame (banner on top, lip at the bottom), from frame.png."""
+    """The parts of a cover that are pure frame (banner on top, lip at the bottom), from frame.png and from the family frame.
+    Each reference is (shape, mask): mask is None, or marks the pixels worth comparing (the family corner's soft edge is left out: it
+    blends the green with the banner, so its saturation depends on the colour the case was turned to)."""
     global _frame_ref
     if _frame_ref is None:
-        fr = Image.open(FRAME).convert("RGBA")
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
-        tops = [fr.crop(top).tobytes()]
-        tops.append(load_frame(0, True).crop(top).tobytes())          # the family frame differs from the plain one only in the corner triangle
-        _frame_ref = (top, bot, tuple(tops), fr.crop(bot).tobytes())
+        plain, family = load_frame(0), load_frame(0, True)          # the family frame differs from the plain one only in the corner triangle
+        edge = Image.open(FAMILY_CORNER).convert("RGBA").getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0)
+        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None), (_shape(family.crop(top)), edge)), (_shape(plain.crop(bot)), None))
     return _frame_ref
 
 
+def _same_shape(a, ref):
+    """Same transparency exactly, and saturation and brightness within 2 levels (turning the hue moves them by at most 1)."""
+    (s, v, alpha), mask = ref
+    if a[2].tobytes() != alpha.tobytes():
+        return False
+    for x, y in ((a[0], s), (a[1], v)):
+        diff = ImageChops.difference(x, y)
+        if mask is not None:
+            diff = ImageChops.darker(diff, mask)
+        if diff.getextrema()[1] > 2:
+            return False
+    return True
+
+
 def is_steamcase_cover(path):
-    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge match frame.png (or the family frame) exactly.
-    Art you set yourself never matches, so it is never mistaken for ours."""
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge have the shape of frame.png (or of the family frame),
+    whatever colour the case was turned to. Art you set yourself never matches, so it is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return False
@@ -959,7 +1000,8 @@ def is_steamcase_cover(path):
             if im.size != SIZE:
                 return False
             im = im.convert("RGBA")
-        return im.crop(top).tobytes() in ref_tops and im.crop(bot).tobytes() == ref_bot
+        banner = _shape(im.crop(top))
+        return any(_same_shape(banner, ref) for ref in ref_tops) and _same_shape(_shape(im.crop(bot)), ref_bot)
     except Exception:
         return False
 

@@ -1050,5 +1050,56 @@ class CoverColour(unittest.TestCase):
             self.assertRegex(sc.case_color(hue), r"^#[0-9a-f]{6}$")
 
 
+class CoverColourFiles(Base):
+    """What is written into a cover file, and recognising covers of every colour."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.src = os.path.join(self.tmp, "portrait.png")
+        sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
+
+    def make(self, name, hue=0, family=False):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.src, out, sc.load_frame(hue, family), hue)
+        return out
+
+    def test_cover_hue_reads_the_recorded_hue_and_treats_old_covers_as_zero(self):
+        self.assertEqual(sc.cover_hue(self.make("a.png", 134)), 134)
+        self.assertEqual(sc.cover_hue(self.make("b.png", 360 + 5)), 5)                 # recorded already wrapped
+        old = os.path.join(self.tmp, "old.png")
+        sc.Image.new("RGBA", sc.SIZE).save(old)                                         # made before this feature: no hue chunk
+        self.assertEqual(sc.cover_hue(old), 0)
+        self.assertIsNone(sc.cover_hue(os.path.join(self.tmp, "missing.png")))
+        jpeg = os.path.join(self.tmp, "j.png")
+        sc.Image.new("RGB", (10, 10)).save(jpeg, format="JPEG")
+        self.assertIsNone(sc.cover_hue(jpeg))
+        link = os.path.join(self.tmp, "link.png")
+        try:
+            os.symlink(old, link)
+        except (OSError, NotImplementedError):
+            return                                                                      # no symlinks here (Windows without privilege)
+        self.assertIsNone(sc.cover_hue(link))
+
+    def test_covers_of_every_colour_are_recognised_and_look_alikes_are_not(self):
+        for hue in sc.HUE_SWATCHES:
+            for family in (False, True):
+                self.assertTrue(sc.is_steamcase_cover(self.make("c.png", hue, family)), (hue, family))
+        flat = os.path.join(self.tmp, "flat.png")
+        sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255)).save(flat)
+        self.assertFalse(sc.is_steamcase_cover(flat))
+        for hue in (0, 134):
+            real = self.make("r.png", hue)
+            grey = os.path.join(self.tmp, "grey.png")
+            sc.Image.open(real).convert("L").convert("RGBA").save(grey)
+            self.assertFalse(sc.is_steamcase_cover(grey), hue)
+            img = sc.Image.open(real).convert("RGBA")
+            img.putpixel((400, 10), (1, 2, 3, 255))
+            tampered = os.path.join(self.tmp, "t.png")
+            img.save(tampered)
+            self.assertFalse(sc.is_steamcase_cover(tampered), hue)
+
+
 if __name__ == "__main__":
     unittest.main()
