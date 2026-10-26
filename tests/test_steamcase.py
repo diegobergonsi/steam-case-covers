@@ -940,6 +940,27 @@ class StoreMocks(Base):
     def is_green(self, rgb):
         return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
 
+    # ---- command line ----
+    def fake_library(self, with_family):
+        """Steam with one owned game (1) and, if asked, one game that is only in the cache (2); returns the library file."""
+        os.makedirs(os.path.join(self.steam, "appcache", "librarycache", "2" if with_family else "1"), exist_ok=True)
+        write_packageinfo(os.path.join(self.steam, "appcache", "packageinfo.vdf"), {0: [1]})
+        path = os.path.join(self.tmp, "userdata.json")
+        with open(path, "w") as f:
+            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0]}, f)
+        return path
+
+    def run_cli(self, *args):
+        import contextlib, io
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["steamcase"] + list(args)
+        try:
+            with contextlib.redirect_stdout(out):
+                sc.main()
+        finally:
+            sys.argv = argv
+        return out.getvalue()
+
 
 class FamilyCovers(StoreMocks):
     """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
@@ -976,27 +997,6 @@ class FamilyCovers(StoreMocks):
         img.putpixel((400, 10), (1, 2, 3, 255))                              # one banner pixel outside the corner
         img.save(tampered)
         self.assertFalse(sc.is_steamcase_cover(tampered))
-
-    # ---- command line ----
-    def fake_library(self, with_family):
-        """Steam with one owned game (1) and, if asked, one game that is only in the cache (2); returns the library file."""
-        os.makedirs(os.path.join(self.steam, "appcache", "librarycache", "2" if with_family else "1"), exist_ok=True)
-        write_packageinfo(os.path.join(self.steam, "appcache", "packageinfo.vdf"), {0: [1]})
-        path = os.path.join(self.tmp, "userdata.json")
-        with open(path, "w") as f:
-            json.dump({"rgOwnedApps": [1], "rgOwnedPackages": [0]}, f)
-        return path
-
-    def run_cli(self, *args):
-        import contextlib, io
-        out, argv = io.StringIO(), sys.argv
-        sys.argv = ["steamcase"] + list(args)
-        try:
-            with contextlib.redirect_stdout(out):
-                sc.main()
-        finally:
-            sys.argv = argv
-        return out.getvalue()
 
     def test_list_marks_family_games(self):
         lib = self.fake_library(True)
@@ -1202,6 +1202,30 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(200, "Home"), 0)
         self.assertEqual(f(10, "End"), 359)
         self.assertEqual(f(77, "x"), 77)
+
+
+class ColourCli(StoreMocks):
+    """--hue on the command line."""
+
+    def test_make_accepts_a_hue(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "134")
+        self.assertIn("in a custom colour", text)
+        self.assertEqual(sc.cover_hue(os.path.join(out, "Game_1_1.png")), 134)
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out0"))
+        self.assertNotIn("custom colour", text)
+
+    def test_a_bad_hue_is_refused_with_a_clear_message(self):
+        import contextlib, io
+        lib = self.fake_library(False)
+        for bad in ("400", "-1", "abc", "1.5", ""):
+            out = os.path.join(self.tmp, "out_" + (bad or "empty"))
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", bad)
+            self.assertIn("0 to 359", err.getvalue(), bad)
+            self.assertFalse(os.path.exists(out), bad)                                   # nothing was built
 
 
 if __name__ == "__main__":

@@ -134,6 +134,7 @@ Changed your mind?
 ✅ Undo, step by step, and a reset to Steam's default art <br>
 ✅ Cancel anytime; run again to continue <br>
 ✅ Optional "skip blurry covers" for games Steam has no real portrait for <br>
+✅ Pick the colour of the cases with a slider or a ready-made swatch, with a live preview. Only the original blue is checked for readable text <br>
 ✅ Several Steam accounts on one computer: you choose which one gets the covers <br>
 ✅ Games shared through Steam Family Sharing get covers too, with a green corner and a family icon so you can tell them apart. The app finds them in Steam's own files on your computer, with nothing extra to download. This is only tested on a small family, so please open an issue if games are missing from a big shared library. Save your game list again after you buy games, so the new ones are not mistaken for family games <br>
 ✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
@@ -165,6 +166,7 @@ Everything the window does is also available in a terminal:
 
 ```bash
 python steamcase.py make --library userdata.json   # build covers
+python steamcase.py make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
 python steamcase.py apply --close-steam            # install them
 python steamcase.py restore                        # undo the last apply
 python steamcase.py reset                          # back to Steam's default art
@@ -180,7 +182,7 @@ python steamcase.py reset --everything             # ...also removing art from o
 | `restore` | Undo the last apply (run again to go further back) |
 | `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
 
-Run `python steamcase.py -h` for all options, such as `--only`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
+Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
 ## FAQ
 

@@ -1189,6 +1189,12 @@ def cmd_list(args):
         print("%d from your Steam Family library" % shared)
 
 
+def _hue_arg(text):
+    if not re.fullmatch(r"[0-9]{1,3}", text) or int(text) > 359:
+        raise argparse.ArgumentTypeError("%r is not a whole number from 0 to 359" % text)
+    return int(text)
+
+
 def cmd_make(args):
     steam, games, family = _collect(args)
 
@@ -1196,9 +1202,10 @@ def cmd_make(args):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=args.hue)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
-          + (" | %d from your Steam Family library" % res["family"] if res["family"] else ""))
+          + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
+          + (" | in a custom colour" if args.hue else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
@@ -1304,6 +1311,8 @@ def main():
         common(p, make=True, apply_=(name == "run"))
         p.add_argument("--only", type=int, nargs="+", metavar="APPID", help="only these app IDs")
         p.add_argument("--force", action="store_true", help="rebuild covers that already exist")
+        p.add_argument("--hue", type=_hue_arg, default=0, metavar="DEGREES",
+                       help="turn the case colour by this many degrees, 0 to 359 (default 0: the original blue; covers in another colour are rebuilt)")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
