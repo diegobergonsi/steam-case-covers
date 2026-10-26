@@ -1086,6 +1086,15 @@ class CoverColourFiles(Base):
             return                                                                      # no symlinks here (Windows without privilege)
         self.assertIsNone(sc.cover_hue(link))
 
+    def test_an_unreadable_hue_note_is_not_taken_for_blue(self):
+        from PIL.PngImagePlugin import PngInfo
+        for value, want in (("0", 0), ("5", 5), ("359", 359), ("360", None), ("999", None), ("-5", None), ("12345", None), ("abc", None), ("", None), ("007", None), ("\u0663", None)):
+            note = PngInfo()
+            note.add_text("steamcase-hue", value)
+            path = os.path.join(self.tmp, "n.png")
+            sc.Image.new("RGBA", sc.SIZE).save(path, pnginfo=note)
+            self.assertEqual(sc.cover_hue(path), want, repr(value))
+
     def test_covers_of_every_colour_are_recognised_and_look_alikes_are_not(self):
         for hue in sc.HUE_SWATCHES:
             for family in (False, True):
@@ -1139,6 +1148,21 @@ class MakeInColour(StoreMocks):
         sc.make_covers({1: None, 2: None}, self.covers, family={2}, hue=134)
         self.assertTrue(self.is_green(self.corner(self.cover(2))))
         self.assertFalse(self.is_green(self.corner(self.cover(1))))
+
+    def test_hues_that_look_the_same_are_not_rebuilt(self):
+        # 1 and 2 degrees turn Pillow's 0..255 hue scale by the same step: the covers would come out identical
+        self.assertEqual(sc.hue_shift(1), sc.hue_shift(2))
+        self.assertNotEqual(sc.hue_shift(1), sc.hue_shift(3))
+        self.assertEqual(sc.hue_shift(0), sc.hue_shift(360))
+        sc.make_covers({1: None}, self.covers, hue=1)
+        before = self.read(self.cover(1))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, hue=2, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual((self.read(self.cover(1)), statuses), (before, ["exists"]))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 2))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 3))                      # a real step: rebuilt
+        sc.make_covers({1: None}, self.covers, hue=3)
+        self.assertEqual(sc.cover_hue(self.cover(1)), 3)
 
     def test_existing_cover_hue_reads_the_colour_of_the_folder(self):
         self.assertIsNone(sc.existing_cover_hue(os.path.join(self.tmp, "nowhere")))

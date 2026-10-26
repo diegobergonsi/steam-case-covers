@@ -22,7 +22,7 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 
 `assets/icon.*` (the app icon, source in `tools/src/icon.svg`) is original artwork released under the same license as the code (GPL-3.0-or-later). It deliberately does not use the Steam logo.
 
-The font and the SVG sources are only used by `tools/build_frame.py` and `tools/build_icon.py` to render `assets/frame.png` and the icons. They are not needed to run the app.
+The font and the SVG sources are only used by `tools/build_frame.py`, `tools/build_icon.py` and `tools/build_default_art.py` to render `assets/frame.png`, the icons and `assets/default_art.png`. They are not needed to run the app.
 
 ## Game artwork
 The preview image at the top of the README (`assets/preview.png`) shows covers of a few games (SnowRunner, Coral Island, Clair Obscur: Expedition 33, Fallout 4 and V Rising) only to show what the app produces. That artwork, and the games' names and logos, belong to their publishers and developers. They are not covered by this project's license. If a rights holder objects, the image will be removed.

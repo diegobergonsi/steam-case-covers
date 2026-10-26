@@ -669,10 +669,20 @@ def list_games(games, log=None):
 
 
 # ---------- drawing ----------
+def hue_shift(hue):
+    """How far `hue` degrees turns Pillow's hue band (0..255). Neighbouring whole degrees can share a step (1 and 2 do): the covers are then identical."""
+    return round((hue % 360) * 256 / 360) % 256
+
+
+def same_colour(a, b):
+    """True if two case hues (degrees, or None when unknown) give the same colour."""
+    return a is not None and b is not None and hue_shift(a) == hue_shift(b)
+
+
 def recolor_frame(frame, hue):
     """The frame with its hue turned by `hue` degrees. Saturation, brightness and transparency stay, so the shading and the white parts stay;
     0 degrees returns the frame itself (the original blue, byte for byte)."""
-    shift = round((hue % 360) * 256 / 360) % 256                  # Pillow's hue band runs 0..255
+    shift = hue_shift(hue)
     if not shift:
         return frame
     r, g, b, a = frame.split()
@@ -719,13 +729,16 @@ def preview_cover(hue=0, family=False):
 
 def cover_hue(path):
     """The case colour (degrees turned from the original blue) a cover was made in, read from its PNG header without decoding the picture.
-    Covers made before colours existed have no such note and count as 0. None if this is not a readable PNG file of ours-sized."""
+    Covers made before colours existed have no such note and count as 0. None if this is not a readable PNG, or if the note is not a whole number
+    from 0 to 359 (then the cover is rebuilt rather than taken for blue)."""
     try:
         if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return None
         with Image.open(path, formats=["PNG"]) as im:
             value = im.info.get(HUE_CHUNK)
-        return int(value) % 360 if isinstance(value, str) and re.fullmatch(r"[0-9]{1,3}", value) else 0
+        if value is None:
+            return 0
+        return int(value) if isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", value) and int(value) < 360 else None
     except Exception:
         return None
 
@@ -811,7 +824,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        if os.path.exists(dest) and not force and cover_hue(dest) == hue:
+        if os.path.exists(dest) and not force and same_colour(cover_hue(dest), hue):
             res["ok"] += 1
             res["files"].append(dest)
             report(n, appid, name, "exists")
@@ -863,8 +876,10 @@ def covers_in_other_colour(covers_dir, hue):
     except OSError:
         return False
     for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None and cover_hue(os.path.join(covers_dir, n)) not in (None, hue % 360):
-            return True
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            h = cover_hue(os.path.join(covers_dir, n))
+            if h is not None and not same_colour(h, hue):
+                return True
     return False
 
 
