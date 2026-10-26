@@ -788,6 +788,14 @@ class FamilyOwnership(Base):
         self.packageinfo({i: [100 + i] for i in range(10)})
         self.assertEqual(sc.package_apps(self.steam, list(range(10))), {100 + i for i in range(10)})
 
+    def test_package_apps_refuses_a_file_over_16_mb(self):
+        # a real packageinfo.vdf is a few hundred KB; a huge one could only make us use a lot of memory
+        path = self.packageinfo({0: [570]})
+        self.assertEqual(sc.package_apps(self.steam, [0]), {570})
+        with open(path, "ab") as f:
+            f.write(b"\0" * (17 * 1024 * 1024))                                      # padding after the end marker, which the parser would ignore
+        self.assertIsNone(sc.package_apps(self.steam, [0]))
+
     def test_package_apps_survives_a_tree_of_an_odd_shape(self):
         path = self.packageinfo({})
         tree = b"\x01" + b"7\0" + b"x\0" + b"\x08"                                   # {"7": "x"}: a string where a section belongs
