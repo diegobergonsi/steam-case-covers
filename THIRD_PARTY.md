@@ -9,6 +9,8 @@ This project is **not affiliated with, endorsed by, or sponsored by Valve Corpor
 
 These marks appear in `assets/frame.png` only to mimic a physical box and show platform support. They remain the property of their owners. If you are a rights holder and want something changed, open an issue.
 
+`assets/frame_family.png` adds a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
+
 ## Included files
 | File | Source | License |
 |---|---|---|

@@ -3,6 +3,8 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Games from your Steam Family library (borrowed through Family Sharing) now get covers. They have a green corner with a family icon, so you can tell them from games you own. The app finds them in Steam's own files, so there is nothing extra to download. Free and bundled games you own are not marked. Only tested on a small family so far.
+- "Reset to Steam's default art" recognizes the new family covers as well as the old ones. `list` marks family games with `(family)`.
 
 ## [1.2.1] - 2026-10-21
 - Windows: a cover could occasionally fail to save when antivirus or a second copy of the app held the file for a moment. Saving now waits and retries a few times.
