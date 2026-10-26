@@ -779,6 +779,22 @@ class FamilyOwnership(Base):
         self.addCleanup(setattr, sc, "MAX_PACKAGEINFO", real)
         self.assertIsNone(sc.package_apps(self.steam, [0, 7]))                    # over the size cap
 
+    def test_package_apps_is_none_when_the_file_lacks_most_of_your_packages(self):
+        # e.g. Steam is logged into another account, or its appcache was just cleared: the file parses but is not about you
+        self.packageinfo({})
+        self.assertIsNone(sc.package_apps(self.steam, [0, 5]))
+        self.packageinfo({i: [100 + i] for i in range(8)})
+        self.assertIsNone(sc.package_apps(self.steam, list(range(10))))             # 8 of 10 found
+        self.packageinfo({i: [100 + i] for i in range(10)})
+        self.assertEqual(sc.package_apps(self.steam, list(range(10))), {100 + i for i in range(10)})
+
+    def test_package_apps_survives_a_tree_of_an_odd_shape(self):
+        path = self.packageinfo({})
+        tree = b"\x01" + b"7\0" + b"x\0" + b"\x08"                                   # {"7": "x"}: a string where a section belongs
+        with open(path, "wb") as f:
+            f.write(struct.pack("<II", 0x06565528, 1) + struct.pack("<I", 7) + b"\0" * 32 + tree + struct.pack("<I", 0xFFFFFFFF))
+        self.assertIsNone(sc.package_apps(self.steam, [7]))                         # no AttributeError, and nothing found for package 7
+
     def test_owned_packages_reads_the_list_and_tolerates_a_missing_key(self):
         lib = os.path.join(self.tmp, "userdata.json")
         with open(lib, "w") as f:

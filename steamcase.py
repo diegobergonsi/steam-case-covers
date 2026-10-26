@@ -416,7 +416,8 @@ def _read_binary_kv(data, pos, depth=0):
 
 def package_apps(steam, package_ids):
     """Every app id inside the given packages, read from Steam's own appcache/packageinfo.vdf.
-    None when that file is missing or not in a layout we know: callers then treat ownership as unknown."""
+    None when that file is missing, not in a layout we know, or not about these packages (fewer than 90% of them are in it, as when Steam is
+    logged into another account): callers then treat ownership as unknown."""
     path = os.path.join(steam, "appcache", "packageinfo.vdf")
     wanted = set(package_ids)
     try:
@@ -427,16 +428,18 @@ def package_apps(steam, package_ids):
         magic = struct.unpack_from("<I", data, 0)[0]
         if magic not in _PACKAGEINFO_MAGICS:
             return None
-        pos, apps = 8, set()                       # magic and universe come first, then one entry per package
+        pos, apps, seen = 8, set(), 0              # magic and universe come first, then one entry per package
         while True:
             pid = struct.unpack_from("<I", data, pos)[0]
             pos += 4
             if pid == 0xFFFFFFFF:
-                return apps
+                return apps if seen >= 0.9 * len(wanted) else None
             pos += 24 + (8 if magic == 0x06565528 else 0)        # hash (20), change number (4), and a token (8) in the newer header
             tree, pos = _read_binary_kv(data, pos)
-            if pid in wanted:
-                ids = (tree.get(str(pid)) or {}).get("appids")
+            entry = tree.get(str(pid))
+            if pid in wanted and isinstance(entry, dict):
+                seen += 1
+                ids = entry.get("appids")
                 if isinstance(ids, dict):
                     apps.update(v for v in ids.values() if type(v) is int and 0 < v < 2 ** 32)
     except (OSError, ValueError, struct.error, IndexError, RecursionError, MemoryError):
