@@ -3,6 +3,9 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- The case can now be any shade, from vivid to dark grey and black. Step 2 has three sliders (Colour, Colourfulness and Brightness) and nine swatches (the six colours, then Black, Graphite and Silver), with the live preview. Colourfulness and Brightness go from 0 to 100, where 100 is the original blue's level, and they only go down, so there is no white case. The white logo and text stay white, and the green family corner stays green on every case. The Replace prompt and the preview use all three values.
+- `make` and `run` accept `--saturation PERCENT` and `--brightness PERCENT` (0 to 100) next to `--hue`. An option you leave out keeps the value of the covers already in the folder, else the original.
+- Covers record their tone in a second PNG note (`steamcase-tone`). Covers made before this change keep working: they count as full colourfulness and full brightness, and Reset still finds them. One limit: a grey or black cover that another program re-saved and that dropped its PNG notes is not found by "Remove only ours". "Remove all" still removes it.
 - Documentation: the README has a new screenshot of the window (with the colour row and the info badge), describes the colour choice and the family-games limit in "How it works", and has new FAQ answers for family games that got no cover and for changing the colour later.
 
 ## [1.3.1] - 2026-10-26

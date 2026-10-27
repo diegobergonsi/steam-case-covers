@@ -38,7 +38,7 @@
 
 ## What is it?
 
-Steam shows your library as tall portrait cards. This tool puts each game's own artwork inside a "box" (blue by default, or any colour you pick) with a Steam banner and platform badges, like a boxed console game, and installs the result as your custom artwork.
+Steam shows your library as tall portrait cards. This tool puts each game's own artwork inside a "box" (blue by default, or any colour and shade you pick, from vivid to dark grey and black) with a Steam banner and platform badges, like a boxed console game, and installs the result as your custom artwork.
 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
@@ -115,7 +115,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 ## How it works
 
 1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
-2. **Make the covers.** Optionally pick the colour of the cases first: drag the colour slider or tap a swatch, and the preview shows the result. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour, the app asks before it replaces them.
+2. **Make the covers.** Optionally pick the look of the cases first: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour, the app asks before it replaces them.
 3. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; click **Change account** to pick another.
 
 > [!WARNING]
@@ -134,7 +134,7 @@ Changed your mind?
 ✅ Undo, step by step, and a reset to Steam's default art <br>
 ✅ Cancel anytime; run again to continue <br>
 ✅ Optional "skip blurry covers" for games Steam has no real portrait for <br>
-✅ Pick the colour of the cases with a slider or a ready-made swatch, with a live preview. Only the original blue is checked for readable text <br>
+✅ Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (including black, graphite and silver), with a live preview. Only the original blue is checked for readable text <br>
 ✅ Several Steam accounts on one computer: you choose which one gets the covers <br>
 ✅ Games shared through Steam Family Sharing get covers too, with a green corner and a family icon so you can tell them apart. The app finds them in Steam's own files on your computer, with nothing extra to download, but it needs your game list: with "Only my installed games" ticked, shared games that are not installed are left out. This is only tested on a small family, so please open an issue if games are missing from a big shared library. Save your game list again after you buy games, so the new ones are not mistaken for family games <br>
 ✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
@@ -154,7 +154,7 @@ If you find a security problem, please [report it privately](SECURITY.md).
 ## Steam compatibility
 
 ✅ Linux and SteamOS (Steam in `~/.local/share/Steam`) <br>
-✅ Windows: an early version (0.9.11) was tested by the author's colleague on a real PC; newer versions, including the colour slider and the family corner, are covered by the automated tests only <br>
+✅ Windows: an early version (0.9.11) was tested by the author's colleague on a real PC; newer versions, including the colour sliders and the family corner, are covered by the automated tests only <br>
 🟡 macOS: tested on one Apple Silicon Mac (best effort)
 
 > [!NOTE]
@@ -167,6 +167,8 @@ Everything the window does is also available in a terminal:
 ```bash
 python steamcase.py make --library userdata.json   # build covers
 python steamcase.py make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
+python steamcase.py make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
+python steamcase.py make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
 python steamcase.py apply --close-steam            # install them
 python steamcase.py restore                        # undo the last apply
 python steamcase.py reset                          # back to Steam's default art
@@ -182,9 +184,9 @@ python steamcase.py reset --everything             # ...also removing art from o
 | `restore` | Undo the last apply (run again to go further back) |
 | `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
 
-`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue` (`--hue 0` asks for the original blue).
+`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`; an option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
 
-Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
+Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
 ## FAQ
 
@@ -226,7 +228,7 @@ Games shared with you through Steam Family Sharing are not on your own game list
 <details>
 <summary><b>What happens if I change the colour after I made covers?</b></summary>
 
-When you click **Make covers**, the app asks before it replaces the covers you already made in another colour. If you say yes, it rebuilds them all in the new colour, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read.
+When you click **Make covers**, the app asks before it replaces the covers you already made in another colour or shade. If you say yes, it rebuilds them all in the new look, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read, and the same can happen with a very light case.
 
 </details>
 
