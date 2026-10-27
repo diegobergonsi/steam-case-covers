@@ -297,12 +297,17 @@ class Switch(_Stateful):
         return "break"
 
 
-def hue_from_x(x, width, margin):
-    """Hue (0..359 degrees) for a pixel position on a slider track `width` wide whose ends are `margin` px inside the edges. Clamped."""
+def value_from_x(x, width, margin, top):
+    """Value (0..top) for a pixel position on a slider track `width` wide whose ends are `margin` px inside the edges. Clamped."""
     span = width - 2 * margin
     if span <= 0:
         return 0
-    return max(0, min(359, round((x - margin) * 359 / span)))
+    return max(0, min(top, round((x - margin) * top / span)))
+
+
+def hue_from_x(x, width, margin):
+    """Hue (0..359 degrees) for a pixel position on a slider track; see value_from_x."""
+    return value_from_x(x, width, margin, 359)
 
 
 def drag_mode(dx, dy, threshold):
@@ -313,14 +318,22 @@ def drag_mode(dx, dy, threshold):
     return "horizontal" if abs(dx) >= abs(dy) else "vertical"
 
 
-def step_hue(hue, key, big=30):
-    """The hue after a key press on the slider: arrows move 1 degree, PageUp/PageDown `big`, Home is 0, End is 359; arrows wrap around."""
+def step_value(value, key, top, big=10, wrap=False):
+    """The value (0..top) after a key press on a slider: arrows move 1, PageUp/PageDown `big`, Home is 0, End is `top`. Arrows stop at the ends,
+    or wrap around when `wrap` is set."""
     if key == "Home":
         return 0
     if key == "End":
-        return 359
+        return top
     delta = {"Left": -1, "Down": -1, "Right": 1, "Up": 1, "Prior": big, "Next": -big}.get(key)
-    return hue if delta is None else (hue + delta) % 360
+    if delta is None:
+        return value
+    return (value + delta) % (top + 1) if wrap else max(0, min(top, value + delta))
+
+
+def step_hue(hue, key, big=30):
+    """The hue after a key press on the hue slider: like step_value over 0..359, and the arrows wrap around."""
+    return step_value(hue, key, 359, big, wrap=True)
 
 
 def _dim(color, amount=0.6, toward=CARD):
@@ -343,19 +356,24 @@ def _rainbow_png(w, h, colors):
     return base64.b64encode(buf.getvalue())
 
 
-class HueSlider(_Stateful):
-    """A rainbow slider that picks a hue, 0..359 degrees, into a tk.IntVar. `color_for(hue)` gives the '#rrggbb' to paint at that hue.
-    A tap or a sideways drag sets the hue; a mostly vertical swipe that starts on it scrolls the window instead (so a finger on its way to the
+class _Slider(_Stateful):
+    """Base of the colour sliders: picks an integer 0..TOP into a tk.IntVar over a track painted by `color_for(value)` ('#rrggbb').
+    A tap or a sideways drag sets the value; a mostly vertical swipe that starts on it scrolls the window instead (so a finger on its way to the
     button below does not recolour the covers). Arrows, PageUp/PageDown, Home and End work from the keyboard."""
 
-    def __init__(self, parent, variable, color_for, command=None, state="normal", bg=CARD):
+    TOP, BIG, WRAP = 100, 10, False           # largest value, PageUp/PageDown step, whether the arrows wrap around
+
+    def __init__(self, parent, variable, color_for, command=None, state="normal", bg=CARD, depends=()):
         super().__init__(parent, width=px(260), height=px(52), bg=bg, highlightthickness=0, takefocus=True, cursor="hand2")
         self._init_state(state)
         self.variable, self.color_for, self.command, self._bg = variable, color_for, command, bg
         self._focus = False
         self._start, self._mode = None, None                 # where the pointer went down, and what the drag turned out to be
         self._track, self._track_key = None, None
+        self._repaint_job = None
         variable.trace_add("write", lambda *a: self.draw())
+        for other in depends:                                # the track colours follow these variables
+            other.trace_add("write", lambda *a: self._repaint())
         self.bind("<Configure>", lambda e: self.draw())
         self.bind("<ButtonPress-1>", self._press)
         self.bind("<B1-Motion>", self._motion)
@@ -371,6 +389,19 @@ class HueSlider(_Stateful):
         w = self.winfo_width() if self.winfo_width() > 1 else int(super().cget("width"))
         return w, int(super().cget("height")), px(36), px(36) // 2 + px(8)           # width, height, thumb size, margin of the thumb's centre
 
+    def _repaint(self):
+        """Rebuild the track once per burst of changes (a swatch sets three variables), when the window is next idle."""
+        if self._repaint_job is None:
+            self._repaint_job = self.after_idle(self._repaint_now)
+
+    def _repaint_now(self):
+        self._repaint_job = None
+        self._track_key = None
+        try:
+            self.draw()
+        except tk.TclError:                                  # the window closed in between
+            pass
+
     def _set_focus(self, v):
         self._focus = v
         self.draw()
@@ -382,7 +413,7 @@ class HueSlider(_Stateful):
         track_h = px(48)
         key = (w, track_h, on)
         if self._track_key != key:
-            colors = [self.color_for(hue_from_x(x, w, margin)) for x in range(w)]
+            colors = [self.color_for(value_from_x(x, w, margin, self.TOP)) for x in range(w)]
             if not on:
                 colors = [_dim(c) for c in colors]
             self._track = tk.PhotoImage(master=self, data=_rainbow_png(w, track_h, colors)) if Image is not None else None
@@ -390,23 +421,23 @@ class HueSlider(_Stateful):
         top = (h - track_h) // 2
         if self._track is not None:
             self.create_image(0, top, image=self._track, anchor="nw")
-        hue = max(0, min(359, int(self.variable.get())))
-        cx = margin + hue * (w - 2 * margin) / 359
+        value = max(0, min(self.TOP, int(self.variable.get())))
+        cx = margin + value * (w - 2 * margin) / self.TOP
         cy = h // 2
         if self._focus and on:
             round_rect(self, cx - thumb // 2 - px(8), cy - thumb // 2 - px(8), cx + thumb // 2 + px(8), cy + thumb // 2 + px(8), thumb // 2 + px(8), outline=RING, width=2, fill="")
         round_rect(self, cx - thumb // 2 - px(4), cy - thumb // 2 - px(4), cx + thumb // 2 + px(4), cy + thumb // 2 + px(4), thumb // 2 + px(4), fill=self._bg, outline=self._bg)
         round_rect(self, cx - thumb // 2, cy - thumb // 2, cx + thumb // 2, cy + thumb // 2, thumb // 2, fill=RING if on else OFF_KNOB, outline=RING if on else OFF_KNOB)
 
-    def _set(self, hue):
-        if self.enabled and int(self.variable.get()) != hue:
-            self.variable.set(hue)
+    def _set(self, value):
+        if self.enabled and int(self.variable.get()) != value:
+            self.variable.set(value)
             if self.command:
                 self.command()
 
     def _from_pointer(self, e):
         w, _, _, margin = self._geometry()
-        self._set(hue_from_x(e.x, w, margin))
+        self._set(value_from_x(e.x, w, margin, self.TOP))
 
     def _press(self, e):
         if self.enabled:
@@ -433,8 +464,19 @@ class HueSlider(_Stateful):
 
     def _key(self, e):
         if self.enabled:
-            self._set(step_hue(int(self.variable.get()), e.keysym))
+            self._set(step_value(int(self.variable.get()), e.keysym, self.TOP, self.BIG, self.WRAP))
         return "break"
+
+
+class HueSlider(_Slider):
+    """A rainbow slider that picks a hue, 0..359 degrees. `color_for(hue)` gives the '#rrggbb' to paint at that hue; the arrows wrap around."""
+
+    TOP, BIG, WRAP = 359, 30, True
+
+
+class ToneSlider(_Slider):
+    """A slider that picks a tone strength, 0..100, with no wrap (colourfulness, brightness). `depends` lists the tk.IntVars the track colours
+    depend on (the hue, say); the track repaints when one of them changes."""
 
 
 class Swatch(_Stateful):

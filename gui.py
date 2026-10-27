@@ -8,7 +8,7 @@ from tkinter import filedialog
 import tkinter.font as tkfont
 
 import steamcase as sc
-from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, HueSlider, Swatch, px, set_scale)
+from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, HueSlider, ToneSlider, Swatch, px, set_scale)
 
 
 def downloads_dir():
@@ -90,7 +90,10 @@ class App(tk.Tk):
         self.installed_only = tk.BooleanVar(value=False)
         self.skip_auto = tk.BooleanVar(value=False)
         self.hue = tk.IntVar(value=0)     # case colour: degrees turned from the original blue
+        self.sat = tk.IntVar(value=100)   # its colourfulness and brightness, 0..100 (100: as the original blue)
+        self.val = tk.IntVar(value=100)
         self._preview_job = None
+        self._setting_tone = False
         self.restart_steam = tk.BooleanVar(value=True)
 
         self._wrapped, self._wrap_width, self._head_narrow = [], 0, False
@@ -221,7 +224,7 @@ class App(tk.Tk):
 
         def walk(w):
             for c in w.winfo_children():
-                if isinstance(c, (RoundedButton, Switch, HueSlider, Swatch)):
+                if isinstance(c, (RoundedButton, Switch, HueSlider, ToneSlider, Swatch)):
                     c.configure(state=st)
                 walk(c)
         walk(body)
@@ -354,43 +357,78 @@ class App(tk.Tk):
         self._thumbs = []
 
     def _build_colour(self, body):
-        """Cover colour: a hue slider and ready-made swatches on the left, a live preview of a cover on the right (it wraps under on a narrow window)."""
+        """Cover colour: three sliders (colour, colourfulness, brightness) on the left, a live preview of a cover on the right (it wraps under
+        on a narrow window), and a row of ready-made swatches below them (six colours, then three greys) that wraps as well."""
         box = self._flow(body, pady=px(6))
         left = tk.Frame(box, bg=CARD)
         head = tk.Frame(left, bg=CARD)
         head.pack(fill="x")
         tk.Label(head, text="Cover colour", bg=CARD, fg=FG, font=("TkDefaultFont", 11, "bold")).pack(side="left")
         self.colour_name = tk.Label(head, text="Original", bg=CARD, fg=MUTED)
-        self.colour_name.pack(side="right")
-        self.slider = HueSlider(left, self.hue, sc.case_color)
-        self.slider.pack(fill="x", pady=(px(6), 0))
-        row = tk.Frame(left, bg=CARD)
-        row.pack(fill="x", pady=(px(6), 0))
-        self.swatches = []
-        for h in sc.HUE_SWATCHES:
-            s = Swatch(row, sc.case_color(h), lambda h=h: self.hue.get() == h, lambda h=h: self.hue.set(h))
-            s.pack(side="left", padx=(0, px(4)))
-            self.swatches.append(s)
-        self.colour_note = self._wrap(tk.Label(left, text="Only the original colour is checked for readable text.", bg=CARD, fg=FAINT, justify="left", anchor="w"), px(330))
+        self.colour_name.pack(side="right", padx=(px(12), 0))
+        grid = tk.Frame(left, bg=CARD)
+        grid.pack(fill="x", pady=(px(4), 0))
+        self.slider = HueSlider(grid, self.hue, sc.case_color)
+        # the tracks show what each slider does to the case in its current colour: grey to vivid, black to bright
+        self.sat_slider = ToneSlider(grid, self.sat, lambda v: sc.case_color(self.hue.get() % 360, v, self.val.get()), depends=(self.hue, self.val))
+        self.val_slider = ToneSlider(grid, self.val, lambda v: sc.case_color(self.hue.get() % 360, self.sat.get(), v), depends=(self.hue, self.sat))
+        self.colour_hint = tk.Label(grid, text="", bg=CARD, fg=MUTED, anchor="w")             # always gridded, so its row never changes height
+        for row, (text, slider) in enumerate((("Colour", self.slider), ("Colourfulness", self.sat_slider), ("Brightness", self.val_slider))):
+            tk.Label(grid, text=text, bg=CARD, fg=MUTED, anchor="w").grid(row=2 * row, column=0, sticky="w", padx=(0, px(10)))
+            slider.grid(row=2 * row, column=1, sticky="ew")
+        self.colour_hint.grid(row=1, column=1, sticky="w")
+        grid.columnconfigure(1, weight=1)
         self.colour_preview = tk.Label(box, bg=CARD)
         box.add(left)
         box.add(self.colour_preview, px(20))
-        found = sc.existing_cover_hue(self.covers_dir)          # reopening the app shows the colour of the covers you already made
+        self.swatch_row = row = self._flow(body, pady=(0, px(2)))
+        self.swatches = []
+        tones = [(sc.case_color(h), (h, 100, 100)) for h in sc.HUE_SWATCHES] + [(sc.case_color(0, s, v), (0, s, v)) for _, s, v in sc.NEUTRAL_SWATCHES]
+        for color, tone in tones:
+            s = Swatch(row, color, lambda t=tone: sc.tone_key(*self._tone()) == sc.tone_key(*t), lambda t=tone: self._set_tone(*t))
+            row.add(s, px(4))
+            self.swatches.append(s)
+        self.colour_note = self._wrap(tk.Label(body, text="Only the original colour is checked for readable text.", bg=CARD, fg=FAINT, justify="left", anchor="w"))
+        found = sc.existing_cover_colour(self.covers_dir)          # reopening the app shows the colour of the covers you already made
         if found:
-            self.hue.set(found)
-        self.hue.trace_add("write", self._colour_changed)
+            self._set_tone(*found)
+        for var in (self.hue, self.sat, self.val):
+            var.trace_add("write", self._colour_changed)
+        self._colour_changed()
+
+    def _tone(self):
+        """The chosen case colour: (hue, colourfulness, brightness)."""
+        return self.hue.get() % 360, self.sat.get(), self.val.get()
+
+    def _set_tone(self, hue, sat, val):
+        self._setting_tone = True                                # three variables change: update once, afterwards
+        try:
+            self.hue.set(hue)
+            self.sat.set(sat)
+            self.val.set(val)
+        finally:
+            self._setting_tone = False
         self._colour_changed()
 
     def _colour_changed(self, *_):
-        hue = self.hue.get()
-        self.colour_name.configure(text="Original" if hue == 0 else "Custom · %d°" % hue)
+        if self._setting_tone:
+            return
+        hue, sat, val = self._tone()
+        key = sc.tone_key(hue, sat, val)
+        name = "Original" if key == sc.tone_key(0) else "Custom · %d° %d%% %d%%" % (hue, sat, val)
+        for n, s, v in sc.NEUTRAL_SWATCHES:
+            if key == sc.tone_key(0, s, v):
+                name = n
+        self.colour_name.configure(text=name)
         for s in self.swatches:
             s.draw()
-        if hue == 0:
+        # without colour or light the Colour slider does nothing: say so (the text, not the row, comes and goes: nothing moves under a finger)
+        self.colour_hint.configure(text="Colour has no effect on grey or black." if sat == 0 or val == 0 else "")
+        if key == sc.tone_key(0):
             self.colour_note.pack_forget()
-        else:
-            self.colour_note.pack(fill="x", pady=(px(6), 0))
-        if self._preview_job is None:                            # one redraw per burst of changes while the slider is dragged
+        elif not self.colour_note.winfo_manager():
+            self.colour_note.pack(fill="x", pady=(0, px(6)), after=self.swatch_row)
+        if self._preview_job is None:                            # one redraw per burst of changes while a slider is dragged
             self._preview_job = self.after_idle(self._draw_preview)
 
     def _draw_preview(self):
@@ -399,7 +437,8 @@ class App(tk.Tk):
             return
         try:
             import base64, io
-            im = sc.preview_cover(self.hue.get() % 360).resize((px(130), px(195)), sc.Image.LANCZOS)
+            hue, sat, val = self._tone()
+            im = sc.preview_cover(hue, sat=sat, val=val).resize((px(130), px(195)), sc.Image.LANCZOS)
             buf = io.BytesIO()
             im.save(buf, "PNG")
             self._colour_img = tk.PhotoImage(master=self, data=base64.b64encode(buf.getvalue()))
@@ -434,8 +473,8 @@ class App(tk.Tk):
     def start_make(self):
         if self.running:
             return
-        hue = self.hue.get() % 360
-        if sc.covers_in_other_colour(self.covers_dir, hue):
+        tone = self._tone()
+        if sc.covers_in_other_colour(self.covers_dir, *tone):
             if not messagebox.askokcancel("Change the colour of your covers?",
                                           [("This replaces the covers you already made in another colour.", "main"),
                                            ("Steam keeps showing your current art until you add the new covers in step 3.", "muted")],
@@ -454,16 +493,17 @@ class App(tk.Tk):
         self.refresh_step1()
         self.refresh_step3()
         skip = self.skip_auto.get()
-        threading.Thread(target=self._worker, args=(lib, skip, hue), daemon=True).start()
+        threading.Thread(target=self._worker, args=(lib, skip, tone), daemon=True).start()
 
-    def _worker(self, lib, skip, hue=0):
-        """Runs off the UI thread; talks to the UI only through self.events."""
+    def _worker(self, lib, skip, tone=(0, 100, 100)):
+        """Runs off the UI thread; talks to the UI only through self.events. `tone` is the case colour (hue, sat, val)."""
+        hue, sat, val = tone
         try:
             steam = sc.steam_dir()
             games, family = sc.load_library(steam, lib)
             if not games:
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
-            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family, hue=hue,
+            res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family, hue=hue, sat=sat, val=val,
                                  progress=lambda *a: self.events.put(("progress",) + a),
                                  cancelled=self.cancel_flag.is_set)
             self.events.put(("done", res))
@@ -873,9 +913,14 @@ def selftest():
             im = Image.open(out)
             assert im.size == (600, 900), "bad size %s" % (im.size,)
             assert im.getpixel((300, 500))[:3] == (200, 60, 60), "art window not filled"
-            assert sc.cover_hue(out) == 0, "the cover does not record its colour"
+            assert sc.cover_colour(out) == (0, 100, 100), "the cover does not record its colour"
+            blue = sc.preview_cover(0).getpixel((7, 450))
             turned = sc.preview_cover(134)
-            assert turned.size == (600, 900) and turned.getpixel((7, 450)) != sc.preview_cover(0).getpixel((7, 450)), "the case colour cannot be changed"
+            assert turned.size == (600, 900) and turned.getpixel((7, 450)) != blue, "the case colour cannot be changed"
+            assert sc.preview_cover(0, sat=0, val=14).getpixel((7, 450)) != blue, "the case cannot be made black"
+            black = os.path.join(d, "b.png")
+            sc.build_cover(src, black, sc.load_frame(0, sat=0, val=14), sat=0, val=14)
+            assert sc.is_steamcase_cover(black), "a black cover is not recognised as ours"
         print("selftest ok")
         return 0
     except Exception as e:

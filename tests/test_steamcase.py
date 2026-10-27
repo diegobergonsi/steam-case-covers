@@ -1054,6 +1054,95 @@ class CoverColour(unittest.TestCase):
             self.assertRegex(sc.case_color(hue), r"^#[0-9a-f]{6}$")
 
 
+class CoverClamping(unittest.TestCase):
+    """Out-of-range tones are clamped, hue 360 is hue 0, and the case_color cache shares what looks the same."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_tones_are_clamped_and_360_is_0(self):
+        self.assertEqual(sc.load_frame(0, sat=150, val=-5).tobytes(), sc.load_frame(0, sat=100, val=0).tobytes())
+        frame = sc.Image.open(sc.FRAME).convert("RGBA")
+        self.assertEqual(sc.recolor_frame(frame, 0, 150, -5).tobytes(), sc.recolor_frame(frame, 0, 100, 0).tobytes())
+        self.assertEqual(sc.case_color(360), sc.case_color(0))
+        self.assertEqual(sc.case_color(0, 150, -5), sc.case_color(0, 100, 0))
+
+    def test_case_color_ignores_a_hue_that_shows_nothing(self):
+        self.assertEqual(sc.case_color(10, 0, 50), sc.case_color(200, 0, 50))
+        self.assertEqual(sc.case_color(10, 80, 0), sc.case_color(300, 80, 0))
+        self.assertEqual(sc.case_color(0), "#1636c8")
+        self.assertNotEqual(sc.case_color(10, 80, 50), sc.case_color(200, 80, 50))
+
+
+class CoverTone(unittest.TestCase):
+    """Colourfulness and brightness of the case: a case can become black, grey or silver; white parts, alpha and the family corner stay."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
+
+    def assertClose(self, a, b, tol=1):
+        self.assertEqual(len(a), len(b))
+        self.assertLessEqual(max(abs(x - y) for x, y in zip(a, b)), tol)
+
+    def test_full_tone_is_the_untouched_frame(self):
+        self.assertEqual(sc.load_frame(0, sat=100, val=100).tobytes(), self.plain.tobytes())
+
+    def test_tone_keeps_alpha_and_white_parts(self):
+        white = (255, 255, 255, 255)
+        want = list(self.plain.crop((0, 0, 600, 96)).getdata()).count(white)
+        for sat, val in ((0, 0), (0, 14), (0, 78), (40, 50)):
+            toned = sc.load_frame(0, sat=sat, val=val)
+            self.assertEqual(toned.getchannel("A").tobytes(), self.plain.getchannel("A").tobytes(), (sat, val))
+            self.assertEqual(list(toned.crop((0, 0, 600, 96)).getdata()).count(white), want, (sat, val))
+
+    def test_black_is_dark_and_grey_has_no_colour(self):
+        r, g, b, _ = sc.load_frame(0, sat=0, val=14).getpixel((7, 450))
+        self.assertLessEqual(max(r, g, b), 60)
+        self.assertLessEqual(max(r, g, b) - min(r, g, b), 4)
+        r, g, b, _ = sc.load_frame(0, sat=0, val=78).getpixel((7, 450))
+        self.assertLessEqual(max(r, g, b) - min(r, g, b), 4)
+        self.assertGreaterEqual(max(r, g, b), 150)
+        r, g, b, _ = sc.load_frame(0, sat=100, val=50).getpixel((7, 450))
+        self.assertGreater(b, r + 40)
+        self.assertLess(max(r, g, b), max(self.plain.getpixel((7, 450))[:3]))
+
+    def test_less_saturation_or_brightness_never_brightens(self):
+        _, s0, v0 = self.plain.convert("RGB").convert("HSV").getpixel((7, 450))
+        _, s1, v1 = sc.load_frame(0, sat=60, val=60).convert("RGB").convert("HSV").getpixel((7, 450))
+        self.assertLessEqual(s1, s0)
+        self.assertLessEqual(v1, v0)
+
+    def test_hue_does_not_matter_at_zero_saturation_or_zero_brightness(self):
+        for sat, val in ((0, 60), (80, 0)):
+            a = sc.load_frame(134, sat=sat, val=val).tobytes()
+            b = sc.load_frame(0, sat=sat, val=val).tobytes()
+            self.assertEqual(len(a), len(b))
+            self.assertLessEqual(max(abs(x - y) for x, y in zip(a, b)), 1, (sat, val))
+
+    def test_the_family_corner_stays_green_on_black_and_silver(self):
+        for sat, val in ((0, 14), (0, 78)):
+            r, g, b, _ = sc.load_frame(0, True, sat=sat, val=val).getpixel((8, 8))
+            self.assertClose((r, g, b), sc.FAMILY_COLOR, 8)
+
+    def test_case_color_follows_the_tone(self):
+        self.assertEqual(sc.case_color(0), "#1636c8")
+        grey = sc.case_color(0, 0, 14)
+        self.assertRegex(grey, r"^#[0-9a-f]{6}$")
+        r, g, b = (int(grey[i:i + 2], 16) for i in (1, 3, 5))
+        self.assertLessEqual(max(r, g, b) - min(r, g, b), 4)
+        self.assertLess(max(r, g, b), 70)
+
+    def test_neutral_swatches_are_plain_tuples(self):
+        self.assertEqual([n for n, _, _ in sc.NEUTRAL_SWATCHES], ["Black", "Graphite", "Silver"])
+        for name, sat, val in sc.NEUTRAL_SWATCHES:
+            self.assertIsInstance(name, str)
+            self.assertEqual(sat, 0)
+            self.assertTrue(0 <= val <= 100)
+
+
 class CoverColourFiles(Base):
     """What is written into a cover file, and recognising covers of every colour."""
 
@@ -1064,10 +1153,43 @@ class CoverColourFiles(Base):
         self.src = os.path.join(self.tmp, "portrait.png")
         sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
 
-    def make(self, name, hue=0, family=False):
+    def make(self, name, hue=0, family=False, sat=100, val=100):
         out = os.path.join(self.tmp, name)
-        sc.build_cover(self.src, out, sc.load_frame(hue, family), hue)
+        sc.build_cover(self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val)
         return out
+
+    def note_cover(self, **notes):
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in notes.items():
+            info.add_text("steamcase-" + key, value)
+        path = os.path.join(self.tmp, "n.png")
+        sc.Image.new("RGBA", sc.SIZE).save(path, pnginfo=info)
+        return path
+
+    def test_tone_is_recorded_and_old_covers_count_as_full_tone(self):
+        self.assertEqual(sc.cover_colour(self.make("a.png", 0, sat=0, val=14)), (0, 0, 14))
+        self.assertEqual(sc.cover_colour(self.make("b.png", 134)), (134, 100, 100))
+        self.assertEqual(sc.cover_colour(self.note_cover(hue="77")), (77, 100, 100))      # built the old way: only the hue note
+        old = os.path.join(self.tmp, "old.png")
+        sc.Image.new("RGBA", sc.SIZE).save(old)
+        self.assertEqual(sc.cover_colour(old), (0, 100, 100))
+        self.assertIsNone(sc.cover_colour(os.path.join(self.tmp, "missing.png")))
+
+    def test_a_garbled_tone_note_is_unknown(self):
+        for value in ("abc", "101 5", "-1 5", "5", "5 5 5", " 5 5", "5 5 ", "05 5", "5  5", ""):
+            self.assertIsNone(sc.cover_colour(self.note_cover(tone=value)), repr(value))
+        self.assertEqual(sc.cover_colour(self.note_cover(tone="100 0")), (0, 100, 0))
+
+    def test_same_colour_ignores_hue_at_zero_saturation_or_brightness(self):
+        self.assertTrue(sc.same_colour((10, 0, 50), (200, 0, 50)))
+        self.assertFalse(sc.same_colour((10, 0, 50), (10, 0, 51)))
+        self.assertFalse(sc.same_colour((10, 100, 50), (200, 100, 50)))
+        self.assertTrue(sc.same_colour((10, 80, 0), (300, 80, 0)))
+        self.assertFalse(sc.same_colour(None, (0, 100, 100)))
+        self.assertFalse(sc.same_colour((0, 100, 100), None))
+        self.assertTrue(sc.same_colour((1, 100, 100), (2, 100, 100)))                 # neighbouring degrees on the same step
+        self.assertEqual(sc.tone_key(5, 150, -3), (0, 100, 0))
 
     def test_cover_hue_reads_the_recorded_hue_and_treats_old_covers_as_zero(self):
         self.assertEqual(sc.cover_hue(self.make("a.png", 134)), 134)
@@ -1113,6 +1235,76 @@ class CoverColourFiles(Base):
             img.save(tampered)
             self.assertFalse(sc.is_steamcase_cover(tampered), hue)
 
+    def renote(self, path, **notes):
+        """The same pixels saved again with only these notes (none: a cover from before notes existed)."""
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in notes.items():
+            info.add_text("steamcase-" + key, value)
+        out = os.path.join(self.tmp, "renoted.png")
+        sc.Image.open(path).convert("RGBA").save(out, pnginfo=info)
+        return out
+
+    def test_covers_of_every_tone_are_recognised(self):
+        tones = [(hue, 100, 100) for hue in sc.HUE_SWATCHES] + [(0, s, v) for _, s, v in sc.NEUTRAL_SWATCHES] + [(0, 100, 45), (134, 60, 30), (0, 0, 0)]
+        for hue, sat, val in tones:
+            for family in (False, True):
+                self.assertTrue(sc.is_steamcase_cover(self.make("c.png", hue, family, sat, val)), (hue, sat, val, family))
+
+    def test_old_covers_without_a_tone_note_are_still_recognised(self):
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("a.png", 0), hue="0")))
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("b.png", 134), hue="134")))
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("c.png", 0))))
+
+    def test_a_note_that_does_not_match_the_pixels_is_not_recognised(self):
+        self.assertFalse(sc.is_steamcase_cover(self.renote(self.make("a.png", 0), hue="0", tone="0 14")))
+        black = self.make("b.png", 0, sat=0, val=14)
+        self.assertFalse(sc.is_steamcase_cover(self.renote(black, hue="0")))           # the documented limit: the legacy rule sees other S and V
+        self.assertFalse(sc.is_steamcase_cover(self.renote(black, hue="0", tone="100 100")))
+        self.assertFalse(sc.is_steamcase_cover(self.renote(black, hue="0", tone="0 15x")))   # a garbled tone note is not ours
+
+    def test_look_alikes_are_still_refused_at_every_tone(self):
+        from PIL.PngImagePlugin import PngInfo
+        for hue, sat, val in ((0, 100, 100), (134, 100, 100), (0, 0, 14), (0, 0, 78)):
+            real = self.make("r.png", hue, False, sat, val)
+            note = PngInfo()
+            note.add_text("steamcase-hue", str(hue))
+            note.add_text("steamcase-tone", "%d %d" % (sat, val))
+            flat = os.path.join(self.tmp, "flat.png")
+            sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255)).save(flat, pnginfo=note)
+            self.assertFalse(sc.is_steamcase_cover(flat), (hue, sat, val))
+            grey = os.path.join(self.tmp, "grey.png")
+            sc.Image.open(real).convert("L").convert("RGBA").save(grey)
+            self.assertFalse(sc.is_steamcase_cover(grey), (hue, sat, val))
+            img = sc.Image.open(real).convert("RGBA")
+            img.putpixel((400, 10), (1, 2, 3, 255))
+            tampered = os.path.join(self.tmp, "t.png")
+            img.save(tampered, pnginfo=note)                                            # notes kept: the toned check must catch it
+            self.assertFalse(sc.is_steamcase_cover(tampered), (hue, sat, val))
+            jpeg = os.path.join(self.tmp, "j.png")
+            sc.Image.open(real).convert("RGB").save(jpeg, format="JPEG", quality=100)
+            self.assertFalse(sc.is_steamcase_cover(jpeg), (hue, sat, val))
+
+    def test_a_look_alike_is_refused_at_zero_brightness(self):
+        cover = self.make("k.png", 0, False, 0, 0)
+        img = sc.Image.open(cover).convert("RGBA")
+        r, g, b, a = img.getpixel((400, 10))
+        img.putpixel((400, 10), (r + 3, g + 3, b + 3, a))                  # +2 is within the tolerance and may pass; +3 may not
+        from PIL.PngImagePlugin import PngInfo
+        note = PngInfo()
+        note.add_text("steamcase-hue", "0")
+        note.add_text("steamcase-tone", "0 0")
+        path = os.path.join(self.tmp, "near.png")
+        img.save(path, pnginfo=note)
+        self.assertFalse(sc.is_steamcase_cover(path))
+
+    def test_a_black_cover_survives_zero_brightness(self):
+        cover = self.make("k.png", 0, False, 0, 0)
+        self.assertTrue(sc.is_steamcase_cover(cover))
+        top = (0, 0, sc.SIZE[0], sc.WINDOW[1])
+        self.assertEqual(sc.load_frame(0, sat=0, val=0).getchannel("A").tobytes(), sc.load_frame(0).getchannel("A").tobytes())
+        self.assertEqual(sc.Image.open(cover).convert("RGBA").crop(top).getchannel("A").tobytes(), sc.load_frame(0).crop(top).getchannel("A").tobytes())
+
 
 class MakeInColour(StoreMocks):
     """make_covers in a chosen case colour."""
@@ -1124,6 +1316,35 @@ class MakeInColour(StoreMocks):
         sc.make_covers({1: None}, self.covers, hue=134)
         self.assertEqual(sc.cover_hue(self.cover(1)), 134)
         self.assertEqual(sc.Image.open(self.cover(1)).convert("RGBA").getpixel((7, 450)), sc.load_frame(134).getpixel((7, 450)))
+
+    def test_covers_are_made_in_the_chosen_tone(self):
+        sc.make_covers({1: None}, self.covers, hue=0, sat=0, val=14)
+        self.assertEqual(sc.cover_colour(self.cover(1)), (0, 0, 14))
+        self.assertEqual(sc.Image.open(self.cover(1)).convert("RGBA").getpixel((7, 450)), sc.load_frame(0, sat=0, val=14).getpixel((7, 450)))
+
+    def test_changing_only_the_tone_rebuilds_and_changing_only_the_hue_at_black_does_not(self):
+        sc.make_covers({1: None}, self.covers, hue=0)
+        blue = self.read(self.cover(1))
+        sc.make_covers({1: None}, self.covers, hue=0, sat=0, val=14)
+        black = self.read(self.cover(1))
+        self.assertNotEqual(black, blue)
+        self.assertEqual(sc.cover_colour(self.cover(1)), (0, 0, 14))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, hue=200, sat=0, val=14, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual((self.read(self.cover(1)), statuses), (black, ["exists"]))
+
+    def test_covers_in_other_colour_sees_the_tone(self):
+        sc.make_covers({1: None}, self.covers)
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 0, 0, 14))
+        os.remove(self.cover(1))
+        sc.make_covers({1: None}, self.covers, sat=0, val=14)
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 200, 0, 14))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 0))
+
+    def test_existing_cover_colour_reads_the_folder(self):
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
+        sc.make_covers({1: None}, self.covers, sat=0, val=14)
+        self.assertEqual(sc.existing_cover_colour(self.covers), (0, 0, 14))
 
     def test_an_existing_cover_in_another_colour_is_rebuilt_and_one_in_the_same_colour_is_kept(self):
         sc.make_covers({1: None}, self.covers)
@@ -1164,16 +1385,16 @@ class MakeInColour(StoreMocks):
         sc.make_covers({1: None}, self.covers, hue=3)
         self.assertEqual(sc.cover_hue(self.cover(1)), 3)
 
-    def test_existing_cover_hue_reads_the_colour_of_the_folder(self):
-        self.assertIsNone(sc.existing_cover_hue(os.path.join(self.tmp, "nowhere")))
-        self.assertIsNone(sc.existing_cover_hue(self.covers))                            # empty folder
+    def test_existing_cover_colour_reads_the_colour_of_the_folder(self):
+        self.assertIsNone(sc.existing_cover_colour(os.path.join(self.tmp, "nowhere")))
+        self.assertIsNone(sc.existing_cover_colour(self.covers))                            # empty folder
         sc.Image.new("RGBA", sc.SIZE).save(os.path.join(self.covers, "notes.png"))      # not named like one of our covers: ignored
-        self.assertIsNone(sc.existing_cover_hue(self.covers))
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
         sc.make_covers({1: None}, self.covers, hue=134)
-        self.assertEqual(sc.existing_cover_hue(self.covers), 134)
+        self.assertEqual(sc.existing_cover_colour(self.covers), (134, 100, 100))
         old = os.path.join(self.covers, "Old_2.png")                                     # made before colours existed: blue
         sc.Image.new("RGBA", sc.SIZE).save(old)
-        self.assertEqual(sc.existing_cover_hue(self.covers), 134)                        # the first cover by name decides: Game_1_1.png
+        self.assertEqual(sc.existing_cover_colour(self.covers), (134, 100, 100))                        # the first cover by name decides: Game_1_1.png
 
     def test_covers_in_other_colour(self):
         self.assertFalse(sc.covers_in_other_colour(os.path.join(self.tmp, "nowhere"), 134))
@@ -1228,6 +1449,30 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(5, 0, 0), 0)                                   # a track with no width: no division by zero
         self.assertEqual(f(5, 20, 10), 0)                                 # margins eat the whole width
 
+    def test_value_from_x_maps_and_clamps_to_a_range(self):
+        f = self.w.value_from_x
+        self.assertEqual(f(10, 410, 10, 100), 0)
+        self.assertEqual(f(400, 410, 10, 100), 100)
+        self.assertEqual(f(-50, 410, 10, 100), 0)
+        self.assertEqual(f(9999, 410, 10, 100), 100)
+        self.assertEqual(f(205, 410, 10, 100), 50)
+        self.assertEqual(f(5, 0, 0, 100), 0)                              # a track with no width
+        self.assertEqual(self.w.hue_from_x(400, 410, 10), 359)            # the hue slider keeps its numbers
+        self.assertEqual(self.w.hue_from_x(10, 410, 10), 0)
+
+    def test_step_value_stops_at_both_ends(self):
+        f = self.w.step_value
+        self.assertEqual(f(0, "Left", 100), 0)
+        self.assertEqual(f(100, "Right", 100), 100)
+        self.assertEqual(f(95, "Prior", 100), 100)
+        self.assertEqual(f(5, "Next", 100), 0)
+        self.assertEqual(f(40, "Home", 100), 0)
+        self.assertEqual(f(40, "End", 100), 100)
+        self.assertEqual(f(40, "Right", 100), 41)
+        self.assertEqual(f(40, "x", 100), 40)
+        self.assertEqual(f(0, "Left", 359, wrap=True), 359)
+        self.assertEqual(f(359, "Right", 359, wrap=True), 0)
+
     def test_drag_mode_tells_a_slide_from_a_swipe(self):
         f = self.w.drag_mode
         self.assertIsNone(f(0, 0, 6))                      # a tap or a tiny wobble: undecided
@@ -1250,7 +1495,7 @@ class HueMath(unittest.TestCase):
 
 
 class ColourCli(StoreMocks):
-    """--hue on the command line."""
+    """--hue, --saturation and --brightness on the command line."""
 
     def test_make_accepts_a_hue(self):
         lib = self.fake_library(False)
@@ -1272,6 +1517,50 @@ class ColourCli(StoreMocks):
         self.assertIn("in a custom colour", text)
         self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "0")    # asking for blue explicitly does
         self.assertEqual(sc.cover_hue(path), 0)
+
+    def test_make_accepts_saturation_and_brightness(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "0", "--brightness", "14")
+        self.assertIn("in a custom colour", text)
+        self.assertEqual(sc.cover_colour(os.path.join(out, "Game_1_1.png")), (0, 0, 14))
+
+    def test_make_without_tone_options_keeps_the_tone_of_the_covers_already_there(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        path = os.path.join(out, "Game_1_1.png")
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "0", "--brightness", "14")
+        before = self.read(path)
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)          # no options: black stays black
+        self.assertEqual(sc.cover_colour(path), (0, 0, 14))
+        self.assertEqual(self.read(path), before)
+        self.assertIn("in a custom colour", text)
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "100", "--brightness", "100", "--hue", "0")
+        self.assertEqual(sc.cover_colour(path), (0, 100, 100))                                            # asking for the original does rebuild
+
+    def test_a_bad_percentage_is_refused_with_a_clear_message(self):
+        import contextlib, io
+        lib = self.fake_library(False)
+        for option in ("--saturation", "--brightness"):
+            for bad in ("101", "-1", "abc", "1.5", ""):
+                out = os.path.join(self.tmp, "out_" + option.strip("-") + (bad or "empty"))
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                    self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, option, bad)
+                self.assertIn("whole number from 0 to 100", err.getvalue(), option + bad)
+                self.assertIn(repr(bad), err.getvalue(), option + bad)
+                self.assertFalse(os.path.exists(out), option + bad)
+
+    def test_percentages_are_plain_ascii_digits(self):
+        import contextlib, io
+        lib = self.fake_library(False)
+        for bad in ("\u0663", " 5", "+5"):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out_bad"), "--saturation", bad)
+            self.assertIn(repr(bad), err.getvalue(), bad)
+        for good, want in (("05", 5), ("0", 0), ("100", 100)):
+            self.assertEqual(sc._percent_arg(good), want)
 
     def test_a_bad_hue_is_refused_with_a_clear_message(self):
         import contextlib, io
