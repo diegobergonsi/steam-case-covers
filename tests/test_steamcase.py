@@ -1054,6 +1054,74 @@ class CoverColour(unittest.TestCase):
             self.assertRegex(sc.case_color(hue), r"^#[0-9a-f]{6}$")
 
 
+class CoverTone(unittest.TestCase):
+    """Colourfulness and brightness of the case: a case can become black, grey or silver; white parts, alpha and the family corner stay."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.plain = sc.Image.open(sc.FRAME).convert("RGBA")
+
+    def assertClose(self, a, b, tol=1):
+        self.assertEqual(len(a), len(b))
+        self.assertLessEqual(max(abs(x - y) for x, y in zip(a, b)), tol)
+
+    def test_full_tone_is_the_untouched_frame(self):
+        self.assertEqual(sc.load_frame(0, sat=100, val=100).tobytes(), self.plain.tobytes())
+
+    def test_tone_keeps_alpha_and_white_parts(self):
+        white = (255, 255, 255, 255)
+        want = list(self.plain.crop((0, 0, 600, 96)).getdata()).count(white)
+        for sat, val in ((0, 0), (0, 14), (0, 78), (40, 50)):
+            toned = sc.load_frame(0, sat=sat, val=val)
+            self.assertEqual(toned.getchannel("A").tobytes(), self.plain.getchannel("A").tobytes(), (sat, val))
+            self.assertEqual(list(toned.crop((0, 0, 600, 96)).getdata()).count(white), want, (sat, val))
+
+    def test_black_is_dark_and_grey_has_no_colour(self):
+        r, g, b, _ = sc.load_frame(0, sat=0, val=14).getpixel((7, 450))
+        self.assertLessEqual(max(r, g, b), 60)
+        self.assertLessEqual(max(r, g, b) - min(r, g, b), 4)
+        r, g, b, _ = sc.load_frame(0, sat=0, val=78).getpixel((7, 450))
+        self.assertLessEqual(max(r, g, b) - min(r, g, b), 4)
+        self.assertGreaterEqual(max(r, g, b), 150)
+        r, g, b, _ = sc.load_frame(0, sat=100, val=50).getpixel((7, 450))
+        self.assertGreater(b, r + 40)
+        self.assertLess(max(r, g, b), max(self.plain.getpixel((7, 450))[:3]))
+
+    def test_less_saturation_or_brightness_never_brightens(self):
+        _, s0, v0 = self.plain.convert("RGB").convert("HSV").getpixel((7, 450))
+        _, s1, v1 = sc.load_frame(0, sat=60, val=60).convert("RGB").convert("HSV").getpixel((7, 450))
+        self.assertLessEqual(s1, s0)
+        self.assertLessEqual(v1, v0)
+
+    def test_hue_does_not_matter_at_zero_saturation_or_zero_brightness(self):
+        for sat, val in ((0, 60), (80, 0)):
+            a = sc.load_frame(134, sat=sat, val=val).tobytes()
+            b = sc.load_frame(0, sat=sat, val=val).tobytes()
+            self.assertEqual(len(a), len(b))
+            self.assertLessEqual(max(abs(x - y) for x, y in zip(a, b)), 1, (sat, val))
+
+    def test_the_family_corner_stays_green_on_black_and_silver(self):
+        for sat, val in ((0, 14), (0, 78)):
+            r, g, b, _ = sc.load_frame(0, True, sat=sat, val=val).getpixel((8, 8))
+            self.assertClose((r, g, b), sc.FAMILY_COLOR, 8)
+
+    def test_case_color_follows_the_tone(self):
+        self.assertEqual(sc.case_color(0), "#1636c8")
+        grey = sc.case_color(0, 0, 14)
+        self.assertRegex(grey, r"^#[0-9a-f]{6}$")
+        r, g, b = (int(grey[i:i + 2], 16) for i in (1, 3, 5))
+        self.assertLessEqual(max(r, g, b) - min(r, g, b), 4)
+        self.assertLess(max(r, g, b), 70)
+
+    def test_neutral_swatches_are_plain_tuples(self):
+        self.assertEqual([n for n, _, _ in sc.NEUTRAL_SWATCHES], ["Black", "Graphite", "Silver"])
+        for name, sat, val in sc.NEUTRAL_SWATCHES:
+            self.assertIsInstance(name, str)
+            self.assertEqual(sat, 0)
+            self.assertTrue(0 <= val <= 100)
+
+
 class CoverColourFiles(Base):
     """What is written into a cover file, and recognising covers of every colour."""
 

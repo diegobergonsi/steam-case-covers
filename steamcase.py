@@ -36,6 +36,7 @@ FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
+NEUTRAL_SWATCHES = (("Black", 0, 14), ("Graphite", 0, 34), ("Silver", 0, 78))    # ready-made greys: (name, colourfulness, brightness), hue does not matter
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
 FAMILY_ICON_CONTRAST = 4.5                  # WCAG AA for normal text; the icon must never fall below it
 WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y0, x1, y1)
@@ -685,30 +686,37 @@ def same_colour(a, b):
     return a is not None and b is not None and hue_shift(a) == hue_shift(b)
 
 
-def recolor_frame(frame, hue):
-    """The frame with its hue turned by `hue` degrees. Saturation, brightness and transparency stay, so the shading and the white parts stay;
-    0 degrees returns the frame itself (the original blue, byte for byte)."""
+def recolor_frame(frame, hue, sat=100, val=100):
+    """The frame with its hue turned by `hue` degrees, then its colourfulness and brightness scaled to `sat` and `val` (0 to 100, 100 = as drawn).
+    Brightness only changes the coloured parts (weighted by their own saturation), so the white logo and text and the transparency stay; at 0 degrees,
+    100 and 100 the frame itself comes back (the original blue, byte for byte). Colourfulness 0 gives greys: dark ones are black, light ones silver."""
     shift = hue_shift(hue)
-    if not shift:
+    sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
+    if not shift and sat == 100 and val == 100:
         return frame
     r, g, b, a = frame.split()
     h, s, v = Image.merge("RGB", (r, g, b)).convert("HSV").split()
-    h = h.point(lambda x: (x + shift) % 256)
-    return Image.merge("RGBA", (*Image.merge("HSV", (h, s, v)).convert("RGB").split(), a))
+    if shift:
+        h = h.point(lambda x: (x + shift) % 256)
+    weight = [min(1.0, x / 255 / 0.02) for x in range(256)]            # 0 on the pure white parts, 1 on anything with a trace of colour
+    new_s = s.point([round(x * sat / 100) for x in range(256)])               # white parts have none to lose
+    factor = s.point([round(255 * (1 - w * (1 - val / 100))) for w in weight])
+    v = ImageChops.multiply(v, factor)
+    return Image.merge("RGBA", (*Image.merge("HSV", (h, new_s, v)).convert("RGB").split(), a))
 
 
-def load_frame(hue=0, family=False):
-    """The case frame in the wanted colour; with family=True the green corner of the Steam Family library is laid over it (never recoloured)."""
-    frame = recolor_frame(Image.open(FRAME).convert("RGBA"), hue)
+def load_frame(hue=0, family=False, *, sat=100, val=100):
+    """The case frame in the wanted colour and tone; with family=True the green corner of the Steam Family library is laid over it (never recoloured)."""
+    frame = recolor_frame(Image.open(FRAME).convert("RGBA"), hue, sat, val)
     if family:
         frame = Image.alpha_composite(frame, Image.open(FAMILY_CORNER).convert("RGBA"))
     return frame
 
 
 @functools.lru_cache(maxsize=None)
-def case_color(hue):
-    """'#rrggbb' of the case's middle colour (the original is #1636c8) turned by `hue` degrees: for painting swatches and the colour slider."""
-    return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue % 360).getpixel((0, 0))[:3]
+def case_color(hue, sat=100, val=100):
+    """'#rrggbb' of the case's middle colour (the original is #1636c8) turned by `hue` degrees and toned by `sat` and `val`: for painting swatches and the colour sliders."""
+    return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue % 360, sat, val).getpixel((0, 0))[:3]
 
 
 HUE_CHUNK = "steamcase-hue"
@@ -727,10 +735,10 @@ def _compose(art, frame):
     return Image.alpha_composite(canvas, frame)
 
 
-def preview_cover(hue=0, family=False):
-    """What a cover looks like in this case colour, made from the default art that ships with the app (the window shows it before any game's art exists)."""
+def preview_cover(hue=0, family=False, *, sat=100, val=100):
+    """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists)."""
     with Image.open(DEFAULT_ART) as im:
-        return _compose(im.convert("RGBA"), load_frame(hue, family))
+        return _compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val))
 
 
 def cover_hue(path):
