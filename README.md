@@ -32,7 +32,7 @@
 <p align="center">
   <em>
     This project is not affiliated with Valve Corporation, Microsoft or any game publisher.
-    Steam and Windows are trademarks of their respective owners. See <a href="THIRD_PARTY.md">THIRD_PARTY.md</a>.
+    Steam and Windows are trademarks of their respective owners. See <a href="docs/THIRD_PARTY.md">THIRD_PARTY.md</a>.
   </em>
 </p>
 
@@ -110,7 +110,7 @@ On macOS and Linux, use `python3` instead of `python`. Run the tests with `pytho
 
 </details>
 
-Release files come with a `SHA256SUMS` list so you can check what you downloaded. See [SECURITY.md](SECURITY.md).
+Release files come with a `SHA256SUMS` list so you can check what you downloaded. See [SECURITY.md](docs/SECURITY.md).
 
 ## How it works
 
@@ -169,7 +169,7 @@ Good to know:
 * It never logs in, never asks for a password or API key, never uploads anything and never runs with elevated rights.
 * Files it reads from the internet are size-limited and checked before use.
 
-If you find a security problem, please [report it privately](SECURITY.md).
+If you find a security problem, please [report it privately](docs/SECURITY.md).
 
 ## Steam compatibility
 
