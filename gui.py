@@ -452,7 +452,8 @@ class App(tk.Tk):
         tk.Label(head, text="Highlight my 100% games (optional)", bg=CARD, fg=FG, font=("TkDefaultFont", 11, "bold")).pack(side="left")
         InfoBadge(head, PAGE_HELP).pack(side="left", padx=px(6))
         self._note(body, "Games where you unlocked every achievement can get a ribbon, and a gold case or border if you like. "
-                         "Steam shows them on your games page: open it, then save it as games.html. This app notices the file by itself.")
+                         "Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. "
+                         "This app notices the file by itself.")
         r = self._flow(body)
         self.btn_page_open = RoundedButton(r, "Open my games page", self.open_games_page)
         r.add(self.btn_page_open)
