@@ -17,10 +17,10 @@ The functions below are the engine. The CLI at the bottom and gui.py both use th
 import argparse, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
-    from PIL import Image, ImageChops
+    from PIL import Image, ImageChops, ImageDraw
     from PIL.PngImagePlugin import PngInfo
 except ImportError:
-    Image = ImageChops = PngInfo = None
+    Image = ImageChops = ImageDraw = PngInfo = None
 
 try:
     import certifi                      # a bundled set of trusted certificates (the packaged app's own Python may not find the system's)
@@ -35,6 +35,11 @@ HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file_
 FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
+COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    # rosette and "100% Complete" ribbon, laid over the covers of games with every achievement
+TREATMENTS = ("ribbon", "gold-case", "gold-border")      # how a 100% cover looks: the marks only, the marks on a gold case, the marks inside a gold border
+GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
+BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
+DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatment; plain covers have none
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 NEUTRAL_SWATCHES = (("Black", 0, 14), ("Graphite", 0, 34), ("Silver", 0, 78))    # ready-made greys: (name, colourfulness, brightness), hue does not matter
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
@@ -747,10 +752,55 @@ def _compose(art, frame):
     return Image.alpha_composite(canvas, frame)
 
 
-def preview_cover(hue=0, family=False, *, sat=100, val=100):
-    """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists)."""
+def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None):
+    """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists).
+    With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked."""
+    hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
-        return _compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val))
+        return finish_treatment(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), treatment)
+
+
+def treatment_colour(treatment, colour):
+    """The case colour (hue, sat, val) a cover is built in: gold for the "gold-case" treatment, the user's `colour` otherwise."""
+    return (GOLD_HUE, 100, 100) if treatment == "gold-case" else colour
+
+
+@functools.lru_cache(maxsize=1)
+def _completion_overlay():
+    with Image.open(COMPLETION_OVERLAY) as im:
+        return im.convert("RGBA")
+
+
+@functools.lru_cache(maxsize=1)
+def _gold_border():
+    """The rounded gold plate of the "gold-border" treatment: a vertical gradient, its corners rounded to follow the case's (drawn at 3x for smooth edges)."""
+    w, h, k = SIZE[0], SIZE[1], 3
+    top, bottom = (0xff, 0xe2, 0x78), (0xc4, 0x88, 0x16)
+    column = Image.new("RGB", (1, h))
+    for y in range(h):
+        t = y / (h - 1)
+        column.putpixel((0, y), tuple(round(top[i] * (1 - t) + bottom[i] * t) for i in range(3)))
+    plate = column.resize(SIZE).convert("RGBA")
+    mask = Image.new("L", (w * k, h * k), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=(24 + BORDER) * k, fill=255)
+    plate.putalpha(mask.resize(SIZE, Image.LANCZOS))
+    return plate
+
+
+def finish_treatment(cover, treatment):
+    """`cover` (the finished 600 x 900 composition) with the marks of a 100% game: the rosette over the platform badges and the
+    ribbon at the bottom, kept inside the case's own outline. For "gold-border" the whole cover is then shrunk by BORDER pixels
+    on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself."""
+    if treatment is None:
+        return cover
+    marks = _completion_overlay().copy()
+    marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
+    done = Image.alpha_composite(cover, marks)
+    if treatment == "gold-border":
+        plate = _gold_border().copy()
+        plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
+        done = plate
+    return done
 
 
 def cover_colour(path):

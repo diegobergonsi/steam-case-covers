@@ -1678,5 +1678,97 @@ class FamilyHelp(unittest.TestCase):
         self.assertLess(len(sc.FAMILY_HELP), 700)                                 # a tooltip, not a manual
 
 
+def near(px, ref, tol=12):
+    return all(abs(x - y) <= tol for x, y in zip(px, ref))
+
+
+def pixels(im):
+    return getattr(im, "get_flattened_data", im.getdata)()          # getdata is deprecated from Pillow 12; the floor (10.3) only has getdata
+
+
+def BORDER_AT(v, axis):
+    """Where a point of the full cover lands once the "gold-border" treatment has shrunk it into the border."""
+    return sc.BORDER + v * (sc.SIZE[axis] - 2 * sc.BORDER) / sc.SIZE[axis]
+
+
+class Treatments(unittest.TestCase):
+    """The marks of a 100% game: the rosette over the badges, the cut ribbon at the bottom, and the three case treatments."""
+    DISC, BAND = (255, 207, 10), (26, 159, 255)
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_the_overlay_asset_exists_and_is_a_full_size_rgba(self):
+        with sc.Image.open(sc.COMPLETION_OVERLAY) as im:
+            self.assertEqual(im.mode, "RGBA")
+            self.assertEqual(im.size, (600, 900))
+
+    def test_the_overlay_has_the_approved_marks(self):
+        with sc.Image.open(sc.COMPLETION_OVERLAY) as im:
+            ov = im.convert("RGBA")
+        self.assertTrue(near(ov.getpixel((526, 66))[:3], self.DISC), ov.getpixel((526, 66)))     # the rosette's gold disc
+        text = ov.crop((150, 800, 450, 840))
+        white = sum(1 for p in pixels(text) if p[3] == 255 and min(p[:3]) >= 240)
+        self.assertGreaterEqual(white, 200)                                                    # "100% Complete"
+        self.assertTrue(near(ov.getpixel((80, 800))[:3], self.BAND), ov.getpixel((80, 800)))    # the band
+        self.assertEqual(ov.getpixel((300, 400))[3], 0)                                         # the middle of the art stays clear
+
+    def test_no_treatment_returns_the_cover_untouched(self):
+        c = sc.preview_cover()
+        self.assertIs(sc.finish_treatment(c, None), c)
+
+    def test_a_ribbon_cover_changes_only_the_rosette_and_the_ribbon(self):
+        done, plain = sc.preview_cover(treatment="ribbon"), sc.preview_cover()
+        self.assertEqual(done.getpixel((300, 400)), plain.getpixel((300, 400)))
+        self.assertNotEqual(done.getpixel((526, 66)), plain.getpixel((526, 66)))
+        self.assertNotEqual(done.getpixel((300, 820)), plain.getpixel((300, 820)))
+        self.assertEqual(done.getpixel((0, 0))[3], 0)                                           # nothing leaves the rounded case
+
+    def test_gold_case_changes_the_case_colour_to_gold(self):
+        self.assertEqual(sc.preview_cover(20, treatment="gold-case").getpixel((7, 450)),
+                         sc.preview_cover(sc.GOLD_HUE).getpixel((7, 450)))                      # the user's hue 20 is ignored
+
+    def test_other_treatments_keep_the_users_colour(self):
+        self.assertEqual(sc.preview_cover(134, treatment="ribbon").getpixel((7, 450)), sc.preview_cover(134).getpixel((7, 450)))
+        self.assertEqual(sc.preview_cover(134, sat=0, val=14, treatment="ribbon").getpixel((7, 450)),
+                         sc.preview_cover(134, sat=0, val=14).getpixel((7, 450)))
+
+    def test_gold_border_shrinks_the_case_and_stays_600_by_900(self):
+        im = sc.preview_cover(treatment="gold-border")
+        self.assertEqual(im.size, (600, 900))
+        r, g, b, a = im.getpixel((5, 450))
+        self.assertTrue(r > 180 and b < 90, (r, g, b))                                         # the gold border
+        r, g, b, a = im.getpixel((20, 450))
+        self.assertGreater(b, r)                                                               # the user's blue case, a little inside
+        self.assertNotEqual(im.getpixel((300, 450)), im.getpixel((5, 450)))                     # the art still shows
+        self.assertEqual(im.getpixel((300, 450))[3], 255)
+        for corner in ((0, 0), (599, 0), (0, 899), (599, 899)):
+            self.assertEqual(im.getpixel(corner)[3], 0, corner)
+
+    def test_gold_border_keeps_the_rosette_and_ribbon_on_the_art(self):
+        im = sc.preview_cover(treatment="gold-border")
+        self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((480, 30, 560, 100)))))
+        box = im.crop((460, 20, 580, 140))                                                     # the whole disc, to find its centre
+        disc = [(i % 120 + 460, i // 120 + 20) for i, p in enumerate(pixels(box)) if near(p[:3], self.DISC)]
+        cx, cy = sum(x for x, _ in disc) / len(disc), sum(y for _, y in disc) / len(disc)
+        want = (BORDER_AT(526, 0), BORDER_AT(66, 1))                                           # the disc shrank with the case: its centre moved
+        self.assertTrue(abs(cx - want[0]) <= 2 and abs(cy - want[1]) <= 2, ((cx, cy), want))
+        self.assertGreater(abs(cx - 526) + abs(cy - 66), 10)
+        strip = pixels(im.crop((0, 0, 14, 900)))
+        self.assertFalse(any(p[3] and near(p[:3], self.BAND) for p in strip))
+
+    def test_family_corner_and_the_rosette_do_not_overlap(self):
+        im = sc.preview_cover(0, True, treatment="ribbon")
+        self.assertTrue(near(im.getpixel((8, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((8, 8)))
+        self.assertTrue(near(im.getpixel((526, 66))[:3], self.DISC), im.getpixel((526, 66)))
+
+    def test_treatment_colour(self):
+        self.assertEqual(sc.treatment_colour("gold-case", (20, 40, 50)), (176, 100, 100))
+        self.assertEqual(sc.treatment_colour("ribbon", (20, 40, 50)), (20, 40, 50))
+        c = (20, 40, 50)
+        self.assertEqual(sc.treatment_colour(None, c), c)
+
+
 if __name__ == "__main__":
     unittest.main()
