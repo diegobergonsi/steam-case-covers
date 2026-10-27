@@ -3,6 +3,9 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+
+## [1.4.0] - 2026-10-27
+- Documentation files other than the README now live in the `docs/` folder.
 - Step 2 has an optional block, "Highlight my 100% games". "Open my games page" opens your Steam games page; you save it from your own browser as "Webpage, Complete" (Chrome or Firefox), named `games.html`, and the app notices it in Downloads, or you pick it with "Browse…". Games with every achievement unlocked get a rosette at the top right, over the platform badges, and a "100% Complete" ribbon at the bottom. The choice can be picked once a page is loaded: "Gold case", "Gold border" (a gold border around the outside of the case, which gets about 5% smaller), "Normal case with ribbon" (the default) and "No special case". Only games already in your step 1 list can be highlighted. Switching the choice, or saving the page again after finishing another game and pressing Make covers, rebuilds only the covers that change. "No special case" removes the highlights on the next Make covers, after asking.
 - The window says plainly that the saved page contains a temporary login token for your Steam account. The app only reads which games are at 100%: it never uses, stores or logs the token, and never deletes your files.
 - `make` and `run` accept `--games-page FILE` and `--completed-style {ribbon,gold-case,gold-border,none}`. With a page and no style, it is `ribbon`; `none` removes the highlights. Without either option, covers keep their look.
