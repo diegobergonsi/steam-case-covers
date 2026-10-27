@@ -375,9 +375,9 @@ class App(tk.Tk):
         self.colour_preview = tk.Label(box, bg=CARD)
         box.add(left)
         box.add(self.colour_preview, px(20))
-        found = sc.existing_cover_hue(self.covers_dir)          # reopening the app shows the colour of the covers you already made
-        if found:
-            self.hue.set(found)
+        found = sc.existing_cover_colour(self.covers_dir)          # reopening the app shows the colour of the covers you already made
+        if found and found[0]:
+            self.hue.set(found[0])
         self.hue.trace_add("write", self._colour_changed)
         self._colour_changed()
 

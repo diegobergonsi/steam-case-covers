@@ -1132,10 +1132,43 @@ class CoverColourFiles(Base):
         self.src = os.path.join(self.tmp, "portrait.png")
         sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
 
-    def make(self, name, hue=0, family=False):
+    def make(self, name, hue=0, family=False, sat=100, val=100):
         out = os.path.join(self.tmp, name)
-        sc.build_cover(self.src, out, sc.load_frame(hue, family), hue)
+        sc.build_cover(self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val)
         return out
+
+    def note_cover(self, **notes):
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in notes.items():
+            info.add_text("steamcase-" + key, value)
+        path = os.path.join(self.tmp, "n.png")
+        sc.Image.new("RGBA", sc.SIZE).save(path, pnginfo=info)
+        return path
+
+    def test_tone_is_recorded_and_old_covers_count_as_full_tone(self):
+        self.assertEqual(sc.cover_colour(self.make("a.png", 0, sat=0, val=14)), (0, 0, 14))
+        self.assertEqual(sc.cover_colour(self.make("b.png", 134)), (134, 100, 100))
+        self.assertEqual(sc.cover_colour(self.note_cover(hue="77")), (77, 100, 100))      # built the old way: only the hue note
+        old = os.path.join(self.tmp, "old.png")
+        sc.Image.new("RGBA", sc.SIZE).save(old)
+        self.assertEqual(sc.cover_colour(old), (0, 100, 100))
+        self.assertIsNone(sc.cover_colour(os.path.join(self.tmp, "missing.png")))
+
+    def test_a_garbled_tone_note_is_unknown(self):
+        for value in ("abc", "101 5", "-1 5", "5", "5 5 5", " 5 5", "5 5 ", "05 5", "5  5", ""):
+            self.assertIsNone(sc.cover_colour(self.note_cover(tone=value)), repr(value))
+        self.assertEqual(sc.cover_colour(self.note_cover(tone="100 0")), (0, 100, 0))
+
+    def test_same_colour_ignores_hue_at_zero_saturation_or_brightness(self):
+        self.assertTrue(sc.same_colour((10, 0, 50), (200, 0, 50)))
+        self.assertFalse(sc.same_colour((10, 0, 50), (10, 0, 51)))
+        self.assertFalse(sc.same_colour((10, 100, 50), (200, 100, 50)))
+        self.assertTrue(sc.same_colour((10, 80, 0), (300, 80, 0)))
+        self.assertFalse(sc.same_colour(None, (0, 100, 100)))
+        self.assertFalse(sc.same_colour((0, 100, 100), None))
+        self.assertTrue(sc.same_colour((1, 100, 100), (2, 100, 100)))                 # neighbouring degrees on the same step
+        self.assertEqual(sc.tone_key(5, 150, -3), (0, 100, 0))
 
     def test_cover_hue_reads_the_recorded_hue_and_treats_old_covers_as_zero(self):
         self.assertEqual(sc.cover_hue(self.make("a.png", 134)), 134)
@@ -1193,6 +1226,35 @@ class MakeInColour(StoreMocks):
         self.assertEqual(sc.cover_hue(self.cover(1)), 134)
         self.assertEqual(sc.Image.open(self.cover(1)).convert("RGBA").getpixel((7, 450)), sc.load_frame(134).getpixel((7, 450)))
 
+    def test_covers_are_made_in_the_chosen_tone(self):
+        sc.make_covers({1: None}, self.covers, hue=0, sat=0, val=14)
+        self.assertEqual(sc.cover_colour(self.cover(1)), (0, 0, 14))
+        self.assertEqual(sc.Image.open(self.cover(1)).convert("RGBA").getpixel((7, 450)), sc.load_frame(0, sat=0, val=14).getpixel((7, 450)))
+
+    def test_changing_only_the_tone_rebuilds_and_changing_only_the_hue_at_black_does_not(self):
+        sc.make_covers({1: None}, self.covers, hue=0)
+        blue = self.read(self.cover(1))
+        sc.make_covers({1: None}, self.covers, hue=0, sat=0, val=14)
+        black = self.read(self.cover(1))
+        self.assertNotEqual(black, blue)
+        self.assertEqual(sc.cover_colour(self.cover(1)), (0, 0, 14))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, hue=200, sat=0, val=14, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual((self.read(self.cover(1)), statuses), (black, ["exists"]))
+
+    def test_covers_in_other_colour_sees_the_tone(self):
+        sc.make_covers({1: None}, self.covers)
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 0, 0, 14))
+        os.remove(self.cover(1))
+        sc.make_covers({1: None}, self.covers, sat=0, val=14)
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 200, 0, 14))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 0))
+
+    def test_existing_cover_colour_reads_the_folder(self):
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
+        sc.make_covers({1: None}, self.covers, sat=0, val=14)
+        self.assertEqual(sc.existing_cover_colour(self.covers), (0, 0, 14))
+
     def test_an_existing_cover_in_another_colour_is_rebuilt_and_one_in_the_same_colour_is_kept(self):
         sc.make_covers({1: None}, self.covers)
         before = self.read(self.cover(1))
@@ -1232,16 +1294,16 @@ class MakeInColour(StoreMocks):
         sc.make_covers({1: None}, self.covers, hue=3)
         self.assertEqual(sc.cover_hue(self.cover(1)), 3)
 
-    def test_existing_cover_hue_reads_the_colour_of_the_folder(self):
-        self.assertIsNone(sc.existing_cover_hue(os.path.join(self.tmp, "nowhere")))
-        self.assertIsNone(sc.existing_cover_hue(self.covers))                            # empty folder
+    def test_existing_cover_colour_reads_the_colour_of_the_folder(self):
+        self.assertIsNone(sc.existing_cover_colour(os.path.join(self.tmp, "nowhere")))
+        self.assertIsNone(sc.existing_cover_colour(self.covers))                            # empty folder
         sc.Image.new("RGBA", sc.SIZE).save(os.path.join(self.covers, "notes.png"))      # not named like one of our covers: ignored
-        self.assertIsNone(sc.existing_cover_hue(self.covers))
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
         sc.make_covers({1: None}, self.covers, hue=134)
-        self.assertEqual(sc.existing_cover_hue(self.covers), 134)
+        self.assertEqual(sc.existing_cover_colour(self.covers), (134, 100, 100))
         old = os.path.join(self.covers, "Old_2.png")                                     # made before colours existed: blue
         sc.Image.new("RGBA", sc.SIZE).save(old)
-        self.assertEqual(sc.existing_cover_hue(self.covers), 134)                        # the first cover by name decides: Game_1_1.png
+        self.assertEqual(sc.existing_cover_colour(self.covers), (134, 100, 100))                        # the first cover by name decides: Game_1_1.png
 
     def test_covers_in_other_colour(self):
         self.assertFalse(sc.covers_in_other_colour(os.path.join(self.tmp, "nowhere"), 134))

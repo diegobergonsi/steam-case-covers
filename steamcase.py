@@ -681,9 +681,15 @@ def hue_shift(hue):
     return round((hue % 360) * 256 / 360) % 256
 
 
+def tone_key(hue, sat=100, val=100):
+    """What decides how a case looks: (hue step, sat, val), tone clamped to 0..100. Without colour or without light the hue shows nothing, so it counts as 0."""
+    sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
+    return (0 if sat == 0 or val == 0 else hue_shift(hue), sat, val)
+
+
 def same_colour(a, b):
-    """True if two case hues (degrees, or None when unknown) give the same colour."""
-    return a is not None and b is not None and hue_shift(a) == hue_shift(b)
+    """True if two case colours, (hue, sat, val) or None when unknown, look the same."""
+    return a is not None and b is not None and tone_key(*a) == tone_key(*b)
 
 
 def recolor_frame(frame, hue, sat=100, val=100):
@@ -720,6 +726,7 @@ def case_color(hue, sat=100, val=100):
 
 
 HUE_CHUNK = "steamcase-hue"
+TONE_CHUNK = "steamcase-tone"                 # "<sat> <val>"; covers without it are in full tone
 
 
 def _compose(art, frame):
@@ -741,23 +748,37 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100):
         return _compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val))
 
 
-def cover_hue(path):
-    """The case colour (degrees turned from the original blue) a cover was made in, read from its PNG header without decoding the picture.
-    Covers made before colours existed have no such note and count as 0. None if this is not a readable PNG, or if the note is not a whole number
-    from 0 to 359 (then the cover is rebuilt rather than taken for blue)."""
+def cover_colour(path):
+    """The case colour (hue, sat, val) a cover was made in, read from its PNG header without decoding the picture.
+    Covers made before colours existed have no hue note and count as 0; those without a tone note count as full tone (100, 100).
+    None if this is not a readable PNG, or if a note is not what we write (the hue a whole number from 0 to 359, the tone two whole
+    numbers from 0 to 100 split by a space): the cover is then rebuilt rather than taken for blue."""
     try:
         if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return None
         with Image.open(path, formats=["PNG"]) as im:
-            value = im.info.get(HUE_CHUNK)
-        if value is None:
-            return 0
-        return int(value) if isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", value) and int(value) < 360 else None
+            hue, tone = im.info.get(HUE_CHUNK), im.info.get(TONE_CHUNK)
+        if hue is None:
+            hue = 0
+        elif isinstance(hue, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", hue) and int(hue) < 360:
+            hue = int(hue)
+        else:
+            return None
+        if tone is None:
+            return (hue, 100, 100)
+        m = re.fullmatch(r"(0|[1-9][0-9]?|100) (0|[1-9][0-9]?|100)", tone) if isinstance(tone, str) else None
+        return (hue, int(m.group(1)), int(m.group(2))) if m else None
     except Exception:
         return None
 
 
-def build_cover(portrait_path, out_path, frame, hue=0):
+def cover_hue(path):
+    """The case hue of a cover (see cover_colour), or None when unknown."""
+    colour = cover_colour(path)
+    return colour[0] if colour else None
+
+
+def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100):
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
@@ -768,18 +789,20 @@ def build_cover(portrait_path, out_path, frame, hue=0):
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
+    note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
     cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
 
 # ---------- make ----------
-def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0):
+def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
     family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
-    hue: degrees to turn the case colour from the original blue (0). A cover that exists in another colour is rebuilt, one in this colour is kept.
+    hue, sat, val: the case colour: degrees to turn it from the original blue (0), then its colourfulness and brightness (0 to 100, 100 = as drawn).
+    A cover that exists in another colour is rebuilt, one in this colour is kept (the hue means nothing at 0 sat or 0 val).
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
@@ -789,9 +812,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     os.makedirs(out, exist_ok=True)
     hue %= 360
-    frame = load_frame(hue)
+    sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
+    frame = load_frame(hue, sat=sat, val=val)
     family = set(family or ())
-    frame_family = load_frame(hue, True) if family else None
+    frame_family = load_frame(hue, True, sat=sat, val=val) if family else None
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -838,7 +862,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        if os.path.exists(dest) and not force and same_colour(cover_hue(dest), hue):
+        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), (hue, sat, val)):
             res["ok"] += 1
             res["files"].append(dest)
             report(n, appid, name, "exists")
@@ -866,7 +890,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(tmp, dest, frame_family if is_family else frame, hue)
+            build_cover(tmp, dest, frame_family if is_family else frame, hue, sat=sat, val=val)
             res["ok"] += 1
             res["family"] += is_family
             res["files"].append(dest)
@@ -883,31 +907,31 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
-def covers_in_other_colour(covers_dir, hue):
-    """True if the covers folder already holds a cover made in a different case colour than `hue` (stops at the first one)."""
+def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
+    """True if the covers folder already holds a cover made in a different case colour than (`hue`, `sat`, `val`) (stops at the first one)."""
     try:
         names = os.listdir(covers_dir)
     except OSError:
         return False
     for n in names:
         if n.lower().endswith(".png") and appid_of(n) is not None:
-            h = cover_hue(os.path.join(covers_dir, n))
-            if h is not None and not same_colour(h, hue):
+            c = cover_colour(os.path.join(covers_dir, n))
+            if c is not None and not same_colour(c, (hue, sat, val)):
                 return True
     return False
 
 
-def existing_cover_hue(covers_dir):
-    """The case colour of the covers already in the folder (that of the first one by name), or None when there are none."""
+def existing_cover_colour(covers_dir):
+    """The case colour (hue, sat, val) of the covers already in the folder (that of the first one by name), or None when there are none."""
     try:
         names = sorted(os.listdir(covers_dir))
     except OSError:
         return None
     for n in names:
         if n.lower().endswith(".png") and appid_of(n) is not None:
-            h = cover_hue(os.path.join(covers_dir, n))
-            if h is not None:
-                return h
+            c = cover_colour(os.path.join(covers_dir, n))
+            if c is not None:
+                return c
     return None
 
 
@@ -1240,16 +1264,17 @@ def _hue_arg(text):
 
 def cmd_make(args):
     steam, games, family = _collect(args)
-    hue = args.hue if args.hue is not None else (existing_cover_hue(os.path.abspath(args.out)) or 0)
+    found = existing_cover_colour(os.path.abspath(args.out)) or (0, 100, 100)
+    hue, sat, val = (args.hue, 100, 100) if args.hue is not None else found           # no --hue: keep the colour and tone of the covers already there
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
-          + (" | in a custom colour" if hue else ""))
+          + (" | in a custom colour" if hue or (sat, val) != (100, 100) else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
