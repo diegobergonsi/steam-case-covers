@@ -1615,6 +1615,17 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(10, "End"), 359)
         self.assertEqual(f(77, "x"), 77)
 
+    def test_step_choice_moves_and_stops_at_the_ends(self):
+        f = self.w.step_choice
+        self.assertEqual(f(0, "Left", 4), 0)
+        self.assertEqual(f(3, "Right", 4), 3)
+        self.assertEqual(f(1, "Right", 4), 2)
+        self.assertEqual(f(2, "Home", 4), 0)
+        self.assertEqual(f(1, "End", 4), 3)
+        self.assertEqual(f(1, "x", 4), 1)
+        self.assertEqual(f(0, "Down", 4), 1)
+        self.assertEqual(f(2, "Up", 4), 1)
+
 
 class CompletionCli(StoreMocks):
     """--games-page and --completed-style on the command line."""
