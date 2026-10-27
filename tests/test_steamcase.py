@@ -3,6 +3,7 @@
 """Regression tests: normal use, plus the attacks the app must refuse. No network, no real Steam.
 Run:  python -m unittest discover -s tests -v"""
 import http.server, json, os, re, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import steamcase as sc
@@ -1362,6 +1363,12 @@ class RecogniseTreated(Base):
         ribbon = self.make("r.png", treatment="ribbon")
         self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, done="gold-case"))))
 
+    def test_a_gold_case_whose_colour_notes_are_not_gold_is_not_ours(self):
+        gold = self.make("g.png", treatment="gold-case")
+        self.assertTrue(sc.is_steamcase_cover(gold))
+        for change in ({"hue": "10"}, {"tone": "50 100"}, {"tone": "100 60"}):
+            self.assertFalse(sc.is_steamcase_cover(self.renote(gold, **self.notes_of(gold, **change))), change)
+
     def test_a_garbled_treatment_note_is_not_ours(self):
         ribbon = self.make("r.png", treatment="ribbon")
         for value in ("sparkly", "", "ribbon ", "RIBBON"):
@@ -1698,6 +1705,64 @@ class CompletionCli(StoreMocks):
         self.assertEqual(self.read(path), before)
         self.assertEqual(self.treatment(out, 1), "ribbon")
 
+    def test_none_does_not_read_the_page_so_a_bad_one_cannot_stop_it(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        bad = os.path.join(self.tmp, "plain.html")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("<html><body>nothing here</body></html>")
+        for page in (bad, os.path.join(self.tmp, "missing.html")):
+            self.make(out, "--games-page", page, "--completed-style", "none")
+            self.assertIsNone(self.treatment(out, 1))
+            self.make(out, "--games-page", self.page({1: (10, 10)}))
+
+    def test_none_with_a_good_page_works(self):
+        out = os.path.join(self.tmp, "out")
+        page = self.page({1: (10, 10), 2: (1, 9)})
+        self.make(out, "--games-page", page)
+        self.make(out, "--games-page", page, "--completed-style", "none")
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_the_page_is_checked_before_the_library_is_loaded(self):
+        import contextlib, io
+        with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None))
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_a_tilde_in_the_page_path_is_expanded(self):
+        page = self.page({1: (10, 10)}, "tilde.html")
+        with mock.patch.dict(os.environ, {"HOME": self.tmp, "USERPROFILE": self.tmp}):
+            got = sc._completion_args(sc.argparse.Namespace(games_page=os.path.join("~", "tilde.html"), completed_style=None))
+        self.assertEqual(got, ({1}, "ribbon"))
+
+    def test_a_missing_page_names_only_its_file_name(self):
+        import contextlib, io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.make(os.path.join(self.tmp, "out"), "--games-page", os.path.join(self.tmp, "gone.html"))
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(err.getvalue().strip(), "That file could not be opened. (gone.html)")
+
+    def test_run_with_a_bad_page_exits_2_and_does_not_apply(self):
+        import contextlib, io
+        bad = os.path.join(self.tmp, "plain.html")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("<html><body>nothing here</body></html>")
+        with mock.patch.object(sc, "cmd_apply") as apply_, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            self.run_cli("run", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", os.path.join(self.tmp, "out"), "--games-page", bad)
+        self.assertEqual(caught.exception.code, 2)
+        apply_.assert_not_called()
+
+    def test_run_with_none_and_a_good_page_applies(self):
+        with mock.patch.object(sc, "cmd_apply") as apply_:
+            out = os.path.join(self.tmp, "out")
+            self.run_cli("run", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", out,
+                         "--games-page", self.page({1: (10, 10)}), "--completed-style", "none")
+        apply_.assert_called_once()
+        self.assertIsNone(self.treatment(out, 1))
+
     def test_a_bad_page_prints_the_reason_and_exits_2(self):
         import contextlib, io
         bad = os.path.join(self.tmp, "plain.html")
@@ -1871,8 +1936,25 @@ class GamesPage(unittest.TestCase):
         with self.assertRaises(cp.PageError):
             cp.read_games_page(link)
 
+    def test_a_link_swapped_in_after_the_first_check_is_still_refused(self):
+        if not hasattr(os, "O_NOFOLLOW"):
+            self.skipTest("no O_NOFOLLOW here")
+        link = os.path.join(self.tmp, "link.html")
+        os.symlink(self.FIXTURE, link)
+        with mock.patch.object(cp.os, "lstat", os.stat):                       # as if the path was a plain file when it was checked
+            with self.assertRaises(cp.PageError) as cm:
+                cp.read_games_page(link)
+        self.assertIn("not a plain file", str(cm.exception))
+
+    def test_a_missing_file_names_only_its_base_name(self):
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(os.path.join(self.tmp, "gone.html"))
+        self.assertEqual(str(cm.exception), "That file could not be opened. (gone.html)")
+
     def test_junk_is_parsed_in_linear_time(self):
         junk = b'<a href="https://store.steampowered.com/app/' * (5 * 1024 * 1024 // 44) + os.urandom(5 * 1024 * 1024)
+        # the progress pattern too: link starts that never end, and achievements links with nothing after them
+        junk += (b'<a href="https://steamcommunity.com/id/' + b"a" * 200) * 2000 + b'/achievements/' * 20000
         p = self.page(self.html.encode("utf-8") + junk)
         t0 = time.monotonic()
         got = cp.read_games_page(p)
@@ -2008,6 +2090,20 @@ class MakeTreated(StoreMocks):
 
     def cover(self, appid):
         return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_an_unknown_treatment_is_refused_before_anything_is_made(self):
+        for bad in ("sparkly", "", "RIBBON", False):
+            with self.assertRaises(ValueError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment=bad)
+        self.assertEqual(os.listdir(self.covers), [])
+
+    def test_a_missing_frame_fails_before_any_lookup_or_download(self):
+        with mock.patch.object(sc, "FRAME", os.path.join(self.tmp, "no-frame.png")), \
+                mock.patch.object(sc, "store_items") as store, mock.patch.object(sc, "http_get") as get:
+            with self.assertRaises(OSError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-case")
+        store.assert_not_called()
+        get.assert_not_called()
 
     def test_a_completed_game_gets_the_treatment_and_the_others_do_not(self):
         res = sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")

@@ -48,7 +48,7 @@ class _NoProcess:
 
 gui.App.open_covers_folder = lambda self: LAUNCHED.append(("open covers folder", self.covers_dir))
 gui.webbrowser.open = lambda url, *a, **k: LAUNCHED.append(("browser", url)) or True
-gui.subprocess.Popen = _NoProcess
+gui.subprocess.Popen = _NoProcess        # global for the whole run: it is the same subprocess module, so subprocess.run starts this stand-in too
 
 
 def games_page(rows):
@@ -326,10 +326,15 @@ def run_one(seed, steps, sandbox):
                     bad.append("temp file left: " + f)
         return bad
 
+    def act_load_page():
+        """Load one of the pages: every seed does this once early, so the 100% block is always exercised."""
+        picks["file"] = rnd.choice(page_files); app.browse_games_page(); return "browse page (forced) " + os.path.basename(picks["file"])
+
+    forced = rnd.randrange(min(10, steps)) if steps else -1       # one of the first 10 steps
     log, failure, loaded = [], None, set()
     for n in range(steps):
         try:
-            what = act()
+            what = act_load_page() if n == forced else act()
         except Exception as e:
             errors.append(("act", "%s: %s" % (type(e).__name__, e)))
             what = "ACT-EXCEPTION"

@@ -903,6 +903,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
+    if treatment is not None and treatment not in TREATMENTS:
+        raise ValueError("unknown treatment: %r" % (treatment,))        # a note nobody can read back would have the cover rebuilt on every run
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -914,6 +916,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         if key not in frames:
             frames[key] = load_frame(colour[0], is_family, sat=colour[1], val=colour[2])
         return frames[key]
+
+    frame_for((hue, sat, val), False)           # a missing frame.png fails here, before any download
 
     ids = sorted(games)
     if only:
@@ -1225,7 +1229,7 @@ def _same_pixels(strip, ref):
     return max(hi for _, hi in diff.getextrema()) <= 2
 
 
-@functools.lru_cache(maxsize=8)                                     # about 2.7 MB an entry; a library uses one or two colours, each plain and family
+@functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry; a library uses one or two colours, each plain and family
 def _treated_reference(key, family):
     """(expected, mask) for a treated cover: key is (tone_key, treatment). The cover is made twice, from flat black and from flat white
     art, through the same steps as build_cover; the mask is 255 where both agree within 2 on every channel (frame, rosette, ribbon,
@@ -1267,6 +1271,8 @@ def is_steamcase_cover(path):
         if done is not None:
             if done not in TREATMENTS or colour is None:
                 return False
+            if done == "gold-case" and tone_key(*colour) != tone_key(GOLD_HUE, 100, 100):
+                return False                                    # we always write a gold case with gold notes (gold-case and the ribbon at hue 176 look the same, so those two notes swapped cannot be told; harmless)
             key = (tone_key(*treatment_colour(done, colour)), done)
             return any(_same_treated(im, key, family) for family in (False, True))
         if toned:
@@ -1457,15 +1463,15 @@ def _chosen_colour(args):
 
 def _completion_args(args):
     """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
-    A page alone means the ribbon; "none" removes the treatments, with a page or without. Exits with status 2 and the reason if the page cannot be used."""
+    A page alone means the ribbon; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
     if args.games_page is None and args.completed_style is None:
         return None, None
     style = args.completed_style or "ribbon"
     treatment = None if style == "none" else style
-    if args.games_page is None:
+    if args.games_page is None or treatment is None:        # "none" needs no page: a bad one must not stop you removing the highlights
         return set(), treatment
     try:
-        completed = completion.completed_apps(completion.read_games_page(args.games_page))
+        completed = completion.completed_apps(completion.read_games_page(os.path.expanduser(args.games_page)))
     except completion.PageError as e:
         print(e, file=sys.stderr)
         sys.exit(2)
@@ -1473,9 +1479,9 @@ def _completion_args(args):
 
 
 def cmd_make(args):
+    completed, treatment = _completion_args(args)           # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
     hue, sat, val = _chosen_colour(args)
-    completed, treatment = _completion_args(args)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
@@ -1605,6 +1611,7 @@ def main():
                             "The saved page contains a temporary login token of yours: this app does not use or keep it, and you can delete the page afterwards")
         p.add_argument("--completed-style", choices=("ribbon", "gold-case", "gold-border", "none"), default=None,
                        help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
+                            "gold-case is always gold and ignores --hue, --saturation and --brightness. "
                             "Needs --games-page, except none. Without either option the covers are left as they are")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)

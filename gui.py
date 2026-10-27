@@ -324,6 +324,8 @@ class App(tk.Tk):
         elif not self.library_path:
             self.step1_status.configure(text="Waiting for userdata.json…", fg=MUTED)
         self._set_state(self.step2, ready and not self.running)
+        if self.page_pending:
+            self.btn_make.configure(state="disabled")        # wait for the page: Make covers must not use the one read before
         self._refresh_choice()
         self.btn_cancel.configure(state="normal" if self.running else "disabled")
         self.update_steps()
@@ -499,6 +501,7 @@ class App(tk.Tk):
         """Read the saved games page on a worker thread. The answer comes back as a "page" event (see on_page); a failure shows in red in the block."""
         self._page_req += 1
         self.page_pending += 1
+        self.refresh_step1()
         self.page_status.configure(text="Reading %s…" % os.path.basename(path), fg=MUTED)
         threading.Thread(target=self._page_worker, args=(self._page_req, path), daemon=True).start()
 
@@ -515,11 +518,13 @@ class App(tk.Tk):
     def on_page(self, req, path, done, error):
         self.page_pending -= 1
         if req != self._page_req:                    # the user picked another page in the meantime
+            self.refresh_step1()
             return
         name = os.path.basename(path)              # only the file's name is shown, never anything from inside it
         if error:
             kept = " The page you loaded before is still used." if self.games_page else ""
             self.page_status.configure(text="%s: %s%s" % (name, error, kept), fg=RED)
+            self.refresh_step1()
             return
         self.games_page, self.completed = path, set(done)
         n = len(done)
@@ -529,7 +534,7 @@ class App(tk.Tk):
                                       "which this app does not use or keep." % name)
         if not self.page_note.winfo_manager():
             self.page_note.pack(fill="x", pady=(0, px(6)), after=self.style_choice)
-        self._refresh_choice()
+        self.refresh_step1()
         self._schedule_preview()
 
     def _refresh_choice(self):
@@ -624,28 +629,44 @@ class App(tk.Tk):
         """Why Make covers would rebuild covers already in the folder, as (title, sentence) for the prompt; None when nothing is rebuilt."""
         if not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment):
             return None
-        if sc.covers_in_other_colour(self.covers_dir, *tone):
+        colour = sc.covers_in_other_colour(self.covers_dir, *tone)
+        styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
+        if completed is not None:
+            try:
+                for n in os.listdir(self.covers_dir):
+                    appid = sc.appid_of(n)
+                    if n.lower().endswith(".png") and appid is not None:
+                        have = sc.cover_treatment(os.path.join(self.covers_dir, n)) or None
+                        styles.add(have)
+                        changed = changed or have != (treatment if int(appid) in completed else None)
+            except OSError:
+                pass
+        if colour and not changed:
             return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
-        if treatment is None:
-            return "Remove the 100% highlight?", "You chose “No special case”: the covers of your 100% games are made again as normal covers."
-        label = dict(STYLES)[treatment]
-        styles = set()
-        try:
-            for n in os.listdir(self.covers_dir):
-                if n.lower().endswith(".png"):
-                    styles.add(sc.cover_treatment(os.path.join(self.covers_dir, n)))
-        except OSError:
-            pass
         styles &= set(sc.TREATMENTS)
-        if styles - {treatment}:
-            return "Change the look of your 100% games?", "This replaces the covers of your 100%% games made in another style with “%s”." % label
-        if not styles:
-            return "Highlight your 100% games?", "This replaces the covers of your 100%% games with highlighted ones (“%s”)." % label
-        return "Update your 100% covers?", ("Some covers you already made are made again to match your games page: "
-                                            "games you finished get the highlight, games no longer at 100% lose it.")
+        label = dict(STYLES).get(treatment)
+        if treatment is None:
+            what = "the covers of your 100% games are made again as normal covers"
+            title, one = "Remove the 100% highlight?", "You chose “No special case”: " + what + "."
+        elif not completed:
+            what = "the covers with a highlight lose it, as no game on your page is at 100%"
+            title, one = "Remove the 100% highlight?", "No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers."
+        elif styles - {treatment}:
+            what = "the covers of your 100%% games made in another style are made again as “%s”" % label
+            title, one = "Change the look of your 100% games?", "This replaces the covers of your 100%% games made in another style with “%s”." % label
+        elif not styles:
+            what = "your 100% games get highlighted covers (“%s”)" % label
+            title, one = "Highlight your 100% games?", "This replaces the covers of your 100%% games with highlighted ones (“%s”)." % label
+        else:
+            what = "your 100% covers are updated to match your games page"
+            title, one = "Update your 100% covers?", ("Some covers you already made are made again to match your games page: "
+                                                      "games you finished get the highlight, games no longer at 100% lose it.")
+        if colour:
+            return "Change your covers?", "This replaces the covers you already made in another colour, and %s." % what
+        return title, one
 
     def start_make(self):
-        if self.running:
+        if self.running or self.page_pending:
             return
         tone = self._tone()
         completed, treatment = self._completion()           # read here, on the UI thread: the worker never touches Tk variables

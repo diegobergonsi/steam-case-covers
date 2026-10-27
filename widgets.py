@@ -726,7 +726,8 @@ class _Pill(_Stateful):
 class Choice(tk.Frame):
     """A group of 2 to 4 pill options of which exactly one is chosen, kept in a tk.StringVar.
     `options` is a list of (value, label). The group is one Tab stop: Tab lands on the chosen pill, and the arrows, Home and End move AND choose
-    (Space / Enter choose the focused pill). The pills wrap onto more rows when the window is narrow. command() runs once per change by the user."""
+    (Space / Enter choose the focused pill). The pills wrap onto more rows when the window is narrow, but only if it is packed with fill="x"
+    or gridded with sticky="ew" (it follows the width it is given). command() runs once per change by the user."""
 
     def __init__(self, parent, variable, options, command=None, state="normal", bg=CARD):
         self._rows_h = None
@@ -739,8 +740,17 @@ class Choice(tk.Frame):
             pill = _Pill(self, label, lambda v=value: self.variable.get() == v, lambda v=value: self._choose(v), self._move_from(i), bg=bg)
             self._pills.append(pill)
         self._layout()
-        variable.trace_add("write", lambda *a: self._sync())
+        self._trace = variable.trace_add("write", lambda *a: self._sync())
+        self.bind("<Destroy>", self._forget, add="+")
         self.configure(state=state)
+
+    def _forget(self, e):
+        """Stop listening to the variable once this group is gone (the variable outlives it)."""
+        if e.widget is self:
+            try:
+                self.variable.trace_remove("write", self._trace)
+            except tk.TclError:
+                pass
 
     def _layout(self, _e=None):
         """Place the pills row by row with place(): a grid (as Flow uses) would give the pills of one column the width of the widest, which pushes them off a narrow window."""
