@@ -1770,5 +1770,140 @@ class Treatments(unittest.TestCase):
         self.assertEqual(sc.treatment_colour(None, c), c)
 
 
+class MakeTreated(StoreMocks):
+    """make_covers with the games that are 100% and a treatment: which covers get it, which are kept and which are rebuilt."""
+
+    def setUp(self):
+        super().setUp()
+        self.games = {1: None, 2: None}
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_a_completed_game_gets_the_treatment_and_the_others_do_not(self):
+        res = sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "ribbon")
+        self.assertIsNone(sc.cover_treatment(self.cover(2)))
+        self.assertEqual(res["completed"], 1)
+
+    def test_each_treatment_is_recorded(self):
+        for t in sc.TREATMENTS:
+            with self.subTest(t):
+                shutil.rmtree(self.covers)
+                sc.make_covers({1: None}, self.covers, hue=90, completed={1}, treatment=t)
+                self.assertEqual(sc.cover_treatment(self.cover(1)), t)
+                self.assertEqual(sc.cover_colour(self.cover(1)), (176, 100, 100) if t == "gold-case" else (90, 100, 100))
+                with sc.Image.open(self.cover(1)) as im:
+                    self.assertEqual(im.size, sc.SIZE)
+
+    def test_the_gold_case_ignores_the_users_colour_and_is_not_rebuilt_when_it_changes(self):
+        sc.make_covers(self.games, self.covers, hue=0, completed={1}, treatment="gold-case")
+        gold, plain = self.read(self.cover(1)), self.read(self.cover(2))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 134, 100, 100, completed={1}, treatment="gold-case"))
+        aside = os.path.join(self.tmp, "aside.png")
+        shutil.move(self.cover(2), aside)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 134, 100, 100, completed={1}, treatment="gold-case"))    # only game 2 counted
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134))                     # no page: the gold case keeps its gold
+        shutil.move(aside, self.cover(2))
+        res = sc.make_covers(self.games, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertEqual(self.read(self.cover(1)), gold)
+        self.assertNotEqual(self.read(self.cover(2)), plain)
+        self.assertEqual(sc.cover_colour(self.cover(2)), (134, 100, 100))
+        self.assertEqual(res["completed"], 1)                                               # the kept one counts too
+
+    def test_a_changed_style_rebuilds_only_the_completed_games(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        ribbon, plain = self.read(self.cover(1)), self.read(self.cover(2))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, completed={1}, treatment="gold-border"))
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-border")
+        self.assertNotEqual(self.read(self.cover(1)), ribbon)
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-border")
+        self.assertEqual(self.read(self.cover(2)), plain)
+
+    def test_no_special_case_rebuilds_treated_covers_as_plain(self):
+        sc.make_covers(self.games, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertTrue(sc.covers_in_other_look(self.covers, 134, 100, 100, completed=set(), treatment=None))
+        res = sc.make_covers(self.games, self.covers, hue=134, completed=set(), treatment=None)
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+        self.assertEqual(sc.cover_colour(self.cover(1)), (134, 100, 100))
+        self.assertEqual(res["completed"], 0)
+
+    def test_without_a_page_treated_covers_keep_their_treatment(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        ribbon, plain = self.read(self.cover(1)), self.read(self.cover(2))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100))
+        res = sc.make_covers(self.games, self.covers, completed=None, treatment=None)
+        self.assertEqual((self.read(self.cover(1)), self.read(self.cover(2))), (ribbon, plain))
+        self.assertEqual(res["completed"], 1)
+        sc.make_covers(self.games, self.covers, hue=134)
+        self.assertNotEqual(self.read(self.cover(1)), ribbon)
+        self.assertEqual(sc.cover_colour(self.cover(1)), (134, 100, 100))
+        self.assertEqual((sc.cover_treatment(self.cover(1)), sc.cover_treatment(self.cover(2))), ("ribbon", None))
+
+    def test_a_game_that_stops_being_complete_loses_the_treatment(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, completed=set(), treatment="ribbon"))
+        sc.make_covers(self.games, self.covers, completed=set(), treatment="ribbon")
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+
+    def test_family_games_can_be_completed(self):
+        for t in ("ribbon", "gold-case"):
+            with self.subTest(t):
+                shutil.rmtree(self.covers)
+                sc.make_covers({1: None}, self.covers, family={1}, completed={1}, treatment=t)
+                self.assertTrue(self.is_green(self.corner(self.cover(1))))
+                self.assertEqual(sc.cover_treatment(self.cover(1)), t)
+        shutil.rmtree(self.covers)
+        sc.make_covers({1: None}, self.covers, family={1}, completed={1}, treatment="gold-border")
+        box = sc.Image.open(self.cover(1)).convert("RGBA").crop((14, 14, 60, 60))
+        self.assertTrue(any(p[3] == 255 and self.is_green(p[:3]) for p in pixels(box)))
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-border")
+
+    def test_a_garbled_treatment_note_means_rebuild(self):
+        from PIL.PngImagePlugin import PngInfo
+        sc.make_covers({1: None}, self.covers)
+        note = PngInfo()
+        note.add_text(sc.HUE_CHUNK, "0")
+        note.add_text(sc.TONE_CHUNK, "100 100")
+        note.add_text(sc.DONE_CHUNK, "sparkly")
+        sc.Image.open(self.cover(1)).save(self.cover(1), pnginfo=note)
+        garbled = self.read(self.cover(1))
+        self.assertIs(sc.cover_treatment(self.cover(1)), False)
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, completed=None, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual(statuses, ["ok"])
+        self.assertNotEqual(self.read(self.cover(1)), garbled)
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+
+    def test_cover_treatment_of_files_that_are_not_covers(self):
+        self.assertIs(sc.cover_treatment(os.path.join(self.tmp, "nowhere.png")), False)
+        junk = os.path.join(self.tmp, "junk.png")
+        with open(junk, "wb") as f:
+            f.write(b"not a png")
+        self.assertIs(sc.cover_treatment(junk), False)
+        sc.make_covers({1: None}, self.covers)
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+
+    def test_existing_cover_colour_ignores_gold_case_covers(self):
+        sc.make_covers({1: None}, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
+        sc.make_covers({2: None}, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertEqual(sc.existing_cover_colour(self.covers), (134, 100, 100))
+
+    def test_a_completed_game_that_is_not_in_the_library_is_ignored(self):
+        res = sc.make_covers({1: None}, self.covers, completed={1, 99}, treatment="ribbon")
+        self.assertEqual(sorted(os.listdir(self.covers)), ["Game_1_1.png"])
+        self.assertEqual((res["files"], res["completed"]), ([self.cover(1)], 1))
+
+    def test_make_covers_keeps_its_old_behaviour_without_the_new_arguments(self):
+        res = sc.make_covers(self.games, self.covers, hue=134)
+        self.assertEqual(res["completed"], 0)
+        for appid in self.games:
+            self.assertIsNone(sc.cover_treatment(self.cover(appid)))
+            with sc.Image.open(self.cover(appid)) as im:
+                self.assertNotIn(sc.DONE_CHUNK, im.info)
+
+
 if __name__ == "__main__":
     unittest.main()

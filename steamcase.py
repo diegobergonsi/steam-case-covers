@@ -838,44 +838,83 @@ def cover_hue(path):
     return colour[0] if colour else None
 
 
-def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100):
+def cover_treatment(path):
+    """The treatment (one of TREATMENTS) a cover was made with, read from its PNG header without decoding the picture; None for a plain cover.
+    False if this is not a readable PNG or the note is not exactly one we write: the cover is then rebuilt."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return False
+        with Image.open(path, formats=["PNG"]) as im:
+            done = im.info.get(DONE_CHUNK)
+    except Exception:
+        return False
+    return done if done is None or done in TREATMENTS else False
+
+
+def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None):
+    """Write the cover of one portrait into `out_path`, with its colour notes and, for a 100% game, its `treatment` and treatment note.
+    `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
-    cover = _compose(art, frame)
+    cover = finish_treatment(_compose(art, frame), treatment)
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
     note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
+    if treatment is not None:
+        note.add_text(DONE_CHUNK, treatment)                   # plain covers carry no note, as before treatments existed
     cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
 
 # ---------- make ----------
-def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100):
+def _wanted_look(appid, path, colour, completed, treatment):
+    """(treatment, case colour) the cover of `appid` at `path` should have (see make_covers). Without a page (`completed` None)
+    a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain."""
+    if completed is not None:
+        target = treatment if appid in completed else None
+    else:
+        target = cover_treatment(path) or None
+    return target, treatment_colour(target, colour)
+
+
+def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
+                completed=None, treatment=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
     cancelled() -> True stops early.
     family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
     hue, sat, val: the case colour: degrees to turn it from the original blue (0), then its colourfulness and brightness (0 to 100, 100 = as drawn).
-    A cover that exists in another colour is rebuilt, one in this colour is kept (the hue means nothing at 0 sat or 0 val).
+    completed: set of appids with every achievement unlocked (from the saved games page), or None when no page is loaded.
+    treatment: one of TREATMENTS for those games, or None ("No special case": they get plain covers).
+    Without a page each existing cover keeps the treatment it was made with. A "gold-case" cover is made in gold whatever the colour asked.
+    A cover that exists in another colour or with another treatment is rebuilt, one that already looks right is kept
+    (the hue means nothing at 0 sat or 0 val). Apps in `completed` that are not in `games` are ignored.
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
-    "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set)}.
+    "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set),
+    "completed": how many of "files" carry a treatment, kept ones included}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
-    frame = load_frame(hue, sat=sat, val=val)
     family = set(family or ())
-    frame_family = load_frame(hue, True, sat=sat, val=val) if family else None
+    frames = {}                                 # (look of the colour, family?) -> frame: each one is made once per run
+
+    def frame_for(colour, is_family):
+        key = (tone_key(*colour), is_family)
+        if key not in frames:
+            frames[key] = load_frame(colour[0], is_family, sat=colour[1], val=colour[2])
+        return frames[key]
+
     ids = sorted(games)
     if only:
         ids = [i for i in ids if i in set(only)]
@@ -886,7 +925,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
         raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
-    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0}
+    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0}
     todo = []                                   # only items that can become a cover count towards the progress
     for appid in ids:
         it = info.get(appid) or {}
@@ -922,8 +961,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), (hue, sat, val)):
+        target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment)
+        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target:
             res["ok"] += 1
+            res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "exists")
             continue
@@ -950,9 +991,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(tmp, dest, frame_family if is_family else frame, hue, sat=sat, val=val)
+            build_cover(tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target)
             res["ok"] += 1
             res["family"] += is_family
+            res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "ok")
         except Exception as e:
@@ -967,30 +1009,44 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
-def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
-    """True if the covers folder already holds a cover made in a different case colour than (`hue`, `sat`, `val`) (stops at the first one)."""
+def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None):
+    """True if make_covers with this colour, `completed` and `treatment` would rebuild a cover already in the folder (stops at the first one):
+    one in another case colour (a "gold-case" cover is compared as gold) or with another treatment. Covers whose colour notes are unreadable are not counted."""
     try:
         names = os.listdir(covers_dir)
     except OSError:
         return False
     for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None:
-            c = cover_colour(os.path.join(covers_dir, n))
-            if c is not None and not same_colour(c, (hue, sat, val)):
+        appid = appid_of(n)
+        if n.lower().endswith(".png") and appid is not None:
+            path = os.path.join(covers_dir, n)
+            c = cover_colour(path)
+            if c is None:
+                continue
+            target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment)       # appid_of gives text; `completed` holds numbers
+            if not same_colour(c, colour) or cover_treatment(path) != target:
                 return True
     return False
 
 
+def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
+    """True if the covers folder already holds a cover made in a different case colour than (`hue`, `sat`, `val`) (stops at the first one).
+    No page loaded: each cover keeps its treatment, so a "gold-case" cover stays gold and is not counted (see covers_in_other_look)."""
+    return covers_in_other_look(covers_dir, hue, sat, val)
+
+
 def existing_cover_colour(covers_dir):
-    """The case colour (hue, sat, val) of the covers already in the folder (that of the first one by name), or None when there are none."""
+    """The case colour (hue, sat, val) of the covers already in the folder (that of the first one by name), or None when there are none.
+    "gold-case" covers are skipped: their notes say gold, not the colour the user chose."""
     try:
         names = sorted(os.listdir(covers_dir))
     except OSError:
         return None
     for n in names:
         if n.lower().endswith(".png") and appid_of(n) is not None:
-            c = cover_colour(os.path.join(covers_dir, n))
-            if c is not None:
+            path = os.path.join(covers_dir, n)
+            c = cover_colour(path)
+            if c is not None and cover_treatment(path) != "gold-case":
                 return c
     return None
 
