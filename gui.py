@@ -93,6 +93,7 @@ class App(tk.Tk):
         self.sat = tk.IntVar(value=100)   # its colourfulness and brightness, 0..100 (100: as the original blue)
         self.val = tk.IntVar(value=100)
         self._preview_job = None
+        self._setting_tone = False
         self.restart_steam = tk.BooleanVar(value=True)
 
         self._wrapped, self._wrap_width, self._head_narrow = [], 0, False
@@ -371,7 +372,7 @@ class App(tk.Tk):
         # the tracks show what each slider does to the case in its current colour: grey to vivid, black to bright
         self.sat_slider = ToneSlider(grid, self.sat, lambda v: sc.case_color(self.hue.get() % 360, v, self.val.get()), depends=(self.hue, self.val))
         self.val_slider = ToneSlider(grid, self.val, lambda v: sc.case_color(self.hue.get() % 360, self.sat.get(), v), depends=(self.hue, self.sat))
-        self.colour_hint = tk.Label(grid, text="Colour has no effect on grey or black.", bg=CARD, fg=MUTED, anchor="w")
+        self.colour_hint = tk.Label(grid, text="", bg=CARD, fg=MUTED, anchor="w")             # always gridded, so its row never changes height
         for row, (text, slider) in enumerate((("Colour", self.slider), ("Colourfulness", self.sat_slider), ("Brightness", self.val_slider))):
             tk.Label(grid, text=text, bg=CARD, fg=MUTED, anchor="w").grid(row=2 * row, column=0, sticky="w", padx=(0, px(10)))
             slider.grid(row=2 * row, column=1, sticky="ew")
@@ -400,11 +401,18 @@ class App(tk.Tk):
         return self.hue.get() % 360, self.sat.get(), self.val.get()
 
     def _set_tone(self, hue, sat, val):
-        self.hue.set(hue)
-        self.sat.set(sat)
-        self.val.set(val)
+        self._setting_tone = True                                # three variables change: update once, afterwards
+        try:
+            self.hue.set(hue)
+            self.sat.set(sat)
+            self.val.set(val)
+        finally:
+            self._setting_tone = False
+        self._colour_changed()
 
     def _colour_changed(self, *_):
+        if self._setting_tone:
+            return
         hue, sat, val = self._tone()
         key = sc.tone_key(hue, sat, val)
         name = "Original" if key == sc.tone_key(0) else "Custom · %d° %d%% %d%%" % (hue, sat, val)
@@ -414,13 +422,11 @@ class App(tk.Tk):
         self.colour_name.configure(text=name)
         for s in self.swatches:
             s.draw()
-        if sat == 0 or val == 0:                                 # without colour or light the Colour slider does nothing: say so
-            self.colour_hint.grid()
-        else:
-            self.colour_hint.grid_remove()
+        # without colour or light the Colour slider does nothing: say so (the text, not the row, comes and goes: nothing moves under a finger)
+        self.colour_hint.configure(text="Colour has no effect on grey or black." if sat == 0 or val == 0 else "")
         if key == sc.tone_key(0):
             self.colour_note.pack_forget()
-        elif not self.colour_note.winfo_ismapped():
+        elif not self.colour_note.winfo_manager():
             self.colour_note.pack(fill="x", pady=(0, px(6)), after=self.swatch_row)
         if self._preview_job is None:                            # one redraw per burst of changes while a slider is dragged
             self._preview_job = self.after_idle(self._draw_preview)

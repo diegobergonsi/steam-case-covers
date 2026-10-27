@@ -1054,6 +1054,27 @@ class CoverColour(unittest.TestCase):
             self.assertRegex(sc.case_color(hue), r"^#[0-9a-f]{6}$")
 
 
+class CoverClamping(unittest.TestCase):
+    """Out-of-range tones are clamped, hue 360 is hue 0, and the case_color cache shares what looks the same."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_tones_are_clamped_and_360_is_0(self):
+        self.assertEqual(sc.load_frame(0, sat=150, val=-5).tobytes(), sc.load_frame(0, sat=100, val=0).tobytes())
+        frame = sc.Image.open(sc.FRAME).convert("RGBA")
+        self.assertEqual(sc.recolor_frame(frame, 0, 150, -5).tobytes(), sc.recolor_frame(frame, 0, 100, 0).tobytes())
+        self.assertEqual(sc.case_color(360), sc.case_color(0))
+        self.assertEqual(sc.case_color(0, 150, -5), sc.case_color(0, 100, 0))
+
+    def test_case_color_ignores_a_hue_that_shows_nothing(self):
+        self.assertEqual(sc.case_color(10, 0, 50), sc.case_color(200, 0, 50))
+        self.assertEqual(sc.case_color(10, 80, 0), sc.case_color(300, 80, 0))
+        self.assertEqual(sc.case_color(0), "#1636c8")
+        self.assertNotEqual(sc.case_color(10, 80, 50), sc.case_color(200, 80, 50))
+
+
 class CoverTone(unittest.TestCase):
     """Colourfulness and brightness of the case: a case can become black, grey or silver; white parts, alpha and the family corner stay."""
 
@@ -1263,6 +1284,19 @@ class CoverColourFiles(Base):
             jpeg = os.path.join(self.tmp, "j.png")
             sc.Image.open(real).convert("RGB").save(jpeg, format="JPEG", quality=100)
             self.assertFalse(sc.is_steamcase_cover(jpeg), (hue, sat, val))
+
+    def test_a_look_alike_is_refused_at_zero_brightness(self):
+        cover = self.make("k.png", 0, False, 0, 0)
+        img = sc.Image.open(cover).convert("RGBA")
+        r, g, b, a = img.getpixel((400, 10))
+        img.putpixel((400, 10), (r + 3, g + 3, b + 3, a))                  # +2 is within the tolerance and may pass; +3 may not
+        from PIL.PngImagePlugin import PngInfo
+        note = PngInfo()
+        note.add_text("steamcase-hue", "0")
+        note.add_text("steamcase-tone", "0 0")
+        path = os.path.join(self.tmp, "near.png")
+        img.save(path, pnginfo=note)
+        self.assertFalse(sc.is_steamcase_cover(path))
 
     def test_a_black_cover_survives_zero_brightness(self):
         cover = self.make("k.png", 0, False, 0, 0)
@@ -1516,6 +1550,17 @@ class ColourCli(StoreMocks):
                 self.assertIn("whole number from 0 to 100", err.getvalue(), option + bad)
                 self.assertIn(repr(bad), err.getvalue(), option + bad)
                 self.assertFalse(os.path.exists(out), option + bad)
+
+    def test_percentages_are_plain_ascii_digits(self):
+        import contextlib, io
+        lib = self.fake_library(False)
+        for bad in ("\u0663", " 5", "+5"):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", os.path.join(self.tmp, "out_bad"), "--saturation", bad)
+            self.assertIn(repr(bad), err.getvalue(), bad)
+        for good, want in (("05", 5), ("0", 0), ("100", 100)):
+            self.assertEqual(sc._percent_arg(good), want)
 
     def test_a_bad_hue_is_refused_with_a_clear_message(self):
         import contextlib, io

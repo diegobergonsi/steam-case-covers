@@ -719,10 +719,15 @@ def load_frame(hue=0, family=False, *, sat=100, val=100):
     return frame
 
 
-@functools.lru_cache(maxsize=None)
 def case_color(hue, sat=100, val=100):
     """'#rrggbb' of the case's middle colour (the original is #1636c8) turned by `hue` degrees and toned by `sat` and `val`: for painting swatches and the colour sliders."""
-    return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue % 360, sat, val).getpixel((0, 0))[:3]
+    sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
+    return _case_color(0 if sat == 0 or val == 0 else hue % 360, sat, val)           # the hue shows nothing without colour or light: one entry for all
+
+
+@functools.lru_cache(maxsize=8192)                                  # the sliders ask for a few hundred colours per repaint
+def _case_color(hue, sat, val):
+    return "#%02x%02x%02x" % recolor_frame(Image.new("RGBA", (1, 1), (0x16, 0x36, 0xc8, 255)), hue, sat, val).getpixel((0, 0))[:3]
 
 
 HUE_CHUNK = "steamcase-hue"
@@ -1090,7 +1095,7 @@ def _same_shape(a, ref):
     return True
 
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=16)                                    # about 0.76 MB an entry, and the tone comes from a file's note
 def _tone_strips(key):
     """_expected_strips for one tone_key: covers that look the same share one set of strips."""
     step, sat, val = key                                            # step * 360 / 256 degrees turns the hue by exactly `step` again

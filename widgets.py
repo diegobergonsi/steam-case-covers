@@ -370,6 +370,7 @@ class _Slider(_Stateful):
         self._focus = False
         self._start, self._mode = None, None                 # where the pointer went down, and what the drag turned out to be
         self._track, self._track_key = None, None
+        self._repaint_job = None
         variable.trace_add("write", lambda *a: self.draw())
         for other in depends:                                # the track colours follow these variables
             other.trace_add("write", lambda *a: self._repaint())
@@ -389,8 +390,17 @@ class _Slider(_Stateful):
         return w, int(super().cget("height")), px(36), px(36) // 2 + px(8)           # width, height, thumb size, margin of the thumb's centre
 
     def _repaint(self):
+        """Rebuild the track once per burst of changes (a swatch sets three variables), when the window is next idle."""
+        if self._repaint_job is None:
+            self._repaint_job = self.after_idle(self._repaint_now)
+
+    def _repaint_now(self):
+        self._repaint_job = None
         self._track_key = None
-        self.draw()
+        try:
+            self.draw()
+        except tk.TclError:                                  # the window closed in between
+            pass
 
     def _set_focus(self, v):
         self._focus = v
