@@ -2,10 +2,11 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Regression tests: normal use, plus the attacks the app must refuse. No network, no real Steam.
 Run:  python -m unittest discover -s tests -v"""
-import http.server, json, os, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
+import http.server, json, os, re, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import steamcase as sc
+import completion as cp
 
 
 def make_png(path, w, h):
@@ -1572,6 +1573,99 @@ class ColourCli(StoreMocks):
                 self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", bad)
             self.assertIn("0 to 359", err.getvalue(), bad)
             self.assertFalse(os.path.exists(out), bad)                                   # nothing was built
+
+
+class GamesPage(unittest.TestCase):
+    """Reading the saved Steam games page: only ints may come out of it, whatever the file holds."""
+    FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "games_page.html")
+    WANT = {1001: (10, 10), 1002: (4, 50), 1003: (0, 12), 1004: (7, 7)}
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        with open(self.FIXTURE, encoding="utf-8") as f:
+            self.html = f.read()
+
+    def page(self, text, name="page.html"):
+        p = os.path.join(self.tmp, name)
+        with open(p, "wb") as f:
+            f.write(text if isinstance(text, bytes) else text.encode("utf-8"))
+        return p
+
+    def test_reads_progress_for_every_row_that_shows_it(self):
+        self.assertEqual(cp.read_games_page(self.FIXTURE), self.WANT)
+
+    def test_completed_apps_needs_unlocked_equal_total_above_zero(self):
+        self.assertEqual(cp.completed_apps({1: (10, 10), 2: (4, 50), 3: (0, 0), 4: (5, 3), 5: (7, 7)}), {1, 5})
+
+    def test_the_label_language_does_not_matter(self):
+        self.assertEqual(cp.completed_apps(cp.read_games_page(self.FIXTURE)), {1001, 1004})
+        swapped = re.sub(r"(/achievements/\d+\">)[^<]*(</a><span)", "\\1日本語\\2", self.html)
+        self.assertIn("日本語", swapped)
+        self.assertNotIn("CONQUISTAS", swapped)
+        self.assertEqual(cp.read_games_page(self.page(swapped)), self.WANT)
+
+    def test_a_profiles_address_works_like_an_id_address(self):
+        other = self.html.replace("/id/playerone/", "/profiles/76561190000000000/")
+        self.assertNotIn("/id/", other)
+        self.assertEqual(cp.read_games_page(self.page(other)), self.WANT)
+
+    def test_a_page_saved_as_html_only_is_refused_with_advice(self):
+        p = self.page('<html><script>var x = {"rgRecentlyPlayedGames":[1,2]};</script></html>')
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(p)
+        self.assertIn("Webpage, Complete", str(cm.exception))
+
+    def test_rows_without_any_progress_are_refused(self):
+        bare = re.sub(r"<span class=\"cnt\">[^<]*</span>", "", self.html)
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(self.page(bare))
+        self.assertIn("no game shows achievement progress", str(cm.exception).lower())
+
+    def test_a_file_that_is_not_a_steam_page_is_refused(self):
+        for name, data in (("a.txt", b"just some words\n"), ("b.html", b""), ("c.html", b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 8)):
+            with self.assertRaises(cp.PageError) as cm:
+                cp.read_games_page(self.page(data, name))
+            self.assertIn("does not look like your Steam games page", str(cm.exception))
+
+    def test_too_big_files_and_links_are_refused(self):
+        big = os.path.join(self.tmp, "big.html")
+        with open(big, "wb") as f:
+            f.truncate(cp.MAX_GAMES_PAGE + 1)                                   # sparse: costs no disk
+        with self.assertRaises(cp.PageError):
+            cp.read_games_page(big)
+        link = os.path.join(self.tmp, "link.html")
+        try:
+            os.symlink(self.FIXTURE, link)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not available here")
+        with self.assertRaises(cp.PageError):
+            cp.read_games_page(link)
+
+    def test_junk_is_parsed_in_linear_time(self):
+        junk = b'<a href="https://store.steampowered.com/app/' * (5 * 1024 * 1024 // 44) + os.urandom(5 * 1024 * 1024)
+        p = self.page(self.html.encode("utf-8") + junk)
+        t0 = time.monotonic()
+        got = cp.read_games_page(p)
+        self.assertLess(time.monotonic() - t0, 3)
+        self.assertEqual(got, self.WANT)
+        for k, v in got.items():
+            self.assertIs(type(k), int)
+            self.assertTrue(all(type(n) is int for n in v))
+
+    def test_nothing_from_a_script_is_returned(self):
+        text = self.html.replace("</body>", '<script>{"strWebAPIToken":"SECRET-TOKEN"}</script></body>')
+        self.assertNotIn("SECRET-TOKEN", repr(cp.read_games_page(self.page(text))))
+        only = self.page('<script>{"strWebAPIToken":"SECRET-TOKEN","rgRecentlyPlayedGames":[]}</script>', "s.html")
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(only)
+        self.assertNotIn("SECRET-TOKEN", str(cm.exception))
+
+    def test_odd_numbers_are_ignored_or_kept_but_never_complete(self):
+        text = self.html.replace("10/10", "5/3").replace("4/50", "0/0").replace("0/12", "x/y")
+        got = cp.read_games_page(self.page(text))
+        self.assertEqual(got, {1001: (5, 3), 1002: (0, 0), 1004: (7, 7)})
+        self.assertEqual(cp.completed_apps(got), {1004})
 
 
 class FamilyHelp(unittest.TestCase):
