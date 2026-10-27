@@ -1214,6 +1214,63 @@ class CoverColourFiles(Base):
             img.save(tampered)
             self.assertFalse(sc.is_steamcase_cover(tampered), hue)
 
+    def renote(self, path, **notes):
+        """The same pixels saved again with only these notes (none: a cover from before notes existed)."""
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in notes.items():
+            info.add_text("steamcase-" + key, value)
+        out = os.path.join(self.tmp, "renoted.png")
+        sc.Image.open(path).convert("RGBA").save(out, pnginfo=info)
+        return out
+
+    def test_covers_of_every_tone_are_recognised(self):
+        tones = [(hue, 100, 100) for hue in sc.HUE_SWATCHES] + [(0, s, v) for _, s, v in sc.NEUTRAL_SWATCHES] + [(0, 100, 45), (134, 60, 30), (0, 0, 0)]
+        for hue, sat, val in tones:
+            for family in (False, True):
+                self.assertTrue(sc.is_steamcase_cover(self.make("c.png", hue, family, sat, val)), (hue, sat, val, family))
+
+    def test_old_covers_without_a_tone_note_are_still_recognised(self):
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("a.png", 0), hue="0")))
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("b.png", 134), hue="134")))
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("c.png", 0))))
+
+    def test_a_note_that_does_not_match_the_pixels_is_not_recognised(self):
+        self.assertFalse(sc.is_steamcase_cover(self.renote(self.make("a.png", 0), hue="0", tone="0 14")))
+        black = self.make("b.png", 0, sat=0, val=14)
+        self.assertFalse(sc.is_steamcase_cover(self.renote(black, hue="0")))           # the documented limit: the legacy rule sees other S and V
+        self.assertFalse(sc.is_steamcase_cover(self.renote(black, hue="0", tone="100 100")))
+        self.assertFalse(sc.is_steamcase_cover(self.renote(black, hue="0", tone="0 15x")))   # a garbled tone note is not ours
+
+    def test_look_alikes_are_still_refused_at_every_tone(self):
+        from PIL.PngImagePlugin import PngInfo
+        for hue, sat, val in ((0, 100, 100), (134, 100, 100), (0, 0, 14), (0, 0, 78)):
+            real = self.make("r.png", hue, False, sat, val)
+            note = PngInfo()
+            note.add_text("steamcase-hue", str(hue))
+            note.add_text("steamcase-tone", "%d %d" % (sat, val))
+            flat = os.path.join(self.tmp, "flat.png")
+            sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255)).save(flat, pnginfo=note)
+            self.assertFalse(sc.is_steamcase_cover(flat), (hue, sat, val))
+            grey = os.path.join(self.tmp, "grey.png")
+            sc.Image.open(real).convert("L").convert("RGBA").save(grey)
+            self.assertFalse(sc.is_steamcase_cover(grey), (hue, sat, val))
+            img = sc.Image.open(real).convert("RGBA")
+            img.putpixel((400, 10), (1, 2, 3, 255))
+            tampered = os.path.join(self.tmp, "t.png")
+            img.save(tampered, pnginfo=note)                                            # notes kept: the toned check must catch it
+            self.assertFalse(sc.is_steamcase_cover(tampered), (hue, sat, val))
+            jpeg = os.path.join(self.tmp, "j.png")
+            sc.Image.open(real).convert("RGB").save(jpeg, format="JPEG", quality=100)
+            self.assertFalse(sc.is_steamcase_cover(jpeg), (hue, sat, val))
+
+    def test_a_black_cover_survives_zero_brightness(self):
+        cover = self.make("k.png", 0, False, 0, 0)
+        self.assertTrue(sc.is_steamcase_cover(cover))
+        top = (0, 0, sc.SIZE[0], sc.WINDOW[1])
+        self.assertEqual(sc.load_frame(0, sat=0, val=0).getchannel("A").tobytes(), sc.load_frame(0).getchannel("A").tobytes())
+        self.assertEqual(sc.Image.open(cover).convert("RGBA").crop(top).getchannel("A").tobytes(), sc.load_frame(0).crop(top).getchannel("A").tobytes())
+
 
 class MakeInColour(StoreMocks):
     """make_covers in a chosen case colour."""

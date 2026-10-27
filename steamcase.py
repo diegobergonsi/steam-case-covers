@@ -757,19 +757,24 @@ def cover_colour(path):
         if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return None
         with Image.open(path, formats=["PNG"]) as im:
-            hue, tone = im.info.get(HUE_CHUNK), im.info.get(TONE_CHUNK)
-        if hue is None:
-            hue = 0
-        elif isinstance(hue, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", hue) and int(hue) < 360:
-            hue = int(hue)
-        else:
-            return None
-        if tone is None:
-            return (hue, 100, 100)
-        m = re.fullmatch(r"(0|[1-9][0-9]?|100) (0|[1-9][0-9]?|100)", tone) if isinstance(tone, str) else None
-        return (hue, int(m.group(1)), int(m.group(2))) if m else None
+            return _noted_colour(im.info)
     except Exception:
         return None
+
+
+def _noted_colour(info):
+    """The case colour (hue, sat, val) the notes in a PNG's `info` give (see cover_colour), or None if a note is garbled."""
+    hue, tone = info.get(HUE_CHUNK), info.get(TONE_CHUNK)
+    if hue is None:
+        hue = 0
+    elif isinstance(hue, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", hue) and int(hue) < 360:
+        hue = int(hue)
+    else:
+        return None
+    if tone is None:
+        return (hue, 100, 100)
+    m = re.fullmatch(r"(0|[1-9][0-9]?|100) (0|[1-9][0-9]?|100)", tone) if isinstance(tone, str) else None
+    return (hue, int(m.group(1)), int(m.group(2))) if m else None
 
 
 def cover_hue(path):
@@ -1050,7 +1055,8 @@ _frame_ref = None
 
 
 def _shape(strip):
-    """Saturation, brightness and transparency of a strip of a cover. The hue is left out on purpose: a recoloured case still counts as ours."""
+    """Saturation, brightness and transparency of a strip of a cover (for covers without a tone note). The hue is left out on purpose:
+    a cover from before tones existed is in full tone, and turning only its hue still leaves it ours."""
     r, g, b, a = strip.split()
     _, s, v = Image.merge("RGB", (r, g, b)).convert("HSV").split()
     return s, v, a
@@ -1059,18 +1065,19 @@ def _shape(strip):
 def _frame_regions():
     """The parts of a cover that are pure frame (banner on top, lip at the bottom), from frame.png and from the family frame.
     Each reference is (shape, mask): mask is None, or marks the pixels worth comparing (the family corner's soft edge is left out: it
-    blends the green with the banner, so its saturation depends on the colour the case was turned to)."""
+    blends the green with the banner, so its saturation depends on the colour the case was turned to). The mask comes last on its own."""
     global _frame_ref
     if _frame_ref is None:
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
         plain, family = load_frame(0), load_frame(0, True)          # the family frame differs from the plain one only in the corner triangle
         edge = Image.open(FAMILY_CORNER).convert("RGBA").getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0)
-        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None), (_shape(family.crop(top)), edge)), (_shape(plain.crop(bot)), None))
+        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None), (_shape(family.crop(top)), edge)), (_shape(plain.crop(bot)), None), edge)
     return _frame_ref
 
 
 def _same_shape(a, ref):
-    """Same transparency exactly, and saturation and brightness within 2 levels (turning the hue moves them by at most 1)."""
+    """Same transparency exactly, and saturation and brightness within 2 levels (turning the hue moves them by at most 1). Hue is not
+    compared, so this only holds for covers in full tone: a grey case has other saturation and brightness and never passes."""
     (s, v, alpha), mask = ref
     if a[2].tobytes() != alpha.tobytes():
         return False
@@ -1083,17 +1090,50 @@ def _same_shape(a, ref):
     return True
 
 
+@functools.lru_cache(maxsize=None)
+def _tone_strips(key):
+    """_expected_strips for one tone_key: covers that look the same share one set of strips."""
+    step, sat, val = key                                            # step * 360 / 256 degrees turns the hue by exactly `step` again
+    top, bot, _, _, edge = _frame_regions()
+    blank = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+    plain, family = (Image.alpha_composite(blank, load_frame(step * 360 / 256, f, sat=sat, val=val)) for f in (False, True))   # as _compose lays it down
+    return ((plain.crop(top), None), (family.crop(top), Image.merge("RGBA", (edge,) * 4))), (plain.crop(bot), None)
+
+
+def _expected_strips(hue, sat, val):
+    """The banner (plain, and family with the corner's soft-edge mask) and the bottom strip exactly as a cover in this colour and tone has them."""
+    return _tone_strips(tone_key(hue, sat, val))
+
+
+def _same_pixels(strip, ref):
+    """Every RGBA channel within 2 levels of the reference strip, outside the masked-off pixels."""
+    want, mask = ref
+    diff = ImageChops.difference(strip, want)
+    if mask is not None:
+        diff = ImageChops.darker(diff, mask)
+    return max(hi for _, hi in diff.getextrema()) <= 2
+
+
 def is_steamcase_cover(path):
-    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge have the shape of frame.png (or of the family frame),
-    whatever colour the case was turned to. Art you set yourself never matches, so it is never mistaken for ours."""
+    """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge are those of frame.png (or of the family frame).
+    A cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one without (made
+    before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to a tone note, a
+    garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return False
-        top, bot, ref_tops, ref_bot = _frame_regions()
+        top, bot, ref_tops, ref_bot, _ = _frame_regions()
         with Image.open(path, formats=["PNG"]) as im:
             if im.size != SIZE:
                 return False
+            toned, colour = TONE_CHUNK in im.info, _noted_colour(im.info)
             im = im.convert("RGBA")
+        if toned:
+            if colour is None:
+                return False
+            tops, bottom = _expected_strips(*colour)
+            banner = im.crop(top)
+            return any(_same_pixels(banner, ref) for ref in tops) and _same_pixels(im.crop(bot), bottom)
         banner = _shape(im.crop(top))
         return any(_same_shape(banner, ref) for ref in ref_tops) and _same_shape(_shape(im.crop(bot)), ref_bot)
     except Exception:
