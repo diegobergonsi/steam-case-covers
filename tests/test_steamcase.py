@@ -1415,6 +1415,30 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(5, 0, 0), 0)                                   # a track with no width: no division by zero
         self.assertEqual(f(5, 20, 10), 0)                                 # margins eat the whole width
 
+    def test_value_from_x_maps_and_clamps_to_a_range(self):
+        f = self.w.value_from_x
+        self.assertEqual(f(10, 410, 10, 100), 0)
+        self.assertEqual(f(400, 410, 10, 100), 100)
+        self.assertEqual(f(-50, 410, 10, 100), 0)
+        self.assertEqual(f(9999, 410, 10, 100), 100)
+        self.assertEqual(f(205, 410, 10, 100), 50)
+        self.assertEqual(f(5, 0, 0, 100), 0)                              # a track with no width
+        self.assertEqual(self.w.hue_from_x(400, 410, 10), 359)            # the hue slider keeps its numbers
+        self.assertEqual(self.w.hue_from_x(10, 410, 10), 0)
+
+    def test_step_value_stops_at_both_ends(self):
+        f = self.w.step_value
+        self.assertEqual(f(0, "Left", 100), 0)
+        self.assertEqual(f(100, "Right", 100), 100)
+        self.assertEqual(f(95, "Prior", 100), 100)
+        self.assertEqual(f(5, "Next", 100), 0)
+        self.assertEqual(f(40, "Home", 100), 0)
+        self.assertEqual(f(40, "End", 100), 100)
+        self.assertEqual(f(40, "Right", 100), 41)
+        self.assertEqual(f(40, "x", 100), 40)
+        self.assertEqual(f(0, "Left", 359, wrap=True), 359)
+        self.assertEqual(f(359, "Right", 359, wrap=True), 0)
+
     def test_drag_mode_tells_a_slide_from_a_swipe(self):
         f = self.w.drag_mode
         self.assertIsNone(f(0, 0, 6))                      # a tap or a tiny wobble: undecided
