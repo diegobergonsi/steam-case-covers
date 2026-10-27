@@ -336,6 +336,17 @@ def step_hue(hue, key, big=30):
     return step_value(hue, key, 359, big, wrap=True)
 
 
+def step_choice(index, key, count):
+    """The option index (0..count-1) after a key press on a choice group: Left/Up one back, Right/Down one forward, Home the first, End the last.
+    It stops at the ends (no wrap)."""
+    if key == "Home":
+        return 0
+    if key == "End":
+        return count - 1
+    delta = {"Left": -1, "Up": -1, "Right": 1, "Down": 1}.get(key)
+    return index if delta is None else max(0, min(count - 1, index + delta))
+
+
 def _dim(color, amount=0.6, toward=CARD):
     """A colour faded toward the card background: the look of a disabled control."""
     a, b = _rgb(color), _rgb(toward)
@@ -652,6 +663,154 @@ class Flow(tk.Frame):
         self._placed = plan
         for w, r, c, g in plan:
             w.grid(row=r, column=c, padx=(g, 0), pady=(0 if r == 0 else px(4), 0), sticky="w")
+
+
+class _Pill(_Stateful):
+    """One option of a Choice: a touch-sized pill, filled with the accent while it is the chosen one."""
+
+    def __init__(self, parent, text, selected, select, move, bg=CARD):
+        self._font = tkfont.Font(font="TkDefaultFont")
+        self._font.configure(weight="bold")
+        super().__init__(parent, width=self._font.measure(text) + px(40), height=max(px(46), self._font.metrics("linespace") + px(18)), bg=bg,
+                         highlightthickness=0, takefocus=False, cursor="hand2")
+        self._init_state("normal")
+        self.text, self.selected, self.select, self.move = text, selected, select, move
+        self._focus = self._armed = False
+        self.bind("<ButtonPress-1>", self._click)
+        self.bind("<ButtonRelease-1>", self._release)
+        self.bind("<space>", self._key)
+        self.bind("<Return>", self._key)
+        for key in ("Left", "Right", "Up", "Down", "Home", "End"):
+            self.bind("<%s>" % key, lambda e: self._move(e.keysym))
+        self.bind("<FocusIn>", lambda e: self._set_focus(True))
+        self.bind("<FocusOut>", lambda e: self._set_focus(False))
+
+    def _set_focus(self, v):
+        self._focus = v
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        w, h = int(super().cget("width")), int(super().cget("height"))
+        on, chosen = self.enabled, self.selected()
+        if on:
+            fill, outline, fg = (ACCENT, ACCENT, DARK) if chosen else (CARD2, EDGE, FG)
+        else:
+            fill, outline, fg = (OFF_TRACK_ON, OFF_TRACK_ON, MUTED) if chosen else (CARD, OFF_EDGE, FAINT)
+        if self._focus and on:
+            round_rect(self, 1, 1, w - 1, h - 1, h // 2, outline=RING, width=2, fill="")
+        round_rect(self, 4, 4, w - 4, h - 4, h // 2, fill=fill, outline=outline, width=1)
+        self.create_text(w // 2, h // 2, text=self.text, font=self._font, fill=fg)
+
+    def _click(self, _e):
+        if self.enabled:
+            self.focus_set()
+            self._armed = True
+
+    def _release(self, e):
+        armed, self._armed = self._armed, False
+        if armed and not _dragging and 0 <= e.x <= self.winfo_width() and 0 <= e.y <= self.winfo_height():
+            self.select()
+
+    def _key(self, _e):
+        if self.enabled:
+            self.select()
+        return "break"
+
+    def _move(self, key):
+        if self.enabled:
+            self.move(key)
+        return "break"
+
+
+class Choice(tk.Frame):
+    """A group of 2 to 4 pill options of which exactly one is chosen, kept in a tk.StringVar.
+    `options` is a list of (value, label). The group is one Tab stop: Tab lands on the chosen pill, and the arrows, Home and End move AND choose
+    (Space / Enter choose the focused pill). The pills wrap onto more rows when the window is narrow, but only if it is packed with fill="x"
+    or gridded with sticky="ew" (it follows the width it is given). command() runs once per change by the user."""
+
+    def __init__(self, parent, variable, options, command=None, state="normal", bg=CARD):
+        self._rows_h = None
+        super().__init__(parent, bg=bg)
+        self.bind("<Configure>", self._layout)
+        self.variable, self.command, self._state = variable, command, state
+        self._values = [value for value, _ in options]
+        self._pills = []
+        for i, (value, label) in enumerate(options):
+            pill = _Pill(self, label, lambda v=value: self.variable.get() == v, lambda v=value: self._choose(v), self._move_from(i), bg=bg)
+            self._pills.append(pill)
+        self._layout()
+        self._trace = variable.trace_add("write", lambda *a: self._sync())
+        self.bind("<Destroy>", self._forget, add="+")
+        self.configure(state=state)
+
+    def _forget(self, e):
+        """Stop listening to the variable once this group is gone (the variable outlives it)."""
+        if e.widget is self:
+            try:
+                self.variable.trace_remove("write", self._trace)
+            except tk.TclError:
+                pass
+
+    def _layout(self, _e=None):
+        """Place the pills row by row with place(): a grid (as Flow uses) would give the pills of one column the width of the widest, which pushes them off a narrow window."""
+        width = self.winfo_width()
+        if width < 2:
+            width = 10 ** 6                      # not on screen yet: ask for a single line
+        gap, x, y, row_h = px(8), 0, 0, 0
+        for pill in self._pills:
+            pw, ph = pill.winfo_reqwidth(), pill.winfo_reqheight()
+            if x and x + gap + pw > width:
+                x, y, row_h = 0, y + row_h + px(4), 0
+            x += gap if x else 0
+            pill.place(x=x, y=y)
+            x, row_h = x + pw, max(row_h, ph)
+        if (y + row_h) != self._rows_h:
+            self._rows_h = y + row_h
+            tk.Frame.configure(self, height=self._rows_h, width=max([p.winfo_reqwidth() for p in self._pills] + [1]))
+
+    def _move_from(self, i):
+        return lambda key: self._choose_at(step_choice(i, key, len(self._pills)), focus=True)
+
+    def _choose_at(self, index, focus=False):
+        self._choose(self._values[index])
+        if focus:
+            self._pills[index].focus_set()
+
+    def _choose(self, value):
+        if self.enabled and self.variable.get() != value:
+            self.variable.set(value)
+            if self.command:
+                self.command()
+
+    def _sync(self):
+        """Repaint the pills, and make the chosen one the group's only Tab stop (the first one while nothing is chosen)."""
+        try:
+            current = self.variable.get()
+            stop = self._values.index(current) if current in self._values else 0
+            for i, pill in enumerate(self._pills):
+                pill.configure(takefocus=self.enabled and i == stop)
+                pill.draw()
+        except tk.TclError:                                  # the window closed in between
+            pass
+
+    def configure(self, cnf=None, **kw):
+        if "state" in kw:
+            self._state = kw.pop("state")
+            for pill in self._pills:
+                pill.configure(state=self._state)            # also redraws and sets the cursor
+            self._sync()
+        if cnf or kw:
+            return super().configure(cnf, **kw)
+
+    config = configure
+
+    def cget(self, key):
+        return self._state if key == "state" else super().cget(key)
+
+    @property
+    def enabled(self):
+        return self._state == "normal"
 
 
 class ScrollFrame(tk.Frame):

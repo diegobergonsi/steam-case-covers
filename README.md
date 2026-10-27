@@ -126,6 +126,25 @@ Changed your mind?
 * **Restore previous artwork** undoes the last Apply. Press it again to go one step further back.
 * **Reset to Steam's default art** removes the covers this app made. It works even if you have no backup. If it also finds custom art that this app did not make (from SteamGridDB, or set by hand in Steam), it asks whether to remove that too: **Remove only ours** keeps it, **Remove all** brings back Steam's own art everywhere. Restore undoes either.
 
+### Optional: highlight your 100% games
+
+Step 2 has an optional block, **Highlight my 100% games**. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom. It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
+
+1. Click **Open my games page** (or **Copy link**). Your browser opens your Steam games page, sorted by achievements. Log in if it asks and wait until your games have loaded.
+2. Save it (Ctrl+S, or Cmd+S on a Mac) as **"Webpage, Complete"** in Chrome or Firefox, named `games.html`. Your browser also saves a folder next to it. The app notices the file in your Downloads folder by itself, or you can click **Browse…** and pick it.
+3. Choose how those games look: **Gold case** (the whole case turns gold), **Gold border** (a gold border around the outside of the case, which becomes about 5% smaller), **Normal case with ribbon** (your case stays as it is; this is the default once a page is loaded) or **No special case**. The choice can be picked once a page is loaded. Then click **Make covers**.
+
+> [!NOTE]
+> The saved page contains a temporary login token for your Steam account. The app only reads which games are at 100%: it never uses, stores or logs the token. You can delete `games.html` and its folder once the covers are made. The app never deletes your files itself.
+
+Good to know:
+
+* Only games that are already in your step 1 list can be highlighted.
+* Steam's page shows progress only for games where you have unlocked at least one achievement. That is why only games at 100% are marked: there are no marks for games you have only started.
+* Switching the choice, or saving the page again after you finish another game and clicking **Make covers**, rebuilds only the covers that change. If you make covers without loading a page, covers that are already highlighted keep their highlight.
+* The page lists most of a library but not all of it. On the author's library it listed about 99% of the covers (509 of 515): a few old, free or hidden games are not on it and cannot be highlighted.
+* This was only tried with Chrome, on Linux, with Steam in one language. Firefox is expected to save the page the same way, and the app reads the progress without depending on the language of Steam's label, but none of that was tested. Windows and macOS were not tested either, and neither was a real touchscreen.
+
 ## Features
 
 ✅ Covers for your installed games, or your whole library <br>
@@ -135,6 +154,7 @@ Changed your mind?
 ✅ Cancel anytime; run again to continue <br>
 ✅ Optional "skip blurry covers" for games Steam has no real portrait for <br>
 ✅ Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (including black, graphite and silver), with a live preview. Only the original blue is checked for readable text <br>
+✅ Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon, and, if you like, a gold case or a gold border. You save one more page from your own browser; the app never uses the login token that page contains <br>
 ✅ Several Steam accounts on one computer: you choose which one gets the covers <br>
 ✅ Games shared through Steam Family Sharing get covers too, with a green corner and a family icon so you can tell them apart. The app finds them in Steam's own files on your computer, with nothing extra to download, but it needs your game list: with "Only my installed games" ticked, shared games that are not installed are left out. This is only tested on a small family, so please open an issue if games are missing from a big shared library. Save your game list again after you buy games, so the new ones are not mistaken for family games <br>
 ✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
@@ -169,6 +189,9 @@ python steamcase.py make --library userdata.json   # build covers
 python steamcase.py make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
 python steamcase.py make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
 python steamcase.py make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
+python steamcase.py make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
+python steamcase.py make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
+python steamcase.py make --library userdata.json --completed-style none   # ...and back to plain covers for 100% games
 python steamcase.py apply --close-steam            # install them
 python steamcase.py restore                        # undo the last apply
 python steamcase.py reset                          # back to Steam's default art
@@ -185,6 +208,8 @@ python steamcase.py reset --everything             # ...also removing art from o
 | `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
 
 `list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`; an option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
+
+`--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. Without either option, covers keep the look they have.
 
 Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
@@ -229,6 +254,27 @@ Games shared with you through Steam Family Sharing are not on your own game list
 <summary><b>What happens if I change the colour after I made covers?</b></summary>
 
 When you click **Make covers**, the app asks before it replaces the covers you already made in another colour or shade. If you say yes, it rebuilds them all in the new look, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read, and the same can happen with a very light case.
+
+</details>
+
+<details>
+<summary><b>Why does the games page need to be saved as "Webpage, Complete"?</b></summary>
+
+Steam builds that page in your browser after it loads. "Webpage, HTML only" saves only Steam's first answer, which holds just the 20 games you played most recently and no game rows, so the app finds nothing to read and tells you so. "Webpage, Complete" saves the page as it looks on screen, with every game. It also saves a folder of images (about 90 MB for a big library) that the app does not need.
+
+</details>
+
+<details>
+<summary><b>Can I remove the highlights later?</b></summary>
+
+Yes. Load a page again (or any page), choose **No special case** and click **Make covers**: the app asks first, then rebuilds the highlighted covers as normal ones. On the command line, use `--completed-style none`. Add the covers to Steam again in step 3 to see the change there.
+
+</details>
+
+<details>
+<summary><b>What happens when I finish another game?</b></summary>
+
+Save your games page again (same name, same way), pick the new file with **Browse…** in the games-page block (the app only watches Downloads while no page is loaded), and click **Make covers**. Only the covers that change are rebuilt.
 
 </details>
 

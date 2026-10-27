@@ -11,6 +11,8 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 
 `assets/family_corner.png` is a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
 
+`assets/completion_overlay.png` holds the rosette and the "100% Complete" ribbon drawn on covers of games where every achievement is unlocked. The rosette is an original drawing inspired by the look of Steam's old achievement ribbon; it is not Valve's artwork. The file is built by `tools/build_completion_overlay.py` with the Nunito Sans font credited below.
+
 `assets/default_art.png` (source: `tools/src/default_art.svg`) is original artwork drawn for this project and released under the project's licence. It is not taken from any game and is only used to preview the case colour.
 
 ## Included files
@@ -22,7 +24,7 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 
 `assets/icon.*` (the app icon, source in `tools/src/icon.svg`) is original artwork released under the same license as the code (GPL-3.0-or-later). It deliberately does not use the Steam logo.
 
-The font and the SVG sources are only used by `tools/build_frame.py`, `tools/build_icon.py` and `tools/build_default_art.py` to render `assets/frame.png`, the icons and `assets/default_art.png`. They are not needed to run the app.
+The font and the SVG sources are only used by `tools/build_frame.py`, `tools/build_icon.py`, `tools/build_default_art.py` and `tools/build_completion_overlay.py` to render `assets/frame.png`, the icons, `assets/default_art.png` and `assets/completion_overlay.png`. They are not needed to run the app.
 
 ## Game artwork
 The preview image at the top of the README (`assets/preview.png`) shows covers of a few games (SnowRunner, Coral Island, Clair Obscur: Expedition 33, Fallout 4 and V Rising), the screenshot of the app window (`assets/screenshot.png`) shows the same five, and the screenshot of a Steam library further down (`assets/steam-library.png`) shows covers of about twenty games, only to show what the app produces. That artwork, and the games' names and logos, belong to their publishers and developers. They are not covered by this project's license. If a rights holder objects, the image will be removed.

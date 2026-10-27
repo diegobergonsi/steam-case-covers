@@ -13,8 +13,54 @@ Exit code 0 = every run was clean."""
 import argparse, faulthandler, io, json, os, random, re, shutil, sys, tempfile, threading, time, traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import gui, widgets, steamcase as sc
+import gui, widgets, completion, steamcase as sc
 from PIL import Image
+
+LAUNCHED = []                        # programs the window tried to start; a fuzz run never starts any (no file manager, no browser)
+
+
+class _NoProcess:
+    """Stands in for subprocess.Popen: records the command and pretends it finished at once."""
+    returncode = 0
+
+    def __init__(self, args, *a, **k):
+        LAUNCHED.append(args)
+        self.args = args
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def communicate(self, *a, **k):
+        return None, None
+
+    def poll(self):
+        return 0
+
+    def wait(self, *a, **k):
+        return 0
+
+    def kill(self):
+        pass
+
+
+gui.App.open_covers_folder = lambda self: LAUNCHED.append(("open covers folder", self.covers_dir))
+gui.webbrowser.open = lambda url, *a, **k: LAUNCHED.append(("browser", url)) or True
+gui.subprocess.Popen = _NoProcess        # global for the whole run: it is the same subprocess module, so subprocess.run starts this stand-in too
+
+
+def games_page(rows):
+    """A saved games page in the structure of tests/fixtures/games_page.html: rows is [(appid, unlocked, total or None)]."""
+    out = ['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Games</title></head><body><div class="list">']
+    for appid, done, total in rows:
+        out.append('<div class="row"><a href="https://store.steampowered.com/app/%d" class="name">G%d</a>' % (appid, appid))
+        if total is not None:
+            out.append('<a class="ach" href="https://steamcommunity.com/id/playerone/achievements/%d">ACHIEVEMENTS</a><span class="cnt">%d/%d</span>'
+                       % (appid, done, total))
+        out.append("</div>")
+    return "\n".join(out + ["</div></body></html>"])
 
 NAMES = {101: "Plain Game", 102: "Gäme 🎮 ✓", 103: "نص عربي ‮ RTL", 104: "X" * 300, 105: "../../etc/passwd",
          106: "Tom's \"Quoted\" & <Tagged>", 107: "日本語のゲーム"}
@@ -78,7 +124,7 @@ def run_one(seed, steps, sandbox):
     gui.messagebox.choose = lambda t, m, buttons, icon="question": rnd.choice([b[1] for b in buttons]) if answers["ok"] else None
     gui.messagebox.showerror = lambda t, m: notes.append("popup:" + m[:60])
     gui.messagebox.showinfo = lambda t, m: None
-    gui.pick_file = lambda title, initialdir: picks["file"]
+    gui.pick_file = lambda title, initialdir, *a, **k: picks["file"]
 
     junk = os.path.join(base, "junk")
     os.makedirs(junk)
@@ -90,6 +136,19 @@ def run_one(seed, steps, sandbox):
     os.makedirs(os.path.join(junk, "folder.json"))
     open(os.path.join(junk, "nested.json"), "w").write("[" * 50000)
     choices = [os.path.join(junk, f) for f in os.listdir(junk)] + [os.path.join(junk, "nope.json"), ""]
+    pages = os.path.join(base, "pages")
+    os.makedirs(os.path.join(pages, "games_files"))           # the folder a browser saves next to the page
+    ids = sorted(NAMES)
+    for name, text in (("games.html", games_page([(i, rnd.choice([0, 3, 5]), 5) for i in ids])),
+                       ("all100.html", games_page([(i, 7, 7) for i in ids])),
+                       ("none100.html", games_page([(i, 1, 9) for i in ids] + [(999999, 2, 2)])),
+                       ("noprogress.html", games_page([(i, 0, None) for i in ids])),
+                       ("htmlonly.html", "<html><script>var rgRecentlyPlayedGames = [];</script></html>"),
+                       ("empty.html", "")):
+        with open(os.path.join(pages, name), "w", encoding="utf-8") as f:
+            f.write(text)
+    page_files = sorted(os.path.join(pages, f) for f in os.listdir(pages) if os.path.isfile(os.path.join(pages, f)))      # sorted: the same actions per seed on any filesystem
+    page_choices = page_files + [os.path.join(pages, "games_files"), os.path.join(junk, "photo.json"), os.path.join(pages, "nope.html"), ""]
 
     covers = os.path.join(base, "cv")
     app = gui.App(downloads=os.path.join(base, "dl"), covers_dir=covers, screen_h=rnd.choice([700, 800, 1080]))
@@ -102,7 +161,7 @@ def run_one(seed, steps, sandbox):
         t0 = time.time()
         while time.time() - t0 < limit:
             app.update()
-            if not app.running and not app.busy:
+            if not app.running and not app.busy and not app.page_pending:
                 return True
             time.sleep(0.02)
         return False
@@ -112,13 +171,35 @@ def run_one(seed, steps, sandbox):
 
         def walk(w):
             for c in w.winfo_children():
-                if isinstance(c, (widgets.RoundedButton, widgets.Switch, widgets.InfoBadge, widgets.HueSlider, widgets.ToneSlider, widgets.Swatch)):
+                if isinstance(c, (widgets.RoundedButton, widgets.Switch, widgets.InfoBadge, widgets.HueSlider, widgets.ToneSlider, widgets.Swatch, widgets._Pill)):
                     out.append(c)
                 walk(c)
         walk(app)
         return out
 
+    def act_page():
+        """The optional 100% block: pick a page (good, junk or none), drop one in Downloads, or change the style."""
+        r = rnd.random()
+        if r < .35:
+            picks["file"] = rnd.choice(page_choices); app.browse_games_page(); return "browse page " + os.path.basename(picks["file"])
+        if r < .75:
+            app.completion_style.set(rnd.choice(["ribbon", "gold-case", "gold-border", "none"])); return "set 100% style " + app.completion_style.get()
+        if r < .9:
+            name = rnd.choice(["games.html", "games (1).htm", "Games.HTML"])
+            if rnd.random() < .15:                    # a folder with a page's name: it must be skipped, never read
+                shutil.copytree(os.path.join(pages, "games_files"), os.path.join(base, "dl", name), dirs_exist_ok=True)
+                return "drop a folder named %s in Downloads" % name
+            src = rnd.choice(page_files)
+            dst = os.path.join(base, "dl", name)
+            if os.path.isdir(dst):
+                shutil.rmtree(dst)
+            shutil.copy(src, dst)
+            return "drop a games page in Downloads: " + os.path.basename(src)
+        rnd.choice([app.open_games_page, app.copy_page_link])(); return "open or copy the games page link"
+
     def act():
+        if rnd.random() < .12:
+            return act_page()
         r = rnd.random()
         if r < .05:
             net["mode"] = "slow"
@@ -213,6 +294,18 @@ def run_one(seed, steps, sandbox):
         colour = [app.slider, app.sat_slider, app.val_slider] + app.swatches
         if {st(w) for w in colour} != {st(app.sw_skip)}:
             bad.append("colour controls are %s but the other step 2 controls are %s" % ({st(w) for w in colour}, st(app.sw_skip)))
+        page_buttons = [app.btn_page_open, app.btn_page_browse, app.btn_page_copy]
+        if {st(w) for w in page_buttons} != {st(app.sw_skip)}:
+            bad.append("games page buttons are %s but the other step 2 controls are %s" % ({st(w) for w in page_buttons}, st(app.sw_skip)))
+        want = "normal" if st(app.sw_skip) == "normal" and app.games_page else "disabled"
+        if st(app.style_choice) != want or {st(p) for p in app.style_choice._pills} != {want}:
+            bad.append("100%% choice is %s but should be %s (page loaded: %s)" % (st(app.style_choice), want, bool(app.games_page)))
+        if app.completion_style.get() not in ("ribbon", "gold-case", "gold-border", "none"):
+            bad.append("100%% style out of range: %r" % app.completion_style.get())
+        if not (app.completed is None or (isinstance(app.completed, set) and all(type(a) is int for a in app.completed))):
+            bad.append("completed is not None or a set of app ids: %r" % (app.completed,))
+        if (app.completed is None) != (app.games_page is None):
+            bad.append("games_page=%r but completed=%r" % (app.games_page, app.completed))
         if not 0 <= app.hue.get() < 360:
             bad.append("hue out of range: %s" % app.hue.get())
         if not (0 <= app.sat.get() <= 100 and 0 <= app.val.get() <= 100):
@@ -233,15 +326,22 @@ def run_one(seed, steps, sandbox):
                     bad.append("temp file left: " + f)
         return bad
 
-    log, failure = [], None
+    def act_load_page():
+        """Load one of the pages: every seed does this once early, so the 100% block is always exercised."""
+        picks["file"] = rnd.choice(page_files); app.browse_games_page(); return "browse page (forced) " + os.path.basename(picks["file"])
+
+    forced = rnd.randrange(min(10, steps)) if steps else -1       # one of the first 10 steps
+    log, failure, loaded = [], None, set()
     for n in range(steps):
         try:
-            what = act()
+            what = act_load_page() if n == forced else act()
         except Exception as e:
             errors.append(("act", "%s: %s" % (type(e).__name__, e)))
             what = "ACT-EXCEPTION"
         log.append(what)
         bad = invariants()
+        if app.games_page:
+            loaded.add((os.path.basename(app.games_page), app.completion_style.get()))
         if bad or errors:
             failure = "seed %d step %d after '%s' (last 6: %s)\n" % (seed, n, what, log[-6:]) + "".join("   INVARIANT: %s\n" % b for b in bad) + "".join("   ERROR: %s %s\n" % (e[0], e[1][-300:]) for e in errors[-3:])
             break
@@ -250,7 +350,7 @@ def run_one(seed, steps, sandbox):
     except Exception:
         pass
     shutil.rmtree(base, ignore_errors=True)
-    return failure, len(log), len(set(notes))
+    return failure, len(log), len(set(notes)), len(loaded)
 
 
 def main():
@@ -264,13 +364,13 @@ def main():
     bad = 0
     for seed in range(a.first_seed, a.first_seed + a.seeds):
         sandbox = (a.sandbox or seed % 2 == 0) and hasattr(sc, "IN_SANDBOX")
-        failure, n, popups = run_one(seed, a.steps, sandbox)
+        failure, n, popups, looks = run_one(seed, a.steps, sandbox)
         if failure:
             bad += 1
             print("FAIL (sandbox=%s) %s" % (sandbox, failure))
         else:
-            print("ok   seed %d, %d random actions, sandbox=%s, %d kinds of error popup shown" % (seed, n, sandbox, popups))
-    print("%d of %d runs failed" % (bad, a.seeds))
+            print("ok   seed %d, %d random actions, sandbox=%s, %d kinds of error popup shown, %d (page, 100%% style) pairs used" % (seed, n, sandbox, popups, looks))
+    print("%d of %d runs failed; %d attempts to open a program or folder were blocked" % (bad, a.seeds, len(LAUNCHED)))
     sys.exit(1 if bad else 0)
 
 

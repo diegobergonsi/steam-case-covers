@@ -2,10 +2,12 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Regression tests: normal use, plus the attacks the app must refuse. No network, no real Steam.
 Run:  python -m unittest discover -s tests -v"""
-import http.server, json, os, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
+import http.server, json, os, re, shutil, socketserver, struct, sys, tempfile, threading, time, unittest, zlib
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import steamcase as sc
+import completion as cp
 
 
 def make_png(path, w, h):
@@ -1153,9 +1155,11 @@ class CoverColourFiles(Base):
         self.src = os.path.join(self.tmp, "portrait.png")
         sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
 
-    def make(self, name, hue=0, family=False, sat=100, val=100):
+    def make(self, name, hue=0, family=False, sat=100, val=100, treatment=None, src=None):
+        """A cover built the way make_covers builds it; with a `treatment`, in the colour that treatment uses."""
         out = os.path.join(self.tmp, name)
-        sc.build_cover(self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val)
+        hue, sat, val = sc.treatment_colour(treatment, (hue, sat, val))
+        sc.build_cover(src or self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val, treatment=treatment)
         return out
 
     def note_cover(self, **notes):
@@ -1304,6 +1308,131 @@ class CoverColourFiles(Base):
         top = (0, 0, sc.SIZE[0], sc.WINDOW[1])
         self.assertEqual(sc.load_frame(0, sat=0, val=0).getchannel("A").tobytes(), sc.load_frame(0).getchannel("A").tobytes())
         self.assertEqual(sc.Image.open(cover).convert("RGBA").crop(top).getchannel("A").tobytes(), sc.load_frame(0).crop(top).getchannel("A").tobytes())
+
+
+class RecogniseTreated(Base):
+    """Reset finds covers with a 100% treatment by their treatment note, and still refuses look-alikes."""
+    COLOURS = ((0, 100, 100), (134, 100, 100), (0, 0, 14), (200, 60, 40))
+    make, renote = CoverColourFiles.make, CoverColourFiles.renote
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.src = os.path.join(self.tmp, "portrait.png")
+        sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
+
+    def notes_of(self, path, **change):
+        """The steamcase notes of a cover, as renote takes them, with some changed or (None) dropped."""
+        with sc.Image.open(path) as im:
+            notes = {k[len("steamcase-"):]: v for k, v in im.info.items() if k.startswith("steamcase-")}
+        notes.update(change)
+        return {k: v for k, v in notes.items() if v is not None}
+
+    def save_with_notes(self, img, like, name="t.png"):
+        """`img` saved with the notes of the cover `like`."""
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in self.notes_of(like).items():
+            info.add_text("steamcase-" + key, value)
+        out = os.path.join(self.tmp, name)
+        img.save(out, pnginfo=info)
+        return out
+
+    def noise(self, name, seed):
+        """A portrait full of fine detail: the worst case for art that bleeds into the frame."""
+        path = os.path.join(self.tmp, name)
+        bands = [sc.Image.effect_noise((600, 900), 120 + 10 * (seed + i)) for i in range(3)]
+        sc.Image.merge("RGB", bands).save(path)
+        return path
+
+    def test_every_treatment_in_every_kind_is_recognised(self):
+        for t in sc.TREATMENTS:
+            for family in (False, True):
+                for hue, sat, val in self.COLOURS:
+                    self.assertTrue(sc.is_steamcase_cover(self.make("c.png", hue, family, sat, val, treatment=t)), (t, family, hue, sat, val))
+
+    def test_a_treatment_note_on_plain_pixels_is_not_ours(self):
+        plain = self.make("p.png")
+        self.assertTrue(sc.is_steamcase_cover(plain))
+        self.assertFalse(sc.is_steamcase_cover(self.renote(plain, **self.notes_of(plain, done="ribbon"))))
+
+    def test_a_note_over_another_treatments_pixels_is_not_ours(self):
+        border = self.make("b.png", treatment="gold-border")
+        self.assertFalse(sc.is_steamcase_cover(self.renote(border, **self.notes_of(border, done="ribbon"))))
+        ribbon = self.make("r.png", treatment="ribbon")
+        self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, done="gold-case"))))
+
+    def test_a_gold_case_whose_colour_notes_are_not_gold_is_not_ours(self):
+        gold = self.make("g.png", treatment="gold-case")
+        self.assertTrue(sc.is_steamcase_cover(gold))
+        for change in ({"hue": "10"}, {"tone": "50 100"}, {"tone": "100 60"}):
+            self.assertFalse(sc.is_steamcase_cover(self.renote(gold, **self.notes_of(gold, **change))), change)
+
+    def test_a_garbled_treatment_note_is_not_ours(self):
+        ribbon = self.make("r.png", treatment="ribbon")
+        for value in ("sparkly", "", "ribbon ", "RIBBON"):
+            self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, done=value))), repr(value))
+        self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, tone="0 15x"))))   # a garbled colour note too
+
+    def test_look_alikes_are_still_refused_at_every_treatment(self):
+        for t in sc.TREATMENTS:
+            real = self.make("r.png", 134, treatment=t)
+            self.assertTrue(sc.is_steamcase_cover(real), t)
+            flat = self.save_with_notes(sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255)), real, "flat.png")
+            self.assertFalse(sc.is_steamcase_cover(flat), t)
+            grey = self.save_with_notes(sc.Image.open(real).convert("L").convert("RGBA"), real, "grey.png")
+            self.assertFalse(sc.is_steamcase_cover(grey), t)
+            for xy in ((400, 10), (300, 800)):                                          # the banner, and the ribbon below the art
+                img = sc.Image.open(real).convert("RGBA")
+                img.putpixel(xy, (1, 2, 3, 255))
+                self.assertFalse(sc.is_steamcase_cover(self.save_with_notes(img, real)), (t, xy))
+            jpeg = os.path.join(self.tmp, "j.png")
+            sc.Image.open(real).convert("RGB").save(jpeg, format="JPEG", quality=100)
+            self.assertFalse(sc.is_steamcase_cover(jpeg), t)
+
+    def test_art_changes_do_not_matter(self):
+        for t in sc.TREATMENTS:
+            for family in (False, True):
+                a = self.make("a.png", 0, family, treatment=t, src=self.noise("n1.png", 0))
+                b = self.make("b.png", 0, family, treatment=t, src=self.noise("n2.png", 3))
+                self.assertTrue(sc.is_steamcase_cover(a), (t, family))
+                self.assertTrue(sc.is_steamcase_cover(b), (t, family))
+                key = (sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t)
+                self.assertIs(sc._treated_reference(key, family), sc._treated_reference(key, family))
+
+    def test_the_mask_ignores_the_art_and_includes_the_marks(self):
+        for t in sc.TREATMENTS:
+            _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t), False)
+            self.assertEqual(mask.getpixel((300, 400)), 0, t)
+        _, mask = sc._treated_reference((sc.tone_key(0), "ribbon"), False)
+        self.assertEqual(mask.getpixel((526, 66)), 255)
+        _, mask = sc._treated_reference((sc.tone_key(0), "gold-border"), False)
+        self.assertEqual(mask.getpixel((5, 450)), 255)
+
+    def test_covers_from_earlier_versions_are_unchanged(self):
+        self.assertTrue(sc.is_steamcase_cover(self.make("blue.png")))
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("h.png", 134), hue="134")))      # hue note only
+        self.assertTrue(sc.is_steamcase_cover(self.make("t.png", 134, sat=60, val=30)))
+        self.assertTrue(sc.is_steamcase_cover(self.make("f.png", 84, True)))
+        gold = self.make("g.png", treatment="gold-case")
+        self.assertFalse(sc.is_steamcase_cover(self.renote(gold, **self.notes_of(gold, done=None))))   # the rosette is not part of a frame
+
+    def test_a_forged_oversized_or_symlinked_treated_file_is_refused(self):
+        real = self.make("r.png", treatment="ribbon")
+        big = os.path.join(self.tmp, "big.png")
+        shutil.copy(real, big)
+        with open(big, "ab") as f:
+            f.truncate(sc.MAX_DOWNLOAD + 1)                                              # trailing bytes after IEND
+        self.assertFalse(sc.is_steamcase_cover(big))
+        narrow = self.save_with_notes(sc.Image.open(real).convert("RGBA").crop((0, 0, 599, 900)), real, "narrow.png")
+        self.assertFalse(sc.is_steamcase_cover(narrow))
+        link = os.path.join(self.tmp, "link.png")
+        try:
+            os.symlink(real, link)
+        except (OSError, NotImplementedError):
+            return                                                                      # no symlinks here (Windows without privilege)
+        self.assertFalse(sc.is_steamcase_cover(link))
 
 
 class MakeInColour(StoreMocks):
@@ -1493,6 +1622,235 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(10, "End"), 359)
         self.assertEqual(f(77, "x"), 77)
 
+    def test_step_choice_moves_and_stops_at_the_ends(self):
+        f = self.w.step_choice
+        self.assertEqual(f(0, "Left", 4), 0)
+        self.assertEqual(f(3, "Right", 4), 3)
+        self.assertEqual(f(1, "Right", 4), 2)
+        self.assertEqual(f(2, "Home", 4), 0)
+        self.assertEqual(f(1, "End", 4), 3)
+        self.assertEqual(f(1, "x", 4), 1)
+        self.assertEqual(f(0, "Down", 4), 1)
+        self.assertEqual(f(2, "Up", 4), 1)
+
+
+class ReplaceReason(StoreMocks):
+    """The sentence of the Replace prompt (gui.App._replace_reason) for every kind of change, over covers made by the app's own functions."""
+
+    def setUp(self):
+        super().setUp()
+        try:
+            import types, gui
+        except ImportError:
+            self.skipTest("tkinter missing")
+        self.gui = gui
+        self.fake = types.SimpleNamespace(covers_dir=self.covers)
+        self.games = {1: None, 2: None}
+
+    def made(self, hue=0, completed=None, treatment=None):
+        sc.make_covers(self.games, self.covers, hue=hue, completed=completed, treatment=treatment)
+
+    def reason(self, tone, completed, treatment):
+        got = self.gui.App._replace_reason(self.fake, tone, completed, treatment)
+        self.assertIsNotNone(got)
+        title, sentence = got
+        self.assertTrue(title.strip() and sentence.strip() and "%" not in title.replace("100%", "") and "%" not in sentence.replace("100%", ""), got)
+        return got
+
+    def test_nothing_to_rebuild_gives_no_prompt(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), {1}, "ribbon"))
+
+    def test_no_page_only_a_colour_change(self):
+        self.made()
+        self.assertIn("colour", self.reason((90, 100, 100), None, None)[1])
+
+    def test_no_special_case(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("No special case", self.reason((0, 100, 100), set(), None)[1])
+
+    def test_a_page_with_no_game_at_100_says_the_highlight_is_lost(self):
+        for treatment in ("ribbon", "gold-case"):
+            shutil.rmtree(self.covers, ignore_errors=True)
+            self.made(completed={1}, treatment=treatment)
+            self.assertIn("lose it", self.reason((0, 100, 100), set(), "ribbon")[1])
+
+    def test_a_first_highlight_over_plain_covers(self):
+        for treatment in sc.TREATMENTS:
+            shutil.rmtree(self.covers, ignore_errors=True)
+            self.made()
+            self.assertIn("highlighted", self.reason((0, 100, 100), {1}, treatment)[1])
+
+    def test_another_style_for_the_100_games(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("another style", self.reason((0, 100, 100), {1}, "gold-border")[1])
+
+    def test_the_set_of_100_games_changes(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("match your games page", self.reason((0, 100, 100), {2}, "ribbon")[1])
+
+    def test_a_colour_and_a_style_change_name_both(self):
+        self.made(completed={1}, treatment="ribbon")
+        for completed, treatment, part in (({1}, "gold-border", "another style"), (set(), "ribbon", "lose it"), (set(), None, "normal covers"), ({2}, "ribbon", "match your games page")):
+            sentence = self.reason((90, 100, 100), completed, treatment)[1]
+            self.assertIn("colour", sentence)
+            self.assertIn(part, sentence)
+
+
+class CompletionCli(StoreMocks):
+    """--games-page and --completed-style on the command line."""
+
+    def page(self, progress, name="games.html"):
+        """A saved games page like tests/fixtures/games_page.html, with a row per app id in `progress` {appid: (unlocked, total) or None}."""
+        rows = []
+        for appid, counts in progress.items():
+            store = '<a href="https://store.steampowered.com/app/%d"' % appid
+            row = '<div class="row">\n  %s class="img"></a>\n  %s class="name">Game</a>\n' % (store, store)
+            if counts:
+                row += '  <a class="ach" href="https://steamcommunity.com/id/playerone/achievements/%d">ACHIEVEMENTS</a><span class="cnt">%d/%d</span>\n' % ((appid,) + counts)
+            rows.append(row + "</div>\n")
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('<!DOCTYPE html>\n<html><body><div class="list">\n' + "".join(rows) + "</div></body></html>\n")
+        return path
+
+    def make(self, out, *extra):
+        lib = self.fake_library(True)
+        return self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, *extra)
+
+    def treatment(self, out, appid):
+        return sc.cover_treatment(os.path.join(out, "Game_%d_%d.png" % (appid, appid)))
+
+    def test_make_with_a_page_highlights_the_completed_games(self):
+        out = os.path.join(self.tmp, "out")
+        text = self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        self.assertIsNone(self.treatment(out, 2))
+        self.assertIn("1 of them are 100% complete", text)
+
+    def test_each_style_is_accepted(self):
+        page = self.page({1: (10, 10), 2: (1, 9)})
+        for style in sc.TREATMENTS:
+            out = os.path.join(self.tmp, "out_" + style)
+            text = self.make(out, "--games-page", page, "--completed-style", style)
+            self.assertEqual(self.treatment(out, 1), style)
+            self.assertIsNone(self.treatment(out, 2))
+            self.assertIn("1 of them are 100% complete", text)
+
+    def test_a_style_without_a_page_is_refused(self):
+        import contextlib, io
+        out = os.path.join(self.tmp, "out")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.make(out, "--completed-style", "gold-case")
+        self.assertNotEqual(caught.exception.code, 0)
+        self.assertIn("error: --completed-style needs --games-page", err.getvalue())
+        self.assertFalse(os.path.exists(out))
+
+    def test_none_removes_treatments(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        text = self.make(out, "--completed-style", "none")
+        self.assertIsNone(self.treatment(out, 1))
+        self.assertNotIn("100% complete", text)
+        self.make(out, "--games-page", self.page({1: (10, 10)}), "--completed-style", "ribbon")
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        self.make(out, "--games-page", self.page({1: (10, 10)}), "--completed-style", "none")
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_without_the_new_options_treated_covers_stay_treated(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        path = os.path.join(out, "Game_1_1.png")
+        before = self.read(path)
+        self.make(out)
+        self.assertEqual(self.read(path), before)
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+
+    def test_none_does_not_read_the_page_so_a_bad_one_cannot_stop_it(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        bad = os.path.join(self.tmp, "plain.html")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("<html><body>nothing here</body></html>")
+        for page in (bad, os.path.join(self.tmp, "missing.html")):
+            self.make(out, "--games-page", page, "--completed-style", "none")
+            self.assertIsNone(self.treatment(out, 1))
+            self.make(out, "--games-page", self.page({1: (10, 10)}))
+
+    def test_none_with_a_good_page_works(self):
+        out = os.path.join(self.tmp, "out")
+        page = self.page({1: (10, 10), 2: (1, 9)})
+        self.make(out, "--games-page", page)
+        self.make(out, "--games-page", page, "--completed-style", "none")
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_the_page_is_checked_before_the_library_is_loaded(self):
+        import contextlib, io
+        with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None))
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_a_tilde_in_the_page_path_is_expanded(self):
+        page = self.page({1: (10, 10)}, "tilde.html")
+        with mock.patch.dict(os.environ, {"HOME": self.tmp, "USERPROFILE": self.tmp}):
+            got = sc._completion_args(sc.argparse.Namespace(games_page=os.path.join("~", "tilde.html"), completed_style=None))
+        self.assertEqual(got, ({1}, "ribbon"))
+
+    def test_a_missing_page_names_only_its_file_name(self):
+        import contextlib, io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.make(os.path.join(self.tmp, "out"), "--games-page", os.path.join(self.tmp, "gone.html"))
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(err.getvalue().strip(), "That file could not be opened. (gone.html)")
+
+    def test_run_with_a_bad_page_exits_2_and_does_not_apply(self):
+        import contextlib, io
+        bad = os.path.join(self.tmp, "plain.html")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("<html><body>nothing here</body></html>")
+        with mock.patch.object(sc, "cmd_apply") as apply_, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            self.run_cli("run", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", os.path.join(self.tmp, "out"), "--games-page", bad)
+        self.assertEqual(caught.exception.code, 2)
+        apply_.assert_not_called()
+
+    def test_run_with_none_and_a_good_page_applies(self):
+        with mock.patch.object(sc, "cmd_apply") as apply_:
+            out = os.path.join(self.tmp, "out")
+            self.run_cli("run", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", out,
+                         "--games-page", self.page({1: (10, 10)}), "--completed-style", "none")
+        apply_.assert_called_once()
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_a_bad_page_prints_the_reason_and_exits_2(self):
+        import contextlib, io
+        bad = os.path.join(self.tmp, "plain.html")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("<html><body>nothing here</body></html>")
+        out = os.path.join(self.tmp, "out")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.make(out, "--games-page", bad)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("Webpage, Complete", err.getvalue())
+        self.assertFalse(os.path.exists(out))
+
+    def test_run_shares_the_options(self):
+        import contextlib, io
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["steamcase", "run", "-h"]
+        try:
+            with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+                sc.main()
+        finally:
+            sys.argv = argv
+        self.assertIn("--games-page", out.getvalue())
+        self.assertIn("--completed-style", out.getvalue())
+
 
 class ColourCli(StoreMocks):
     """--hue, --saturation and --brightness on the command line."""
@@ -1574,6 +1932,116 @@ class ColourCli(StoreMocks):
             self.assertFalse(os.path.exists(out), bad)                                   # nothing was built
 
 
+class GamesPage(unittest.TestCase):
+    """Reading the saved Steam games page: only ints may come out of it, whatever the file holds."""
+    FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "games_page.html")
+    WANT = {1001: (10, 10), 1002: (4, 50), 1003: (0, 12), 1004: (7, 7)}
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        with open(self.FIXTURE, encoding="utf-8") as f:
+            self.html = f.read()
+
+    def page(self, text, name="page.html"):
+        p = os.path.join(self.tmp, name)
+        with open(p, "wb") as f:
+            f.write(text if isinstance(text, bytes) else text.encode("utf-8"))
+        return p
+
+    def test_reads_progress_for_every_row_that_shows_it(self):
+        self.assertEqual(cp.read_games_page(self.FIXTURE), self.WANT)
+
+    def test_completed_apps_needs_unlocked_equal_total_above_zero(self):
+        self.assertEqual(cp.completed_apps({1: (10, 10), 2: (4, 50), 3: (0, 0), 4: (5, 3), 5: (7, 7)}), {1, 5})
+
+    def test_the_label_language_does_not_matter(self):
+        self.assertEqual(cp.completed_apps(cp.read_games_page(self.FIXTURE)), {1001, 1004})
+        swapped = re.sub(r"(/achievements/\d+\">)[^<]*(</a><span)", "\\1日本語\\2", self.html)
+        self.assertIn("日本語", swapped)
+        self.assertNotIn("CONQUISTAS", swapped)
+        self.assertEqual(cp.read_games_page(self.page(swapped)), self.WANT)
+
+    def test_a_profiles_address_works_like_an_id_address(self):
+        other = self.html.replace("/id/playerone/", "/profiles/76561190000000000/")
+        self.assertNotIn("/id/", other)
+        self.assertEqual(cp.read_games_page(self.page(other)), self.WANT)
+
+    def test_a_page_saved_as_html_only_is_refused_with_advice(self):
+        p = self.page('<html><script>var x = {"rgRecentlyPlayedGames":[1,2]};</script></html>')
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(p)
+        self.assertIn("Webpage, Complete", str(cm.exception))
+
+    def test_rows_without_any_progress_are_refused(self):
+        bare = re.sub(r"<span class=\"cnt\">[^<]*</span>", "", self.html)
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(self.page(bare))
+        self.assertIn("no game shows achievement progress", str(cm.exception).lower())
+
+    def test_a_file_that_is_not_a_steam_page_is_refused(self):
+        for name, data in (("a.txt", b"just some words\n"), ("b.html", b""), ("c.html", b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 8)):
+            with self.assertRaises(cp.PageError) as cm:
+                cp.read_games_page(self.page(data, name))
+            self.assertIn("does not look like your Steam games page", str(cm.exception))
+
+    def test_too_big_files_and_links_are_refused(self):
+        big = os.path.join(self.tmp, "big.html")
+        with open(big, "wb") as f:
+            f.truncate(cp.MAX_GAMES_PAGE + 1)                                   # sparse: costs no disk
+        with self.assertRaises(cp.PageError):
+            cp.read_games_page(big)
+        link = os.path.join(self.tmp, "link.html")
+        try:
+            os.symlink(self.FIXTURE, link)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not available here")
+        with self.assertRaises(cp.PageError):
+            cp.read_games_page(link)
+
+    def test_a_link_swapped_in_after_the_first_check_is_still_refused(self):
+        if not hasattr(os, "O_NOFOLLOW"):
+            self.skipTest("no O_NOFOLLOW here")
+        link = os.path.join(self.tmp, "link.html")
+        os.symlink(self.FIXTURE, link)
+        with mock.patch.object(cp.os, "lstat", os.stat):                       # as if the path was a plain file when it was checked
+            with self.assertRaises(cp.PageError) as cm:
+                cp.read_games_page(link)
+        self.assertIn("not a plain file", str(cm.exception))
+
+    def test_a_missing_file_names_only_its_base_name(self):
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(os.path.join(self.tmp, "gone.html"))
+        self.assertEqual(str(cm.exception), "That file could not be opened. (gone.html)")
+
+    def test_junk_is_parsed_in_linear_time(self):
+        junk = b'<a href="https://store.steampowered.com/app/' * (5 * 1024 * 1024 // 44) + os.urandom(5 * 1024 * 1024)
+        # the progress pattern too: link starts that never end, and achievements links with nothing after them
+        junk += (b'<a href="https://steamcommunity.com/id/' + b"a" * 200) * 2000 + b'/achievements/' * 20000
+        p = self.page(self.html.encode("utf-8") + junk)
+        t0 = time.monotonic()
+        got = cp.read_games_page(p)
+        self.assertLess(time.monotonic() - t0, 3)
+        self.assertEqual(got, self.WANT)
+        for k, v in got.items():
+            self.assertIs(type(k), int)
+            self.assertTrue(all(type(n) is int for n in v))
+
+    def test_nothing_from_a_script_is_returned(self):
+        text = self.html.replace("</body>", '<script>{"strWebAPIToken":"SECRET-TOKEN"}</script></body>')
+        self.assertNotIn("SECRET-TOKEN", repr(cp.read_games_page(self.page(text))))
+        only = self.page('<script>{"strWebAPIToken":"SECRET-TOKEN","rgRecentlyPlayedGames":[]}</script>', "s.html")
+        with self.assertRaises(cp.PageError) as cm:
+            cp.read_games_page(only)
+        self.assertNotIn("SECRET-TOKEN", str(cm.exception))
+
+    def test_odd_numbers_are_ignored_or_kept_but_never_complete(self):
+        text = self.html.replace("10/10", "5/3").replace("4/50", "0/0").replace("0/12", "x/y")
+        got = cp.read_games_page(self.page(text))
+        self.assertEqual(got, {1001: (5, 3), 1002: (0, 0), 1004: (7, 7)})
+        self.assertEqual(cp.completed_apps(got), {1004})
+
+
 class FamilyHelp(unittest.TestCase):
     """The hover text next to "Only my installed games": it must say what the switch leaves out and how to get those games."""
 
@@ -1582,6 +2050,255 @@ class FamilyHelp(unittest.TestCase):
         for must in ("family", "game list", "installed", "green corner"):
             self.assertIn(must, text)
         self.assertLess(len(sc.FAMILY_HELP), 700)                                 # a tooltip, not a manual
+
+
+def near(px, ref, tol=12):
+    return all(abs(x - y) <= tol for x, y in zip(px, ref))
+
+
+def pixels(im):
+    return getattr(im, "get_flattened_data", im.getdata)()          # getdata is deprecated from Pillow 12; the floor (10.3) only has getdata
+
+
+def BORDER_AT(v, axis):
+    """Where a point of the full cover lands once the "gold-border" treatment has shrunk it into the border."""
+    return sc.BORDER + v * (sc.SIZE[axis] - 2 * sc.BORDER) / sc.SIZE[axis]
+
+
+class Treatments(unittest.TestCase):
+    """The marks of a 100% game: the rosette over the badges, the cut ribbon at the bottom, and the three case treatments."""
+    DISC, BAND = (255, 207, 10), (26, 159, 255)
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_the_overlay_asset_exists_and_is_a_full_size_rgba(self):
+        with sc.Image.open(sc.COMPLETION_OVERLAY) as im:
+            self.assertEqual(im.mode, "RGBA")
+            self.assertEqual(im.size, (600, 900))
+
+    def test_the_overlay_has_the_approved_marks(self):
+        with sc.Image.open(sc.COMPLETION_OVERLAY) as im:
+            ov = im.convert("RGBA")
+        self.assertTrue(near(ov.getpixel((526, 66))[:3], self.DISC), ov.getpixel((526, 66)))     # the rosette's gold disc
+        text = ov.crop((150, 800, 450, 840))
+        white = sum(1 for p in pixels(text) if p[3] == 255 and min(p[:3]) >= 240)
+        self.assertGreaterEqual(white, 200)                                                    # "100% Complete"
+        self.assertTrue(near(ov.getpixel((80, 800))[:3], self.BAND), ov.getpixel((80, 800)))    # the band
+        self.assertEqual(ov.getpixel((300, 400))[3], 0)                                         # the middle of the art stays clear
+
+    def test_no_treatment_returns_the_cover_untouched(self):
+        c = sc.preview_cover()
+        self.assertIs(sc.finish_treatment(c, None), c)
+
+    def test_a_ribbon_cover_changes_only_the_rosette_and_the_ribbon(self):
+        done, plain = sc.preview_cover(treatment="ribbon"), sc.preview_cover()
+        self.assertEqual(done.getpixel((300, 400)), plain.getpixel((300, 400)))
+        self.assertNotEqual(done.getpixel((526, 66)), plain.getpixel((526, 66)))
+        self.assertNotEqual(done.getpixel((300, 820)), plain.getpixel((300, 820)))
+        self.assertEqual(done.getpixel((0, 0))[3], 0)                                           # nothing leaves the rounded case
+
+    def test_gold_case_changes_the_case_colour_to_gold(self):
+        self.assertEqual(sc.preview_cover(20, treatment="gold-case").getpixel((7, 450)),
+                         sc.preview_cover(sc.GOLD_HUE).getpixel((7, 450)))                      # the user's hue 20 is ignored
+
+    def test_other_treatments_keep_the_users_colour(self):
+        self.assertEqual(sc.preview_cover(134, treatment="ribbon").getpixel((7, 450)), sc.preview_cover(134).getpixel((7, 450)))
+        self.assertEqual(sc.preview_cover(134, sat=0, val=14, treatment="ribbon").getpixel((7, 450)),
+                         sc.preview_cover(134, sat=0, val=14).getpixel((7, 450)))
+
+    def test_gold_border_shrinks_the_case_and_stays_600_by_900(self):
+        im = sc.preview_cover(treatment="gold-border")
+        self.assertEqual(im.size, (600, 900))
+        r, g, b, a = im.getpixel((5, 450))
+        self.assertTrue(r > 180 and b < 90, (r, g, b))                                         # the gold border
+        r, g, b, a = im.getpixel((20, 450))
+        self.assertGreater(b, r)                                                               # the user's blue case, a little inside
+        self.assertNotEqual(im.getpixel((300, 450)), im.getpixel((5, 450)))                     # the art still shows
+        self.assertEqual(im.getpixel((300, 450))[3], 255)
+        for corner in ((0, 0), (599, 0), (0, 899), (599, 899)):
+            self.assertEqual(im.getpixel(corner)[3], 0, corner)
+
+    def test_gold_border_keeps_the_rosette_and_ribbon_on_the_art(self):
+        im = sc.preview_cover(treatment="gold-border")
+        self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((480, 30, 560, 100)))))
+        box = im.crop((460, 20, 580, 140))                                                     # the whole disc, to find its centre
+        disc = [(i % 120 + 460, i // 120 + 20) for i, p in enumerate(pixels(box)) if near(p[:3], self.DISC)]
+        cx, cy = sum(x for x, _ in disc) / len(disc), sum(y for _, y in disc) / len(disc)
+        want = (BORDER_AT(526, 0), BORDER_AT(66, 1))                                           # the disc shrank with the case: its centre moved
+        self.assertTrue(abs(cx - want[0]) <= 2 and abs(cy - want[1]) <= 2, ((cx, cy), want))
+        self.assertGreater(abs(cx - 526) + abs(cy - 66), 10)
+        strip = pixels(im.crop((0, 0, 14, 900)))
+        self.assertFalse(any(p[3] and near(p[:3], self.BAND) for p in strip))
+
+    def test_family_corner_and_the_rosette_do_not_overlap(self):
+        im = sc.preview_cover(0, True, treatment="ribbon")
+        self.assertTrue(near(im.getpixel((8, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((8, 8)))
+        self.assertTrue(near(im.getpixel((526, 66))[:3], self.DISC), im.getpixel((526, 66)))
+
+    def test_treatment_colour(self):
+        self.assertEqual(sc.treatment_colour("gold-case", (20, 40, 50)), (176, 100, 100))
+        self.assertEqual(sc.treatment_colour("ribbon", (20, 40, 50)), (20, 40, 50))
+        c = (20, 40, 50)
+        self.assertEqual(sc.treatment_colour(None, c), c)
+
+
+class MakeTreated(StoreMocks):
+    """make_covers with the games that are 100% and a treatment: which covers get it, which are kept and which are rebuilt."""
+
+    def setUp(self):
+        super().setUp()
+        self.games = {1: None, 2: None}
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_an_unknown_treatment_is_refused_before_anything_is_made(self):
+        for bad in ("sparkly", "", "RIBBON", False):
+            with self.assertRaises(ValueError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment=bad)
+        self.assertEqual(os.listdir(self.covers), [])
+
+    def test_a_missing_frame_fails_before_any_lookup_or_download(self):
+        with mock.patch.object(sc, "FRAME", os.path.join(self.tmp, "no-frame.png")), \
+                mock.patch.object(sc, "store_items") as store, mock.patch.object(sc, "http_get") as get:
+            with self.assertRaises(OSError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-case")
+        store.assert_not_called()
+        get.assert_not_called()
+
+    def test_a_missing_overlay_fails_before_any_cover_is_made(self):
+        with mock.patch.object(sc, "COMPLETION_OVERLAY", os.path.join(self.tmp, "no-overlay.png")):
+            sc._completion_overlay.cache_clear()
+            self.addCleanup(sc._completion_overlay.cache_clear)
+            with self.assertRaises(OSError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        self.assertEqual(os.listdir(self.covers), [])
+
+    def test_a_completed_game_gets_the_treatment_and_the_others_do_not(self):
+        res = sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "ribbon")
+        self.assertIsNone(sc.cover_treatment(self.cover(2)))
+        self.assertEqual(res["completed"], 1)
+
+    def test_each_treatment_is_recorded(self):
+        for t in sc.TREATMENTS:
+            with self.subTest(t):
+                shutil.rmtree(self.covers)
+                sc.make_covers({1: None}, self.covers, hue=90, completed={1}, treatment=t)
+                self.assertEqual(sc.cover_treatment(self.cover(1)), t)
+                self.assertEqual(sc.cover_colour(self.cover(1)), (176, 100, 100) if t == "gold-case" else (90, 100, 100))
+                with sc.Image.open(self.cover(1)) as im:
+                    self.assertEqual(im.size, sc.SIZE)
+
+    def test_the_gold_case_ignores_the_users_colour_and_is_not_rebuilt_when_it_changes(self):
+        sc.make_covers(self.games, self.covers, hue=0, completed={1}, treatment="gold-case")
+        gold, plain = self.read(self.cover(1)), self.read(self.cover(2))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 134, 100, 100, completed={1}, treatment="gold-case"))
+        aside = os.path.join(self.tmp, "aside.png")
+        shutil.move(self.cover(2), aside)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 134, 100, 100, completed={1}, treatment="gold-case"))    # only game 2 counted
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134))                     # no page: the gold case keeps its gold
+        shutil.move(aside, self.cover(2))
+        res = sc.make_covers(self.games, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertEqual(self.read(self.cover(1)), gold)
+        self.assertNotEqual(self.read(self.cover(2)), plain)
+        self.assertEqual(sc.cover_colour(self.cover(2)), (134, 100, 100))
+        self.assertEqual(res["completed"], 1)                                               # the kept one counts too
+
+    def test_a_changed_style_rebuilds_only_the_completed_games(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        ribbon, plain = self.read(self.cover(1)), self.read(self.cover(2))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, completed={1}, treatment="gold-border"))
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-border")
+        self.assertNotEqual(self.read(self.cover(1)), ribbon)
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-border")
+        self.assertEqual(self.read(self.cover(2)), plain)
+
+    def test_no_special_case_rebuilds_treated_covers_as_plain(self):
+        sc.make_covers(self.games, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertTrue(sc.covers_in_other_look(self.covers, 134, 100, 100, completed=set(), treatment=None))
+        res = sc.make_covers(self.games, self.covers, hue=134, completed=set(), treatment=None)
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+        self.assertEqual(sc.cover_colour(self.cover(1)), (134, 100, 100))
+        self.assertEqual(res["completed"], 0)
+
+    def test_without_a_page_treated_covers_keep_their_treatment(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        ribbon, plain = self.read(self.cover(1)), self.read(self.cover(2))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100))
+        res = sc.make_covers(self.games, self.covers, completed=None, treatment=None)
+        self.assertEqual((self.read(self.cover(1)), self.read(self.cover(2))), (ribbon, plain))
+        self.assertEqual(res["completed"], 1)
+        sc.make_covers(self.games, self.covers, hue=134)
+        self.assertNotEqual(self.read(self.cover(1)), ribbon)
+        self.assertEqual(sc.cover_colour(self.cover(1)), (134, 100, 100))
+        self.assertEqual((sc.cover_treatment(self.cover(1)), sc.cover_treatment(self.cover(2))), ("ribbon", None))
+
+    def test_a_game_that_stops_being_complete_loses_the_treatment(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, completed=set(), treatment="ribbon"))
+        sc.make_covers(self.games, self.covers, completed=set(), treatment="ribbon")
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+
+    def test_family_games_can_be_completed(self):
+        for t in ("ribbon", "gold-case"):
+            with self.subTest(t):
+                shutil.rmtree(self.covers)
+                sc.make_covers({1: None}, self.covers, family={1}, completed={1}, treatment=t)
+                self.assertTrue(self.is_green(self.corner(self.cover(1))))
+                self.assertEqual(sc.cover_treatment(self.cover(1)), t)
+        shutil.rmtree(self.covers)
+        sc.make_covers({1: None}, self.covers, family={1}, completed={1}, treatment="gold-border")
+        box = sc.Image.open(self.cover(1)).convert("RGBA").crop((14, 14, 60, 60))
+        self.assertTrue(any(p[3] == 255 and self.is_green(p[:3]) for p in pixels(box)))
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-border")
+
+    def test_a_garbled_treatment_note_means_rebuild(self):
+        from PIL.PngImagePlugin import PngInfo
+        sc.make_covers({1: None}, self.covers)
+        note = PngInfo()
+        note.add_text(sc.HUE_CHUNK, "0")
+        note.add_text(sc.TONE_CHUNK, "100 100")
+        note.add_text(sc.DONE_CHUNK, "sparkly")
+        sc.Image.open(self.cover(1)).save(self.cover(1), pnginfo=note)
+        garbled = self.read(self.cover(1))
+        self.assertIs(sc.cover_treatment(self.cover(1)), False)
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100))
+        statuses = []
+        sc.make_covers({1: None}, self.covers, completed=None, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual(statuses, ["ok"])
+        self.assertNotEqual(self.read(self.cover(1)), garbled)
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+
+    def test_cover_treatment_of_files_that_are_not_covers(self):
+        self.assertIs(sc.cover_treatment(os.path.join(self.tmp, "nowhere.png")), False)
+        junk = os.path.join(self.tmp, "junk.png")
+        with open(junk, "wb") as f:
+            f.write(b"not a png")
+        self.assertIs(sc.cover_treatment(junk), False)
+        sc.make_covers({1: None}, self.covers)
+        self.assertIsNone(sc.cover_treatment(self.cover(1)))
+
+    def test_existing_cover_colour_ignores_gold_case_covers(self):
+        sc.make_covers({1: None}, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
+        sc.make_covers({2: None}, self.covers, hue=134, completed={1}, treatment="gold-case")
+        self.assertEqual(sc.existing_cover_colour(self.covers), (134, 100, 100))
+
+    def test_a_completed_game_that_is_not_in_the_library_is_ignored(self):
+        res = sc.make_covers({1: None}, self.covers, completed={1, 99}, treatment="ribbon")
+        self.assertEqual(sorted(os.listdir(self.covers)), ["Game_1_1.png"])
+        self.assertEqual((res["files"], res["completed"]), ([self.cover(1)], 1))
+
+    def test_make_covers_keeps_its_old_behaviour_without_the_new_arguments(self):
+        res = sc.make_covers(self.games, self.covers, hue=134)
+        self.assertEqual(res["completed"], 0)
+        for appid in self.games:
+            self.assertIsNone(sc.cover_treatment(self.cover(appid)))
+            with sc.Image.open(self.cover(appid)) as im:
+                self.assertNotIn(sc.DONE_CHUNK, im.info)
 
 
 if __name__ == "__main__":
