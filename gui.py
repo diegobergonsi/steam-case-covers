@@ -655,7 +655,7 @@ class App(tk.Tk):
             what = "the covers of your 100%% games made in another style are made again as “%s”" % label
             title, one = "Change the look of your 100% games?", "This replaces the covers of your 100%% games made in another style with “%s”." % label
         elif not styles:
-            what = "your 100% games get highlighted covers (“%s”)" % label
+            what = "your 100%% games get highlighted covers (“%s”)" % label
             title, one = "Highlight your 100% games?", "This replaces the covers of your 100%% games with highlighted ones (“%s”)." % label
         else:
             what = "your 100% covers are updated to match your games page"

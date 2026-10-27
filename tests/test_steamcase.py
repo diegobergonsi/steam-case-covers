@@ -1634,6 +1634,69 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(2, "Up", 4), 1)
 
 
+class ReplaceReason(StoreMocks):
+    """The sentence of the Replace prompt (gui.App._replace_reason) for every kind of change, over covers made by the app's own functions."""
+
+    def setUp(self):
+        super().setUp()
+        try:
+            import types, gui
+        except ImportError:
+            self.skipTest("tkinter missing")
+        self.gui = gui
+        self.fake = types.SimpleNamespace(covers_dir=self.covers)
+        self.games = {1: None, 2: None}
+
+    def made(self, hue=0, completed=None, treatment=None):
+        sc.make_covers(self.games, self.covers, hue=hue, completed=completed, treatment=treatment)
+
+    def reason(self, tone, completed, treatment):
+        got = self.gui.App._replace_reason(self.fake, tone, completed, treatment)
+        self.assertIsNotNone(got)
+        title, sentence = got
+        self.assertTrue(title.strip() and sentence.strip() and "%" not in title.replace("100%", "") and "%" not in sentence.replace("100%", ""), got)
+        return got
+
+    def test_nothing_to_rebuild_gives_no_prompt(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), {1}, "ribbon"))
+
+    def test_no_page_only_a_colour_change(self):
+        self.made()
+        self.assertIn("colour", self.reason((90, 100, 100), None, None)[1])
+
+    def test_no_special_case(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("No special case", self.reason((0, 100, 100), set(), None)[1])
+
+    def test_a_page_with_no_game_at_100_says_the_highlight_is_lost(self):
+        for treatment in ("ribbon", "gold-case"):
+            shutil.rmtree(self.covers, ignore_errors=True)
+            self.made(completed={1}, treatment=treatment)
+            self.assertIn("lose it", self.reason((0, 100, 100), set(), "ribbon")[1])
+
+    def test_a_first_highlight_over_plain_covers(self):
+        for treatment in sc.TREATMENTS:
+            shutil.rmtree(self.covers, ignore_errors=True)
+            self.made()
+            self.assertIn("highlighted", self.reason((0, 100, 100), {1}, treatment)[1])
+
+    def test_another_style_for_the_100_games(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("another style", self.reason((0, 100, 100), {1}, "gold-border")[1])
+
+    def test_the_set_of_100_games_changes(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("match your games page", self.reason((0, 100, 100), {2}, "ribbon")[1])
+
+    def test_a_colour_and_a_style_change_name_both(self):
+        self.made(completed={1}, treatment="ribbon")
+        for completed, treatment, part in (({1}, "gold-border", "another style"), (set(), "ribbon", "lose it"), (set(), None, "normal covers"), ({2}, "ribbon", "match your games page")):
+            sentence = self.reason((90, 100, 100), completed, treatment)[1]
+            self.assertIn("colour", sentence)
+            self.assertIn(part, sentence)
+
+
 class CompletionCli(StoreMocks):
     """--games-page and --completed-style on the command line."""
 
@@ -2104,6 +2167,14 @@ class MakeTreated(StoreMocks):
                 sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-case")
         store.assert_not_called()
         get.assert_not_called()
+
+    def test_a_missing_overlay_fails_before_any_cover_is_made(self):
+        with mock.patch.object(sc, "COMPLETION_OVERLAY", os.path.join(self.tmp, "no-overlay.png")):
+            sc._completion_overlay.cache_clear()
+            self.addCleanup(sc._completion_overlay.cache_clear)
+            with self.assertRaises(OSError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
+        self.assertEqual(os.listdir(self.covers), [])
 
     def test_a_completed_game_gets_the_treatment_and_the_others_do_not(self):
         res = sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")

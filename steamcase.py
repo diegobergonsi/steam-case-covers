@@ -918,6 +918,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         return frames[key]
 
     frame_for((hue, sat, val), False)           # a missing frame.png fails here, before any download
+    if treatment is not None or completed is None:
+        _completion_overlay()                   # so does a missing overlay: otherwise every 100% cover would count as a failed download
 
     ids = sorted(games)
     if only:
