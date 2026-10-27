@@ -17,10 +17,10 @@ The functions below are the engine. The CLI at the bottom and gui.py both use th
 import argparse, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
-    from PIL import Image, ImageChops, ImageDraw
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
     from PIL.PngImagePlugin import PngInfo
 except ImportError:
-    Image = ImageChops = ImageDraw = PngInfo = None
+    Image = ImageChops = ImageDraw = ImageFilter = PngInfo = None
 
 try:
     import certifi                      # a bundled set of trusted certificates (the packaged app's own Python may not find the system's)
@@ -1225,11 +1225,36 @@ def _same_pixels(strip, ref):
     return max(hi for _, hi in diff.getextrema()) <= 2
 
 
+@functools.lru_cache(maxsize=8)                                     # about 2.7 MB an entry; a library uses one or two colours, each plain and family
+def _treated_reference(key, family):
+    """(expected, mask) for a treated cover: key is (tone_key, treatment). The cover is made twice, from flat black and from flat white
+    art, through the same steps as build_cover; the mask is 255 where both agree within 2 on every channel (frame, rosette, ribbon,
+    border: nothing the game's art reaches) and 0 elsewhere, then pulled back 3 pixels from the art: the gold border's shrink (Lanczos)
+    lets detailed art ring that far past where flat art reaches. Expected is halfway between the two, so real art lands within 1 of it."""
+    (step, sat, val), treatment = key                               # step * 360 / 256 degrees turns the hue by exactly `step` again
+    frame = load_frame(step * 360 / 256, family, sat=sat, val=val)
+    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), treatment) for c in (0, 255))
+    widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
+    return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
+
+
+def _same_treated(im, key, family):
+    """True if `im` matches the treated cover for `key` within 2 levels on every pixel the art does not reach (see _treated_reference).
+    A mask that covers less than 15% of the canvas leaves too little to tell our covers from others: then never ours."""
+    want, mask = _treated_reference(key, family)
+    if mask.histogram()[255] < 0.15 * SIZE[0] * SIZE[1]:
+        return False
+    return _same_pixels(im, (want, Image.merge("RGBA", (mask,) * 4)))
+
+
 def is_steamcase_cover(path):
     """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge are those of frame.png (or of the family frame).
-    A cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one without (made
-    before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to a tone note, a
-    garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it is never mistaken for ours."""
+    A cover with a treatment note (a 100% game) must name exactly one of TREATMENTS, have colour notes we write, and match the cover
+    regenerated in that colour, tone and treatment on every pixel the game's art does not reach (frame, rosette, ribbon, border).
+    Otherwise, a cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one
+    without (made before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to
+    a tone or treatment note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
+    is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
             return False
@@ -1237,8 +1262,13 @@ def is_steamcase_cover(path):
         with Image.open(path, formats=["PNG"]) as im:
             if im.size != SIZE:
                 return False
-            toned, colour = TONE_CHUNK in im.info, _noted_colour(im.info)
+            toned, colour, done = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK)
             im = im.convert("RGBA")
+        if done is not None:
+            if done not in TREATMENTS or colour is None:
+                return False
+            key = (tone_key(*treatment_colour(done, colour)), done)
+            return any(_same_treated(im, key, family) for family in (False, True))
         if toned:
             if colour is None:
                 return False

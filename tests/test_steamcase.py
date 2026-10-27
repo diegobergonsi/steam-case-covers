@@ -1154,9 +1154,11 @@ class CoverColourFiles(Base):
         self.src = os.path.join(self.tmp, "portrait.png")
         sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
 
-    def make(self, name, hue=0, family=False, sat=100, val=100):
+    def make(self, name, hue=0, family=False, sat=100, val=100, treatment=None, src=None):
+        """A cover built the way make_covers builds it; with a `treatment`, in the colour that treatment uses."""
         out = os.path.join(self.tmp, name)
-        sc.build_cover(self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val)
+        hue, sat, val = sc.treatment_colour(treatment, (hue, sat, val))
+        sc.build_cover(src or self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val, treatment=treatment)
         return out
 
     def note_cover(self, **notes):
@@ -1305,6 +1307,125 @@ class CoverColourFiles(Base):
         top = (0, 0, sc.SIZE[0], sc.WINDOW[1])
         self.assertEqual(sc.load_frame(0, sat=0, val=0).getchannel("A").tobytes(), sc.load_frame(0).getchannel("A").tobytes())
         self.assertEqual(sc.Image.open(cover).convert("RGBA").crop(top).getchannel("A").tobytes(), sc.load_frame(0).crop(top).getchannel("A").tobytes())
+
+
+class RecogniseTreated(Base):
+    """Reset finds covers with a 100% treatment by their treatment note, and still refuses look-alikes."""
+    COLOURS = ((0, 100, 100), (134, 100, 100), (0, 0, 14), (200, 60, 40))
+    make, renote = CoverColourFiles.make, CoverColourFiles.renote
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.src = os.path.join(self.tmp, "portrait.png")
+        sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
+
+    def notes_of(self, path, **change):
+        """The steamcase notes of a cover, as renote takes them, with some changed or (None) dropped."""
+        with sc.Image.open(path) as im:
+            notes = {k[len("steamcase-"):]: v for k, v in im.info.items() if k.startswith("steamcase-")}
+        notes.update(change)
+        return {k: v for k, v in notes.items() if v is not None}
+
+    def save_with_notes(self, img, like, name="t.png"):
+        """`img` saved with the notes of the cover `like`."""
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in self.notes_of(like).items():
+            info.add_text("steamcase-" + key, value)
+        out = os.path.join(self.tmp, name)
+        img.save(out, pnginfo=info)
+        return out
+
+    def noise(self, name, seed):
+        """A portrait full of fine detail: the worst case for art that bleeds into the frame."""
+        path = os.path.join(self.tmp, name)
+        bands = [sc.Image.effect_noise((600, 900), 120 + 10 * (seed + i)) for i in range(3)]
+        sc.Image.merge("RGB", bands).save(path)
+        return path
+
+    def test_every_treatment_in_every_kind_is_recognised(self):
+        for t in sc.TREATMENTS:
+            for family in (False, True):
+                for hue, sat, val in self.COLOURS:
+                    self.assertTrue(sc.is_steamcase_cover(self.make("c.png", hue, family, sat, val, treatment=t)), (t, family, hue, sat, val))
+
+    def test_a_treatment_note_on_plain_pixels_is_not_ours(self):
+        plain = self.make("p.png")
+        self.assertTrue(sc.is_steamcase_cover(plain))
+        self.assertFalse(sc.is_steamcase_cover(self.renote(plain, **self.notes_of(plain, done="ribbon"))))
+
+    def test_a_note_over_another_treatments_pixels_is_not_ours(self):
+        border = self.make("b.png", treatment="gold-border")
+        self.assertFalse(sc.is_steamcase_cover(self.renote(border, **self.notes_of(border, done="ribbon"))))
+        ribbon = self.make("r.png", treatment="ribbon")
+        self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, done="gold-case"))))
+
+    def test_a_garbled_treatment_note_is_not_ours(self):
+        ribbon = self.make("r.png", treatment="ribbon")
+        for value in ("sparkly", "", "ribbon ", "RIBBON"):
+            self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, done=value))), repr(value))
+        self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, tone="0 15x"))))   # a garbled colour note too
+
+    def test_look_alikes_are_still_refused_at_every_treatment(self):
+        for t in sc.TREATMENTS:
+            real = self.make("r.png", 134, treatment=t)
+            self.assertTrue(sc.is_steamcase_cover(real), t)
+            flat = self.save_with_notes(sc.Image.new("RGBA", sc.SIZE, (30, 60, 90, 255)), real, "flat.png")
+            self.assertFalse(sc.is_steamcase_cover(flat), t)
+            grey = self.save_with_notes(sc.Image.open(real).convert("L").convert("RGBA"), real, "grey.png")
+            self.assertFalse(sc.is_steamcase_cover(grey), t)
+            for xy in ((400, 10), (300, 800)):                                          # the banner, and the ribbon below the art
+                img = sc.Image.open(real).convert("RGBA")
+                img.putpixel(xy, (1, 2, 3, 255))
+                self.assertFalse(sc.is_steamcase_cover(self.save_with_notes(img, real)), (t, xy))
+            jpeg = os.path.join(self.tmp, "j.png")
+            sc.Image.open(real).convert("RGB").save(jpeg, format="JPEG", quality=100)
+            self.assertFalse(sc.is_steamcase_cover(jpeg), t)
+
+    def test_art_changes_do_not_matter(self):
+        for t in sc.TREATMENTS:
+            for family in (False, True):
+                a = self.make("a.png", 0, family, treatment=t, src=self.noise("n1.png", 0))
+                b = self.make("b.png", 0, family, treatment=t, src=self.noise("n2.png", 3))
+                self.assertTrue(sc.is_steamcase_cover(a), (t, family))
+                self.assertTrue(sc.is_steamcase_cover(b), (t, family))
+                key = (sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t)
+                self.assertIs(sc._treated_reference(key, family), sc._treated_reference(key, family))
+
+    def test_the_mask_ignores_the_art_and_includes_the_marks(self):
+        for t in sc.TREATMENTS:
+            _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t), False)
+            self.assertEqual(mask.getpixel((300, 400)), 0, t)
+        _, mask = sc._treated_reference((sc.tone_key(0), "ribbon"), False)
+        self.assertEqual(mask.getpixel((526, 66)), 255)
+        _, mask = sc._treated_reference((sc.tone_key(0), "gold-border"), False)
+        self.assertEqual(mask.getpixel((5, 450)), 255)
+
+    def test_covers_from_earlier_versions_are_unchanged(self):
+        self.assertTrue(sc.is_steamcase_cover(self.make("blue.png")))
+        self.assertTrue(sc.is_steamcase_cover(self.renote(self.make("h.png", 134), hue="134")))      # hue note only
+        self.assertTrue(sc.is_steamcase_cover(self.make("t.png", 134, sat=60, val=30)))
+        self.assertTrue(sc.is_steamcase_cover(self.make("f.png", 84, True)))
+        gold = self.make("g.png", treatment="gold-case")
+        self.assertFalse(sc.is_steamcase_cover(self.renote(gold, **self.notes_of(gold, done=None))))   # the rosette is not part of a frame
+
+    def test_a_forged_oversized_or_symlinked_treated_file_is_refused(self):
+        real = self.make("r.png", treatment="ribbon")
+        big = os.path.join(self.tmp, "big.png")
+        shutil.copy(real, big)
+        with open(big, "ab") as f:
+            f.truncate(sc.MAX_DOWNLOAD + 1)                                              # trailing bytes after IEND
+        self.assertFalse(sc.is_steamcase_cover(big))
+        narrow = self.save_with_notes(sc.Image.open(real).convert("RGBA").crop((0, 0, 599, 900)), real, "narrow.png")
+        self.assertFalse(sc.is_steamcase_cover(narrow))
+        link = os.path.join(self.tmp, "link.png")
+        try:
+            os.symlink(real, link)
+        except (OSError, NotImplementedError):
+            return                                                                      # no symlinks here (Windows without privilege)
+        self.assertFalse(sc.is_steamcase_cover(link))
 
 
 class MakeInColour(StoreMocks):
