@@ -1616,6 +1616,103 @@ class HueMath(unittest.TestCase):
         self.assertEqual(f(77, "x"), 77)
 
 
+class CompletionCli(StoreMocks):
+    """--games-page and --completed-style on the command line."""
+
+    def page(self, progress, name="games.html"):
+        """A saved games page like tests/fixtures/games_page.html, with a row per app id in `progress` {appid: (unlocked, total) or None}."""
+        rows = []
+        for appid, counts in progress.items():
+            store = '<a href="https://store.steampowered.com/app/%d"' % appid
+            row = '<div class="row">\n  %s class="img"></a>\n  %s class="name">Game</a>\n' % (store, store)
+            if counts:
+                row += '  <a class="ach" href="https://steamcommunity.com/id/playerone/achievements/%d">ACHIEVEMENTS</a><span class="cnt">%d/%d</span>\n' % ((appid,) + counts)
+            rows.append(row + "</div>\n")
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('<!DOCTYPE html>\n<html><body><div class="list">\n' + "".join(rows) + "</div></body></html>\n")
+        return path
+
+    def make(self, out, *extra):
+        lib = self.fake_library(True)
+        return self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, *extra)
+
+    def treatment(self, out, appid):
+        return sc.cover_treatment(os.path.join(out, "Game_%d_%d.png" % (appid, appid)))
+
+    def test_make_with_a_page_highlights_the_completed_games(self):
+        out = os.path.join(self.tmp, "out")
+        text = self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        self.assertIsNone(self.treatment(out, 2))
+        self.assertIn("1 of them are 100% complete", text)
+
+    def test_each_style_is_accepted(self):
+        page = self.page({1: (10, 10), 2: (1, 9)})
+        for style in sc.TREATMENTS:
+            out = os.path.join(self.tmp, "out_" + style)
+            text = self.make(out, "--games-page", page, "--completed-style", style)
+            self.assertEqual(self.treatment(out, 1), style)
+            self.assertIsNone(self.treatment(out, 2))
+            self.assertIn("1 of them are 100% complete", text)
+
+    def test_a_style_without_a_page_is_refused(self):
+        import contextlib, io
+        out = os.path.join(self.tmp, "out")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.make(out, "--completed-style", "gold-case")
+        self.assertNotEqual(caught.exception.code, 0)
+        self.assertIn("error: --completed-style needs --games-page", err.getvalue())
+        self.assertFalse(os.path.exists(out))
+
+    def test_none_removes_treatments(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        text = self.make(out, "--completed-style", "none")
+        self.assertIsNone(self.treatment(out, 1))
+        self.assertNotIn("100% complete", text)
+        self.make(out, "--games-page", self.page({1: (10, 10)}), "--completed-style", "ribbon")
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+        self.make(out, "--games-page", self.page({1: (10, 10)}), "--completed-style", "none")
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_without_the_new_options_treated_covers_stay_treated(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
+        path = os.path.join(out, "Game_1_1.png")
+        before = self.read(path)
+        self.make(out)
+        self.assertEqual(self.read(path), before)
+        self.assertEqual(self.treatment(out, 1), "ribbon")
+
+    def test_a_bad_page_prints_the_reason_and_exits_2(self):
+        import contextlib, io
+        bad = os.path.join(self.tmp, "plain.html")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("<html><body>nothing here</body></html>")
+        out = os.path.join(self.tmp, "out")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.make(out, "--games-page", bad)
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("Webpage, Complete", err.getvalue())
+        self.assertFalse(os.path.exists(out))
+
+    def test_run_shares_the_options(self):
+        import contextlib, io
+        out, argv = io.StringIO(), sys.argv
+        sys.argv = ["steamcase", "run", "-h"]
+        try:
+            with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+                sc.main()
+        finally:
+            sys.argv = argv
+        self.assertIn("--games-page", out.getvalue())
+        self.assertIn("--completed-style", out.getvalue())
+
+
 class ColourCli(StoreMocks):
     """--hue, --saturation and --brightness on the command line."""
 

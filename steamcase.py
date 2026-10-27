@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, completion, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -1455,17 +1455,36 @@ def _chosen_colour(args):
     return tuple(found[i] if o is None else o for i, o in enumerate((args.hue, args.saturation, args.brightness)))
 
 
+def _completion_args(args):
+    """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
+    A page alone means the ribbon; "none" removes the treatments, with a page or without. Exits with status 2 and the reason if the page cannot be used."""
+    if args.games_page is None and args.completed_style is None:
+        return None, None
+    style = args.completed_style or "ribbon"
+    treatment = None if style == "none" else style
+    if args.games_page is None:
+        return set(), treatment
+    try:
+        completed = completion.completed_apps(completion.read_games_page(args.games_page))
+    except completion.PageError as e:
+        print(e, file=sys.stderr)
+        sys.exit(2)
+    return completed, treatment
+
+
 def cmd_make(args):
     steam, games, family = _collect(args)
     hue, sat, val = _chosen_colour(args)
+    completed, treatment = _completion_args(args)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
+          + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
           + (" | in a custom colour" if hue or (sat, val) != (100, 100) else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
@@ -1581,6 +1600,12 @@ def main():
         p.add_argument("--brightness", type=_percent_arg, default=None, metavar="PERCENT",
                        help="how light the case is, 0 to 100 (100 is the original, 0 is black; covers in another tone are rebuilt). "
                             "Default: that of the covers already in the folder, else 100")
+        p.add_argument("--games-page", metavar="FILE",
+                       help="your Steam games page saved from the browser as \"Webpage, Complete\" (HTML only will not do); games with every achievement unlocked get a special cover. "
+                            "The saved page contains a temporary login token of yours: this app does not use or keep it, and you can delete the page afterwards")
+        p.add_argument("--completed-style", choices=("ribbon", "gold-case", "gold-border", "none"), default=None,
+                       help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
+                            "Needs --games-page, except none. Without either option the covers are left as they are")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
@@ -1591,6 +1616,8 @@ def main():
     p.add_argument("--backup", help="backup folder name (see userdata/<id>/config/)")
     p.set_defaults(fn=cmd_restore)
     args = ap.parse_args()
+    if args.cmd in ("make", "run") and args.completed_style not in (None, "none") and args.games_page is None:
+        ap.error("--completed-style needs --games-page")
     try:
         args.fn(args)
     except SteamcaseError as e:
