@@ -425,7 +425,7 @@ class App(tk.Tk):
         shown = tk.Frame(box, bg=CARD)
         self.colour_preview = tk.Label(shown, bg=CARD)
         self.colour_preview.pack()
-        self.preview_caption = tk.Label(shown, text="Preview of a 100% game", bg=CARD, fg=MUTED)       # packed while the preview shows one
+        self.preview_caption = tk.Label(shown, text="", bg=CARD, fg=MUTED)       # packed once a page is loaded; then only its text comes and goes
         box.add(left)
         box.add(shown, px(20))
         self.swatch_row = row = self._flow(body, pady=(0, px(2)))
@@ -579,10 +579,10 @@ class App(tk.Tk):
         """The sample cover in the chosen colour; with a games page loaded and a style chosen, the cover of a 100% game in that style."""
         self._preview_job = None
         treatment = self._completion()[1]
-        if treatment and not self.preview_caption.winfo_manager():
+        # the text, not the row, comes and goes: the style pills below never move under a finger
+        if self.completed is not None and not self.preview_caption.winfo_manager():
             self.preview_caption.pack(pady=(px(4), 0))
-        elif not treatment:
-            self.preview_caption.pack_forget()
+        self.preview_caption.configure(text="Preview of a 100% game" if treatment else "")
         if sc.Image is None:
             return
         try:
@@ -626,8 +626,6 @@ class App(tk.Tk):
             return None
         if sc.covers_in_other_colour(self.covers_dir, *tone):
             return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
-        if completed is None:                        # no page: only a cover whose notes cannot be read is made again
-            return "Make some covers again?", "Some covers you already made have notes this app cannot read, so they are made again."
         if treatment is None:
             return "Remove the 100% highlight?", "You chose “No special case”: the covers of your 100% games are made again as normal covers."
         label = dict(STYLES)[treatment]

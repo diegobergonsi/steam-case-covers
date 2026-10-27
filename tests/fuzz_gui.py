@@ -147,7 +147,8 @@ def run_one(seed, steps, sandbox):
                        ("empty.html", "")):
         with open(os.path.join(pages, name), "w", encoding="utf-8") as f:
             f.write(text)
-    page_choices = [os.path.join(pages, f) for f in os.listdir(pages)] + [os.path.join(junk, "photo.json"), os.path.join(pages, "nope.html"), ""]
+    page_files = sorted(os.path.join(pages, f) for f in os.listdir(pages) if os.path.isfile(os.path.join(pages, f)))      # sorted: the same actions per seed on any filesystem
+    page_choices = page_files + [os.path.join(pages, "games_files"), os.path.join(junk, "photo.json"), os.path.join(pages, "nope.html"), ""]
 
     covers = os.path.join(base, "cv")
     app = gui.App(downloads=os.path.join(base, "dl"), covers_dir=covers, screen_h=rnd.choice([700, 800, 1080]))
@@ -184,8 +185,15 @@ def run_one(seed, steps, sandbox):
         if r < .75:
             app.completion_style.set(rnd.choice(["ribbon", "gold-case", "gold-border", "none"])); return "set 100% style " + app.completion_style.get()
         if r < .9:
-            src = rnd.choice(page_choices[:6])
-            shutil.copy(src, os.path.join(base, "dl", rnd.choice(["games.html", "games (1).htm", "Games.HTML"])))
+            name = rnd.choice(["games.html", "games (1).htm", "Games.HTML"])
+            if rnd.random() < .15:                    # a folder with a page's name: it must be skipped, never read
+                shutil.copytree(os.path.join(pages, "games_files"), os.path.join(base, "dl", name), dirs_exist_ok=True)
+                return "drop a folder named %s in Downloads" % name
+            src = rnd.choice(page_files)
+            dst = os.path.join(base, "dl", name)
+            if os.path.isdir(dst):
+                shutil.rmtree(dst)
+            shutil.copy(src, dst)
             return "drop a games page in Downloads: " + os.path.basename(src)
         rnd.choice([app.open_games_page, app.copy_page_link])(); return "open or copy the games page link"
 
@@ -293,7 +301,7 @@ def run_one(seed, steps, sandbox):
         if st(app.style_choice) != want or {st(p) for p in app.style_choice._pills} != {want}:
             bad.append("100%% choice is %s but should be %s (page loaded: %s)" % (st(app.style_choice), want, bool(app.games_page)))
         if app.completion_style.get() not in ("ribbon", "gold-case", "gold-border", "none"):
-            bad.append("100% style out of range: %r" % app.completion_style.get())
+            bad.append("100%% style out of range: %r" % app.completion_style.get())
         if not (app.completed is None or (isinstance(app.completed, set) and all(type(a) is int for a in app.completed))):
             bad.append("completed is not None or a set of app ids: %r" % (app.completed,))
         if (app.completed is None) != (app.games_page is None):
