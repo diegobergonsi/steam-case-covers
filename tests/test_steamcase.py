@@ -1437,7 +1437,7 @@ class HueMath(unittest.TestCase):
 
 
 class ColourCli(StoreMocks):
-    """--hue on the command line."""
+    """--hue, --saturation and --brightness on the command line."""
 
     def test_make_accepts_a_hue(self):
         lib = self.fake_library(False)
@@ -1459,6 +1459,39 @@ class ColourCli(StoreMocks):
         self.assertIn("in a custom colour", text)
         self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "0")    # asking for blue explicitly does
         self.assertEqual(sc.cover_hue(path), 0)
+
+    def test_make_accepts_saturation_and_brightness(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "0", "--brightness", "14")
+        self.assertIn("in a custom colour", text)
+        self.assertEqual(sc.cover_colour(os.path.join(out, "Game_1_1.png")), (0, 0, 14))
+
+    def test_make_without_tone_options_keeps_the_tone_of_the_covers_already_there(self):
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        path = os.path.join(out, "Game_1_1.png")
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "0", "--brightness", "14")
+        before = self.read(path)
+        text = self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)          # no options: black stays black
+        self.assertEqual(sc.cover_colour(path), (0, 0, 14))
+        self.assertEqual(self.read(path), before)
+        self.assertIn("in a custom colour", text)
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "100", "--brightness", "100", "--hue", "0")
+        self.assertEqual(sc.cover_colour(path), (0, 100, 100))                                            # asking for the original does rebuild
+
+    def test_a_bad_percentage_is_refused_with_a_clear_message(self):
+        import contextlib, io
+        lib = self.fake_library(False)
+        for option in ("--saturation", "--brightness"):
+            for bad in ("101", "-1", "abc", "1.5", ""):
+                out = os.path.join(self.tmp, "out_" + option.strip("-") + (bad or "empty"))
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                    self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, option, bad)
+                self.assertIn("whole number from 0 to 100", err.getvalue(), option + bad)
+                self.assertIn(repr(bad), err.getvalue(), option + bad)
+                self.assertFalse(os.path.exists(out), option + bad)
 
     def test_a_bad_hue_is_refused_with_a_clear_message(self):
         import contextlib, io

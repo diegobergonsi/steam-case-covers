@@ -1302,10 +1302,21 @@ def _hue_arg(text):
     return int(text)
 
 
+def _percent_arg(text):
+    if not re.fullmatch(r"[0-9]{1,3}", text) or int(text) > 100:
+        raise argparse.ArgumentTypeError("%r is not a whole number from 0 to 100" % text)
+    return int(text)
+
+
+def _chosen_colour(args):
+    """The case colour (hue, sat, val) to build: each part is the option if given, else that of the covers already in the folder, else the original."""
+    found = existing_cover_colour(os.path.abspath(args.out)) or (0, 100, 100)
+    return tuple(found[i] if o is None else o for i, o in enumerate((args.hue, args.saturation, args.brightness)))
+
+
 def cmd_make(args):
     steam, games, family = _collect(args)
-    found = existing_cover_colour(os.path.abspath(args.out)) or (0, 100, 100)
-    hue, sat, val = (args.hue, 100, 100) if args.hue is not None else found           # no --hue: keep the colour and tone of the covers already there
+    hue, sat, val = _chosen_colour(args)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
@@ -1423,6 +1434,12 @@ def main():
         p.add_argument("--hue", type=_hue_arg, default=None, metavar="DEGREES",
                        help="turn the case colour by this many degrees, 0 to 359 (0 is the original blue; covers in another colour are rebuilt). "
                             "Default: the colour of the covers already in the folder, else the original blue")
+        p.add_argument("--saturation", type=_percent_arg, default=None, metavar="PERCENT",
+                       help="how colourful the case is, 0 to 100 (100 is the original, 0 is grey; covers in another tone are rebuilt). "
+                            "Default: that of the covers already in the folder, else 100")
+        p.add_argument("--brightness", type=_percent_arg, default=None, metavar="PERCENT",
+                       help="how light the case is, 0 to 100 (100 is the original, 0 is black; covers in another tone are rebuilt). "
+                            "Default: that of the covers already in the folder, else 100")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
