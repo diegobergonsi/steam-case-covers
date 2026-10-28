@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Ask a question or report a bug on Discord
+    url: https://discord.gg/JQMjAPWHCT
+    about: Feedback and bug reports are mainly handled on the project's Discord.
   - name: Report a security problem privately
     url: https://github.com/diegobergonsi/steam-case-covers/security/advisories/new
     about: Please do not post security problems in a public issue.

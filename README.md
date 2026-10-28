@@ -10,7 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/releases"><b>DOWNLOAD</b></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/releases"><b>DOWNLOAD</b></a> ·
+  <a href="https://discord.gg/JQMjAPWHCT"><b>DISCORD</b></a>
 </p>
 
 <p align="center">
@@ -20,7 +21,8 @@
   <a href="#safety">Safety</a> ·
   <a href="#steam-compatibility">Steam compatibility</a> ·
   <a href="#command-line">Command line</a> ·
-  <a href="#faq">FAQ</a>
+  <a href="#faq">FAQ</a> ·
+  <a href="#feedback-and-bugs">Feedback and bugs</a>
 </p>
 
 <p align="center">
@@ -191,7 +193,7 @@ If you find a security problem, please [report it privately](docs/SECURITY.md).
 🟡 macOS: tested on one Apple Silicon Mac (best effort)
 
 > [!NOTE]
-> If something doesn't work on your system, please [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) with your system and what you saw. Feedback from Windows and macOS is especially welcome.
+> If something doesn't work on your system, please tell us on [Discord](https://discord.gg/JQMjAPWHCT) (or [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues)) with your system and what you saw. Feedback from Windows and macOS is especially welcome.
 
 ## Command line
 
@@ -311,6 +313,12 @@ Covers I already made are on SteamGridDB: <https://www.steamgriddb.com/profile/7
 No. The window works fully with the keyboard (Tab, Space, Enter), but the toolkit it uses can't talk to screen readers. The command line is the accessible alternative.
 
 </details>
+
+## Feedback and bugs
+
+Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** button shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
+
+Security problems are the exception: please [report them privately](docs/SECURITY.md), not in public.
 
 ## Acknowledgments
 
