@@ -42,20 +42,11 @@ Steam shows your library as tall portrait cards. This tool puts each game's own 
 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
-<table align="center">
-  <tr>
-    <td align="center" valign="top">
-      <img src="assets/library-100.png" width="430" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon">
-      <br>
-      <em>Games completed at 100%, with the gold case option.</em>
-    </td>
-    <td align="center" valign="top">
-      <img src="assets/library-mixed.png" width="430" alt="A Steam library of blue cases with two games at 100% inside a gold border, and Leaf it Alone with a green family corner">
-      <br>
-      <em>A normal library with two 100% games in a gold border. Leaf it Alone is borrowed from a family member, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge).</em>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="assets/library-mixed.png" width="560" alt="A Steam library of blue cases with two games at 100% inside a gold border, and Leaf it Alone with a green family corner">
+  <br>
+  <em>How the covers look inside Steam. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge). Coral Island and V Rising are at 100%, here with the gold border option.</em>
+</p>
 
 ## Install
 
@@ -138,6 +129,12 @@ Changed your mind?
 ### Optional: highlight your 100% games
 
 Step 2 has an optional block, **Highlight my 100% games**. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom. It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
+
+<p align="center">
+  <img src="assets/library-100.png" width="560" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon">
+  <br>
+  <em>Games completed at 100%, with the gold case option.</em>
+</p>
 
 1. Click **Open my games page** (or **Copy link**). Your browser opens your Steam games page, sorted by achievements. Log in if it asks and wait until your games have loaded.
 2. Save it (Ctrl+S, or Cmd+S on a Mac) as **"Webpage, Complete"** in Chrome or Firefox, named `games.html`. Your browser also saves a folder next to it. The app notices the file in your Downloads folder by itself, or you can click **Browse…** and pick it.
