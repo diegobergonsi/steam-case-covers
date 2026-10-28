@@ -42,11 +42,20 @@ Steam shows your library as tall portrait cards. This tool puts each game's own 
 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
-<p align="center">
-  <img src="assets/steam-library.png" width="460" alt="A Steam library with the covers installed: every game is a blue case with a Steam banner and platform badges. Leaf it Alone, borrowed from a family member, has a green corner with a family icon; Coral Island, which is owned in both libraries, does not">
-  <br>
-  <em>How the covers look inside Steam. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge).</em>
-</p>
+<table align="center">
+  <tr>
+    <td align="center" valign="top">
+      <img src="assets/library-100.png" width="430" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon">
+      <br>
+      <em>Games completed at 100%, with the gold case option.</em>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/library-mixed.png" width="430" alt="A Steam library of blue cases with two games at 100% inside a gold border, and Leaf it Alone with a green family corner">
+      <br>
+      <em>A normal library with two 100% games in a gold border. Leaf it Alone is borrowed from a family member, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge).</em>
+    </td>
+  </tr>
+</table>
 
 ## Install
 
@@ -147,19 +156,26 @@ Good to know:
 
 ## Features
 
-✅ Covers for your installed games, or your whole library <br>
-✅ Each cover is the game's own portrait inside a case, with the Steam banner and platform badges <br>
-✅ One click to install them: Steam is closed gracefully, backed up, updated and restarted <br>
-✅ Undo, step by step, and a reset to Steam's default art <br>
-✅ Cancel anytime; run again to continue <br>
-✅ Optional "skip blurry covers" for games Steam has no real portrait for <br>
-✅ Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (including black, graphite and silver), with a live preview. Only the original blue is checked for readable text <br>
-✅ Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon, and, if you like, a gold case or a gold border. You save one more page from your own browser; the app never uses the login token that page contains <br>
-✅ Several Steam accounts on one computer: you choose which one gets the covers <br>
-✅ Games shared through Steam Family Sharing get covers too, with a green corner and a family icon so you can tell them apart. The app finds them in Steam's own files on your computer, with nothing extra to download, but it needs your game list: with "Only my installed games" ticked, shared games that are not installed are left out. This is only tested on a small family, so please open an issue if games are missing from a big shared library. Save your game list again after you buy games, so the new ones are not mistaken for family games <br>
-✅ Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's <br>
-✅ A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
-✅ Free software: no ads, no account, no telemetry
+**Covers**
+- For your installed games, or your whole library
+- Each cover is the game's own portrait inside a case, with the Steam banner and platform badges
+- Games shared through Steam Family Sharing get covers too, with a green corner and a family icon
+- Optional "skip blurry covers" for games Steam has no real portrait for
+
+**Make them yours**
+- Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview
+- Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon, and, if you like, a gold case or a gold border ([how it works](#optional-highlight-your-100-games))
+
+**Install them safely**
+- One click: Steam is closed gracefully, backed up, updated and restarted
+- Undo step by step, and a reset to Steam's default art
+- Cancel anytime; run again to continue
+- Several Steam accounts on one computer: you choose which one gets the covers
+
+**The app itself**
+- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's
+- A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
+- Free software: no ads, no account, no telemetry
 
 ## Safety
 

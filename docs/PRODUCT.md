@@ -37,7 +37,7 @@ Desktop app (tkinter window with three steps, custom Canvas widgets in `widgets.
 
 ## Evidence on Hand
 
-Real assets in `assets/`: `preview.png`, `screenshot.png`, `steam-library.png`, icon set. Releases v1.0.0 and v1.1.0 on GitHub. A colleague confirmed an earlier Windows build works (second-hand). No user testimonials or download statistics exist; do not invent any.
+Real assets in `assets/`: `preview.png`, `screenshot.png`, `library-100.png`, `library-mixed.png`, icon set. Releases v1.0.0 and v1.1.0 on GitHub. A colleague confirmed an earlier Windows build works (second-hand). No user testimonials or download statistics exist; do not invent any.
 
 ## Product Principles
 
