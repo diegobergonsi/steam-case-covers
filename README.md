@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/preview.png" alt="Steam Case Covers: your Steam library as a fan of physical game boxes">
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/preview.png"><img src="assets/preview.png" alt="Steam Case Covers: your Steam library as a fan of physical game boxes"></a>
 </p>
 
 <h1 align="center">steam-case-covers</h1>
@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot.png" width="460" alt="The steam-case-covers window with its three steps">
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot.png"><img src="assets/screenshot.png" width="460" alt="The steam-case-covers window with its three steps"></a>
   <br>
   <em>The whole app: three steps, no terminal.</em>
 </p>
@@ -46,7 +46,7 @@ Steam shows your library as tall portrait cards. This tool puts each game's own 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
 <p align="center">
-  <img src="assets/library-mixed.png" width="560" alt="A Steam library of blue cases with two games at 100% inside a gold border, and Leaf it Alone with a green family corner">
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="A Steam library of blue cases with two games at 100% inside a gold border, and Leaf it Alone with a green family corner"></a>
   <br>
   <em>How the covers look inside Steam. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge). Coral Island and V Rising are at 100%, here with the gold border option.</em>
 </p>
@@ -138,7 +138,7 @@ Changed your mind?
 Step 2 has an optional block, **Highlight my 100% games**. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom. It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
 
 <p align="center">
-  <img src="assets/library-100.png" width="560" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon">
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-100.png"><img src="assets/library-100.png" width="560" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon"></a>
   <br>
   <em>Games completed at 100%, with the gold case option.</em>
 </p>
