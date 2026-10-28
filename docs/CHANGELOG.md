@@ -3,7 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
-- Documentation: the README links the project's Discord (feedback and bug reports are mainly handled there) and has a "Feedback and bugs" section; the issue template page offers it too. A "Support the project" section has a banner and a Ko-fi button, and the main README sections have one small emoji each.
+- Documentation: the README links the project's Discord (feedback and bug reports are mainly handled there) and has a "Feedback and bugs" section; the issue template page offers it too. A "Support the project" section has a banner and a Ko-fi button, and the main README sections have one small emoji each. The repository page shows a "Sponsor" button that goes to the Ko-fi page.
 - Documentation: the README shows two new Steam library screenshots (games at 100%, and a normal library with two 100% games) and has a shorter, grouped Features list.
 
 ## [1.4.0] - 2026-10-27
