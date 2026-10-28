@@ -22,7 +22,8 @@
   <a href="#steam-compatibility">Steam compatibility</a> ·
   <a href="#command-line">Command line</a> ·
   <a href="#faq">FAQ</a> ·
-  <a href="#feedback-and-bugs">Feedback and bugs</a>
+  <a href="#feedback-and-bugs">Feedback and bugs</a> ·
+  <a href="#support-the-project">Support</a>
 </p>
 
 <p align="center">
@@ -319,6 +320,12 @@ No. The window works fully with the keyboard (Tab, Space, Enter), but the toolki
 Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** button shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
 
 Security problems are the exception: please [report them privately](docs/SECURITY.md), not in public.
+
+## Support the project
+
+Steam Case Covers is free, and it will stay free: no ads, no account, no telemetry. I make it in my spare time. If it made your library look better and you would like to say thanks, you can [buy me a coffee on Ko-fi](https://ko-fi.com/diegobergonsi). It is entirely optional; telling a friend about the project, or sharing your library on Discord, helps just as much.
+
+My Ko-fi page also covers [WakeDeck](https://wakedeck.app), another small app I made.
 
 ## Acknowledgments
 
