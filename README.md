@@ -51,7 +51,9 @@ The artwork comes from Steam's own servers. The covers are built on your compute
   <em>How the covers look inside Steam. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge). Coral Island and V Rising are at 100%, here with the gold border option.</em>
 </p>
 
-## Install
+<a id="install"></a>
+
+## 📥 Install
 
 <details>
 <summary><b>Windows</b></summary>
@@ -115,7 +117,9 @@ On macOS and Linux, use `python3` instead of `python`. Run the tests with `pytho
 
 Release files come with a `SHA256SUMS` list so you can check what you downloaded. See [SECURITY.md](docs/SECURITY.md).
 
-## How it works
+<a id="how-it-works"></a>
+
+## 🔧 How it works
 
 1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
 2. **Make the covers.** Optionally pick the look of the cases first: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour, the app asks before it replaces them.
@@ -154,7 +158,9 @@ Good to know:
 * The page lists most of a library but not all of it. On the author's library it listed about 99% of the covers (509 of 515): a few old, free or hidden games are not on it and cannot be highlighted.
 * This was only tried with Chrome, on Linux, with Steam set to Portuguese and to English; the saved pages gave exactly the same result. Firefox is expected to save the page the same way, and the app reads the progress without depending on the language of Steam's label, but other languages and browsers were not tested. Windows and macOS were not tested either, and neither was a real touchscreen.
 
-## Features
+<a id="features"></a>
+
+## ✨ Features
 
 **Covers**
 - For your installed games, or your whole library
@@ -177,7 +183,9 @@ Good to know:
 - A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 - Free software: no ads, no account, no telemetry
 
-## Safety
+<a id="safety"></a>
+
+## 🔒 Safety
 
 * It only ever touches the portrait files (`<appid>p.png`, and `.jpg`, `.jpeg` or `.webp` ones that would hide a cover) in your Steam account's `config/grid` folder. Anything it moves is kept in the backup. It never touches your games or saves.
 * Before every change it makes a backup of exactly what it changes, writes files atomically, and rolls back if anything fails.
@@ -187,7 +195,9 @@ Good to know:
 
 If you find a security problem, please [report it privately](docs/SECURITY.md).
 
-## Steam compatibility
+<a id="steam-compatibility"></a>
+
+## 🎮 Steam compatibility
 
 ✅ Linux and SteamOS (Steam in `~/.local/share/Steam`) <br>
 ✅ Windows: an early version (0.9.11) was tested by the author's colleague on a real PC; newer versions, including the colour sliders and the family corner, are covered by the automated tests only <br>
@@ -196,7 +206,9 @@ If you find a security problem, please [report it privately](docs/SECURITY.md).
 > [!NOTE]
 > If something doesn't work on your system, please tell us on [Discord](https://discord.gg/JQMjAPWHCT) (or [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues)) with your system and what you saw. Feedback from Windows and macOS is especially welcome.
 
-## Command line
+<a id="command-line"></a>
+
+## 💻 Command line
 
 Everything the window does is also available in a terminal:
 
@@ -229,7 +241,9 @@ python steamcase.py reset --everything             # ...also removing art from o
 
 Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
-## FAQ
+<a id="faq"></a>
+
+## ❓ FAQ
 
 <details>
 <summary><b>It says my game list has no games in it</b></summary>
@@ -315,24 +329,47 @@ No. The window works fully with the keyboard (Tab, Space, Enter), but the toolki
 
 </details>
 
-## Feedback and bugs
+<a id="feedback-and-bugs"></a>
+
+## 💬 Feedback and bugs
+
+<p align="center">
+  <a href="https://discord.gg/JQMjAPWHCT"><img src="https://img.shields.io/badge/JOIN%20THE%20DISCORD-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord"></a>
+</p>
 
 Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** button shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
 
 Security problems are the exception: please [report them privately](docs/SECURITY.md), not in public.
 
-## Support the project
+<a id="support-the-project"></a>
 
-Steam Case Covers is free, and it will stay free: no ads, no account, no telemetry. I make it in my spare time. If it made your library look better and you would like to say thanks, you can [buy me a coffee on Ko-fi](https://ko-fi.com/diegobergonsi). It is entirely optional; telling a friend about the project, or sharing your library on Discord, helps just as much.
+## ☕ Support the project
+
+<p align="center">
+  <a href="https://ko-fi.com/diegobergonsi">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/kofi-banner-dark.png">
+      <img src="assets/kofi-banner-light.png" width="640" alt="Small, practical apps, free to use. No ads. No tracking. Support the author on Ko-fi">
+    </picture>
+  </a>
+</p>
+
+Steam Case Covers is free, and it will stay free: no ads, no account, no telemetry. I make it in my spare time. If it made your library look better, you can help it keep growing:
+
+<p align="center">
+  <a href="https://ko-fi.com/diegobergonsi"><img src="https://img.shields.io/badge/SUPPORT%20ON%20KO--FI-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
+</p>
+
+It is entirely optional. Starring the repository ⭐ and telling a friend help just as much.
 
 My Ko-fi page also covers [WakeDeck](https://wakedeck.app), another small app I made.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 Thanks to [SteamGridDB](https://www.steamgriddb.com) and its community for making custom Steam artwork easy to share, and to the authors of [Pillow](https://python-pillow.org), [PyInstaller](https://pyinstaller.org), the [Nunito Sans](https://fonts.google.com/specimen/Nunito+Sans) font and the KDE Breeze icon theme. Details are in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 Game artwork shown above belongs to its publishers and developers. Covers you generate contain that artwork: keep them for personal use.
 
-## License
+## 📄 License
 
 Copyright (C) 2026 Diego Bergonsi. Free software under the [GNU General Public License v3 or later](LICENSE): you may use, change and share it, and anything you distribute built on it must stay open under the same license.
