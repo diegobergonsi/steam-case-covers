@@ -183,7 +183,7 @@ def run_one(seed, steps, sandbox):
         if r < .35:
             picks["file"] = rnd.choice(page_choices); app.browse_games_page(); return "browse page " + os.path.basename(picks["file"])
         if r < .45:
-            app.case_theme.set(rnd.choice(["classic", "halloween"])); return "set case theme " + app.case_theme.get()
+            app.theme_choice._choose(rnd.choice(["classic", "halloween"])); return "pick case theme " + app.case_theme.get()      # through the choice, as a user
         if r < .6:
             app.completion_style.set(rnd.choice(["ribbon", "gold-case", "gold-border", "none"])); return "set 100% style " + app.completion_style.get()
         if r < .75:
@@ -312,6 +312,8 @@ def run_one(seed, steps, sandbox):
             bad.append("100%% style out of range: %r" % app.completion_style.get())
         if app.completion_marks.get() not in ("full", "rosette"):
             bad.append("100%% marks out of range: %r" % app.completion_marks.get())
+        if st(app.theme_choice) != st(app.sw_skip) or {st(p) for p in app.theme_choice._pills} != {st(app.sw_skip)}:
+            bad.append("theme choice is %s but the other step 2 controls are %s" % (st(app.theme_choice), st(app.sw_skip)))
         if app.case_theme.get() not in ("classic", "halloween"):
             bad.append("case theme out of range: %r" % app.case_theme.get())
         halloween = app.case_theme.get() == "halloween"

@@ -1186,6 +1186,15 @@ def mixed_cover_colours(covers_dir):
     return False
 
 
+def mixed_cover_themes(covers_dir):
+    """True if the covers folder holds covers in more than one case theme (what an interrupted theme change leaves behind). A garbled note counts as a theme of its own."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    return len({cover_theme(os.path.join(covers_dir, n)) for n in names if n.lower().endswith(".png") and appid_of(n) is not None}) > 1
+
+
 def _safe_copy(src, dst):
     """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
     tmp = _tmp(dst)
@@ -1647,6 +1656,9 @@ def cmd_apply(args):
     if mixed_cover_colours(args.covers):                    # first: before Steam is closed
         raise SteamcaseError("The covers in %s are in more than one colour (a colour change was probably interrupted). Nothing was changed. "
                              "Run make again with the colour you want (--hue, --saturation, --brightness) to finish it, then apply." % args.covers)
+    if mixed_cover_themes(args.covers):
+        raise SteamcaseError("The covers in %s are in more than one theme (a theme change was probably interrupted). Nothing was changed. "
+                             "Run make again with the theme you want (--theme classic or --theme halloween) to finish it, then apply." % args.covers)
     steam = steam_dir(args.steam_dir)
     if steam_running() and not args.yes:
         if args.close_steam:

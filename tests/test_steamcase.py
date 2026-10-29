@@ -1707,11 +1707,11 @@ class ReplaceReason(StoreMocks):
         self.fake = types.SimpleNamespace(covers_dir=self.covers)
         self.games = {1: None, 2: None}
 
-    def made(self, hue=0, completed=None, treatment=None):
-        sc.make_covers(self.games, self.covers, hue=hue, completed=completed, treatment=treatment)
+    def made(self, hue=0, completed=None, treatment=None, theme=None):
+        sc.make_covers(self.games, self.covers, hue=hue, completed=completed, treatment=treatment, theme=theme)
 
-    def reason(self, tone, completed, treatment):
-        got = self.gui.App._replace_reason(self.fake, tone, completed, treatment)
+    def reason(self, tone, completed, treatment, theme=None):
+        got = self.gui.App._replace_reason(self.fake, tone, completed, treatment, theme)
         self.assertIsNotNone(got)
         title, sentence = got
         self.assertTrue(title.strip() and sentence.strip() and "%" not in title.replace("100%", "") and "%" not in sentence.replace("100%", ""), got)
@@ -1747,6 +1747,25 @@ class ReplaceReason(StoreMocks):
         self.assertIn("rosette and ribbon", text)
         self.made(completed={1}, treatment="ribbon")
         self.assertIn("rosette only", self.reason((0, 100, 100), {1}, "rosette")[1])
+
+    def test_a_theme_change_alone_says_the_new_covers_get_the_theme(self):
+        self.made()
+        title, text = self.reason((0, 100, 100), None, None, "halloween")
+        self.assertIn("theme", title.lower())
+        self.assertIn("new ones in the Halloween theme", text)
+        self.made(theme="halloween")
+        self.assertIn("new ones in the Classic case", self.reason((0, 100, 100), None, None, None)[1])
+
+    def test_a_theme_with_a_colour_or_a_look_change_stays_readable(self):
+        self.made()
+        text = self.reason((134, 100, 100), None, None, "halloween")[1]
+        self.assertIn("another colour or theme", text)
+        self.assertNotIn(", and with", text)
+        shutil.rmtree(self.covers, ignore_errors=True)
+        self.made(completed={1}, treatment="ribbon")
+        text = self.reason((0, 100, 100), {1}, "rosette", "halloween")[1]
+        self.assertIn("100%", text)
+        self.assertIn("All your covers are also made in the Halloween theme", text)
 
     def test_another_style_for_the_100_games(self):
         self.made(completed={1}, treatment="ribbon")
@@ -2046,6 +2065,23 @@ class ColourCli(StoreMocks):
         self.assertIn("in a custom colour", text)
         self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "100", "--brightness", "100", "--hue", "0")
         self.assertEqual(sc.cover_colour(path), (0, 100, 100))                                            # asking for the original does rebuild
+
+    def test_apply_refuses_a_folder_with_covers_in_two_themes(self):
+        """A cancelled theme change leaves classic and Halloween covers side by side; apply must not copy that mix into Steam."""
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out)
+        self.assertFalse(sc.mixed_cover_themes(out))
+        sc.make_covers({2: None}, out, theme="halloween")                           # a cover from the interrupted run, in the other theme
+        self.assertTrue(sc.mixed_cover_themes(out))
+        with self.assertRaises(SystemExit) as caught:
+            self.run_cli("apply", "--steam-dir", self.steam, "--covers", out, "--yes")
+        self.assertIn("more than one theme", str(caught.exception))
+        self.assertEqual(os.listdir(self.grid), [])                                  # nothing was copied
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--theme", "halloween")
+        self.assertFalse(sc.mixed_cover_themes(out))
+        self.run_cli("apply", "--steam-dir", self.steam, "--covers", out, "--yes")   # one theme again: applies
+        self.assertEqual(len(os.listdir(self.grid)), 2)
 
     def test_apply_refuses_a_folder_with_covers_in_two_colours(self):
         """An interrupted colour change leaves old and new covers side by side; apply must not copy that mix into Steam."""

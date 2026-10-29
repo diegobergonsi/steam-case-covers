@@ -602,6 +602,7 @@ class App(tk.Tk):
         ready = self.installed_only.get() or bool(self.library_path)
         usable = ready and not self.running and bool(self.games_page)
         self.style_choice.configure(state="normal" if usable else "disabled")
+        self.theme_choice.configure(state="normal" if ready and not self.running else "disabled")       # with the other step 2 controls
         self.marks_choice.configure(state="normal" if usable and self.completion_style.get() in sc.CASES and not self._theme() else "disabled")
 
     def _tone(self):
@@ -692,9 +693,9 @@ class App(tk.Tk):
         if not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment, theme=theme):
             return None
         colour = sc.covers_in_other_colour(self.covers_dir, *tone)
-        tail = ""                                            # what the theme adds to the sentence, when it changes
+        tail = ""                                            # the theme every cover is made in, when it changes
         if sc.covers_in_other_theme(self.covers_dir, theme):
-            tail = "with the %s theme" % theme.capitalize() if theme else "with the Classic case"
+            tail = "the %s theme" % theme.capitalize() if theme else "the Classic case"
         styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
         if completed is not None:
             try:
@@ -708,8 +709,8 @@ class App(tk.Tk):
                 pass
         if tail and not changed:
             if colour:
-                return "Change your covers?", "This replaces the covers you already made in another colour, and %s." % tail
-            return "Change the theme of your covers?", "This replaces the covers you already made %s." % tail
+                return "Change your covers?", "This replaces the covers you already made in another colour or theme."
+            return "Change the theme of your covers?", "This replaces the covers you already made with new ones in %s." % tail
         if colour and not changed:
             return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
         styles &= set(sc.TREATMENTS)
@@ -731,9 +732,9 @@ class App(tk.Tk):
             title, one = "Update your 100% covers?", ("Some covers you already made are made again to match your games page: "
                                                       "games you finished get the highlight, games no longer at 100% lose it.")
         if colour:
-            return "Change your covers?", "This replaces the covers you already made in another colour, and %s%s." % (what, ", and " + tail if tail else "")
+            return "Change your covers?", "This replaces the covers you already made in another colour, and %s.%s" % (what, " All your covers are also made in %s." % tail if tail else "")
         if tail:
-            return "Change your covers?", "%s, and %s." % (one.rstrip("."), tail)
+            return "Change your covers?", "%s All your covers are also made in %s." % (one, tail)
         return title, one
 
     def start_make(self):
