@@ -1519,11 +1519,11 @@ def _chosen_colour(args):
 
 def _completion_args(args):
     """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
-    A page alone means the ribbon; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
-    if args.games_page is None and args.completed_style is None:
+    A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks or the rosette alone, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
+    if args.games_page is None and args.completed_style is None and args.completed_marks is None:
         return None, None
     style = args.completed_style or "ribbon"
-    treatment = None if style == "none" else style
+    treatment = None if style == "none" else compose_treatment(style, args.completed_marks or "full")
     if args.games_page is None or treatment is None:        # "none" needs no page: a bad one must not stop you removing the highlights
         return set(), treatment
     try:
@@ -1672,6 +1672,9 @@ def main():
                        help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
                             "gold-case is always gold and ignores --hue, --saturation and --brightness. "
                             "Needs --games-page, except none. Without either option the covers are left as they are")
+        p.add_argument("--completed-marks", choices=MARKS, default=None,
+                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default) or rosette (the rosette alone). "
+                            "Works with every --completed-style and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
@@ -1682,8 +1685,11 @@ def main():
     p.add_argument("--backup", help="backup folder name (see userdata/<id>/config/)")
     p.set_defaults(fn=cmd_restore)
     args = ap.parse_args()
-    if args.cmd in ("make", "run") and args.completed_style not in (None, "none") and args.games_page is None:
-        ap.error("--completed-style needs --games-page")
+    if args.cmd in ("make", "run") and args.games_page is None:
+        if args.completed_style not in (None, "none"):
+            ap.error("--completed-style needs --games-page")
+        if args.completed_style is None and args.completed_marks is not None:
+            ap.error("--completed-marks needs --games-page")
     try:
         args.fn(args)
     except SteamcaseError as e:

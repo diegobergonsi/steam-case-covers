@@ -1763,6 +1763,40 @@ class CompletionCli(StoreMocks):
         self.assertIn("error: --completed-style needs --games-page", err.getvalue())
         self.assertFalse(os.path.exists(out))
 
+    def test_marks_rosette_with_a_page_means_the_plain_case_with_the_rosette(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}), "--completed-marks", "rosette")
+        self.assertEqual(self.treatment(out, 1), "rosette")
+        self.assertIsNone(self.treatment(out, 2))
+
+    def test_marks_combine_with_the_style(self):
+        page = self.page({1: (10, 10)})
+        for style, marks, want in (("gold-border", "rosette", "gold-border-rosette"), ("gold-case", "rosette", "gold-case-rosette"),
+                                   ("gold-case", "full", "gold-case"), ("ribbon", "full", "ribbon")):
+            out = os.path.join(self.tmp, "out_%s_%s" % (style, marks))
+            self.make(out, "--games-page", page, "--completed-style", style, "--completed-marks", marks)
+            self.assertEqual(self.treatment(out, 1), want)
+
+    def test_marks_with_none_remove_the_highlights_and_need_no_page(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10)}), "--completed-marks", "rosette")
+        self.assertEqual(self.treatment(out, 1), "rosette")
+        self.make(out, "--completed-style", "none", "--completed-marks", "rosette")
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_marks_without_a_page_or_with_a_bad_value_are_refused(self):
+        import contextlib, io
+        for args, message in ((("--completed-marks", "rosette"), "error: --completed-marks needs --games-page"),
+                              (("--completed-style", "gold-case", "--completed-marks", "rosette"), "error: --completed-style needs --games-page"),
+                              (("--completed-marks", "bogus"), "invalid choice")):
+            out = os.path.join(self.tmp, "out")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                self.make(out, *args)
+            self.assertNotEqual(caught.exception.code, 0)
+            self.assertIn(message, err.getvalue())
+            self.assertFalse(os.path.exists(out))
+
     def test_none_removes_treatments(self):
         out = os.path.join(self.tmp, "out")
         self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}))
@@ -1807,13 +1841,13 @@ class CompletionCli(StoreMocks):
         import contextlib, io
         with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
-            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None))
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None))
         self.assertEqual(caught.exception.code, 2)
 
     def test_a_tilde_in_the_page_path_is_expanded(self):
         page = self.page({1: (10, 10)}, "tilde.html")
         with mock.patch.dict(os.environ, {"HOME": self.tmp, "USERPROFILE": self.tmp}):
-            got = sc._completion_args(sc.argparse.Namespace(games_page=os.path.join("~", "tilde.html"), completed_style=None))
+            got = sc._completion_args(sc.argparse.Namespace(games_page=os.path.join("~", "tilde.html"), completed_style=None, completed_marks=None))
         self.assertEqual(got, ({1}, "ribbon"))
 
     def test_a_missing_page_names_only_its_file_name(self):
