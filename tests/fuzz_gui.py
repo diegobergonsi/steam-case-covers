@@ -10,7 +10,7 @@ action it checks that nothing crashed, nothing is stuck, the buttons match the s
     python tests/fuzz_gui.py [--seeds N] [--steps N] [--sandbox]
 
 Exit code 0 = every run was clean."""
-import argparse, faulthandler, io, json, os, random, re, shutil, sys, tempfile, threading, time, traceback
+import argparse, faulthandler, gc, io, json, os, random, re, shutil, sys, tempfile, threading, time, traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gui, widgets, completion, steamcase as sc
@@ -182,10 +182,12 @@ def run_one(seed, steps, sandbox):
         r = rnd.random()
         if r < .35:
             picks["file"] = rnd.choice(page_choices); app.browse_games_page(); return "browse page " + os.path.basename(picks["file"])
+        if r < .45:
+            app.case_theme.set(rnd.choice(["classic", "halloween"])); return "set case theme " + app.case_theme.get()
         if r < .6:
             app.completion_style.set(rnd.choice(["ribbon", "gold-case", "gold-border", "none"])); return "set 100% style " + app.completion_style.get()
         if r < .75:
-            app.completion_marks.set(rnd.choice(["full", "rosette"])); return "set 100% marks " + app.completion_marks.get()
+            app.marks_choice._choose(rnd.choice(["full", "rosette"])); return "pick 100% marks " + app.completion_marks.get()      # through the choice, as a user: it ignores a greyed-out one
         if r < .9:
             name = rnd.choice(["games.html", "games (1).htm", "Games.HTML"])
             if rnd.random() < .15:                    # a folder with a page's name: it must be skipped, never read
@@ -310,10 +312,17 @@ def run_one(seed, steps, sandbox):
             bad.append("100%% style out of range: %r" % app.completion_style.get())
         if app.completion_marks.get() not in ("full", "rosette"):
             bad.append("100%% marks out of range: %r" % app.completion_marks.get())
-        want_marks = "normal" if want == "normal" and app.completion_style.get() != "none" else "disabled"
+        if app.case_theme.get() not in ("classic", "halloween"):
+            bad.append("case theme out of range: %r" % app.case_theme.get())
+        halloween = app.case_theme.get() == "halloween"
+        if halloween and app.completion_marks.get() != "rosette":
+            bad.append("Halloween theme with marks %r" % app.completion_marks.get())
+        want_marks = "normal" if want == "normal" and app.completion_style.get() != "none" and not halloween else "disabled"
         if st(app.marks_choice) != want_marks or {st(p) for p in app.marks_choice._pills} != {want_marks}:
             bad.append("marks choice is %s but should be %s (page loaded: %s, style %s)" % (st(app.marks_choice), want_marks, bool(app.games_page), app.completion_style.get()))
         treatment = app._completion()[1]
+        if halloween and treatment is not None and sc.split_treatment(treatment)[1] != "rosette":
+            bad.append("Halloween theme with the look %r" % (treatment,))
         if app.completed is None and treatment is not None or (treatment is not None and treatment not in sc.TREATMENTS):
             bad.append("100%% look is not one the app can make: %r" % (treatment,))
         if not (app.completed is None or (isinstance(app.completed, set) and all(type(a) is int for a in app.completed))):
@@ -363,6 +372,8 @@ def run_one(seed, steps, sandbox):
         app.destroy()
     except Exception:
         pass
+    app = None
+    gc.collect()                       # the window's Tk images die here, on the main thread: left to the collector they can die in a worker thread of the next seed and hang it
     shutil.rmtree(base, ignore_errors=True)
     return failure, len(log), len(set(notes)), len(loaded)
 

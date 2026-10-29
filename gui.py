@@ -29,6 +29,8 @@ SAVE_KEY = "Cmd+S" if sys.platform == "darwin" else "Ctrl+S"
 GAMES_PAGE_URL = "https://steamcommunity.com/my/games/?tab=all&sort=achievements"     # the user's own games page, most achievements first
 STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon", "Normal case"), ("none", "No special case")]    # values: sc.CASES, or "none"
 MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
+THEME_CHOICES = [("classic", "Classic"), ("halloween", "Halloween")]                                                              # values: "classic", sc.THEMES
+THEME_NOTE = "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web."
 
 
 def look_label(treatment):
@@ -115,6 +117,8 @@ class App(tk.Tk):
         self.completed = None             # app ids at 100% on that page; only these numbers are kept from it, never its text
         self.completion_style = tk.StringVar(value="ribbon")       # one of sc.CASES, or "none"
         self.completion_marks = tk.StringVar(value="full")         # one of sc.MARKS
+        self.case_theme = tk.StringVar(value="classic")            # "classic" or one of sc.THEMES
+        self._marks_before = None                                  # the marks picked before Halloween forced the rosette alone
         self.page_pending = 0             # games pages being read on a worker thread
         self._page_req = 0                # the newest of those; older answers are dropped
         self._page_tried = {}             # path -> (size, mtime) of pages in Downloads already read once
@@ -457,6 +461,13 @@ class App(tk.Tk):
             s = Swatch(row, color, lambda t=tone: sc.tone_key(*self._tone()) == sc.tone_key(*t), lambda t=tone: self._set_tone(*t))
             row.add(s, px(4))
             self.swatches.append(s)
+        head = self._row(body, pady=(px(8), 0))
+        tk.Label(head, text="Case theme", bg=CARD, fg=MUTED).pack(side="left", padx=(0, px(10)))
+        self.theme_choice = Choice(body, self.case_theme, THEME_CHOICES)
+        self.theme_choice.pack(fill="x", pady=px(4))
+        found_theme = sc.existing_cover_theme(self.covers_dir)     # reopening the app shows the theme of the covers you already made
+        if found_theme:
+            self.case_theme.set(found_theme)
         self.colour_note = self._wrap(tk.Label(body, text="Only the original colour is checked for readable text.", bg=CARD, fg=FAINT, justify="left", anchor="w"))
         found = sc.existing_cover_colour(self.covers_dir)          # reopening the app shows the colour of the covers you already made
         if found:
@@ -485,12 +496,36 @@ class App(tk.Tk):
         self.page_status.pack(fill="x", pady=(px(4), px(4)))
         self.marks_choice = Choice(body, self.completion_marks, MARKS, state="disabled")
         self.marks_choice.pack(fill="x", pady=px(4))
+        self.theme_note = self._wrap(tk.Label(body, text=THEME_NOTE, bg=CARD, fg=FAINT, anchor="w", justify="left"))      # packed while Halloween is chosen
         self.style_choice = Choice(body, self.completion_style, STYLES, state="disabled")
         self.style_choice.pack(fill="x", pady=px(4))
         self.page_note = self._wrap(tk.Label(body, text="", bg=CARD, fg=FAINT, anchor="w", justify="left"))         # packed once a page is loaded
         self.completion_style.trace_add("write", self._schedule_preview)
         self.completion_style.trace_add("write", lambda *a: self._refresh_choice())       # "No special case" has no marks to choose
         self.completion_marks.trace_add("write", self._schedule_preview)
+        self.case_theme.trace_add("write", self._theme_changed)
+        self._theme_changed()                                                              # the folder may hold Halloween covers already
+
+    def _theme(self):
+        """The case theme for make_covers: None (classic) or one of sc.THEMES."""
+        theme = self.case_theme.get()
+        return theme if theme in sc.THEMES else None
+
+    def _theme_changed(self, *_):
+        """Halloween goes with the rosette alone: choosing it picks that and greys the marks out; going back restores what was picked before."""
+        if self._theme():
+            if self._marks_before is None:
+                self._marks_before = self.completion_marks.get()
+            self.completion_marks.set("rosette")
+            if not self.theme_note.winfo_manager():
+                self.theme_note.pack(fill="x", pady=(0, px(4)), after=self.marks_choice)
+        else:
+            if self._marks_before is not None:
+                self.completion_marks.set(self._marks_before)
+                self._marks_before = None
+            self.theme_note.pack_forget()
+        self._refresh_choice()
+        self._schedule_preview()
 
     def _completion(self):
         """(completed, treatment) for make_covers. No page loaded: (None, None), every cover keeps its look.
@@ -567,7 +602,7 @@ class App(tk.Tk):
         ready = self.installed_only.get() or bool(self.library_path)
         usable = ready and not self.running and bool(self.games_page)
         self.style_choice.configure(state="normal" if usable else "disabled")
-        self.marks_choice.configure(state="normal" if usable and self.completion_style.get() in sc.CASES else "disabled")
+        self.marks_choice.configure(state="normal" if usable and self.completion_style.get() in sc.CASES and not self._theme() else "disabled")
 
     def _tone(self):
         """The chosen case colour: (hue, colourfulness, brightness)."""
@@ -620,7 +655,7 @@ class App(tk.Tk):
         try:
             import base64, io
             hue, sat, val = self._tone()
-            im = sc.preview_cover(hue, sat=sat, val=val, treatment=treatment).resize((px(130), px(195)), sc.Image.LANCZOS)
+            im = sc.preview_cover(hue, sat=sat, val=val, treatment=treatment, theme=self._theme()).resize((px(130), px(195)), sc.Image.LANCZOS)
             buf = io.BytesIO()
             im.save(buf, "PNG")
             self._colour_img = tk.PhotoImage(master=self, data=base64.b64encode(buf.getvalue()))
@@ -652,11 +687,14 @@ class App(tk.Tk):
         if self._thumbs:
             self.preview.pack(fill="x", pady=(px(12), 0))
 
-    def _replace_reason(self, tone, completed, treatment):
+    def _replace_reason(self, tone, completed, treatment, theme=None):
         """Why Make covers would rebuild covers already in the folder, as (title, sentence) for the prompt; None when nothing is rebuilt."""
-        if not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment):
+        if not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment, theme=theme):
             return None
         colour = sc.covers_in_other_colour(self.covers_dir, *tone)
+        tail = ""                                            # what the theme adds to the sentence, when it changes
+        if sc.covers_in_other_theme(self.covers_dir, theme):
+            tail = "with the %s theme" % theme.capitalize() if theme else "with the Classic case"
         styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
         if completed is not None:
             try:
@@ -668,6 +706,10 @@ class App(tk.Tk):
                         changed = changed or have != (treatment if int(appid) in completed else None)
             except OSError:
                 pass
+        if tail and not changed:
+            if colour:
+                return "Change your covers?", "This replaces the covers you already made in another colour, and %s." % tail
+            return "Change the theme of your covers?", "This replaces the covers you already made %s." % tail
         if colour and not changed:
             return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
         styles &= set(sc.TREATMENTS)
@@ -689,7 +731,9 @@ class App(tk.Tk):
             title, one = "Update your 100% covers?", ("Some covers you already made are made again to match your games page: "
                                                       "games you finished get the highlight, games no longer at 100% lose it.")
         if colour:
-            return "Change your covers?", "This replaces the covers you already made in another colour, and %s." % what
+            return "Change your covers?", "This replaces the covers you already made in another colour, and %s%s." % (what, ", and " + tail if tail else "")
+        if tail:
+            return "Change your covers?", "%s, and %s." % (one.rstrip("."), tail)
         return title, one
 
     def start_make(self):
@@ -697,7 +741,8 @@ class App(tk.Tk):
             return
         tone = self._tone()
         completed, treatment = self._completion()           # read here, on the UI thread: the worker never touches Tk variables
-        why = self._replace_reason(tone, completed, treatment)
+        theme = self._theme()
+        why = self._replace_reason(tone, completed, treatment, theme)
         if why:
             if not messagebox.askokcancel(why[0],
                                           [(why[1], "main"),
@@ -717,11 +762,11 @@ class App(tk.Tk):
         self.refresh_step1()
         self.refresh_step3()
         skip = self.skip_auto.get()
-        threading.Thread(target=self._worker, args=(lib, skip, tone, (completed, treatment)), daemon=True).start()
+        threading.Thread(target=self._worker, args=(lib, skip, tone, (completed, treatment), theme), daemon=True).start()
 
-    def _worker(self, lib, skip, tone=(0, 100, 100), look=(None, None)):
+    def _worker(self, lib, skip, tone=(0, 100, 100), look=(None, None), theme=None):
         """Runs off the UI thread; talks to the UI only through self.events. `tone` is the case colour (hue, sat, val);
-        `look` is (completed, treatment) for the 100% games, taken by start_make (see _completion)."""
+        `look` is (completed, treatment) for the 100% games, taken by start_make (see _completion); `theme` is None or one of sc.THEMES."""
         hue, sat, val = tone
         completed, treatment = look
         try:
@@ -731,7 +776,7 @@ class App(tk.Tk):
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
             res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family, hue=hue, sat=sat, val=val,
                                  progress=lambda *a: self.events.put(("progress",) + a),
-                                 cancelled=self.cancel_flag.is_set, completed=completed, treatment=treatment)
+                                 cancelled=self.cancel_flag.is_set, completed=completed, treatment=treatment, theme=theme)
             self.events.put(("done", res))
         except sc.SteamcaseError as e:
             self.events.put(("error", str(e)))
@@ -1174,6 +1219,9 @@ def selftest():
             only = os.path.join(d, "r.png")                       # the same with the rosette alone
             sc.build_cover(src, only, sc.load_frame(0), treatment="rosette")
             assert sc.cover_treatment(only) == "rosette" and sc.is_steamcase_cover(only), "a rosette-only cover is not recognised as ours"
+            themed = os.path.join(d, "h.png")                     # the Halloween theme, with the rosette alone
+            sc.build_cover(src, themed, sc.load_frame(0), treatment="rosette", theme="halloween")
+            assert sc.cover_theme(themed) == "halloween" and sc.is_steamcase_cover(themed), "a Halloween cover is not recognised as ours"
             assert look_label("ribbon") == "Normal case, rosette and ribbon" and look_label("gold-border-rosette") == "Gold border, rosette only", "the look labels are wrong"
         print("selftest ok")
         return 0
