@@ -27,7 +27,14 @@ def downloads_dir():
 
 SAVE_KEY = "Cmd+S" if sys.platform == "darwin" else "Ctrl+S"
 GAMES_PAGE_URL = "https://steamcommunity.com/my/games/?tab=all&sort=achievements"     # the user's own games page, most achievements first
-STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon", "Normal case with ribbon"), ("none", "No special case")]
+STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon", "Normal case"), ("none", "No special case")]    # values: sc.CASES, or "none"
+MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
+
+
+def look_label(treatment):
+    """How a treatment (one of sc.TREATMENTS) is named in the prompts: its case, then ", rosette only" for the rosette-only marks."""
+    case, marks = sc.split_treatment(treatment)
+    return dict(STYLES)[case] + (", rosette only" if marks == "rosette" else "")
 PAGE_HELP = ("How to save the page: open it with the button and log in if asked. Wait until your games have loaded, press %s and save it as "
              "“Webpage, Complete” (Chrome or Firefox), named games.html. Your browser also saves a folder next to it.\n\n"
              "The saved file contains a temporary login token for your Steam account. This app only reads which games are at 100%%: "
@@ -106,7 +113,8 @@ class App(tk.Tk):
         self.restart_steam = tk.BooleanVar(value=True)
         self.games_page = None            # the saved Steam games page in use (path), or None: covers keep the 100% look they have
         self.completed = None             # app ids at 100% on that page; only these numbers are kept from it, never its text
-        self.completion_style = tk.StringVar(value="ribbon")       # one of sc.TREATMENTS, or "none"
+        self.completion_style = tk.StringVar(value="ribbon")       # one of sc.CASES, or "none"
+        self.completion_marks = tk.StringVar(value="full")         # one of sc.MARKS
         self.page_pending = 0             # games pages being read on a worker thread
         self._page_req = 0                # the newest of those; older answers are dropped
         self._page_tried = {}             # path -> (size, mtime) of pages in Downloads already read once
@@ -451,7 +459,7 @@ class App(tk.Tk):
         head = self._row(body, pady=(px(10), 0))
         tk.Label(head, text="Highlight my 100% games (optional)", bg=CARD, fg=FG, font=("TkDefaultFont", 11, "bold")).pack(side="left")
         InfoBadge(head, PAGE_HELP).pack(side="left", padx=px(6))
-        self._note(body, "Games where you unlocked every achievement can get a ribbon, and a gold case or border if you like. "
+        self._note(body, "Games where you unlocked every achievement can get a rosette and a ribbon (or the rosette alone), and a gold case or border if you like. "
                          "Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. "
                          "This app notices the file by itself.")
         r = self._flow(body)
@@ -463,10 +471,14 @@ class App(tk.Tk):
         r.add(self.btn_page_copy, px(10))
         self.page_status = self._wrap(tk.Label(body, text="No games page loaded. Your covers keep the look they have.", bg=CARD, fg=MUTED, anchor="w", justify="left"))
         self.page_status.pack(fill="x", pady=(px(4), px(4)))
+        self.marks_choice = Choice(body, self.completion_marks, MARKS, state="disabled")
+        self.marks_choice.pack(fill="x", pady=px(4))
         self.style_choice = Choice(body, self.completion_style, STYLES, state="disabled")
         self.style_choice.pack(fill="x", pady=px(4))
         self.page_note = self._wrap(tk.Label(body, text="", bg=CARD, fg=FAINT, anchor="w", justify="left"))         # packed once a page is loaded
         self.completion_style.trace_add("write", self._schedule_preview)
+        self.completion_style.trace_add("write", lambda *a: self._refresh_choice())       # "No special case" has no marks to choose
+        self.completion_marks.trace_add("write", self._schedule_preview)
 
     def _completion(self):
         """(completed, treatment) for make_covers. No page loaded: (None, None), every cover keeps its look.
@@ -474,9 +486,9 @@ class App(tk.Tk):
         if self.completed is None:
             return None, None
         style = self.completion_style.get()
-        if style not in sc.TREATMENTS:
+        if style not in sc.CASES:
             return set(), None
-        return set(self.completed), style
+        return set(self.completed), sc.compose_treatment(style, self.completion_marks.get())
 
     def open_games_page(self):
         try:
@@ -539,9 +551,11 @@ class App(tk.Tk):
         self._schedule_preview()
 
     def _refresh_choice(self):
-        """The style can be picked once a page is loaded, while the other step 2 controls can be used."""
+        """The style can be picked once a page is loaded, while the other step 2 controls can be used; the marks too, unless the style is "No special case"."""
         ready = self.installed_only.get() or bool(self.library_path)
-        self.style_choice.configure(state="normal" if ready and not self.running and self.games_page else "disabled")
+        usable = ready and not self.running and bool(self.games_page)
+        self.style_choice.configure(state="normal" if usable else "disabled")
+        self.marks_choice.configure(state="normal" if usable and self.completion_style.get() in sc.CASES else "disabled")
 
     def _tone(self):
         """The chosen case colour: (hue, colourfulness, brightness)."""
@@ -645,7 +659,7 @@ class App(tk.Tk):
         if colour and not changed:
             return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
         styles &= set(sc.TREATMENTS)
-        label = dict(STYLES).get(treatment)
+        label = look_label(treatment) if treatment else None
         if treatment is None:
             what = "the covers of your 100% games are made again as normal covers"
             title, one = "Remove the 100% highlight?", "You chose “No special case”: " + what + "."
@@ -1130,6 +1144,10 @@ def selftest():
             sc.build_cover(src, done, sc.load_frame(0), treatment="ribbon")
             assert sc.cover_treatment(done) == "ribbon", "a 100% cover does not record its style"
             assert sc.is_steamcase_cover(done), "a 100% cover is not recognised as ours"
+            only = os.path.join(d, "r.png")                       # the same with the rosette alone
+            sc.build_cover(src, only, sc.load_frame(0), treatment="rosette")
+            assert sc.cover_treatment(only) == "rosette" and sc.is_steamcase_cover(only), "a rosette-only cover is not recognised as ours"
+            assert look_label("ribbon") == "Normal case" and look_label("gold-border-rosette") == "Gold border, rosette only", "the look labels are wrong"
         print("selftest ok")
         return 0
     except Exception as e:
