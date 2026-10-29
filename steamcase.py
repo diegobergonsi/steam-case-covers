@@ -1594,13 +1594,23 @@ def _chosen_colour(args):
     return tuple(found[i] if o is None else o for i, o in enumerate((args.hue, args.saturation, args.brightness)))
 
 
-def _completion_args(args):
+def _chosen_theme(args):
+    """The case theme to build: --theme if given ("classic" is None), else that of the covers already in the folder, else None (the classic case)."""
+    if args.theme is not None:
+        return None if args.theme == "classic" else args.theme
+    return existing_cover_theme(os.path.abspath(args.out))
+
+
+def _completion_args(args, theme=None):
     """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
+    With a `theme` the marks default to the rosette alone, and asking for the full marks is refused (the ribbon would hide the decorations).
     A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks or the rosette alone, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
     if args.games_page is None and args.completed_style is None and args.completed_marks is None:
         return None, None
     style = args.completed_style or "ribbon"
-    treatment = None if style == "none" else compose_treatment(style, args.completed_marks or "full")
+    if theme is not None and args.completed_marks == "full" and style != "none":
+        raise SteamcaseError("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations." % theme.capitalize())
+    treatment = None if style == "none" else compose_treatment(style, args.completed_marks or ("rosette" if theme else "full"))
     if args.games_page is None or treatment is None:        # "none" needs no page: a bad one must not stop you removing the highlights
         return set(), treatment
     try:
@@ -1612,7 +1622,8 @@ def _completion_args(args):
 
 
 def cmd_make(args):
-    completed, treatment = _completion_args(args)           # first: a bad page fails before the library is loaded
+    theme = _chosen_theme(args)
+    completed, treatment = _completion_args(args, theme)    # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
     hue, sat, val = _chosen_colour(args)
 
@@ -1620,11 +1631,12 @@ def cmd_make(args):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
-          + (" | in a custom colour" if hue or (sat, val) != (100, 100) else ""))
+          + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")
+          + (" | with the %s theme" % theme.capitalize() if theme else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
@@ -1749,6 +1761,9 @@ def main():
                        help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
                             "gold-case is always gold and ignores --hue, --saturation and --brightness. "
                             "Needs --games-page, except none. Without either option the covers are left as they are")
+        p.add_argument("--theme", choices=("classic", "halloween"), default=None,
+                       help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
+                            "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default) or rosette (the rosette alone). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")

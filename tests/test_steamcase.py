@@ -1804,6 +1804,56 @@ class CompletionCli(StoreMocks):
             self.assertIsNone(self.treatment(out, 2))
             self.assertIn("1 of them are 100% complete", text)
 
+    def theme(self, out, appid):
+        return sc.cover_theme(os.path.join(out, "Game_%d_%d.png" % (appid, appid)))
+
+    def test_theme_makes_halloween_covers_and_keeps_the_colour_options(self):
+        out = os.path.join(self.tmp, "out")
+        text = self.make(out, "--theme", "halloween", "--hue", "134")
+        self.assertEqual(self.theme(out, 1), "halloween")
+        self.assertEqual(sc.cover_hue(os.path.join(out, "Game_1_1.png")), 134)
+        self.assertIn("Halloween theme", text)
+
+    def test_the_theme_of_the_covers_already_there_is_kept_unless_asked_otherwise(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--theme", "halloween")
+        path = os.path.join(out, "Game_1_1.png")
+        before = self.read(path)
+        text = self.make(out)                                                           # no --theme: Halloween covers stay Halloween
+        self.assertEqual(self.read(path), before)
+        self.assertIn("Halloween theme", text)
+        self.make(out, "--theme", "classic")
+        self.assertIsNone(self.theme(out, 1))
+        self.assertNotIn("Halloween theme", self.make(out, "--theme", "classic"))
+
+    def test_a_theme_gives_100_percent_games_the_rosette_only(self):
+        page = self.page({1: (10, 10), 2: (1, 9)})
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--theme", "halloween", "--games-page", page)
+        self.assertEqual(self.treatment(out, 1), "rosette")
+        self.assertIsNone(self.treatment(out, 2))
+        out2 = os.path.join(self.tmp, "out2")
+        self.make(out2, "--theme", "halloween", "--games-page", page, "--completed-style", "gold-border", "--completed-marks", "rosette")
+        self.assertEqual(self.treatment(out2, 1), "gold-border-rosette")
+        self.make(out2, "--games-page", page)                                           # the folder is themed already: the default marks are rosette
+        self.assertEqual(self.treatment(out2, 1), "rosette")
+
+    def test_a_theme_and_full_marks_are_refused(self):
+        page = self.page({1: (10, 10)})
+        out = os.path.join(self.tmp, "out")
+        with self.assertRaises(SystemExit) as caught:
+            self.make(out, "--theme", "halloween", "--games-page", page, "--completed-marks", "full")
+        self.assertIn("Halloween", str(caught.exception))
+        self.assertIn("rosette", str(caught.exception))
+        self.assertFalse(os.path.exists(out))
+
+    def test_a_bad_theme_is_refused(self):
+        import contextlib, io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+            self.make(os.path.join(self.tmp, "out"), "--theme", "bogus")
+        self.assertIn("invalid choice", err.getvalue())
+
     def test_a_style_without_a_page_is_refused(self):
         import contextlib, io
         out = os.path.join(self.tmp, "out")
@@ -1892,7 +1942,7 @@ class CompletionCli(StoreMocks):
         import contextlib, io
         with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
-            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None))
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None, theme="classic"))
         self.assertEqual(caught.exception.code, 2)
 
     def test_a_tilde_in_the_page_path_is_expanded(self):
