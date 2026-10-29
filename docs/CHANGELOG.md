@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- New: the covers of your 100% games can have the rosette only, without the "100% Complete" ribbon over the art. In the window, a new choice above the case style picks "Rosette and ribbon" (as before, the default) or "Rosette only"; it works with every case style and is greyed out for "No special case". On the command line: `--completed-marks rosette`. The case style "Normal case with ribbon" is now called "Normal case", as the marks have their own choice. Covers made before are still found and kept.
 - Fix: the command-line `apply` now refuses a covers folder that holds covers in more than one case colour (left behind when a colour change is interrupted) and tells you to run `make` again, instead of copying the mix into Steam. Nothing is changed and Steam is not closed.
 - Documentation: the README header image now shows the front cover as a 100% game (gold case, rosette and ribbon).
 - Documentation: the README links the project's Discord (feedback and bug reports are mainly handled there) and has a "Feedback and bugs" section; the issue template page offers it too. A "Support the project" section has a banner and a Ko-fi button, and the main README sections have one small emoji each. The repository page shows a "Sponsor" button that goes to the Ko-fi page.
