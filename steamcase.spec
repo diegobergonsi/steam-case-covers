@@ -4,7 +4,7 @@
 import os, sys
 
 # assets/version.txt only exists in release builds (the workflow writes the tag into it); source runs report "dev"
-a = Analysis(["gui.py"], datas=[("assets/frame.png", "assets"), ("assets/family_corner.png", "assets"), ("assets/completion_overlay.png", "assets"), ("assets/default_art.png", "assets"), ("assets/icon.png", "assets"), ("assets/discord.png", "assets")] + ([("assets/version.txt", "assets")] if os.path.exists("assets/version.txt") else []), excludes=["numpy", "matplotlib", "scipy", "pandas"])
+a = Analysis(["gui.py"], datas=[("assets/frame.png", "assets"), ("assets/family_corner.png", "assets"), ("assets/completion_overlay.png", "assets"), ("assets/default_art.png", "assets"), ("assets/icon.png", "assets"), ("assets/discord.png", "assets"), ("assets/halloween_overlay.png", "assets")] + ([("assets/version.txt", "assets")] if os.path.exists("assets/version.txt") else []), excludes=["numpy", "matplotlib", "scipy", "pandas"])
 pyz = PYZ(a.pure)
 
 if sys.platform == "darwin":                       # macOS: folder-based .app (single-file .app is discouraged)

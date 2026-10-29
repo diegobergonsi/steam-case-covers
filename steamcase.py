@@ -36,6 +36,7 @@ FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
 COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    # rosette and "100% Complete" ribbon, laid over the covers of games with every achievement
+HALLOWEEN_OVERLAY = os.path.join(HERE, "assets", "halloween_overlay.png")    # web, spiders and a pumpkin, laid over the case for the Halloween theme
 CASES = ("ribbon", "gold-case", "gold-border")           # the case of a 100% cover: the marks only, the marks on a gold case, the marks inside a gold border
 MARKS = ("full", "rosette")                              # the marks: the rosette and the ribbon, or the rosette alone
 TREATMENTS = ("ribbon", "gold-case", "gold-border", "rosette", "gold-case-rosette", "gold-border-rosette")    # how a 100% cover looks: a case and its marks (see compose_treatment)
@@ -43,6 +44,9 @@ ROSETTE_ROWS = 450                                       # the rosette-only mark
 GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
 DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatment; plain covers have none
+THEMES = ("halloween",)                     # case themes: decorations drawn on the case, whatever its colour; the classic case has none
+THEME_CHUNK = "steamcase-theme"             # PNG note naming a cover's theme; classic covers carry none
+KEEP = "keep"                               # in place of a theme: each existing cover keeps the theme it has
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 NEUTRAL_SWATCHES = (("Black", 0, 14), ("Graphite", 0, 34), ("Silver", 0, 78))    # ready-made greys: (name, colourfulness, brightness), hue does not matter
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
@@ -756,12 +760,13 @@ def _compose(art, frame):
     return Image.alpha_composite(canvas, frame)
 
 
-def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None):
+def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, theme=None):
     """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists).
-    With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked."""
+    With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked; with a `theme` (one of THEMES) the case also
+    carries that theme's decorations."""
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
-        return finish_treatment(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), treatment)
+        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment)
 
 
 def compose_treatment(case, marks):
@@ -796,6 +801,60 @@ def treatment_colour(treatment, colour):
 def _completion_overlay():
     with Image.open(COMPLETION_OVERLAY) as im:
         return im.convert("RGBA")
+
+
+@functools.lru_cache(maxsize=1)
+def _halloween_overlay():
+    with Image.open(HALLOWEEN_OVERLAY) as im:
+        return im.convert("RGBA")
+
+
+def apply_theme(cover, theme):
+    """`cover` (the finished 600 x 900 composition, before the 100% marks) with the decorations of `theme` (one of THEMES) over it, kept inside
+    the case's own outline. The case keeps its colour. No theme: `cover` itself."""
+    if theme is None:
+        return cover
+    if theme not in THEMES:
+        raise ValueError("unknown theme: %r" % (theme,))
+    marks = _halloween_overlay().copy()
+    marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
+    return Image.alpha_composite(cover, marks)
+
+
+def cover_theme(path):
+    """The theme (one of THEMES) a cover was made with, read from its PNG header without decoding the picture; None for a classic cover.
+    False if this is not a readable PNG or the note is not exactly one we write: the cover is then rebuilt."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return False
+        with Image.open(path, formats=["PNG"]) as im:
+            theme = im.info.get(THEME_CHUNK)
+    except Exception:
+        return False
+    return theme if theme is None or theme in THEMES else False
+
+
+def existing_cover_theme(covers_dir):
+    """The theme of the covers already in the folder (that of the first readable one by name), or None when there are none or they are classic."""
+    try:
+        names = sorted(os.listdir(covers_dir))
+    except OSError:
+        return None
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            theme = cover_theme(os.path.join(covers_dir, n))
+            if theme is not False:
+                return theme
+    return None
+
+
+def covers_in_other_theme(covers_dir, theme):
+    """True if the covers folder holds a cover made with another theme than `theme` (None is the classic case); a garbled note counts as another."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    return any(n.lower().endswith(".png") and appid_of(n) is not None and cover_theme(os.path.join(covers_dir, n)) != theme for n in names)
 
 
 @functools.lru_cache(maxsize=1)
@@ -887,39 +946,46 @@ def cover_treatment(path):
     return done if done is None or done in TREATMENTS else False
 
 
-def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None):
-    """Write the cover of one portrait into `out_path`, with its colour notes and, for a 100% game, its `treatment` and treatment note.
-    `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
+def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None):
+    """Write the cover of one portrait into `out_path`, with its colour notes, its `theme` and theme note (None: the classic case) and, for a 100% game,
+    its `treatment` and treatment note. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
+    if theme is not None and theme not in THEMES:
+        raise ValueError("unknown theme: %r" % (theme,))
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
-    cover = finish_treatment(_compose(art, frame), treatment)
+    cover = finish_treatment(apply_theme(_compose(art, frame), theme), treatment)
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
     note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
     if treatment is not None:
         note.add_text(DONE_CHUNK, treatment)                   # plain covers carry no note, as before treatments existed
+    if theme is not None:
+        note.add_text(THEME_CHUNK, theme)                      # classic covers carry none, as before themes existed
     cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
 
 # ---------- make ----------
-def _wanted_look(appid, path, colour, completed, treatment):
+def _wanted_look(appid, path, colour, completed, treatment, theme=None):
     """(treatment, case colour) the cover of `appid` at `path` should have (see make_covers). Without a page (`completed` None)
-    a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain."""
+    a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain.
+    With a theme (not None or KEEP) the marks are the rosette alone: a full-marks treatment kept from before becomes its rosette-only twin."""
     if completed is not None:
         target = treatment if appid in completed else None
     else:
         target = cover_treatment(path) or None
+    if theme not in (None, KEEP) and target is not None and split_treatment(target)[1] == "full":
+        target = compose_treatment(split_treatment(target)[0], "rosette")
     return target, treatment_colour(target, colour)
 
 
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None):
+                completed=None, treatment=None, theme=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -928,8 +994,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     hue, sat, val: the case colour: degrees to turn it from the original blue (0), then its colourfulness and brightness (0 to 100, 100 = as drawn).
     completed: set of appids with every achievement unlocked (from the saved games page), or None when no page is loaded.
     treatment: one of TREATMENTS (a case and its marks, see compose_treatment) for those games, or None ("No special case": they get plain covers).
+    theme: one of THEMES (decorations on every cover, the case keeps its colour) or None (the classic case). It only goes with the rosette-only
+    marks: a `treatment` whose marks are "full" raises ValueError.
     Without a page each existing cover keeps the treatment it was made with. A "gold-case" cover is made in gold whatever the colour asked.
-    A cover that exists in another colour or with another treatment is rebuilt, one that already looks right is kept
+    A cover that exists in another colour, with another treatment or in another theme is rebuilt, one that already looks right is kept
     (the hue means nothing at 0 sat or 0 val). Apps in `completed` that are not in `games` are ignored.
     progress counts only items that can become a cover (DLC, soundtracks and tools are not counted).
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
@@ -941,6 +1009,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     if treatment is not None and treatment not in TREATMENTS:
         raise ValueError("unknown treatment: %r" % (treatment,))        # a note nobody can read back would have the cover rebuilt on every run
+    if theme is not None and theme not in THEMES:
+        raise ValueError("unknown theme: %r" % (theme,))
+    if theme is not None and treatment is not None and split_treatment(treatment)[1] != "rosette":
+        raise ValueError("the %s theme only goes with the rosette-only marks, not %r" % (theme, treatment))      # the ribbon would hide the decorations
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -956,6 +1028,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     frame_for((hue, sat, val), False)           # a missing frame.png fails here, before any download
     if treatment is not None or completed is None:
         _completion_overlay()                   # so does a missing overlay: otherwise every 100% cover would count as a failed download
+    if theme is not None:
+        _halloween_overlay()                    # and a missing theme overlay: otherwise every cover would
 
     ids = sorted(games)
     if only:
@@ -1003,8 +1077,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment)
-        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target:
+        target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment, theme)
+        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme:
             res["ok"] += 1
             res["completed"] += target is not None
             res["files"].append(dest)
@@ -1033,7 +1107,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target)
+            build_cover(tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target, theme=theme)
             res["ok"] += 1
             res["family"] += is_family
             res["completed"] += target is not None
@@ -1051,9 +1125,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
-def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None):
-    """True if make_covers with this colour, `completed` and `treatment` would rebuild a cover already in the folder (stops at the first one):
-    one in another case colour (a "gold-case" cover is compared as gold) or with another treatment. Covers whose colour notes are unreadable are not counted."""
+def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None, theme=KEEP):
+    """True if make_covers with this colour, `completed`, `treatment` and `theme` would rebuild a cover already in the folder (stops at the first one):
+    one in another case colour (a "gold-case" cover is compared as gold), with another treatment or, unless `theme` is KEEP, in another theme.
+    Covers whose colour notes are unreadable are not counted."""
     try:
         names = os.listdir(covers_dir)
     except OSError:
@@ -1065,8 +1140,8 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
             c = cover_colour(path)
             if c is None:
                 continue
-            target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment)       # appid_of gives text; `completed` holds numbers
-            if not same_colour(c, colour) or cover_treatment(path) != target:
+            target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment, theme)     # appid_of gives text; `completed` holds numbers
+            if not same_colour(c, colour) or cover_treatment(path) != target or (theme != KEEP and cover_theme(path) != theme):
                 return True
     return False
 
@@ -1110,6 +1185,29 @@ def mixed_cover_colours(covers_dir):
                 if len(seen) > 1:
                     return True
     return False
+
+
+def covers_with_full_marks(covers_dir):
+    """True if the covers folder holds a 100% cover with the full marks (the rosette and the ribbon): what a theme turns into the rosette alone."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            treatment = cover_treatment(os.path.join(covers_dir, n))
+            if treatment and split_treatment(treatment)[1] == "full":
+                return True
+    return False
+
+
+def mixed_cover_themes(covers_dir):
+    """True if the covers folder holds covers in more than one case theme (what an interrupted theme change leaves behind). A garbled note counts as a theme of its own."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    return len({cover_theme(os.path.join(covers_dir, n)) for n in names if n.lower().endswith(".png") and appid_of(n) is not None}) > 1
 
 
 def _safe_copy(src, dst):
@@ -1288,13 +1386,13 @@ def _same_pixels(strip, ref):
 
 @functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry; a library uses one or two colours, each plain and family
 def _treated_reference(key, family):
-    """(expected, mask) for a treated cover: key is (tone_key, treatment). The cover is made twice, from flat black and from flat white
+    """(expected, mask) for a treated or themed cover: key is (tone_key, treatment, theme), the last two None for none. The cover is made twice, from flat black and from flat white
     art, through the same steps as build_cover; the mask is 255 where both agree within 2 on every channel (frame, rosette, ribbon,
-    border: nothing the game's art reaches) and 0 elsewhere, then pulled back 3 pixels from the art: the gold border's shrink (Lanczos)
+    border, the theme's decorations: nothing the game's art reaches) and 0 elsewhere, then pulled back 3 pixels from the art: the gold border's shrink (Lanczos)
     lets detailed art ring that far past where flat art reaches. Expected is halfway between the two, so real art lands within 1 of it."""
-    (step, sat, val), treatment = key                               # step * 360 / 256 degrees turns the hue by exactly `step` again
+    (step, sat, val), treatment, theme = key                        # step * 360 / 256 degrees turns the hue by exactly `step` again
     frame = load_frame(step * 360 / 256, family, sat=sat, val=val)
-    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), treatment) for c in (0, 255))
+    black, white = (finish_treatment(apply_theme(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), theme), treatment) for c in (0, 255))
     widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
 
@@ -1310,11 +1408,12 @@ def _same_treated(im, key, family):
 
 def is_steamcase_cover(path):
     """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge are those of frame.png (or of the family frame).
-    A cover with a treatment note (a 100% game) must name exactly one of TREATMENTS, have colour notes we write, and match the cover
-    regenerated in that colour, tone and treatment on every pixel the game's art does not reach (frame, rosette, ribbon, border).
+    A cover with a treatment note (a 100% game) or a theme note must name exactly one of TREATMENTS and one of THEMES (a theme never with full marks),
+    have colour notes we write, and match the cover regenerated in that colour, tone, treatment and theme on every pixel the game's art does not reach
+    (frame, rosette, ribbon, border, the theme's decorations).
     Otherwise, a cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one
     without (made before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to
-    a tone or treatment note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
+    a tone, treatment or theme note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
     is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
@@ -1323,14 +1422,16 @@ def is_steamcase_cover(path):
         with Image.open(path, formats=["PNG"]) as im:
             if im.size != SIZE:
                 return False
-            toned, colour, done = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK)
+            toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
             im = im.convert("RGBA")
-        if done is not None:
-            if done not in TREATMENTS or colour is None:
+        if done is not None or theme is not None:
+            if (done is not None and done not in TREATMENTS) or (theme is not None and theme not in THEMES) or colour is None:
                 return False
+            if theme is not None and done is not None and split_treatment(done)[1] != "rosette":
+                return False                                        # we never write a theme with full marks
             if is_gold_case(done) and tone_key(*colour) != tone_key(GOLD_HUE, 100, 100):
                 return False                                    # we always write a gold case with gold notes (gold-case and the ribbon at hue 176 look the same, so those two notes swapped cannot be told; harmless)
-            key = (tone_key(*treatment_colour(done, colour)), done)
+            key = (tone_key(*treatment_colour(done, colour)), done, theme)
             return any(_same_treated(im, key, family) for family in (False, True))
         if toned:
             if colour is None:
@@ -1518,13 +1619,24 @@ def _chosen_colour(args):
     return tuple(found[i] if o is None else o for i, o in enumerate((args.hue, args.saturation, args.brightness)))
 
 
-def _completion_args(args):
+def _chosen_theme(args):
+    """The case theme to build: --theme if given ("classic" is None), else that of the covers already in the folder, else None (the classic case)."""
+    if args.theme is not None:
+        return None if args.theme == "classic" else args.theme
+    return existing_cover_theme(os.path.abspath(args.out))
+
+
+def _completion_args(args, theme=None):
     """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
+    With a `theme` the marks default to the rosette alone, and asking for the full marks is refused (the ribbon would hide the decorations).
     A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks or the rosette alone, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
     if args.games_page is None and args.completed_style is None and args.completed_marks is None:
         return None, None
     style = args.completed_style or "ribbon"
-    treatment = None if style == "none" else compose_treatment(style, args.completed_marks or "full")
+    if theme is not None and args.completed_marks == "full" and style != "none":
+        raise SteamcaseError("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
+                             "To use the full marks, make the classic case instead (--theme classic)." % theme.capitalize())
+    treatment = None if style == "none" else compose_treatment(style, args.completed_marks or ("rosette" if theme else "full"))
     if args.games_page is None or treatment is None:        # "none" needs no page: a bad one must not stop you removing the highlights
         return set(), treatment
     try:
@@ -1536,7 +1648,8 @@ def _completion_args(args):
 
 
 def cmd_make(args):
-    completed, treatment = _completion_args(args)           # first: a bad page fails before the library is loaded
+    theme = _chosen_theme(args)
+    completed, treatment = _completion_args(args, theme)    # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
     hue, sat, val = _chosen_colour(args)
 
@@ -1544,11 +1657,12 @@ def cmd_make(args):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme)
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
-          + (" | in a custom colour" if hue or (sat, val) != (100, 100) else ""))
+          + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")
+          + (" | with the %s theme" % theme.capitalize() if theme else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
@@ -1559,6 +1673,9 @@ def cmd_apply(args):
     if mixed_cover_colours(args.covers):                    # first: before Steam is closed
         raise SteamcaseError("The covers in %s are in more than one colour (a colour change was probably interrupted). Nothing was changed. "
                              "Run make again with the colour you want (--hue, --saturation, --brightness) to finish it, then apply." % args.covers)
+    if mixed_cover_themes(args.covers):
+        raise SteamcaseError("The covers in %s are in more than one theme (a theme change was probably interrupted). Nothing was changed. "
+                             "Run make again with the theme you want (--theme classic or --theme halloween) to finish it, then apply." % args.covers)
     steam = steam_dir(args.steam_dir)
     if steam_running() and not args.yes:
         if args.close_steam:
@@ -1673,8 +1790,11 @@ def main():
                        help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
                             "gold-case is always gold and ignores --hue, --saturation and --brightness. "
                             "Needs --games-page, except none. Without either option the covers are left as they are")
+        p.add_argument("--theme", choices=("classic", "halloween"), default=None,
+                       help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
+                            "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
-                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default) or rosette (the rosette alone). "
+                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) or rosette (the rosette alone). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
