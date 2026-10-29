@@ -36,7 +36,10 @@ FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
 COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    # rosette and "100% Complete" ribbon, laid over the covers of games with every achievement
-TREATMENTS = ("ribbon", "gold-case", "gold-border")      # how a 100% cover looks: the marks only, the marks on a gold case, the marks inside a gold border
+CASES = ("ribbon", "gold-case", "gold-border")           # the case of a 100% cover: the marks only, the marks on a gold case, the marks inside a gold border
+MARKS = ("full", "rosette")                              # the marks: the rosette and the ribbon, or the rosette alone
+TREATMENTS = ("ribbon", "gold-case", "gold-border", "rosette", "gold-case-rosette", "gold-border-rosette")    # how a 100% cover looks: a case and its marks (see compose_treatment)
+ROSETTE_ROWS = 450                                       # the rosette-only marks are the overlay above this row; the ribbon sits below it
 GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
 DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatment; plain covers have none
@@ -760,15 +763,46 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None):
         return finish_treatment(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), treatment)
 
 
+def compose_treatment(case, marks):
+    """The treatment (one of TREATMENTS) for a `case` (one of CASES) and its `marks` (one of MARKS). Full marks keep the plain name of the case."""
+    if case not in CASES or marks not in MARKS:
+        raise ValueError("unknown case or marks: %r, %r" % (case, marks))
+    if marks == "full":
+        return case
+    return "rosette" if case == "ribbon" else case + "-rosette"
+
+
+def split_treatment(treatment):
+    """(case, marks) of a treatment, the inverse of compose_treatment. ValueError for anything that is not one of TREATMENTS."""
+    for case in CASES:
+        for marks in MARKS:
+            if treatment == compose_treatment(case, marks):
+                return case, marks
+    raise ValueError("unknown treatment: %r" % (treatment,))
+
+
+def is_gold_case(treatment):
+    """True for the treatments whose case is the gold one (always False for None or an unreadable note)."""
+    return treatment in TREATMENTS and split_treatment(treatment)[0] == "gold-case"
+
+
 def treatment_colour(treatment, colour):
-    """The case colour (hue, sat, val) a cover is built in: gold for the "gold-case" treatment, the user's `colour` otherwise."""
-    return (GOLD_HUE, 100, 100) if treatment == "gold-case" else colour
+    """The case colour (hue, sat, val) a cover is built in: gold for the "gold-case" treatments, the user's `colour` otherwise."""
+    return (GOLD_HUE, 100, 100) if is_gold_case(treatment) else colour
 
 
 @functools.lru_cache(maxsize=1)
 def _completion_overlay():
     with Image.open(COMPLETION_OVERLAY) as im:
         return im.convert("RGBA")
+
+
+@functools.lru_cache(maxsize=1)
+def _rosette_overlay():
+    """The overlay without the ribbon: everything from ROSETTE_ROWS down is cleared, which leaves the rosette on the platform badges."""
+    marks = _completion_overlay().copy()
+    marks.paste((0, 0, 0, 0), (0, ROSETTE_ROWS, marks.width, marks.height))
+    return marks
 
 
 @functools.lru_cache(maxsize=1)
@@ -788,15 +822,16 @@ def _gold_border():
 
 
 def finish_treatment(cover, treatment):
-    """`cover` (the finished 600 x 900 composition) with the marks of a 100% game: the rosette over the platform badges and the
-    ribbon at the bottom, kept inside the case's own outline. For "gold-border" the whole cover is then shrunk by BORDER pixels
+    """`cover` (the finished 600 x 900 composition) with the marks of a 100% game: the rosette over the platform badges and, unless the
+    treatment is a rosette-only one, the ribbon at the bottom, kept inside the case's own outline. For "gold-border" the whole cover is then shrunk by BORDER pixels
     on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself."""
     if treatment is None:
         return cover
-    marks = _completion_overlay().copy()
+    case, kind = split_treatment(treatment)
+    marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
     marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
     done = Image.alpha_composite(cover, marks)
-    if treatment == "gold-border":
+    if case == "gold-border":
         plate = _gold_border().copy()
         plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
         done = plate
@@ -891,7 +926,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     family: set of appids that come from the Steam Family library; those covers are drawn with the green-corner frame.
     hue, sat, val: the case colour: degrees to turn it from the original blue (0), then its colourfulness and brightness (0 to 100, 100 = as drawn).
     completed: set of appids with every achievement unlocked (from the saved games page), or None when no page is loaded.
-    treatment: one of TREATMENTS for those games, or None ("No special case": they get plain covers).
+    treatment: one of TREATMENTS (a case and its marks, see compose_treatment) for those games, or None ("No special case": they get plain covers).
     Without a page each existing cover keeps the treatment it was made with. A "gold-case" cover is made in gold whatever the colour asked.
     A cover that exists in another colour or with another treatment is rebuilt, one that already looks right is kept
     (the hue means nothing at 0 sat or 0 val). Apps in `completed` that are not in `games` are ignored.
@@ -1052,7 +1087,7 @@ def existing_cover_colour(covers_dir):
         if n.lower().endswith(".png") and appid_of(n) is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is not None and cover_treatment(path) != "gold-case":
+            if c is not None and not is_gold_case(cover_treatment(path)):
                 return c
     return None
 
@@ -1069,7 +1104,7 @@ def mixed_cover_colours(covers_dir):
         if n.lower().endswith(".png") and appid_of(n) is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is not None and cover_treatment(path) != "gold-case":
+            if c is not None and not is_gold_case(cover_treatment(path)):
                 seen.add(tone_key(*c))
                 if len(seen) > 1:
                     return True
@@ -1292,7 +1327,7 @@ def is_steamcase_cover(path):
         if done is not None:
             if done not in TREATMENTS or colour is None:
                 return False
-            if done == "gold-case" and tone_key(*colour) != tone_key(GOLD_HUE, 100, 100):
+            if is_gold_case(done) and tone_key(*colour) != tone_key(GOLD_HUE, 100, 100):
                 return False                                    # we always write a gold case with gold notes (gold-case and the ribbon at hue 176 look the same, so those two notes swapped cannot be told; harmless)
             key = (tone_key(*treatment_colour(done, colour)), done)
             return any(_same_treated(im, key, family) for family in (False, True))
