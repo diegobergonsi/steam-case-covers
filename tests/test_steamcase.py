@@ -1383,7 +1383,8 @@ class RecogniseTreated(Base):
             self.assertFalse(sc.is_steamcase_cover(flat), t)
             grey = self.save_with_notes(sc.Image.open(real).convert("L").convert("RGBA"), real, "grey.png")
             self.assertFalse(sc.is_steamcase_cover(grey), t)
-            for xy in ((400, 10), (300, 800)):                                          # the banner, and the ribbon below the art
+            probes = ((400, 10), (526, 66)) + (((300, 800),) if sc.split_treatment(t)[1] == "full" else ())    # the banner, the rosette, and the ribbon below the art (rosette-only covers have none)
+            for xy in probes:
                 img = sc.Image.open(real).convert("RGBA")
                 img.putpixel(xy, (1, 2, 3, 255))
                 self.assertFalse(sc.is_steamcase_cover(self.save_with_notes(img, real)), (t, xy))
@@ -1433,6 +1434,21 @@ class RecogniseTreated(Base):
         except (OSError, NotImplementedError):
             return                                                                      # no symlinks here (Windows without privilege)
         self.assertFalse(sc.is_steamcase_cover(link))
+
+
+    def test_every_treatment_is_recognised_and_a_garbled_one_is_not(self):
+        for hue, sat, val in ((0, 100, 100), (0, 0, 14)):
+            for t in sc.TREATMENTS:
+                colour = sc.treatment_colour(t, (hue, sat, val))
+                out = os.path.join(self.tmp, "%s_%d.png" % (t, val))
+                sc.build_cover(self.src, out, sc.load_frame(colour[0], sat=colour[1], val=colour[2]), colour[0], sat=colour[1], val=colour[2], treatment=t)
+                self.assertTrue(sc.is_steamcase_cover(out), (t, val))
+                self.assertEqual(sc.cover_treatment(out), t)
+        good = os.path.join(self.tmp, "rosette_100.png")
+        for bad in ("ribbon-rosette", "rosette-rosette", "gold"):
+            garbled = self.renote(good, **self.notes_of(good, done=bad))
+            self.assertFalse(sc.is_steamcase_cover(garbled), bad)
+            self.assertIs(sc.cover_treatment(garbled), False)
 
 
 class MakeInColour(StoreMocks):
@@ -1681,9 +1697,16 @@ class ReplaceReason(StoreMocks):
             self.made()
             self.assertIn("highlighted", self.reason((0, 100, 100), {1}, treatment)[1])
 
+    def test_a_change_of_marks_alone_says_which_marks_come(self):
+        self.made(completed={1}, treatment="rosette")
+        text = self.reason((0, 100, 100), {1}, "ribbon")[1]
+        self.assertIn("rosette and ribbon", text)
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("rosette only", self.reason((0, 100, 100), {1}, "rosette")[1])
+
     def test_another_style_for_the_100_games(self):
         self.made(completed={1}, treatment="ribbon")
-        self.assertIn("another style", self.reason((0, 100, 100), {1}, "gold-border")[1])
+        self.assertIn("another look", self.reason((0, 100, 100), {1}, "gold-border")[1])
 
     def test_the_set_of_100_games_changes(self):
         self.made(completed={1}, treatment="ribbon")
@@ -1691,7 +1714,7 @@ class ReplaceReason(StoreMocks):
 
     def test_a_colour_and_a_style_change_name_both(self):
         self.made(completed={1}, treatment="ribbon")
-        for completed, treatment, part in (({1}, "gold-border", "another style"), (set(), "ribbon", "lose it"), (set(), None, "normal covers"), ({2}, "ribbon", "match your games page")):
+        for completed, treatment, part in (({1}, "gold-border", "another look"), (set(), "ribbon", "lose it"), (set(), None, "normal covers"), ({2}, "ribbon", "match your games page")):
             sentence = self.reason((90, 100, 100), completed, treatment)[1]
             self.assertIn("colour", sentence)
             self.assertIn(part, sentence)
@@ -1730,7 +1753,7 @@ class CompletionCli(StoreMocks):
 
     def test_each_style_is_accepted(self):
         page = self.page({1: (10, 10), 2: (1, 9)})
-        for style in sc.TREATMENTS:
+        for style in sc.CASES:                                       # the marks have their own option, see test_marks_*
             out = os.path.join(self.tmp, "out_" + style)
             text = self.make(out, "--games-page", page, "--completed-style", style)
             self.assertEqual(self.treatment(out, 1), style)
@@ -1746,6 +1769,40 @@ class CompletionCli(StoreMocks):
         self.assertNotEqual(caught.exception.code, 0)
         self.assertIn("error: --completed-style needs --games-page", err.getvalue())
         self.assertFalse(os.path.exists(out))
+
+    def test_marks_rosette_with_a_page_means_the_plain_case_with_the_rosette(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}), "--completed-marks", "rosette")
+        self.assertEqual(self.treatment(out, 1), "rosette")
+        self.assertIsNone(self.treatment(out, 2))
+
+    def test_marks_combine_with_the_style(self):
+        page = self.page({1: (10, 10)})
+        for style, marks, want in (("gold-border", "rosette", "gold-border-rosette"), ("gold-case", "rosette", "gold-case-rosette"),
+                                   ("gold-case", "full", "gold-case"), ("ribbon", "full", "ribbon")):
+            out = os.path.join(self.tmp, "out_%s_%s" % (style, marks))
+            self.make(out, "--games-page", page, "--completed-style", style, "--completed-marks", marks)
+            self.assertEqual(self.treatment(out, 1), want)
+
+    def test_marks_with_none_remove_the_highlights_and_need_no_page(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--games-page", self.page({1: (10, 10)}), "--completed-marks", "rosette")
+        self.assertEqual(self.treatment(out, 1), "rosette")
+        self.make(out, "--completed-style", "none", "--completed-marks", "rosette")
+        self.assertIsNone(self.treatment(out, 1))
+
+    def test_marks_without_a_page_or_with_a_bad_value_are_refused(self):
+        import contextlib, io
+        for args, message in ((("--completed-marks", "rosette"), "error: --completed-marks needs --games-page"),
+                              (("--completed-style", "gold-case", "--completed-marks", "rosette"), "error: --completed-style needs --games-page"),
+                              (("--completed-marks", "bogus"), "invalid choice")):
+            out = os.path.join(self.tmp, "out")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                self.make(out, *args)
+            self.assertNotEqual(caught.exception.code, 0)
+            self.assertIn(message, err.getvalue())
+            self.assertFalse(os.path.exists(out))
 
     def test_none_removes_treatments(self):
         out = os.path.join(self.tmp, "out")
@@ -1791,13 +1848,13 @@ class CompletionCli(StoreMocks):
         import contextlib, io
         with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
-            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None))
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None))
         self.assertEqual(caught.exception.code, 2)
 
     def test_a_tilde_in_the_page_path_is_expanded(self):
         page = self.page({1: (10, 10)}, "tilde.html")
         with mock.patch.dict(os.environ, {"HOME": self.tmp, "USERPROFILE": self.tmp}):
-            got = sc._completion_args(sc.argparse.Namespace(games_page=os.path.join("~", "tilde.html"), completed_style=None))
+            got = sc._completion_args(sc.argparse.Namespace(games_page=os.path.join("~", "tilde.html"), completed_style=None, completed_marks=None))
         self.assertEqual(got, ({1}, "ribbon"))
 
     def test_a_missing_page_names_only_its_file_name(self):
@@ -2165,6 +2222,64 @@ class Treatments(unittest.TestCase):
         self.assertEqual(sc.treatment_colour(None, c), c)
 
 
+    def test_compose_and_split_round_trip(self):
+        for style in sc.CASES:
+            for marks in sc.MARKS:
+                self.assertEqual(sc.split_treatment(sc.compose_treatment(style, marks)), (style, marks))
+        self.assertEqual(sc.compose_treatment("ribbon", "full"), "ribbon")
+        self.assertEqual(sc.compose_treatment("ribbon", "rosette"), "rosette")
+        self.assertEqual(sc.compose_treatment("gold-case", "rosette"), "gold-case-rosette")
+        self.assertEqual(sc.compose_treatment("gold-border", "full"), "gold-border")
+        self.assertEqual(len(sc.TREATMENTS), 6)
+        for bad in ("ribbon-rosette", "rosette-rosette", "", None, False, "RIBBON"):
+            with self.assertRaises(ValueError):
+                sc.split_treatment(bad)
+        with self.assertRaises(ValueError):
+            sc.compose_treatment("ribbon", "banner")
+        with self.assertRaises(ValueError):
+            sc.compose_treatment("sparkly", "full")
+
+    def test_rosette_only_has_no_bottom_ribbon(self):
+        only, full, plain = sc.preview_cover(treatment="rosette"), sc.preview_cover(treatment="ribbon"), sc.preview_cover()
+        self.assertEqual(list(pixels(only.crop((0, 450, 600, 900)))), list(pixels(plain.crop((0, 450, 600, 900)))))
+        self.assertNotEqual(list(pixels(only.crop((400, 0, 600, 120)))), list(pixels(plain.crop((400, 0, 600, 120)))))
+        self.assertEqual(list(pixels(only.crop((400, 0, 600, 120)))), list(pixels(full.crop((400, 0, 600, 120)))))     # the same rosette
+        self.assertNotEqual(list(pixels(full.crop((0, 800, 600, 870)))), list(pixels(plain.crop((0, 800, 600, 870)))))
+
+    def test_every_treatment_is_gold_or_not(self):
+        for t in sc.TREATMENTS:
+            want = (sc.GOLD_HUE, 100, 100) if t.startswith("gold-case") else (50, 60, 70)
+            self.assertEqual(sc.treatment_colour(t, (50, 60, 70)), want, t)
+            self.assertEqual(sc.is_gold_case(t), t.startswith("gold-case"), t)
+        for none in (None, False):
+            self.assertFalse(sc.is_gold_case(none))
+
+    def test_gold_border_rosette_has_the_border_and_no_ribbon(self):
+        only, full = sc.preview_cover(treatment="gold-border-rosette"), sc.preview_cover(treatment="gold-border")
+        r, g, b, a = only.getpixel((5, 450))
+        self.assertTrue(r > 180 and b < 90, (r, g, b))
+        self.assertEqual(only.getpixel((5, 450)), full.getpixel((5, 450)))
+        self.assertNotEqual(list(pixels(only.crop((0, 800, 600, 870)))), list(pixels(full.crop((0, 800, 600, 870)))))
+        self.assertFalse(any(p[3] and near(p[:3], self.BAND) for p in pixels(only.crop((20, 780, 580, 870)))))
+
+    def test_gold_case_rosette_is_a_gold_case(self):
+        self.assertEqual(sc.preview_cover(20, treatment="gold-case-rosette").getpixel((7, 450)),
+                         sc.preview_cover(sc.GOLD_HUE).getpixel((7, 450)))
+
+    def test_covers_and_mixed_colours_ignore_gold_case_rosette_covers(self):
+        d = os.path.join(tempfile.mkdtemp(), "covers")
+        self.addCleanup(shutil.rmtree, os.path.dirname(d), True)
+        os.makedirs(d)
+        src = os.path.join(os.path.dirname(d), "p.png")
+        sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
+        sc.build_cover(src, os.path.join(d, "A_1_1.png"), sc.load_frame(134), 134)
+        gold = (sc.GOLD_HUE, 100, 100)
+        sc.build_cover(src, os.path.join(d, "B_2_2.png"), sc.load_frame(*gold[:1], sat=gold[1], val=gold[2]), gold[0], sat=gold[1], val=gold[2],
+                       treatment="gold-case-rosette")
+        self.assertEqual(sc.existing_cover_colour(d), (134, 100, 100))
+        self.assertFalse(sc.mixed_cover_colours(d))
+
+
 class MakeTreated(StoreMocks):
     """make_covers with the games that are 100% and a treatment: which covers get it, which are kept and which are rebuilt."""
 
@@ -2197,6 +2312,19 @@ class MakeTreated(StoreMocks):
                 sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
         self.assertEqual(os.listdir(self.covers), [])
 
+    def test_changing_only_the_marks_rebuilds_the_cover(self):
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-case")
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-case")
+        statuses = []
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-case-rosette", progress=lambda *a: statuses.append((a[2], a[4])))
+        self.assertIn((1, "ok"), statuses)
+        self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-case-rosette")
+        statuses = []
+        sc.make_covers(self.games, self.covers, completed={1}, treatment="gold-case-rosette", progress=lambda *a: statuses.append((a[2], a[4])))
+        self.assertIn((1, "exists"), statuses)
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, completed={1}, treatment="gold-case"))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, completed={1}, treatment="gold-case-rosette"))
+
     def test_a_completed_game_gets_the_treatment_and_the_others_do_not(self):
         res = sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
         self.assertEqual(sc.cover_treatment(self.cover(1)), "ribbon")
@@ -2209,7 +2337,7 @@ class MakeTreated(StoreMocks):
                 shutil.rmtree(self.covers)
                 sc.make_covers({1: None}, self.covers, hue=90, completed={1}, treatment=t)
                 self.assertEqual(sc.cover_treatment(self.cover(1)), t)
-                self.assertEqual(sc.cover_colour(self.cover(1)), (176, 100, 100) if t == "gold-case" else (90, 100, 100))
+                self.assertEqual(sc.cover_colour(self.cover(1)), (176, 100, 100) if sc.is_gold_case(t) else (90, 100, 100))
                 with sc.Image.open(self.cover(1)) as im:
                     self.assertEqual(im.size, sc.SIZE)
 

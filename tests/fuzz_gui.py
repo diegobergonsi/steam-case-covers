@@ -182,8 +182,10 @@ def run_one(seed, steps, sandbox):
         r = rnd.random()
         if r < .35:
             picks["file"] = rnd.choice(page_choices); app.browse_games_page(); return "browse page " + os.path.basename(picks["file"])
-        if r < .75:
+        if r < .6:
             app.completion_style.set(rnd.choice(["ribbon", "gold-case", "gold-border", "none"])); return "set 100% style " + app.completion_style.get()
+        if r < .75:
+            app.completion_marks.set(rnd.choice(["full", "rosette"])); return "set 100% marks " + app.completion_marks.get()
         if r < .9:
             name = rnd.choice(["games.html", "games (1).htm", "Games.HTML"])
             if rnd.random() < .15:                    # a folder with a page's name: it must be skipped, never read
@@ -302,6 +304,14 @@ def run_one(seed, steps, sandbox):
             bad.append("100%% choice is %s but should be %s (page loaded: %s)" % (st(app.style_choice), want, bool(app.games_page)))
         if app.completion_style.get() not in ("ribbon", "gold-case", "gold-border", "none"):
             bad.append("100%% style out of range: %r" % app.completion_style.get())
+        if app.completion_marks.get() not in ("full", "rosette"):
+            bad.append("100%% marks out of range: %r" % app.completion_marks.get())
+        want_marks = "normal" if want == "normal" and app.completion_style.get() != "none" else "disabled"
+        if st(app.marks_choice) != want_marks or {st(p) for p in app.marks_choice._pills} != {want_marks}:
+            bad.append("marks choice is %s but should be %s (page loaded: %s, style %s)" % (st(app.marks_choice), want_marks, bool(app.games_page), app.completion_style.get()))
+        treatment = app._completion()[1]
+        if app.completed is None and treatment is not None or (treatment is not None and treatment not in sc.TREATMENTS):
+            bad.append("100%% look is not one the app can make: %r" % (treatment,))
         if not (app.completed is None or (isinstance(app.completed, set) and all(type(a) is int for a in app.completed))):
             bad.append("completed is not None or a set of app ids: %r" % (app.completed,))
         if (app.completed is None) != (app.games_page is None):

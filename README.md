@@ -135,7 +135,7 @@ Changed your mind?
 
 ### Optional: highlight your 100% games
 
-Step 2 has an optional block, **Highlight my 100% games**. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom. It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
+Step 2 has an optional block, **Highlight my 100% games**. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom (you can keep only the rosette). It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
 
 <p align="center">
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-100.png"><img src="assets/library-100.png" width="560" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon"></a>
@@ -145,7 +145,8 @@ Step 2 has an optional block, **Highlight my 100% games**. Games where you unloc
 
 1. Click **Open my games page** (or **Copy link**). Your browser opens your Steam games page, sorted by achievements. Log in if it asks and wait until your games have loaded.
 2. Save it (Ctrl+S, or Cmd+S on a Mac) as **"Webpage, Complete"** in Chrome or Firefox, named `games.html`. Your browser also saves a folder next to it. The app notices the file in your Downloads folder by itself, or you can click **Browse…** and pick it.
-3. Choose how those games look: **Gold case** (the whole case turns gold), **Gold border** (a gold border around the outside of the case, which becomes about 5% smaller), **Normal case with ribbon** (your case stays as it is; this is the default once a page is loaded) or **No special case**. The choice can be picked once a page is loaded. Then click **Make covers**.
+3. Choose what those games get: **Rosette and ribbon** (the rosette at the top right and the "100% Complete" ribbon at the bottom; the default) or **Rosette only** (just the rosette, no ribbon over the art).
+4. Choose how those games look: **Gold case** (the whole case turns gold), **Gold border** (a gold border around the outside of the case, which becomes about 5% smaller), **Normal case** (your case stays as it is; this is the default once a page is loaded) or **No special case** (no highlight at all, so step 3 does not apply). The choices can be picked once a page is loaded. Then click **Make covers**.
 
 > [!NOTE]
 > The saved page contains a temporary login token for your Steam account. The app only reads which games are at 100%: it never uses, stores or logs the token. You can delete `games.html` and its folder once the covers are made. The app never deletes your files itself.
@@ -170,7 +171,7 @@ Good to know:
 
 **Make them yours**
 - Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview
-- Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon, and, if you like, a gold case or a gold border ([how it works](#optional-highlight-your-100-games))
+- Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon (or the rosette alone), and, if you like, a gold case or a gold border ([how it works](#optional-highlight-your-100-games))
 
 **Install them safely**
 - One click: Steam is closed gracefully, backed up, updated and restarted
@@ -219,6 +220,7 @@ python steamcase.py make --library userdata.json --brightness 0   # ...a black c
 python steamcase.py make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
 python steamcase.py make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
 python steamcase.py make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
+python steamcase.py make --library userdata.json --games-page games.html --completed-marks rosette   # ...with the rosette only, no ribbon
 python steamcase.py make --library userdata.json --completed-style none   # ...and back to plain covers for 100% games
 python steamcase.py apply --close-steam            # install them
 python steamcase.py restore                        # undo the last apply
@@ -237,7 +239,7 @@ python steamcase.py reset --everything             # ...also removing art from o
 
 `list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`; an option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
 
-`--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. Without either option, covers keep the look they have.
+`--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the plain case; the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. `--completed-marks` is `full` (the rosette and the ribbon, the default) or `rosette` (the rosette alone) and works with every style except `none`. Without either option, covers keep the look they have.
 
 Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
