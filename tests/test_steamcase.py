@@ -2919,9 +2919,10 @@ class ReleaseMessage(unittest.TestCase):
         self.assertIn("tools/release_message.py", release)
         self.assertIn("workflow_dispatch", announce)
         self.assertIn("tools/release_message.py", announce)
+        self.assertIn("continue-on-error: true", release)                             # a Discord problem never marks a published release as failed
+        self.assertNotIn("continue-on-error", announce)                               # but a manual run must fail loudly (a mistyped tag once showed a green job)
         for text in (release, announce):
             self.assertIn("DISCORD_WEBHOOK_URL", text)
-            self.assertIn("continue-on-error: true", text)                            # a Discord problem never marks the release as failed
             for line in text.splitlines():
                 self.assertFalse("curl" in line and "secrets." in line, line)           # the secret goes through the environment, never into the command line text
 

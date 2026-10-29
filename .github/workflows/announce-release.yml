@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, like v1.5.0"
+        description: "Release tag, exactly like v1.5.0 (a v, then three numbers separated by dots)"
         required: true
         type: string
 
@@ -20,8 +20,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1      # the branch it runs on: its changelog holds every version, old tags have no script
         with:
           persist-credentials: false
-      - name: Announce on Discord
-        continue-on-error: true
+      - name: Announce on Discord      # no continue-on-error here: when you run it by hand, a problem must show as a red job
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           TAG: ${{ inputs.tag }}
