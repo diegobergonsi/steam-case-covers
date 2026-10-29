@@ -200,6 +200,7 @@ def http_get(url, tries=3):
 
 
 REPO = "diegobergonsi/steam-case-covers"
+DISCORD_URL = "https://discord.gg/JQMjAPWHCT"          # the project's Discord server (the invite the README uses); opened only when the button is clicked
 _TAG = re.compile(r"^v([0-9]{1,4})\.([0-9]{1,4})\.([0-9]{1,4})$")
 
 

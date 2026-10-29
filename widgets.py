@@ -180,12 +180,14 @@ class InfoBadge(tk.Canvas):
 class RoundedButton(_Stateful):
     """Pill button. primary=True is the filled accent button; otherwise an outline button."""
 
-    def __init__(self, parent, text, command=None, primary=False, state="normal", bg=CARD, quiet=False):
-        """quiet=True: no outline, muted text; for rare or secondary actions that must not compete with the main one."""
+    def __init__(self, parent, text, command=None, primary=False, state="normal", bg=CARD, quiet=False, image=None):
+        """quiet=True: no outline, muted text; for rare or secondary actions that must not compete with the main one.
+        image: a tk.PhotoImage shown instead of the text, in a round button (the caller keeps a reference to it; `text` is then only its name)."""
         self._font = tkfont.Font(font="TkDefaultFont")
         self._font.configure(weight="bold")
-        self.quiet, self._bg = quiet, bg
-        super().__init__(parent, width=self._font.measure(text) + px(46), height=max(px(46), self._font.metrics("linespace") + px(18)), bg=bg,
+        self.quiet, self._bg, self.image = quiet, bg, image
+        height = max(px(46), self._font.metrics("linespace") + px(18))
+        super().__init__(parent, width=height if image else self._font.measure(text) + px(46), height=height, bg=bg,
                          highlightthickness=0, takefocus=True, cursor="hand2")
         self._init_state(state)
         self.text, self.command, self.primary = text, command, primary
@@ -213,7 +215,10 @@ class RoundedButton(_Stateful):
         if self._focus and on:
             round_rect(self, 1, 1, w - 1, h - 1, h // 2, outline=RING, width=2, fill="")
         round_rect(self, 4, 4, w - 4, h - 4, h // 2, fill=fill, outline=outline, width=1)
-        self.create_text(w // 2, h // 2, text=self.text, font=self._font, fill=fg)
+        if self.image:
+            self.create_image(w // 2, h // 2, image=self.image)
+        else:
+            self.create_text(w // 2, h // 2, text=self.text, font=self._font, fill=fg)
 
     def invoke(self):
         if self.enabled and self.command:

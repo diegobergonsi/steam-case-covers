@@ -339,7 +339,7 @@ No. The window works fully with the keyboard (Tab, Space, Enter), but the toolki
   <a href="https://discord.gg/JQMjAPWHCT"><img src="https://img.shields.io/badge/JOIN%20THE%20DISCORD-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord"></a>
 </p>
 
-Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** button shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
+Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**; the Discord icon at the top of the app opens the invite too. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** button shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
 
 Security problems are the exception: please [report them privately](docs/SECURITY.md), not in public.
 
