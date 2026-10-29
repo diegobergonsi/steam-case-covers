@@ -1674,7 +1674,7 @@ def main():
                             "Needs --games-page, except none. Without either option the covers are left as they are")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default) or rosette (the rosette alone). "
-                            "Works with every --completed-style and needs --games-page, like it")
+                            "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)

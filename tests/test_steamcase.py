@@ -1697,9 +1697,16 @@ class ReplaceReason(StoreMocks):
             self.made()
             self.assertIn("highlighted", self.reason((0, 100, 100), {1}, treatment)[1])
 
+    def test_a_change_of_marks_alone_says_which_marks_come(self):
+        self.made(completed={1}, treatment="rosette")
+        text = self.reason((0, 100, 100), {1}, "ribbon")[1]
+        self.assertIn("rosette and ribbon", text)
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("rosette only", self.reason((0, 100, 100), {1}, "rosette")[1])
+
     def test_another_style_for_the_100_games(self):
         self.made(completed={1}, treatment="ribbon")
-        self.assertIn("another style", self.reason((0, 100, 100), {1}, "gold-border")[1])
+        self.assertIn("another look", self.reason((0, 100, 100), {1}, "gold-border")[1])
 
     def test_the_set_of_100_games_changes(self):
         self.made(completed={1}, treatment="ribbon")
@@ -1707,7 +1714,7 @@ class ReplaceReason(StoreMocks):
 
     def test_a_colour_and_a_style_change_name_both(self):
         self.made(completed={1}, treatment="ribbon")
-        for completed, treatment, part in (({1}, "gold-border", "another style"), (set(), "ribbon", "lose it"), (set(), None, "normal covers"), ({2}, "ribbon", "match your games page")):
+        for completed, treatment, part in (({1}, "gold-border", "another look"), (set(), "ribbon", "lose it"), (set(), None, "normal covers"), ({2}, "ribbon", "match your games page")):
             sentence = self.reason((90, 100, 100), completed, treatment)[1]
             self.assertIn("colour", sentence)
             self.assertIn(part, sentence)

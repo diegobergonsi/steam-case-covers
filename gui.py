@@ -32,9 +32,9 @@ MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]           
 
 
 def look_label(treatment):
-    """How a treatment (one of sc.TREATMENTS) is named in the prompts: its case, then ", rosette only" for the rosette-only marks."""
+    """How a treatment (one of sc.TREATMENTS) is named in the prompts: its case, then its marks, so a change of marks alone reads as one."""
     case, marks = sc.split_treatment(treatment)
-    return dict(STYLES)[case] + (", rosette only" if marks == "rosette" else "")
+    return "%s, %s" % (dict(STYLES)[case], dict(MARKS)[marks].lower())
 PAGE_HELP = ("How to save the page: open it with the button and log in if asked. Wait until your games have loaded, press %s and save it as "
              "“Webpage, Complete” (Chrome or Firefox), named games.html. Your browser also saves a folder next to it.\n\n"
              "The saved file contains a temporary login token for your Steam account. This app only reads which games are at 100%%: "
@@ -667,8 +667,8 @@ class App(tk.Tk):
             what = "the covers with a highlight lose it, as no game on your page is at 100%"
             title, one = "Remove the 100% highlight?", "No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers."
         elif styles - {treatment}:
-            what = "the covers of your 100%% games made in another style are made again as “%s”" % label
-            title, one = "Change the look of your 100% games?", "This replaces the covers of your 100%% games made in another style with “%s”." % label
+            what = "the covers of your 100%% games made with another look are made again as “%s”" % label
+            title, one = "Change the look of your 100% games?", "This replaces the covers of your 100%% games made with another look with “%s”." % label
         elif not styles:
             what = "your 100%% games get highlighted covers (“%s”)" % label
             title, one = "Highlight your 100% games?", "This replaces the covers of your 100%% games with highlighted ones (“%s”)." % label
@@ -1147,7 +1147,7 @@ def selftest():
             only = os.path.join(d, "r.png")                       # the same with the rosette alone
             sc.build_cover(src, only, sc.load_frame(0), treatment="rosette")
             assert sc.cover_treatment(only) == "rosette" and sc.is_steamcase_cover(only), "a rosette-only cover is not recognised as ours"
-            assert look_label("ribbon") == "Normal case" and look_label("gold-border-rosette") == "Gold border, rosette only", "the look labels are wrong"
+            assert look_label("ribbon") == "Normal case, rosette and ribbon" and look_label("gold-border-rosette") == "Gold border, rosette only", "the look labels are wrong"
         print("selftest ok")
         return 0
     except Exception as e:
