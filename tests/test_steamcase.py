@@ -1155,11 +1155,11 @@ class CoverColourFiles(Base):
         self.src = os.path.join(self.tmp, "portrait.png")
         sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
 
-    def make(self, name, hue=0, family=False, sat=100, val=100, treatment=None, src=None):
+    def make(self, name, hue=0, family=False, sat=100, val=100, treatment=None, src=None, theme=None):
         """A cover built the way make_covers builds it; with a `treatment`, in the colour that treatment uses."""
         out = os.path.join(self.tmp, name)
         hue, sat, val = sc.treatment_colour(treatment, (hue, sat, val))
-        sc.build_cover(src or self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val, treatment=treatment)
+        sc.build_cover(src or self.src, out, sc.load_frame(hue, family, sat=sat, val=val), hue, sat=sat, val=val, treatment=treatment, theme=theme)
         return out
 
     def note_cover(self, **notes):
@@ -1375,6 +1375,50 @@ class RecogniseTreated(Base):
             self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, done=value))), repr(value))
         self.assertFalse(sc.is_steamcase_cover(self.renote(ribbon, **self.notes_of(ribbon, tone="0 15x"))))   # a garbled colour note too
 
+    def deep_pixel(self, box, alpha=255, reach=4):
+        """The first pixel of the Halloween overlay inside `box` that is at least `alpha` opaque and whose whole neighbourhood (`reach` pixels each way)
+        is too: a pixel of the decorations well inside them, which the game's art cannot reach (the check pulls its mask back from the art's edge)."""
+        with sc.Image.open(sc.HALLOWEEN_OVERLAY) as im:
+            ov = im.convert("RGBA")
+        x0, y0, x1, y1 = box
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                if all(ov.getpixel((x + dx, y + dy))[3] >= alpha for dx in range(-reach, reach + 1) for dy in range(-reach, reach + 1)):
+                    return x, y
+        self.fail("no such pixel in %r" % (box,))
+
+    def test_themed_covers_are_recognised_on_every_tone_and_look(self):
+        for hue, sat, val in ((0, 100, 100), (0, 0, 14), (200, 60, 40), (0, 0, 78)):
+            for family in (False, True):
+                for treatment in (None, "rosette", "gold-case-rosette", "gold-border-rosette"):
+                    path = self.make("t.png", hue, family, sat, val, treatment=treatment, theme="halloween")
+                    self.assertTrue(sc.is_steamcase_cover(path), (hue, sat, val, family, treatment))
+                    self.assertEqual(sc.cover_theme(path), "halloween")
+
+    def test_themed_look_alikes_are_refused(self):
+        real = self.make("r.png", 134, treatment="rosette", theme="halloween")
+        self.assertTrue(sc.is_steamcase_cover(real))
+        for what, xy in (("the pumpkin", self.deep_pixel((440, 780, 590, 880))), ("the hanging spider", self.deep_pixel((280, 120, 320, 220), 255, 3)),
+                         ("the thread on the banner", (299, 20)), ("the web on the lip", self.deep_pixel((2, 884, 190, 896), 1, 0))):
+            img = sc.Image.open(real).convert("RGBA")
+            img.putpixel(xy, (1, 2, 3, 255))
+            self.assertFalse(sc.is_steamcase_cover(self.save_with_notes(img, real)), what)
+        classic = self.make("c.png", 134, treatment="rosette")
+        forged = self.renote(classic, **self.notes_of(classic, theme="halloween"))
+        self.assertFalse(sc.is_steamcase_cover(forged))                                  # a theme note on a cover without the decorations
+        bare = self.renote(real, **self.notes_of(real, theme=None))
+        self.assertFalse(sc.is_steamcase_cover(bare))                                    # decorations without their note
+        for bad in ("Halloween", "halloween2", "", "spooky"):
+            garbled = self.renote(real, **self.notes_of(real, theme=bad))
+            self.assertFalse(sc.is_steamcase_cover(garbled), bad)
+            self.assertIs(sc.cover_theme(garbled), False if bad else False)
+
+    def test_a_themed_plain_cover_keeps_enough_frame_to_be_told_apart(self):
+        for treatment in (None, "rosette", "gold-border-rosette"):
+            for tone in ((0, 100, 100), (0, 0, 14), (0, 0, 78)):
+                mask = sc._treated_reference((sc.tone_key(*tone), treatment, "halloween"), False)[1]
+                self.assertGreaterEqual(mask.histogram()[255], 0.15 * sc.SIZE[0] * sc.SIZE[1], (treatment, tone))
+
     def test_look_alikes_are_still_refused_at_every_treatment(self):
         for t in sc.TREATMENTS:
             real = self.make("r.png", 134, treatment=t)
@@ -1399,16 +1443,16 @@ class RecogniseTreated(Base):
                 b = self.make("b.png", 0, family, treatment=t, src=self.noise("n2.png", 3))
                 self.assertTrue(sc.is_steamcase_cover(a), (t, family))
                 self.assertTrue(sc.is_steamcase_cover(b), (t, family))
-                key = (sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t)
+                key = (sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t, None)
                 self.assertIs(sc._treated_reference(key, family), sc._treated_reference(key, family))
 
     def test_the_mask_ignores_the_art_and_includes_the_marks(self):
         for t in sc.TREATMENTS:
-            _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t), False)
+            _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t, None), False)
             self.assertEqual(mask.getpixel((300, 400)), 0, t)
-        _, mask = sc._treated_reference((sc.tone_key(0), "ribbon"), False)
+        _, mask = sc._treated_reference((sc.tone_key(0), "ribbon", None), False)
         self.assertEqual(mask.getpixel((526, 66)), 255)
-        _, mask = sc._treated_reference((sc.tone_key(0), "gold-border"), False)
+        _, mask = sc._treated_reference((sc.tone_key(0), "gold-border", None), False)
         self.assertEqual(mask.getpixel((5, 450)), 255)
 
     def test_covers_from_earlier_versions_are_unchanged(self):
@@ -2325,6 +2369,61 @@ class MakeTreated(StoreMocks):
         self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, completed={1}, treatment="gold-case"))
         self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, completed={1}, treatment="gold-case-rosette"))
 
+    def test_changing_only_the_theme_rebuilds_the_cover(self):
+        sc.make_covers(self.games, self.covers)
+        self.assertIsNone(sc.cover_theme(self.cover(1)))
+        statuses = []
+        sc.make_covers(self.games, self.covers, theme="halloween", progress=lambda *a: statuses.append((a[2], a[4])))
+        self.assertIn((1, "ok"), statuses)
+        self.assertEqual(sc.cover_theme(self.cover(1)), "halloween")
+        statuses = []
+        sc.make_covers(self.games, self.covers, theme="halloween", progress=lambda *a: statuses.append((a[2], a[4])))
+        self.assertIn((1, "exists"), statuses)
+        sc.make_covers(self.games, self.covers, theme="halloween", force=True, progress=lambda *a: statuses.append((a[2], a[4])))
+        self.assertIn((1, "ok"), statuses[2:])
+        sc.make_covers(self.games, self.covers)                                           # no theme: back to classic
+        self.assertIsNone(sc.cover_theme(self.cover(1)))
+        self.assertNotIn(sc.THEME_CHUNK, sc.Image.open(self.cover(1)).info)
+
+    def test_the_rebuild_checks_see_the_theme_and_keep_ignores_it(self):
+        sc.make_covers(self.games, self.covers, theme="halloween")
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, theme=sc.KEEP))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, theme="halloween"))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, theme=None))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 0, 100, 100))              # a themed folder in its own colour is not "another colour"
+        self.assertTrue(sc.covers_in_other_theme(self.covers, None))
+        self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
+
+    def test_a_theme_and_full_marks_are_refused_before_anything_is_made(self):
+        for bad in ("ribbon", "gold-case", "gold-border"):
+            with self.assertRaises(ValueError):
+                sc.make_covers(self.games, self.covers, completed={1}, treatment=bad, theme="halloween")
+        with self.assertRaises(ValueError):
+            sc.make_covers(self.games, self.covers, theme="spooky")
+        self.assertEqual(os.listdir(self.covers), [])
+        for fine in (None, "rosette", "gold-border-rosette"):
+            sc.make_covers(self.games, self.covers, completed={1}, treatment=fine, theme="halloween")
+            self.assertEqual(sc.cover_theme(self.cover(1)), "halloween")
+
+    def test_a_theme_over_existing_full_marks_covers_turns_them_into_rosette_only(self):
+        for old, want in (("ribbon", "rosette"), ("gold-case", "gold-case-rosette"), ("gold-border", "gold-border-rosette")):
+            shutil.rmtree(self.covers, ignore_errors=True)
+            sc.make_covers(self.games, self.covers, completed={1}, treatment=old)
+            self.assertTrue(sc.covers_in_other_look(self.covers, 0, 100, 100, theme="halloween"))
+            sc.make_covers(self.games, self.covers, theme="halloween")                    # no page: each cover keeps its look, with the marks the theme allows
+            self.assertEqual(sc.cover_treatment(self.cover(1)), want)
+            self.assertEqual(sc.cover_theme(self.cover(1)), "halloween")
+            self.assertIsNone(sc.cover_treatment(self.cover(2)))
+            self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, theme="halloween"))
+
+    def test_a_missing_halloween_overlay_fails_before_any_cover_is_made(self):
+        with mock.patch.object(sc, "HALLOWEEN_OVERLAY", os.path.join(self.tmp, "no-overlay.png")):
+            sc._halloween_overlay.cache_clear()
+            self.addCleanup(sc._halloween_overlay.cache_clear)
+            with self.assertRaises(OSError):
+                sc.make_covers(self.games, self.covers, theme="halloween")
+        self.assertEqual(os.listdir(self.covers), [])
+
     def test_a_completed_game_gets_the_treatment_and_the_others_do_not(self):
         res = sc.make_covers(self.games, self.covers, completed={1}, treatment="ribbon")
         self.assertEqual(sc.cover_treatment(self.cover(1)), "ribbon")
@@ -2530,6 +2629,66 @@ class HalloweenOverlay(unittest.TestCase):
             text = f.read().lower()
         for must in ("halloween", "original artwork"):
             self.assertIn(must, text)
+
+
+class ThemeCovers(unittest.TestCase):
+    """The Halloween theme on a cover: the decorations, the note that records it, and reading it back."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.src = os.path.join(self.tmp, "portrait.png")
+        sc.Image.new("RGB", (600, 900), (200, 60, 60)).save(self.src)
+
+    def built(self, name, theme=None, hue=0):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.src, out, sc.load_frame(hue), hue, theme=theme)
+        return out
+
+    def test_apply_theme_adds_the_decorations_and_nothing_else(self):
+        c = sc.preview_cover()
+        self.assertIs(sc.apply_theme(c, None), c)
+        themed, plain = sc.preview_cover(134, theme="halloween"), sc.preview_cover(134)
+        self.assertNotEqual(themed.getpixel((520, 842)), plain.getpixel((520, 842)))             # the pumpkin
+        self.assertEqual(themed.getpixel((300, 400)), plain.getpixel((300, 400)))                # the art
+        self.assertEqual(themed.getpixel((7, 450)), plain.getpixel((7, 450)))                    # the case keeps its colour
+        self.assertEqual(themed.getpixel((0, 0))[3], 0)                                          # nothing reaches past the rounded case
+
+    def test_the_theme_is_noted_and_read_back(self):
+        themed, plain = self.built("t.png", "halloween"), self.built("p.png")
+        self.assertEqual(sc.cover_theme(themed), "halloween")
+        self.assertIsNone(sc.cover_theme(plain))
+        self.assertNotIn(sc.THEME_CHUNK, sc.Image.open(plain).info)                              # classic covers carry no note, as before themes existed
+        from PIL.PngImagePlugin import PngInfo
+        for bad in ("Halloween", "halloween2", ""):
+            info = PngInfo()
+            info.add_text(sc.THEME_CHUNK, bad)
+            garbled = os.path.join(self.tmp, "g.png")
+            sc.Image.new("RGBA", sc.SIZE).save(garbled, pnginfo=info)
+            self.assertIs(sc.cover_theme(garbled), False, bad)
+        self.assertIs(sc.cover_theme(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_the_folder_helpers_read_the_first_cover(self):
+        d = os.path.join(self.tmp, "covers")
+        os.makedirs(d)
+        self.assertIsNone(sc.existing_cover_theme(d))
+        self.assertIsNone(sc.existing_cover_theme(os.path.join(self.tmp, "nowhere")))
+        self.assertFalse(sc.covers_in_other_theme(d, "halloween"))
+        sc.build_cover(self.src, os.path.join(d, "A_1_1.png"), sc.load_frame(0), 0)
+        sc.build_cover(self.src, os.path.join(d, "B_2_2.png"), sc.load_frame(0), 0, theme="halloween")
+        self.assertIsNone(sc.existing_cover_theme(d))                                           # the first by name decides
+        self.assertTrue(sc.covers_in_other_theme(d, "halloween"))
+        self.assertTrue(sc.covers_in_other_theme(d, None))
+        os.remove(os.path.join(d, "A_1_1.png"))
+        self.assertEqual(sc.existing_cover_theme(d), "halloween")
+        self.assertFalse(sc.covers_in_other_theme(d, "halloween"))
+
+    def test_build_cover_refuses_an_unknown_theme(self):
+        with self.assertRaises(ValueError):
+            self.built("x.png", "spooky")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "x.png")))
 
 
 if __name__ == "__main__":
