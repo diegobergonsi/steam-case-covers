@@ -2493,5 +2493,44 @@ class DiscordButton(unittest.TestCase):
             self.assertIn(must, text)
 
 
+class HalloweenOverlay(unittest.TestCase):
+    """The artwork of the Halloween case theme: a transparent overlay with a web and a spider, a pumpkin and a hanging spider."""
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        with sc.Image.open(sc.HALLOWEEN_OVERLAY) as im:
+            self.mode, self.ov = im.mode, im.convert("RGBA")
+
+    def ink(self, box):
+        """How many pixels of the overlay in `box` are not fully transparent."""
+        return sum(1 for p in pixels(self.ov.crop(box)) if p[3] > 0)
+
+    def test_it_is_a_full_size_rgba_png(self):
+        self.assertEqual((self.mode, self.ov.size), ("RGBA", (600, 900)))
+
+    def test_the_three_decorations_are_where_they_should_be(self):
+        self.assertGreaterEqual(self.ink((0, 700, 200, 900)), 400)                    # the web and the spider on it, bottom-left
+        self.assertGreaterEqual(self.ink((440, 760, 600, 900)), 400)                  # the pumpkin, bottom-right
+        self.assertGreaterEqual(self.ink((280, 0, 320, 220)), 400)                    # the thread and the spider hanging from the top centre
+
+    def test_the_rest_of_the_cover_stays_clear(self):
+        self.assertEqual(self.ink((140, 300, 460, 760)), 0)                           # the middle of the art
+        self.assertEqual(self.ink((14, 96, 60, 140)), 0)                              # under the family corner
+        self.assertEqual(self.ink((440, 20, 586, 80)), 0)                             # the platform badges, where the rosette goes
+
+    def test_the_decorations_that_matter_are_opaque(self):
+        solid = sum(1 for p in pixels(self.ov.crop((440, 760, 600, 900))) if p[3] == 255)
+        self.assertGreater(solid, 3000)                                               # a pumpkin, not a faint sketch
+
+    def test_the_packaged_app_bundles_it_and_the_licence_file_credits_it(self):
+        with open(os.path.join(sc.HERE, "steamcase.spec"), encoding="utf-8") as f:
+            self.assertIn("assets/halloween_overlay.png", f.read())
+        with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
+            text = f.read().lower()
+        for must in ("halloween", "original artwork"):
+            self.assertIn(must, text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1145,6 +1145,7 @@ def selftest():
         assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
         assert os.path.exists(os.path.join(sc.HERE, "assets", "icon.png")), "icon missing"
         assert os.path.exists(os.path.join(sc.HERE, "assets", "discord.png")), "Discord icon missing"
+        assert os.path.exists(sc.HALLOWEEN_OVERLAY), "Halloween overlay missing"
         assert os.path.exists(sc.FAMILY_CORNER), "family corner image missing: %s" % sc.FAMILY_CORNER
         assert os.path.exists(sc.DEFAULT_ART), "default art missing: %s" % sc.DEFAULT_ART
         restore_child_env()
