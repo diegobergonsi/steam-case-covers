@@ -122,7 +122,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 ## 🔧 How it works
 
 1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
-2. **Make the covers.** Optionally pick the look of the cases first: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour, the app asks before it replaces them.
+2. **Make the covers.** Optionally pick the look of the cases first: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. Under the swatches, **Case theme** can turn the cases into a **Halloween** one: a cobweb with a spider, a pumpkin and a spider hanging from the top, on top of whatever colour you picked. The Halloween case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour, the app asks before it replaces them.
 3. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; click **Change account** to pick another.
 
 > [!WARNING]
@@ -170,7 +170,7 @@ Good to know:
 - Optional "skip blurry covers" for games Steam has no real portrait for
 
 **Make them yours**
-- Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview
+- Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview, and, if you like, a Halloween theme (a cobweb with a spider, a pumpkin and a hanging spider) in any colour
 - Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon (or the rosette alone), and, if you like, a gold case or a gold border ([how it works](#optional-highlight-your-100-games))
 
 **Install them safely**
@@ -218,6 +218,7 @@ python steamcase.py make --library userdata.json   # build covers
 python steamcase.py make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
 python steamcase.py make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
 python steamcase.py make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
+python steamcase.py make --library userdata.json --theme halloween   # ...with the Halloween theme (the case keeps its colour; --theme classic goes back)
 python steamcase.py make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
 python steamcase.py make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
 python steamcase.py make --library userdata.json --games-page games.html --completed-marks rosette   # ...with the rosette only, no ribbon
@@ -237,7 +238,7 @@ python steamcase.py reset --everything             # ...also removing art from o
 | `restore` | Undo the last apply (run again to go further back) |
 | `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
 
-`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`; an option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
+`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`; an option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). `--theme` is `classic` or `halloween`, and without it the covers already in the folder keep their theme; with the Halloween theme, 100% games get the rosette only, so `--completed-marks full` is refused. Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
 
 `--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the plain case; the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. `--completed-marks` is `full` (the rosette and the ribbon, the default) or `rosette` (the rosette alone) and works with every style except `none`. Without either option, covers keep the look they have.
 
@@ -285,7 +286,7 @@ Games shared with you through Steam Family Sharing are not on your own game list
 <details>
 <summary><b>What happens if I change the colour after I made covers?</b></summary>
 
-When you click **Make covers**, the app asks before it replaces the covers you already made in another colour or shade. If you say yes, it rebuilds them all in the new look, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read, and the same can happen with a very light case.
+When you click **Make covers**, the app asks before it replaces the covers you already made in another colour, shade or case theme. If you say yes, it rebuilds them all in the new look, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read, and the same can happen with a very light case.
 
 </details>
 
