@@ -2849,7 +2849,39 @@ class ReleaseMessage(unittest.TestCase):
         self.assertEqual(embed["url"], url)
         self.assertIn("a thing", embed["description"])
         self.assertNotIn("Old: before", embed["description"])
+        self.assertIn("(%s)" % url, embed["description"])                              # the way to the full notes is always there
         self.assertEqual(payload["allowed_mentions"], {"parse": []})                  # words in the changelog can never ping anyone
+
+    def test_the_announcement_keeps_the_first_sentence_of_each_bullet_and_drops_documentation(self):
+        text = ("## [2.0.0] - 2026-11-01\n- New: a big feature. It has many details. And more details.\n"
+                "- Fix: a bug in `apply` (see the notes). Nothing else.\n- Documentation: the README changed. Lots of words.\n")
+        lines = self.rm.announcement(text, "v2.0.0", "https://example.test/r")["embeds"][0]["description"].split("\n")
+        self.assertEqual(lines[:2], ["- New: a big feature.", "- Fix: a bug in `apply` (see the notes)."])
+        joined = "\n".join(lines)
+        for gone in ("many details", "Nothing else", "Documentation", "README"):
+            self.assertNotIn(gone, joined)
+        self.assertIn("Full notes", joined)
+
+    def test_a_documentation_only_release_still_has_a_message(self):
+        text = "## [2.0.1] - 2026-11-02\n- Documentation: the README changed. Lots of words.\n"
+        description = self.rm.announcement(text, "v2.0.1", "https://example.test/r")["embeds"][0]["description"]
+        self.assertIn("- Documentation: the README changed.", description)
+        self.assertNotIn("Lots of words", description)
+
+    def test_a_very_long_sentence_is_cut_at_a_word(self):
+        text = "## [2.0.2] - 2026-11-03\n- New: " + "word " * 200 + "end.\n"
+        line = self.rm.announcement(text, "v2.0.2", "https://example.test/r")["embeds"][0]["description"].split("\n")[0]
+        self.assertLessEqual(len(line), 240)
+        self.assertTrue(line.endswith("…"))
+        self.assertTrue(line[:-1].endswith("word"))
+
+    def test_the_real_release_message_is_short(self):
+        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
+            text = f.read()
+        description = self.rm.announcement(text, "v1.5.0", "https://example.test/r")["embeds"][0]["description"]
+        self.assertIn("Halloween", description)
+        self.assertNotIn("Documentation", description)
+        self.assertLess(len(description), 1200)
 
     def test_a_long_changelog_is_cut_at_a_line_and_points_to_the_release_page(self):
         long = "## [1.5.0] - 2026-10-29\n" + "".join("- Line number %d of a very long list of changes.\n" % i for i in range(400))

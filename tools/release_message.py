@@ -4,7 +4,8 @@
 """Maintainers and CI: the text of a release, taken from docs/CHANGELOG.md (standard library only).
 
     release_message.py body v1.5.0        the release page text: that version's changelog section and how to check the files
-    release_message.py announce v1.5.0    the JSON for a Discord webhook: one embed with the same section and the release link
+    release_message.py announce v1.5.0    the JSON for a Discord webhook: one short embed (the first sentence of each bullet, without the
+                                          "Documentation:" ones) and the link to the release page, which has the whole section
 
 The release workflow runs both after it publishes a release, and the "Announce a release" workflow can send the message again by hand.
 A missing or empty changelog section exits with status 1, so a release without notes is noticed."""
@@ -13,7 +14,8 @@ import argparse, json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHANGELOG = os.path.join(HERE, "..", "docs", "CHANGELOG.md")
 REPO = "diegobergonsi/steam-case-covers"
-LIMIT = 3800                        # of the 4096 characters a Discord embed description may hold: room left for the link to the rest
+LIMIT = 3800                        # of the 4096 characters a Discord embed description may hold
+SENTENCE = 240                      # longest line of the announcement
 
 
 def section(text, version):
@@ -34,19 +36,28 @@ def release_body(text, version, repo=REPO):
             "build attestation (`gh attestation verify <file> --repo %s`)." % (section(text, version), repo))
 
 
+def first_sentence(bullet):
+    """A changelog bullet cut after its first sentence (a full stop followed by a space), at most SENTENCE characters, cut at a word with "…"."""
+    match = re.search(r"(?<=[.!?])\s", bullet)
+    line = bullet[:match.start()] if match else bullet
+    if len(line) > SENTENCE:
+        line = line[:SENTENCE - 1].rsplit(" ", 1)[0] + "…"
+    return line
+
+
 def announcement(text, version, url):
-    """The JSON body of a Discord webhook message: one embed with the changelog section, cut between lines when it is long, and the release link."""
-    notes = section(text, version)
-    if len(notes) > LIMIT:
-        more = "\n\n[Read the full changelog on the release page](%s)" % url
-        kept, size = [], len(more)
-        for line in notes.splitlines():
-            if size + len(line) + 1 > LIMIT:
-                break
-            kept.append(line)
-            size += len(line) + 1
-        notes = ("\n".join(kept) or notes[:LIMIT - len(more) - 1] + "…") + more
-    return {"embeds": [{"title": "steam-case-covers %s is out" % version, "url": url, "description": notes, "color": 0x66C0F4,
+    """The JSON body of a Discord webhook message: one short embed with the first sentence of each changelog bullet (the "Documentation:" bullets
+    left out unless they are all there is) and the link to the release page for the rest."""
+    bullets = [line for line in section(text, version).splitlines() if line.startswith("- ")]
+    chosen = [b for b in bullets if not b.startswith("- Documentation:")] or bullets
+    more = "\n\n[Full notes on the release page](%s)" % url
+    kept, size = [], len(more)
+    for line in map(first_sentence, chosen):
+        if size + len(line) + 1 > LIMIT:
+            break
+        kept.append(line)
+        size += len(line) + 1
+    return {"embeds": [{"title": "steam-case-covers %s is out" % version, "url": url, "description": "\n".join(kept) + more, "color": 0x66C0F4,
                         "footer": {"text": "Downloads for Windows, macOS and Linux are on the release page."}}],
             "allowed_mentions": {"parse": []}}                       # words in the changelog can never ping anyone
 
