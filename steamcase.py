@@ -1057,6 +1057,25 @@ def existing_cover_colour(covers_dir):
     return None
 
 
+def mixed_cover_colours(covers_dir):
+    """True if the covers folder holds covers in more than one case colour (what an interrupted colour change leaves behind).
+    "gold-case" covers are skipped (they are always gold, see existing_cover_colour) and so are covers whose notes are unreadable."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    seen = set()
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            path = os.path.join(covers_dir, n)
+            c = cover_colour(path)
+            if c is not None and cover_treatment(path) != "gold-case":
+                seen.add(tone_key(*c))
+                if len(seen) > 1:
+                    return True
+    return False
+
+
 def _safe_copy(src, dst):
     """Copy src to dst atomically. If dst is a symlink, the link itself is replaced, never the file it points to."""
     tmp = _tmp(dst)
@@ -1501,6 +1520,9 @@ def cmd_make(args):
 
 
 def cmd_apply(args):
+    if mixed_cover_colours(args.covers):                    # first: before Steam is closed
+        raise SteamcaseError("The covers in %s are in more than one colour (a colour change was probably interrupted). Nothing was changed. "
+                             "Run make again with the colour you want (--hue, --saturation, --brightness) to finish it, then apply." % args.covers)
     steam = steam_dir(args.steam_dir)
     if steam_running() and not args.yes:
         if args.close_steam:

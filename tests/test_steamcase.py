@@ -1896,6 +1896,27 @@ class ColourCli(StoreMocks):
         self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--saturation", "100", "--brightness", "100", "--hue", "0")
         self.assertEqual(sc.cover_colour(path), (0, 100, 100))                                            # asking for the original does rebuild
 
+    def test_apply_refuses_a_folder_with_covers_in_two_colours(self):
+        """An interrupted colour change leaves old and new covers side by side; apply must not copy that mix into Steam."""
+        lib = self.fake_library(False)
+        out = os.path.join(self.tmp, "out")
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "134")
+        sc.make_covers({2: None}, out, hue=0)                                      # a cover from the interrupted run, in the other colour
+        with self.assertRaises(SystemExit) as caught:
+            self.run_cli("apply", "--steam-dir", self.steam, "--covers", out, "--yes")
+        self.assertIn("more than one colour", str(caught.exception))
+        self.assertEqual(os.listdir(self.grid), [])                                  # nothing was copied
+        self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, "--hue", "134")
+        sc.make_covers({2: None}, out, hue=134)
+        self.run_cli("apply", "--steam-dir", self.steam, "--covers", out, "--yes")   # one colour again: applies
+        self.assertEqual(len(os.listdir(self.grid)), 2)
+
+    def test_apply_ignores_gold_case_covers_when_checking_the_colour(self):
+        out = os.path.join(self.tmp, "out")
+        sc.make_covers({1: None}, out, hue=134)
+        sc.make_covers({2: None}, out, hue=134, completed={2}, treatment="gold-case")
+        self.assertFalse(sc.mixed_cover_colours(out))
+
     def test_a_bad_percentage_is_refused_with_a_clear_message(self):
         import contextlib, io
         lib = self.fake_library(False)
