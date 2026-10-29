@@ -189,6 +189,8 @@ def run_one(seed, steps, sandbox):
         if r < .9:
             name = rnd.choice(["games.html", "games (1).htm", "Games.HTML"])
             if rnd.random() < .15:                    # a folder with a page's name: it must be skipped, never read
+                if os.path.isfile(os.path.join(base, "dl", name)):        # an earlier drop left a page with this name: copytree cannot replace a file
+                    os.remove(os.path.join(base, "dl", name))
                 shutil.copytree(os.path.join(pages, "games_files"), os.path.join(base, "dl", name), dirs_exist_ok=True)
                 return "drop a folder named %s in Downloads" % name
             src = rnd.choice(page_files)
@@ -200,6 +202,8 @@ def run_one(seed, steps, sandbox):
         rnd.choice([app.open_games_page, app.copy_page_link])(); return "open or copy the games page link"
 
     def act():
+        if rnd.random() < .02:
+            app.btn_discord.invoke(); return "click the Discord button"
         if rnd.random() < .12:
             return act_page()
         r = rnd.random()

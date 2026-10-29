@@ -9,7 +9,7 @@ import tkinter.font as tkfont
 
 import completion
 import steamcase as sc
-from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, HueSlider, ToneSlider, Swatch, Choice, px, set_scale)
+from widgets import (AMBER, BG, CARD, FG, MUTED, FAINT, ACCENT, RED, Card, StepBadge, RoundedButton, Switch, Bar, InfoBadge, ScrollFrame, Messages, Flow, Tooltip, HueSlider, ToneSlider, Swatch, Choice, px, set_scale)
 
 
 def downloads_dir():
@@ -134,8 +134,20 @@ class App(tk.Tk):
         tk.Label(titles, text="Steam Case Covers", bg=BG, fg=FG, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
         self._tagline = tk.Label(titles, text="Put every game in your library in a physical case.", bg=BG, fg=MUTED, justify="left", anchor="w")
         self._tagline.pack(anchor="w")
-        self.btn_update = RoundedButton(head, "Check for updates", self.check_update, bg=BG, quiet=True)
-        self.btn_update.grid(row=0, column=2, sticky="e")
+        self.head_actions = tk.Frame(head, bg=BG)                 # the Discord button and "Check for updates": one block that moves as a whole
+        self.head_actions.grid(row=0, column=2, sticky="e")
+        self._discord_img = None
+        try:
+            img = tk.PhotoImage(master=self, file=os.path.join(sc.HERE, "assets", "discord.png"))      # 96 px; shown at about 24 px, as large as the display needs
+            self._discord_img = img.subsample(max(1, round(96 / px(24))))
+        except tk.TclError:
+            pass                                                   # a missing picture only costs the button, never the window
+        if self._discord_img:
+            self.btn_discord = RoundedButton(self.head_actions, "Join our Discord", self.open_discord, bg=BG, quiet=True, image=self._discord_img)
+            self.btn_discord.pack(side="left", padx=(0, px(4)))
+            Tooltip(self.btn_discord, "Join our Discord server: ask for help, share ideas and report bugs. Opens in your web browser.")
+        self.btn_update = RoundedButton(self.head_actions, "Check for updates", self.check_update, bg=BG, quiet=True)
+        self.btn_update.pack(side="left")
 
         self.step1 = self._card("1", "Get your game list")
         self.step2 = self._card("2", "Make the covers")
@@ -234,9 +246,9 @@ class App(tk.Tk):
         if narrow != self._head_narrow:
             self._head_narrow = narrow
             if narrow:
-                self.btn_update.grid_configure(row=1, column=1, sticky="w", pady=(px(8), 0))
+                self.head_actions.grid_configure(row=1, column=1, sticky="w", pady=(px(8), 0))
             else:
-                self.btn_update.grid_configure(row=0, column=2, sticky="e", pady=0)
+                self.head_actions.grid_configure(row=0, column=2, sticky="e", pady=0)
         self._tagline.configure(wraplength=max(px(160), width - px(2 * 28) - px(80)))
 
     def _note(self, parent, text):
@@ -726,6 +738,19 @@ class App(tk.Tk):
         except Exception as e:                      # never leave the UI stuck in "running"
             self.events.put(("error", "Unexpected problem: %s" % e))
 
+    def open_discord(self):
+        """Opens the project's Discord invite in the browser. If no browser opens, the link is copied and shown instead."""
+        opened = False
+        try:
+            opened = bool(webbrowser.open(sc.DISCORD_URL))
+        except Exception:
+            pass
+        if not opened:
+            self.clipboard_clear()
+            self.clipboard_append(sc.DISCORD_URL)
+            self.update()                               # keeps the text on the clipboard on some systems
+            messagebox.showinfo("Join our Discord", "Your browser did not open, so the invite link was copied. Paste it into your browser:\n%s" % sc.DISCORD_URL)
+
     def check_update(self):
         """Asks GitHub whether a newer release exists. Only on click; nothing is downloaded or installed."""
         self.btn_update.configure(state="disabled")
@@ -1119,6 +1144,7 @@ def selftest():
     try:
         assert os.path.exists(sc.FRAME), "frame image missing: %s" % sc.FRAME
         assert os.path.exists(os.path.join(sc.HERE, "assets", "icon.png")), "icon missing"
+        assert os.path.exists(os.path.join(sc.HERE, "assets", "discord.png")), "Discord icon missing"
         assert os.path.exists(sc.FAMILY_CORNER), "family corner image missing: %s" % sc.FAMILY_CORNER
         assert os.path.exists(sc.DEFAULT_ART), "default art missing: %s" % sc.DEFAULT_ART
         restore_child_env()

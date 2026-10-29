@@ -2450,5 +2450,48 @@ class MakeTreated(StoreMocks):
                 self.assertNotIn(sc.DONE_CHUNK, im.info)
 
 
+
+class DiscordButton(unittest.TestCase):
+    """The Discord icon in the window's header: one link, one bundled image, credited."""
+    PNG = os.path.join(sc.HERE, "assets", "discord.png")
+
+    def test_the_invite_link_is_the_one_the_readme_uses(self):
+        self.assertEqual(sc.DISCORD_URL, "https://discord.gg/JQMjAPWHCT")
+        with open(os.path.join(sc.HERE, "README.md"), encoding="utf-8") as f:
+            links = set(re.findall(r"https://discord\.gg/[A-Za-z0-9]+", f.read()))
+        self.assertEqual(links, {sc.DISCORD_URL})
+
+    def test_the_image_is_a_square_blurple_mark_on_transparency(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        with sc.Image.open(self.PNG) as im:
+            im = im.convert("RGBA")
+        self.assertEqual(im.size, (96, 96))
+        solid = [p for p in pixels(im) if p[3] == 255]
+        self.assertGreater(len(solid), 1500)
+        self.assertTrue(all(p[:3] == (0x58, 0x65, 0xF2) for p in solid))                  # Discord's blurple, nothing else
+        self.assertEqual(im.getpixel((0, 0))[3], 0)
+
+    def test_the_mark_is_readable_on_the_header_background(self):
+        def lum(rgb):
+            c = [x / 255 for x in rgb]
+            c = [x / 12.92 if x <= .03928 else ((x + .055) / 1.055) ** 2.4 for x in c]
+            return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+        try:
+            import widgets
+        except ImportError:
+            self.skipTest("tkinter missing")
+        bg, mark = tuple(int(widgets.BG[i:i + 2], 16) for i in (1, 3, 5)), (0x58, 0x65, 0xF2)    # the header background, the blurple
+        self.assertGreaterEqual((lum(mark) + .05) / (lum(bg) + .05), 3.0)                  # WCAG for graphics
+
+    def test_the_packaged_app_bundles_the_image_and_credits_the_source(self):
+        with open(os.path.join(sc.HERE, "steamcase.spec"), encoding="utf-8") as f:
+            self.assertIn("assets/discord.png", f.read())
+        with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
+            text = f.read()
+        for must in ("Simple Icons", "CC0", "Discord", "trademark"):
+            self.assertIn(must, text)
+
+
 if __name__ == "__main__":
     unittest.main()
