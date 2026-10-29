@@ -1756,6 +1756,27 @@ class ReplaceReason(StoreMocks):
         self.made(theme="halloween")
         self.assertIn("new ones in the Classic case", self.reason((0, 100, 100), None, None, None)[1])
 
+    def test_a_theme_without_a_page_says_the_100_covers_lose_their_ribbon(self):
+        self.made(completed={1}, treatment="ribbon")
+        text = self.reason((0, 100, 100), None, None, "halloween")[1]
+        self.assertIn("lose their ribbon", text)
+        self.assertIn("Rosette and ribbon", text)                                  # and how to get it back
+        shutil.rmtree(self.covers, ignore_errors=True)
+        self.made(completed={1}, treatment="rosette")
+        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])        # nothing to lose
+        shutil.rmtree(self.covers, ignore_errors=True)
+        self.made()
+        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
+
+    def test_covers_with_full_marks_are_found(self):
+        self.assertFalse(sc.covers_with_full_marks(os.path.join(self.tmp, "nowhere")))
+        self.made()
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.made(completed={1}, treatment="gold-border-rosette")
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.made(completed={1}, treatment="gold-border")
+        self.assertTrue(sc.covers_with_full_marks(self.covers))
+
     def test_a_theme_with_a_colour_or_a_look_change_stays_readable(self):
         self.made()
         text = self.reason((134, 100, 100), None, None, "halloween")[1]
@@ -1864,7 +1885,13 @@ class CompletionCli(StoreMocks):
             self.make(out, "--theme", "halloween", "--games-page", page, "--completed-marks", "full")
         self.assertIn("Halloween", str(caught.exception))
         self.assertIn("rosette", str(caught.exception))
+        self.assertIn("--theme classic", str(caught.exception))                         # the way out, also when the theme comes from the folder
         self.assertFalse(os.path.exists(out))
+        import contextlib, io
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["steamcase", "make", "-h"]), contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+            sc.main()
+        self.assertIn("with a theme the default is rosette", " ".join(out.getvalue().split()))      # the help says so too
 
     def test_a_bad_theme_is_refused(self):
         import contextlib, io

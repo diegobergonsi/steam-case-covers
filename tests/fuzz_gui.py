@@ -177,13 +177,25 @@ def run_one(seed, steps, sandbox):
         walk(app)
         return out
 
+    restore = {"marks": None, "check": None}                               # marks to be restored by the next return to Classic
+
+    def act_theme():
+        """Pick the case theme through its choice, as a user; remember what going back to Classic must give back."""
+        before, marks, new = app.case_theme.get(), app.completion_marks.get(), rnd.choice(["classic", "halloween"])
+        app.theme_choice._choose(new)
+        if app.case_theme.get() != new:
+            return "pick case theme %s (ignored)" % new
+        if before == "classic" and new == "halloween":
+            restore["marks"] = marks                                       # what going back to Classic must give back
+        elif before == "halloween" and new == "classic" and restore["marks"] is not None:
+            restore["check"] = restore["marks"]
+        return "pick case theme " + new
+
     def act_page():
         """The optional 100% block: pick a page (good, junk or none), drop one in Downloads, or change the style."""
         r = rnd.random()
         if r < .35:
             picks["file"] = rnd.choice(page_choices); app.browse_games_page(); return "browse page " + os.path.basename(picks["file"])
-        if r < .45:
-            app.theme_choice._choose(rnd.choice(["classic", "halloween"])); return "pick case theme " + app.case_theme.get()      # through the choice, as a user
         if r < .6:
             app.completion_style.set(rnd.choice(["ribbon", "gold-case", "gold-border", "none"])); return "set 100% style " + app.completion_style.get()
         if r < .75:
@@ -206,6 +218,8 @@ def run_one(seed, steps, sandbox):
     def act():
         if rnd.random() < .02:
             app.btn_discord.invoke(); return "click the Discord button"
+        if rnd.random() < .06:
+            return act_theme()
         if rnd.random() < .12:
             return act_page()
         r = rnd.random()
@@ -314,6 +328,10 @@ def run_one(seed, steps, sandbox):
             bad.append("100%% marks out of range: %r" % app.completion_marks.get())
         if st(app.theme_choice) != st(app.sw_skip) or {st(p) for p in app.theme_choice._pills} != {st(app.sw_skip)}:
             bad.append("theme choice is %s but the other step 2 controls are %s" % (st(app.theme_choice), st(app.sw_skip)))
+        if restore["check"] is not None:
+            if app.completion_marks.get() != restore["check"]:
+                bad.append("going back to Classic left the marks at %r, not the %r picked before Halloween" % (app.completion_marks.get(), restore["check"]))
+            restore["check"] = None
         if app.case_theme.get() not in ("classic", "halloween"):
             bad.append("case theme out of range: %r" % app.case_theme.get())
         halloween = app.case_theme.get() == "halloween"

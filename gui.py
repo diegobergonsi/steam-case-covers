@@ -693,6 +693,10 @@ class App(tk.Tk):
         if not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment, theme=theme):
             return None
         colour = sc.covers_in_other_colour(self.covers_dir, *tone)
+        ribbon = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
+        if theme and completed is None and sc.covers_with_full_marks(self.covers_dir):
+            ribbon = (" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
+                      "load your games page and pick “Rosette and ribbon”." % theme.capitalize())
         tail = ""                                            # the theme every cover is made in, when it changes
         if sc.covers_in_other_theme(self.covers_dir, theme):
             tail = "the %s theme" % theme.capitalize() if theme else "the Classic case"
@@ -709,8 +713,8 @@ class App(tk.Tk):
                 pass
         if tail and not changed:
             if colour:
-                return "Change your covers?", "This replaces the covers you already made in another colour or theme."
-            return "Change the theme of your covers?", "This replaces the covers you already made with new ones in %s." % tail
+                return "Change your covers?", "This replaces the covers you already made in another colour or theme.%s" % ribbon
+            return "Change the theme of your covers?", "This replaces the covers you already made with new ones in %s.%s" % (tail, ribbon)
         if colour and not changed:
             return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
         styles &= set(sc.TREATMENTS)

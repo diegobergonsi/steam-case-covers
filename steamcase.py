@@ -762,7 +762,8 @@ def _compose(art, frame):
 
 def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, theme=None):
     """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists).
-    With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked."""
+    With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked; with a `theme` (one of THEMES) the case also
+    carries that theme's decorations."""
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
         return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment)
@@ -1186,6 +1187,20 @@ def mixed_cover_colours(covers_dir):
     return False
 
 
+def covers_with_full_marks(covers_dir):
+    """True if the covers folder holds a 100% cover with the full marks (the rosette and the ribbon): what a theme turns into the rosette alone."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    for n in names:
+        if n.lower().endswith(".png") and appid_of(n) is not None:
+            treatment = cover_treatment(os.path.join(covers_dir, n))
+            if treatment and split_treatment(treatment)[1] == "full":
+                return True
+    return False
+
+
 def mixed_cover_themes(covers_dir):
     """True if the covers folder holds covers in more than one case theme (what an interrupted theme change leaves behind). A garbled note counts as a theme of its own."""
     try:
@@ -1393,11 +1408,12 @@ def _same_treated(im, key, family):
 
 def is_steamcase_cover(path):
     """True if this file is one of our covers: a 600x900 PNG whose banner and bottom edge are those of frame.png (or of the family frame).
-    A cover with a treatment note (a 100% game) must name exactly one of TREATMENTS, have colour notes we write, and match the cover
-    regenerated in that colour, tone and treatment on every pixel the game's art does not reach (frame, rosette, ribbon, border).
+    A cover with a treatment note (a 100% game) or a theme note must name exactly one of TREATMENTS and one of THEMES (a theme never with full marks),
+    have colour notes we write, and match the cover regenerated in that colour, tone, treatment and theme on every pixel the game's art does not reach
+    (frame, rosette, ribbon, border, the theme's decorations).
     Otherwise, a cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one
     without (made before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to
-    a tone or treatment note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
+    a tone, treatment or theme note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
     is never mistaken for ours."""
     try:
         if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
@@ -1618,7 +1634,8 @@ def _completion_args(args, theme=None):
         return None, None
     style = args.completed_style or "ribbon"
     if theme is not None and args.completed_marks == "full" and style != "none":
-        raise SteamcaseError("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations." % theme.capitalize())
+        raise SteamcaseError("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
+                             "To use the full marks, make the classic case instead (--theme classic)." % theme.capitalize())
     treatment = None if style == "none" else compose_treatment(style, args.completed_marks or ("rosette" if theme else "full"))
     if args.games_page is None or treatment is None:        # "none" needs no page: a bad one must not stop you removing the highlights
         return set(), treatment
@@ -1777,7 +1794,7 @@ def main():
                        help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
                             "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
-                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default) or rosette (the rosette alone). "
+                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) or rosette (the rosette alone). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.set_defaults(fn=fn)
