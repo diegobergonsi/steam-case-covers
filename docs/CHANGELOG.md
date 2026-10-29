@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- Release pages now show that version's notes from this changelog (instead of a list of pull requests), with a line on how to check the downloads. New releases are also announced on the project's Discord with the same notes. A release needs its section in this file before the tag is pushed, or the release step stops.
 
 ## [1.5.0] - 2026-10-29
 - New: a Halloween case theme. Under the colour swatches, "Case theme" offers "Classic" (as before) and "Halloween": a cobweb with a spider, a pumpkin and a spider hanging from the top, drawn on the case in whatever colour you picked. The Halloween case goes with the rosette-only marks for 100% games, so choosing it switches that choice to "Rosette only" and greys it out; going back to Classic restores your choice. Switching the theme asks before it replaces covers you already made, and "Remove only ours" still finds themed covers. On the command line: `--theme {classic,halloween}`; without it the covers already in the folder keep their theme. The artwork is original (see `docs/THIRD_PARTY.md`). Covers made before are untouched.

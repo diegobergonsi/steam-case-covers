@@ -2804,5 +2804,95 @@ class ThemeCovers(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "x.png")))
 
 
+class ReleaseMessage(unittest.TestCase):
+    """tools/release_message.py: the release page text and the Discord announcement, both taken from docs/CHANGELOG.md."""
+    SAMPLE = ("# Changelog\n\nIntro.\n\n## [Unreleased]\n- Not out yet.\n\n## [1.5.0] - 2026-10-29\n- New: a thing.\n- Fix: another `thing`.\n\n"
+              "## [1.4.0] - 2026-10-27\n- Old: before.\n")
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("release_message", os.path.join(sc.HERE, "tools", "release_message.py"))
+        cls.rm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.rm)
+
+    def test_section_returns_only_that_versions_bullets(self):
+        for name in ("1.5.0", "v1.5.0"):
+            self.assertEqual(self.rm.section(self.SAMPLE, name), "- New: a thing.\n- Fix: another `thing`.")
+        self.assertEqual(self.rm.section(self.SAMPLE, "v1.4.0"), "- Old: before.")
+
+    def test_section_refuses_a_missing_or_empty_version(self):
+        for bad in ("v9.9.9", "Unreleased", "", "v1.5"):
+            with self.assertRaises(ValueError, msg=bad):
+                self.rm.section(self.SAMPLE, bad)
+        with self.assertRaises(ValueError):
+            self.rm.section("## [1.0.0] - 2026-01-01\n\n## [0.9.0] - 2025-01-01\n- x\n", "v1.0.0")          # a header with nothing under it
+
+    def test_the_real_changelog_has_this_release(self):
+        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("Halloween", self.rm.section(text, "v1.5.0"))
+
+    def test_the_release_page_body_is_the_section_plus_how_to_check_the_files(self):
+        body = self.rm.release_body(self.SAMPLE, "v1.5.0")
+        self.assertTrue(body.startswith("- New: a thing."))
+        self.assertNotIn("Old: before", body)
+        self.assertIn("SHA256SUMS", body)
+        self.assertIn("gh attestation verify", body)
+
+    def test_the_announcement_is_one_embed_with_the_changelog_and_the_link(self):
+        url = "https://github.com/diegobergonsi/steam-case-covers/releases/tag/v1.5.0"
+        payload = self.rm.announcement(self.SAMPLE, "v1.5.0", url)
+        json.dumps(payload)                                                           # it must be plain JSON
+        (embed,) = payload["embeds"]
+        self.assertIn("v1.5.0", embed["title"])
+        self.assertEqual(embed["url"], url)
+        self.assertIn("a thing", embed["description"])
+        self.assertNotIn("Old: before", embed["description"])
+        self.assertEqual(payload["allowed_mentions"], {"parse": []})                  # words in the changelog can never ping anyone
+
+    def test_a_long_changelog_is_cut_at_a_line_and_points_to_the_release_page(self):
+        long = "## [1.5.0] - 2026-10-29\n" + "".join("- Line number %d of a very long list of changes.\n" % i for i in range(400))
+        url = "https://example.test/release"
+        embed = self.rm.announcement(long, "v1.5.0", url)["embeds"][0]
+        self.assertLessEqual(len(embed["description"]), 4096)
+        self.assertIn(url, embed["description"])
+        self.assertIn("Line number 0 ", embed["description"])
+        self.assertNotIn("Line number 399", embed["description"])
+        self.assertFalse(embed["description"].split("\n")[0].endswith("…"))           # cut between lines, not in the middle of one
+
+    def test_the_command_line_prints_the_body_and_the_json(self):
+        import contextlib, io
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "CHANGELOG.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.SAMPLE)
+            for args, check in ((["body", "v1.5.0", "--changelog", path], lambda t: "New: a thing" in t),
+                                (["announce", "v1.5.0", "--changelog", path, "--repo", "o/r"], lambda t: json.loads(t)["embeds"][0]["url"] == "https://github.com/o/r/releases/tag/v1.5.0")):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(self.rm.main(args), 0)
+                self.assertTrue(check(out.getvalue()), args)
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(self.rm.main(["body", "v9.9.9", "--changelog", path]), 1)       # a missing version fails the release step loudly
+
+    def test_the_workflows_use_it_without_putting_the_secret_in_a_script(self):
+        wf = os.path.join(sc.HERE, ".github", "workflows")
+        with open(os.path.join(wf, "release.yml"), encoding="utf-8") as f:
+            release = f.read()
+        with open(os.path.join(wf, "announce-release.yml"), encoding="utf-8") as f:
+            announce = f.read()
+        self.assertIn("body_path", release)
+        self.assertNotIn("generate_release_notes: true", release)
+        self.assertIn("tools/release_message.py", release)
+        self.assertIn("workflow_dispatch", announce)
+        self.assertIn("tools/release_message.py", announce)
+        for text in (release, announce):
+            self.assertIn("DISCORD_WEBHOOK_URL", text)
+            self.assertIn("continue-on-error: true", text)                            # a Discord problem never marks the release as failed
+            for line in text.splitlines():
+                self.assertFalse("curl" in line and "secrets." in line, line)           # the secret goes through the environment, never into the command line text
+
+
 if __name__ == "__main__":
     unittest.main()
