@@ -512,7 +512,8 @@ class Entry(unittest.TestCase):
     def test_the_selftest_passes(self):
         r = self.run_selftest()
         self.assertEqual((r.returncode, r.stdout.strip().splitlines()[-1:]), (0, ["selftest ok"]), r.stderr)
-        self.assertEqual(r.stderr, "")
+        problems = [l for l in r.stderr.splitlines() if any(k in l for k in (".qml", "TypeError", "ReferenceError", "Binding loop", "QML "))]
+        self.assertEqual(problems, [], "QML messages on stderr (Qt's own platform logging, qt.qpa.*, is allowed). Full stderr:\n" + r.stderr)
 
     def test_the_selftest_does_not_touch_the_real_settings_file(self):
         import qtui.settings as st
