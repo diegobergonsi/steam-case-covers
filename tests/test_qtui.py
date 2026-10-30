@@ -1194,6 +1194,125 @@ class LookFlow(QtCase):
 
 
 @need_qt
+class HundredFlow(QtCase):
+    """Step 3 as a person lives it, in the real window with the real timer-less polling: a page being saved is waited for, read, styled, and Next opens Make."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def start(self):
+        from PySide6.QtCore import QPointF
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from qtui.app import close_engine, create_engine, find_item
+        from qtui.shell import Shell
+        import steamcase as sc
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
+        self.shell.reduceEffects = True
+        engine = create_engine(self.shell)
+        self.addCleanup(close_engine, engine)
+        self.root = engine.rootObjects()[0]
+        self.find = find_item
+        self.shell.library.installedOnly = True
+        self.shell.setFact("look_done", True)
+        self.shell.go(3)
+        self.app.processEvents()
+
+        def click(name):
+            it = find_item(self.root, name)
+            scroller = find_item(self.root, "screen_scroller")
+            y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+            scroller.setProperty("contentY", max(0, y - 40))
+            self.app.processEvents()
+            QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint())
+            self.app.processEvents()
+        self.click = click
+
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def test_from_a_page_being_saved_to_make(self):
+        self.start()
+        h, look = self.shell.hundred, self.shell.look
+        path = os.path.join(self.downloads, "games.html")
+        full = write_games_page(self.downloads, {1: (5, 5), 2: (1, 9), 3: (7, 7)})
+        with open(full, "rb") as f:
+            data = f.read()
+        half = data[: len(data) // 2]
+        with open(path, "wb") as f:                              # the browser is still writing
+            f.write(half)
+        self.shell.poll()
+        with open(path, "wb") as f:
+            f.write(data[: 3 * len(data) // 4])                  # it grew since the last look: not finished
+        self.shell.poll()
+        self.assertFalse(h.busy or h.loaded)
+        with open(path, "wb") as f:
+            f.write(data)
+        self.shell.poll()                                        # first look at the finished file
+        self.assertFalse(h.busy or h.loaded)
+        self.shell.poll()                                        # unchanged since: finished
+        self.wait_for(lambda: h.loaded)
+        self.assertEqual((h.count, os.path.basename(h.path)), (2, "games.html"))
+        self.assertTrue(self.find(self.root, "hundred_next").property("visible"))
+        before = look.previewSource
+        self.click("hundred_style_chip_gold-border")
+        self.click("hundred_marks_chip_rosette")
+        self.wait_for(lambda: look.previewSource != before and "/gold-border-rosette/" in look.previewSource)
+        self.assertIn("/classic/gold-border-rosette/", look.previewSource)
+        self.assertEqual(h.values(), ({1, 3}, "gold-border-rosette"))
+        self.assertEqual(self.shell.steps[4]["state"], "locked")
+        self.click("hundred_next")
+        self.assertEqual(self.shell.current, 4)
+        self.assertEqual(self.shell.steps[4]["state"], "active")
+
+    def test_skipping_keeps_a_page_loaded_earlier_and_a_page_is_still_there_when_the_step_is_reopened(self):
+        self.start()
+        h = self.shell.hundred
+        h.loadPage(write_games_page(self.tmp, {1: (2, 2)}))
+        self.wait_for(lambda: h.loaded)
+        self.shell.go(2)
+        self.app.processEvents()
+        self.shell.go(3)
+        self.app.processEvents()
+        self.assertTrue(h.loaded)
+        self.assertTrue(self.find(self.root, "hundred_next").property("visible"))
+        self.assertFalse(self.find(self.root, "hundred_skip").property("visible"))
+        self.assertEqual(h.values()[0], {1})
+        self.shell.hundred.style = "none"                        # a style chosen earlier is still chosen
+        self.shell.go(2)
+        self.shell.go(3)
+        self.app.processEvents()
+        self.assertEqual(h.style, "none")
+        self.assertTrue(self.find(self.root, "hundred_style_chip_none").property("selected"))
+
+    def test_a_wrong_file_then_a_good_one(self):
+        self.start()
+        h = self.shell.hundred
+        bad = os.path.join(self.tmp, "bad.html")
+        with open(bad, "w") as f:
+            f.write("<html>no games here</html>")
+        h.loadPage(bad)
+        self.wait_for(lambda: h.statusKind == "error")
+        self.assertEqual(self.find(self.root, "hundred_status").property("kind"), "error")
+        self.assertFalse(self.find(self.root, "hundred_next").property("visible"))
+        self.assertTrue(self.find(self.root, "hundred_skip").property("visible"))
+        h.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
+        self.wait_for(lambda: h.loaded)
+        self.assertEqual(self.find(self.root, "hundred_status").property("kind"), "ok")
+
+
+@need_qt
 class Components(QtCase):
     """GradientSlider, Swatch, ChoiceChips and PreviewCard, each in a small window of its own (any QML warning fails the test)."""
     @classmethod
