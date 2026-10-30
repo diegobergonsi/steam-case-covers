@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 // One choice out of a few, as pills. `model` is a list of {key, label}; `current` is the chosen key, kept by the owner (set it from `chosen`).
-// Radio-button behaviour: only the chosen pill is a Tab stop, the arrow keys move the choice.
+// `enabled: false` greys it out and makes it inert. Radio-button behaviour: only the chosen pill is a Tab stop, the arrow keys move the choice.
 import QtQuick
 import "."
 
@@ -11,6 +11,7 @@ Flow {
     property string current: ""
     signal chosen(string key)
     spacing: Theme.s8
+    opacity: enabled ? 1 : Theme.disabledOpacity          // `enabled: false` greys the pills, stops clicks and keys and takes them out of the Tab order; the choice still shows
 
     function move(index, delta) {
         var n = chips.model.length
@@ -33,7 +34,7 @@ Flow {
             radius: height / 2
             color: selected ? Theme.accent : area.containsMouse ? Qt.lighter(Theme.raised, Theme.hoverLift) : Theme.raised
             Behavior on color { ColorAnimation { duration: Theme.dur(120) } }
-            activeFocusOnTab: selected || (chips.current === "" && index === 0)
+            activeFocusOnTab: chips.enabled && (selected || (chips.current === "" && index === 0))
             Accessible.role: Accessible.RadioButton
             Accessible.name: modelData.label
             Accessible.checkable: true

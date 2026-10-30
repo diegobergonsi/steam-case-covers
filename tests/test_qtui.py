@@ -1429,6 +1429,33 @@ class Components(QtCase):
         iface = QAccessible.queryAccessibleInterface(self.item("c_chip_classic"))
         self.assertEqual((iface.role(), iface.text(QAccessible.Text.Name), iface.state().checked), (QAccessible.Role.RadioButton, "Classic", True))
 
+    def test_disabled_chips_are_greyed_ignore_clicks_and_keys_and_leave_the_tab_order(self):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtGui import QAccessible
+        self.load(self.CHIPS.replace('current: "classic";', 'current: "classic"; enabled: false;'))
+        c = self.item("c")
+        self.assertEqual(c.property("opacity"), 0.6)                  # the token for a disabled control
+        chip = self.item("c_chip_halloween")
+        centre = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
+        self.mouse("click", centre.x(), centre.y())
+        self.assertEqual(c.property("last"), "")
+        self.key("c_chip_classic", Qt.Key_Right)
+        self.key("c_chip_classic", Qt.Key_Space)
+        self.assertEqual(c.property("last"), "")
+        self.assertFalse(self.item("c_chip_classic").property("activeFocusOnTab"))
+        self.assertFalse(self.item("c_chip_halloween").property("activeFocusOnTab"))
+        self.assertTrue(self.item("c_chip_classic").property("selected"))          # the choice still shows
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        iface = QAccessible.queryAccessibleInterface(self.item("c_chip_classic"))
+        self.assertTrue(iface.state().disabled)
+        self.assertTrue(iface.state().checked)
+        c.setProperty("enabled", True)                                # and everything comes back
+        self.assertEqual(c.property("opacity"), 1)
+        self.assertTrue(self.item("c_chip_classic").property("activeFocusOnTab"))
+        self.mouse("click", centre.x(), centre.y())
+        self.assertEqual(c.property("last"), "halloween")
+
     def test_the_preview_card_shows_the_engines_picture(self):
         import time
         self.load('PreviewCard { objectName: "p"; x: 20; y: 20; source: "image://preview/0/100/100/classic/none/1" }', 300, 400)
