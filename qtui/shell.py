@@ -10,6 +10,7 @@ from qtui.hundred import Hundred
 from qtui.library import Library
 from qtui.look import Look
 from qtui.make import Make
+from qtui.updates import Updates
 
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
 
@@ -33,6 +34,7 @@ class Shell(QObject):
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
+        self._updates = Updates(self)
 
     def _build(self):
         states = steps.step_states(**self._facts)
@@ -56,6 +58,10 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def make(self):
         return self._make
+
+    @Property(QObject, constant=True)
+    def updates(self):
+        return self._updates
 
     @Property(QObject, constant=True)
     def apply(self):

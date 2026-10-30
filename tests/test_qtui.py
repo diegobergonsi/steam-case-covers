@@ -3421,6 +3421,112 @@ class ReplaceReasons(FakeStore):
 
 
 @need_qt
+class UpdatesState(QtCase):
+    """The update check (only on a click, off the UI thread) and the Discord link."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui.updates import Updates
+        self.u = Updates()
+        self.seen = []
+        self.u.message.connect(lambda *a: self.seen.append(a))
+
+    def wait_for(self, condition, seconds=5):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def check(self, result=None, error=None):
+        from unittest import mock
+        import steamcase as sc
+        effect = error if error else None
+        with mock.patch.object(sc, "check_for_update", return_value=result, side_effect=effect):
+            self.u.check()
+            self.wait_for(lambda: bool(self.seen) and not self.u.checking)
+        return self.seen[-1]
+
+    def test_nothing_is_asked_until_clicked(self):
+        self.assertEqual((self.u.checking, self.seen), (False, []))
+
+    def test_no_update_needed(self):
+        self.assertEqual(self.check({"newer": False, "current": "1.2.0", "latest": "1.2.0", "url": "https://github.com/x"}),
+                         ("No update needed", [{"text": "You have the latest version (1.2.0).", "kind": "main"}], "OK", "", ""))
+
+    def test_a_newer_version_offers_the_page_and_says_nothing_is_installed(self):
+        title, paragraphs, ok, cancel, link = self.check({"newer": True, "current": "1.2.0", "latest": "1.3.0", "url": "https://github.com/x/releases"})
+        self.assertEqual((title, ok, cancel, link), ("Update available", "Open GitHub page", "Not now", "https://github.com/x/releases"))
+        self.assertEqual(paragraphs[0]["text"], "A newer version is available: 1.3.0 (you have 1.2.0).")
+        self.assertIn("opens this project's release page on GitHub in your web browser:\nhttps://github.com/x/releases", paragraphs[1]["text"])
+        self.assertEqual(paragraphs[2]["text"], "Nothing is downloaded or installed unless you choose to do it yourself on that page.")
+
+    def test_an_unknown_current_version_cannot_be_compared(self):
+        paragraphs = self.check({"newer": None, "current": None, "latest": "1.3.0", "url": "https://github.com/x"})[1]
+        self.assertEqual(paragraphs[0]["text"], "The latest version is 1.3.0. This copy has no version number (it was not installed from a release), so I cannot compare.")
+
+    def test_a_failed_check_says_why(self):
+        import steamcase as sc
+        self.assertEqual(self.check(error=sc.SteamcaseError("No connection.")),
+                         ("Could not check for updates", [{"text": "No connection.", "kind": "main"}], "OK", "", ""))
+        self.seen.clear()
+        self.assertEqual(self.check(error=ValueError("boom"))[1][0]["text"], "Unexpected problem: boom")
+
+    def test_one_check_at_a_time_and_it_runs_off_the_ui_thread(self):
+        import threading
+        from unittest import mock
+        import steamcase as sc
+        gate, threads = threading.Event(), []
+
+        def slow():
+            threads.append(threading.current_thread())
+            gate.wait(5)
+            return {"newer": False, "current": "1", "latest": "1", "url": "https://github.com/x"}
+        with mock.patch.object(sc, "check_for_update", slow):
+            self.u.check()
+            self.u.check()
+            self.assertTrue(self.u.checking)
+            gate.set()
+            self.wait_for(lambda: bool(self.seen) and not self.u.checking)
+        self.assertEqual(len(threads), 1)
+        self.assertIsNot(threads[0], threading.main_thread())
+
+    def test_only_a_web_link_is_ever_opened(self):
+        from unittest import mock
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.u.openLink("file:///etc/passwd")
+            self.u.openLink("javascript:alert(1)")
+            self.assertEqual(opened.call_count, 0)
+            self.u.openLink("https://github.com/x/releases")
+            self.assertEqual(opened.call_count, 1)
+
+    def test_discord_opens_the_invite_or_copies_it(self):
+        from unittest import mock
+        import steamcase as sc
+        from PySide6.QtGui import QGuiApplication
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.u.openDiscord()
+        self.assertEqual((opened.call_args[0][0].toString(), self.seen), (sc.DISCORD_URL, []))
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=False):
+            self.u.openDiscord()
+        self.assertEqual(QGuiApplication.clipboard().text(), sc.DISCORD_URL)
+        self.assertEqual(self.seen[-1], ("Join our Discord", [{"text": "Your browser did not open, so the invite link was copied. Paste it into your browser:\n" + sc.DISCORD_URL, "kind": "main"}], "OK", "", ""))
+
+    def test_an_answer_that_cannot_be_delivered_is_dropped_quietly(self):
+        import shiboken6
+        from unittest import mock
+        import steamcase as sc
+        from qtui.updates import Updates
+        gone = Updates()
+        shiboken6.delete(gone)
+        with mock.patch.object(sc, "check_for_update", return_value={"newer": False, "current": "1", "latest": "1", "url": "u"}):
+            gone._worker()
+
+
+@need_qt
 class MakeScreen(QtCase, FakeStore):
     """Step 4 in the real window: the choices, the progress, the question before replacing, and the buttons that follow the state."""
     @classmethod
