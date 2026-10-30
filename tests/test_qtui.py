@@ -7,6 +7,7 @@ import json, os, shutil, sys, tempfile, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qtui import settings as st
 from qtui import steps as sp
+from qtui import system
 
 try:
     from PySide6.QtGui import QGuiApplication
@@ -19,6 +20,39 @@ QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def qt_app():
     """One Qt application for the whole test process (a second one cannot be made)."""
     return QGuiApplication.instance() or QGuiApplication([])
+
+
+class SystemHelpers(unittest.TestCase):
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, True)
+
+    def downloads(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"HOME": self.home, "USERPROFILE": self.home}):
+            return system.downloads_dir()
+
+    def test_downloads_dir_reads_the_xdg_setting(self):
+        os.makedirs(os.path.join(self.home, ".config"))
+        os.makedirs(os.path.join(self.home, "Telechargements"))
+        with open(os.path.join(self.home, ".config", "user-dirs.dirs"), "w") as f:
+            f.write('XDG_DESKTOP_DIR="$HOME/Desktop"\nXDG_DOWNLOAD_DIR="$HOME/Telechargements"\n')
+        self.assertEqual(self.downloads(), os.path.join(self.home, "Telechargements"))
+
+    def test_downloads_dir_falls_back_to_downloads_in_home(self):
+        self.assertEqual(self.downloads(), os.path.join(self.home, "Downloads"))
+        os.makedirs(os.path.join(self.home, ".config"))
+        with open(os.path.join(self.home, ".config", "user-dirs.dirs"), "w") as f:
+            f.write('XDG_DOWNLOAD_DIR="$HOME/Gone"\n')                      # names a folder that does not exist
+        self.assertEqual(self.downloads(), os.path.join(self.home, "Downloads"))
+
+    def test_save_key_names_the_platform_shortcut(self):
+        import importlib
+        from unittest import mock
+        for platform, key in (("darwin", "Cmd+S"), ("linux", "Ctrl+S"), ("win32", "Ctrl+S")):
+            with mock.patch.object(sys, "platform", platform):
+                self.assertEqual(importlib.reload(system).SAVE_KEY, key, platform)
+        importlib.reload(system)
 
 
 class Settings(unittest.TestCase):
@@ -265,7 +299,7 @@ class BuildTrimList(unittest.TestCase):
               "PySide6/Qt/qml/QtQuick/Controls/impl/qmldir", "PySide6/Qt/qml/QtQml/qmldir", "PySide6/Qt/lib/libQt6Quick.so.6", "PySide6/Qt/lib/libQt6Qml.so.6",
               "PySide6/Qt/lib/libQt6Gui.so.6", "PySide6/Qt/lib/libQt6Core.so.6", "PySide6/Qt/lib/libQt6Network.so.6", "PySide6/Qt/lib/libQt6OpenGL.so.6",
               "PySide6/Qt/lib/libQt6QuickControls2.so.6", "PySide6/Qt/lib/libQt6QuickControls2Basic.so.6", "PySide6/Qt/lib/libQt6QuickTemplates2.so.6",
-              "PySide6/Qt/lib/libicudata.so.73", "PySide6/QtOpenGL.abi3.so", "PySide6/QtQuick.abi3.so", "libX11.so.6", "libfontconfig.so.1", "libfreetype.so.6"]
+              "PySide6/Qt/lib/libicudata.so.73", "PySide6/QtOpenGL.abi3.so", "PySide6/Qt/qml/QtQuick/Dialogs/qmldir", "PySide6/Qt/lib/libQt6QuickDialogs2.so.6", "PySide6/QtQuick.abi3.so", "libX11.so.6", "libfontconfig.so.1", "libfreetype.so.6"]
 
     def block(self):
         import re

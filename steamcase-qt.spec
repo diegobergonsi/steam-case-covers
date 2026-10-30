@@ -16,9 +16,9 @@ BLOCK = ["platformthemes/libqgtk3", "egldeviceintegrations", "plugins/generic", 
          "libqeglfs", "libqlinuxfb", "libqminimal", "libqvkkhrdisplay", "libqvnc",
          "imageformats/libqgif", "imageformats/libqicns", "imageformats/libqico", "imageformats/libqsvg", "imageformats/libqtga", "imageformats/libqtiff", "imageformats/libqwbmp",
          "QtQuick/Controls/FluentWinUI3", "QtQuick/Controls/Fusion", "QtQuick/Controls/Imagine", "QtQuick/Controls/Material", "QtQuick/Controls/Universal",
-         "QtQuick/Controls/Native", "QtQuick/Controls/designer", "QtQuick/Dialogs", "QtQuick/Particles", "QtTest", "qml/QtWayland", "qml/Qt/labs",
+         "QtQuick/Controls/Native", "QtQuick/Controls/designer", "QtQuick/Particles", "QtTest", "qml/QtWayland", "qml/Qt/labs",
          "libQt6QuickControls2Imagine", "libQt6QuickControls2FluentWinUI3", "libQt6QuickControls2Material", "libQt6QuickControls2Universal", "libQt6QuickControls2Fusion",
-         "libQt6QuickControls2Native", "libQt6LabsStyleKit", "libQt6QuickDialogs2", "libQt6QuickParticles", "libQt6QuickTest", "libQt6Test", "libQt6WaylandCompositor",
+         "libQt6QuickControls2Native", "libQt6LabsStyleKit", "libQt6QuickParticles", "libQt6QuickTest", "libQt6Test", "libQt6WaylandCompositor",
          "libgtk-3", "libgdk-3", "libgdk_pixbuf", "libatk", "libatspi", "libcairo", "libpango", "libglycin", "libcloudproviders", "libjson-glib", "libtinysparql", "libepoxy",
          "libicudata.so.78", "libicuuc.so.78", "libQt6Widgets", "libQt6Svg", "libavif"]
 a.binaries = [e for e in a.binaries if not any(b in e[0] for b in BLOCK)]
