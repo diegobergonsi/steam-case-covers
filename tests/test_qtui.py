@@ -1720,6 +1720,336 @@ class LookState(QtCase):
 
 
 @need_qt
+class HundredState(QtCase):
+    """Step 3: the saved games page, read on a worker thread, and the style of the 100% covers."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui.shell import Shell
+        self.Shell = Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.covers = os.path.join(self.tmp, "covers")
+        os.makedirs(self.covers)
+        self.settings = os.path.join(self.tmp, "settings.json")
+        self.shell = self.new_shell()
+        self.h = self.shell.hundred
+
+    def new_shell(self):
+        return self.Shell(self.settings, downloads=self.downloads, covers_dir=self.covers)
+
+    def page(self, progress, name="games.html", folder=None):
+        """A saved games page like tests/fixtures/games_page.html, with a row per app id in `progress` {appid: (unlocked, total) or None}."""
+        rows = []
+        for appid, counts in progress.items():
+            store = '<a href="https://store.steampowered.com/app/%d"' % appid
+            row = '<div class="row">\n  %s class="img"></a>\n  %s class="name">Game</a>\n' % (store, store)
+            if counts:
+                row += '  <a class="ach" href="https://steamcommunity.com/id/playerone/achievements/%d">ACHIEVEMENTS</a><span class="cnt">%d/%d</span>\n' % ((appid,) + counts)
+            rows.append(row + "</div>\n")
+        path = os.path.join(folder or self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('<!DOCTYPE html>\n<html><body><div class="list">\n' + "".join(rows) + "</div></body></html>\n")
+        return path
+
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def load(self, path):
+        self.h.loadPage(path)
+        self.wait_for(lambda: not self.h.busy)
+
+    def test_it_starts_without_a_page(self):
+        h = self.h
+        self.assertEqual((h.loaded, h.path, h.count, h.busy, h.style, h.marks), (False, "", 0, False, "ribbon", "full"))
+        self.assertEqual((h.status, h.statusKind), ("No games page loaded. Your covers keep the look they have.", "wait"))
+        self.assertEqual((h.styleEnabled, h.marksEnabled, h.note), (False, False, ""))
+        self.assertEqual(h.values(), (None, None))
+
+    def test_a_good_page_is_read_and_only_the_100_percent_games_are_kept(self):
+        h = self.h
+        path = self.page({1: (10, 10), 2: (1, 9), 3: (5, 5), 4: None, 5: (0, 0)})
+        h.loadPage(path)
+        self.assertEqual((h.status, h.statusKind, h.busy), ("Reading games.html…", "wait", True))      # at once, before the answer
+        self.wait_for(lambda: not h.busy)
+        self.assertEqual((h.loaded, h.path, h.count), (True, path, 2))
+        self.assertEqual((h.status, h.statusKind), ("Found 2 games at 100% in games.html. The game list from step 1 decides which games get covers.", "ok"))
+        self.assertTrue(h.note.startswith("Done with the page? You can delete games.html and its folder: they hold a temporary login token for your Steam account, "), h.note)
+        self.assertEqual((h.styleEnabled, h.marksEnabled), (True, True))
+        self.assertEqual(h.values(), ({1, 3}, "ribbon"))
+
+    def test_one_game_is_singular_and_none_says_so(self):
+        self.load(self.page({1: (3, 3), 2: (1, 4)}))
+        self.assertIn("Found 1 game at 100% in games.html.", self.h.status)
+        self.load(self.page({1: (1, 3)}, "other.html"))
+        self.assertEqual(self.h.status, "No game in other.html is at 100% yet. The game list from step 1 decides which games get covers.")
+        self.assertEqual((self.h.loaded, self.h.count), (True, 0))
+        self.assertEqual(self.h.values(), (set(), "ribbon"))
+
+    def test_a_bad_file_says_why_and_the_page_before_stays_in_use(self):
+        h = self.h
+        bad = os.path.join(self.tmp, "notes.html")
+        with open(bad, "w") as f:
+            f.write("<html>hello</html>")
+        self.load(bad)
+        self.assertEqual((h.loaded, h.statusKind), (False, "error"))
+        self.assertTrue(h.status.startswith("notes.html: That file does not look like your Steam games page."), h.status)
+        self.assertNotIn("The page you loaded before", h.status)
+        good = self.page({1: (2, 2)})
+        self.load(good)
+        self.load(bad)
+        self.assertTrue(h.status.endswith(" The page you loaded before is still used."), h.status)
+        self.assertEqual((h.path, h.loaded, h.values()[0]), (good, True, {1}))
+
+    def test_a_missing_file_is_refused_in_words(self):
+        self.load(os.path.join(self.tmp, "gone.html"))
+        self.assertEqual((self.h.status, self.h.statusKind), ("gone.html: That file could not be opened. (gone.html)", "error"))
+
+    def test_a_huge_file_is_refused_without_being_read(self):
+        from unittest import mock
+        path = self.page({1: (1, 1)})
+        with mock.patch("completion.MAX_GAMES_PAGE", 10):
+            self.load(path)
+        self.assertEqual(self.h.status, "games.html: That file is too big to be your Steam games page.")
+        self.assertFalse(self.h.loaded)
+
+    def test_a_link_or_a_pipe_is_not_followed(self):
+        good = self.page({1: (1, 1)})
+        link = os.path.join(self.tmp, "link.html")
+        try:
+            os.symlink(good, link)
+        except (OSError, NotImplementedError):
+            link = None
+        if link:
+            self.load(link)
+            self.assertEqual(self.h.status, "link.html: That is not a plain file. Pick the .html file you saved.")
+            self.assertFalse(self.h.loaded)
+        if hasattr(os, "mkfifo"):
+            pipe = os.path.join(self.tmp, "pipe.html")
+            os.mkfifo(pipe)
+            self.load(pipe)                                            # must not hang
+            self.assertEqual(self.h.status, "pipe.html: That is not a plain file. Pick the .html file you saved.")
+
+    def test_a_surprise_never_quotes_the_page(self):
+        from unittest import mock
+        path = self.page({1: (1, 1)})
+        with mock.patch("completion.read_games_page", side_effect=RuntimeError("token=SECRET123")):
+            self.load(path)
+        self.assertEqual(self.h.status, "games.html: That file could not be read.")
+        self.assertNotIn("SECRET", self.h.status + self.h.note)
+
+    def test_the_status_never_holds_page_text(self):
+        path = self.page({1: (1, 1)})
+        with open(path, "a") as f:
+            f.write("<script>var token='SECRET123'</script>")
+        self.load(path)
+        self.assertNotIn("SECRET", self.h.status + self.h.note + self.h.path)
+
+    def test_two_loads_in_a_row_the_newest_answer_wins_even_if_the_older_arrives_late(self):
+        import threading
+        from unittest import mock
+        import completion
+        first = self.page({1: (1, 1)}, "first.html")
+        second = self.page({2: (2, 2), 3: (4, 4)}, "second.html")
+        gate = threading.Event()
+        real = completion.read_games_page
+
+        def slow(path):
+            if os.path.basename(path) == "first.html":
+                gate.wait(5)                                          # the older read finishes last
+            return real(path)
+        with mock.patch("completion.read_games_page", side_effect=slow):
+            self.h.loadPage(first)
+            self.h.loadPage(second)
+            self.wait_for(lambda: self.h.loaded)
+            self.assertEqual((self.h.path, self.h.values()[0]), (second, {2, 3}))
+            gate.set()
+            self.wait_for(lambda: not self.h.busy)
+        self.assertEqual((self.h.path, self.h.values()[0]), (second, {2, 3}))
+        self.assertIn("second.html", self.h.status)
+
+    def test_the_url_of_the_qt_dialog_loads_the_page(self):
+        from PySide6.QtCore import QUrl
+        path = self.page({1: (1, 1)})
+        self.h.loadPageUrl(QUrl.fromLocalFile(path).toString())
+        self.wait_for(lambda: not self.h.busy)
+        self.assertEqual(self.h.path, os.path.normpath(path))
+
+    def test_the_styles_and_marks_decide_what_make_gets(self):
+        h = self.h
+        self.load(self.page({1: (1, 1), 2: (1, 2)}))
+        import steamcase as sc
+        for style in sc.CASES:
+            for marks in sc.MARKS:
+                h.style, h.marks = style, marks
+                self.assertEqual(h.values(), ({1}, sc.compose_treatment(style, marks)))
+        h.style = "none"
+        self.assertEqual(h.values(), (set(), None))            # the 100% covers become normal covers
+        self.assertEqual((h.styleEnabled, h.marksEnabled), (True, False))      # no marks to choose
+
+    def test_a_wrong_style_or_marks_is_ignored(self):
+        h = self.h
+        h.style, h.marks = "sparkly", "lots"
+        self.assertEqual((h.style, h.marks), ("ribbon", "full"))
+
+    def test_the_choices_are_the_old_windows(self):
+        self.assertEqual([x["key"] for x in self.h.styles], ["gold-case", "gold-border", "ribbon", "none"])
+        self.assertEqual([x["label"] for x in self.h.styles], ["Gold case", "Gold border", "Normal case", "No special case"])
+        self.assertEqual([(x["key"], x["label"]) for x in self.h.markChoices], [("full", "Rosette and ribbon"), ("rosette", "Rosette only")])
+
+    def test_halloween_forces_the_rosette_and_going_back_restores_the_marks(self):
+        h, look = self.h, self.shell.look
+        self.load(self.page({1: (1, 1)}))
+        h.marks = "full"
+        look.theme = "halloween"
+        self.assertEqual((h.marks, h.marksEnabled, h.themeNote), ("rosette", False, "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web."))
+        h.marks = "full"                                              # the greyed choice cannot be changed
+        self.assertEqual(h.marks, "rosette")
+        look.theme = "classic"
+        self.assertEqual((h.marks, h.marksEnabled, h.themeNote), ("full", True, ""))
+        h.marks = "rosette"
+        look.theme = "halloween"
+        look.theme = "classic"
+        self.assertEqual(h.marks, "rosette")                          # what was chosen before, whatever it was
+
+    def test_a_page_loaded_under_halloween_keeps_the_marks_greyed(self):
+        h, look = self.h, self.shell.look
+        look.theme = "halloween"
+        self.load(self.page({1: (1, 1)}))
+        self.assertEqual((h.styleEnabled, h.marksEnabled, h.marks), (True, False, "rosette"))
+        import steamcase as sc
+        self.assertEqual(h.values()[1], sc.compose_treatment("ribbon", "rosette"))
+
+    def test_covers_made_in_halloween_open_the_window_in_halloween(self):
+        import steamcase as sc
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        art = os.path.join(self.tmp, "art.png")
+        sc.Image.new("RGB", (100, 150), (10, 120, 30)).save(art)
+        sc.build_cover(art, os.path.join(self.covers, "Game_1_1.png"), sc.load_frame(0), 0, theme="halloween")
+        h = self.new_shell().hundred
+        self.assertEqual((h.marks, h.marksEnabled, h.themeNote != ""), ("rosette", False, True))
+
+    def test_the_preview_follows_only_when_a_page_is_loaded_and_a_case_is_chosen(self):
+        h, look = self.h, self.shell.look
+        self.assertEqual(look.treatment, "none")
+        h.style = "gold-case"
+        self.assertEqual(look.treatment, "none")                      # no page: covers keep their look
+        self.load(self.page({1: (1, 1)}))
+        self.assertEqual(look.treatment, "gold-case")
+        h.marks = "rosette"
+        self.assertEqual(look.treatment, "gold-case-rosette")
+        h.style = "none"
+        self.assertEqual(look.treatment, "none")
+        h.style = "gold-border"
+        look.theme = "halloween"
+        self.assertEqual(look.treatment, "gold-border-rosette")
+
+    def test_a_page_saved_by_the_browser_is_noticed_once_when_finished(self):
+        h = self.h
+        before = self.page({9: (1, 1)}, "games.html", self.downloads)
+        h = self.new_shell().hundred                                  # what lay there before the app started is stale
+        h.poll(); h.poll()
+        self.assertFalse(h.busy or h.loaded)
+        os.mkdir(os.path.join(self.downloads, "games_files"))         # the folder the browser saves next to the page
+        new = self.page({1: (2, 2)}, "games2.htm", self.downloads)
+        h.poll()                                                      # first sight: maybe still being written
+        self.assertFalse(h.busy or h.loaded)
+        h.poll()
+        self.wait_for(lambda: h.loaded)
+        self.assertEqual((h.path, h.values()[0]), (new, {1}))
+        self.assertNotEqual(h.path, before)
+
+    def test_a_noticed_page_that_is_wrong_is_explained_and_not_read_again(self):
+        from unittest import mock
+        h = self.h
+        bad = os.path.join(self.downloads, "games.html")
+        with open(bad, "w") as f:
+            f.write("<html>nothing</html>")
+        with mock.patch("completion.read_games_page", wraps=__import__("completion").read_games_page) as read:
+            h.poll(); h.poll()
+            self.wait_for(lambda: h.statusKind == "error")
+            h.poll(); h.poll(); h.poll()
+            self.wait_for(lambda: False, 0.2)
+            self.assertEqual(read.call_count, 1)
+        self.assertTrue(h.status.startswith("games.html: "), h.status)
+
+    def test_once_a_page_is_loaded_the_folder_is_not_watched_any_more(self):
+        h = self.h
+        self.load(self.page({1: (1, 1)}, "mine.html"))
+        self.page({2: (2, 2)}, "games.html", self.downloads)
+        for _ in range(4):
+            h.poll()
+        self.wait_for(lambda: False, 0.2)
+        self.assertEqual(os.path.basename(h.path), "mine.html")
+
+    def test_the_shell_poll_looks_at_both_steps(self):
+        self.page({1: (2, 2)}, "games.html", self.downloads)
+        with open(os.path.join(self.downloads, "userdata.json"), "w") as f:
+            json.dump({"rgOwnedApps": [1, 2]}, f)
+        self.shell.poll()
+        self.shell.poll()
+        self.wait_for(lambda: self.h.loaded)
+        self.assertTrue(self.shell.library.ready)
+        self.assertTrue(self.h.loaded)
+
+    def test_open_page_opens_the_link_and_always_shows_the_way_out(self):
+        from unittest import mock
+        for opened in (True, False):
+            with self.subTest(opened=opened), mock.patch("qtui.hundred.QDesktopServices.openUrl", return_value=opened) as m:
+                self.h.openPage()
+                self.assertEqual(m.call_args[0][0].toString(), "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
+                self.assertTrue(self.h.status.startswith("Opening your browser… Log in to Steam if it asks and wait until your games have loaded. Then press "), self.h.status)
+                self.assertIn("named games.html. Nothing opened? Click “Copy link” and paste it into your browser.", self.h.status)
+                self.assertEqual(self.h.statusKind, "wait")
+
+    def test_copy_link_puts_the_page_address_on_the_clipboard(self):
+        self.h.copyLink()
+        self.assertEqual(QGuiApplication.clipboard().text(), "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
+        self.assertEqual(self.h.statusKind, "ok")
+        self.assertTrue(self.h.status.startswith("Link copied. Paste it into your browser, log in if asked, then save the page as “Webpage, Complete”, named games.html ("), self.h.status)
+
+    def test_browse_loads_the_chosen_page(self):
+        from unittest import mock
+        path = self.page({1: (1, 1)})
+        with mock.patch("qtui.hundred.pick_file", return_value=path) as m:
+            self.h.browse()
+            self.wait_for(lambda: self.h.loaded)
+        self.assertEqual(m.call_args[0][2], ("Web pages", "*.html *.htm"))
+        self.assertEqual(self.h.path, path)
+
+    def test_browse_cancelled_changes_nothing_and_without_a_desktop_chooser_asks_for_the_qt_dialog(self):
+        from unittest import mock
+        before = (self.h.status, self.h.statusKind)
+        with mock.patch("qtui.hundred.pick_file", return_value=""):
+            self.h.browse()
+            self.wait_for(lambda: False, 0.3)
+        self.assertEqual((self.h.status, self.h.statusKind), before)
+        seen = []
+        self.h.needDialog.connect(seen.append)
+        with mock.patch("qtui.hundred.pick_file", return_value=None):
+            self.h.browse()
+            self.wait_for(lambda: seen)
+        self.assertEqual(seen, [self.downloads])
+
+    def test_the_help_texts_are_the_old_windows(self):
+        from qtui import system
+        self.assertIn("The saved file contains a temporary login token for your Steam account.", system.PAGE_HELP)
+        self.assertIn(system.SAVE_KEY, system.PAGE_HELP)
+        self.assertEqual(system.THEME_NOTE, "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web.")
+        self.assertEqual(system.GAMES_PAGE_URL, "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
+
+
+@need_qt
 class ShellObject(QtCase):
     @classmethod
     def setUpClass(cls):

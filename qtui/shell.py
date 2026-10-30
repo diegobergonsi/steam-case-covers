@@ -5,6 +5,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 import steamcase as sc
 from qtui import settings, steps, system
+from qtui.hundred import Hundred
 from qtui.library import Library
 from qtui.look import Look
 
@@ -25,6 +26,7 @@ class Shell(QObject):
         self._steps = self._build()
         self._library = Library(self, downloads or system.downloads_dir(), self)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
+        self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
 
     def _build(self):
         states = steps.step_states(**self._facts)
@@ -40,6 +42,16 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def look(self):
         return self._look
+
+    @Property(QObject, constant=True)
+    def hundred(self):
+        return self._hundred
+
+    @Slot()
+    def poll(self):
+        """One look at the Downloads folder for the files the user saves from the browser (call it every 1.5 s)."""
+        self._library.poll()
+        self._hundred.poll()
 
     @Property("QVariantList", notify=stepsChanged)
     def steps(self):

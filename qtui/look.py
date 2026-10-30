@@ -27,7 +27,7 @@ class Look(QObject):
         self._shell = shell
         self._tone = tones.ORIGINAL
         self._theme = "classic"
-        self._treatment = "none"            # plan 4: the look of a 100% game in the preview ("none" or an sc.TREATMENTS name)
+        self._treatment = "none"            # set by Hundred: the look of a 100% game in the preview ("none" or an sc.TREATMENTS name)
         self._serial = 0
         try:                                # reopening the window shows the colour and theme of the covers already made
             found = sc.existing_cover_colour(covers_dir)
@@ -181,10 +181,6 @@ class Look(QObject):
             self._schedule()
 
     theme = Property(str, _get_theme, _set_theme, notify=themeChanged)
-
-    @Property(str, constant=True)
-    def themeNote(self):
-        return ""                              # plan 4: "The Halloween case shows the rosette only..."
 
     def _get_treatment(self):
         return self._treatment

@@ -20,7 +20,7 @@ ApplicationWindow {
     readonly property int navWidth: Theme.navWidth
 
     Binding { target: Theme; property: "reduce"; value: shell.reduceEffects }
-    Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.library.poll() }       // notices the saved game list
+    Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.poll() }       // notices the saved game list and games page
 
     Rectangle {                                                   // the navigation
         id: nav
