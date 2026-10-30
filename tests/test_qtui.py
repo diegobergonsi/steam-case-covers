@@ -1497,8 +1497,8 @@ class Components(QtCase):
 
     def test_a_third_button_sits_between_cancel_and_confirm_and_answers_for_itself(self):
         self.open_fn("openIt")
-        xs = [self.item(n).x() for n in ("dlg_cancel", "dlg_alternate", "dlg_confirm")]
-        self.assertEqual(xs, sorted(xs))
+        places = [(round(self.item(n).y()), self.item(n).x()) for n in ("dlg_cancel", "dlg_alternate", "dlg_confirm")]
+        self.assertEqual(places, sorted(places))                         # in reading order, on one row or wrapped onto several
         self.assertEqual(self.item("dlg_alternate").property("text"), "Remove all")
         self.assertFalse(self.item("dlg_alternate").property("filled"))
         self.assertTrue(self.item("dlg_cancel").property("activeFocus"))
@@ -3889,7 +3889,7 @@ class AddScreen(AddWindow):
         self.root.requestActivate()
         self.click("add_main")
         self.settle()
-        self.click("dlg_cancel")
+        self.click("apply_dlg_cancel")
         self.settle()
         self.assertTrue(self.item("add_main").property("activeFocus"))
 
@@ -3909,10 +3909,10 @@ class AddScreen(AddWindow):
         self.start_window()
         self.click("add_main")
         QTest.qWait(60)
-        self.assertTrue(self.item("add_dialog").isVisible())
-        self.assertEqual(self.text("dlg_title"), "Add covers to Steam")
-        self.assertEqual(self.text("dlg_p0"), "2 covers will be added to the Steam account \u201cAlice\u201d.")
-        self.click("dlg_confirm")
+        self.assertTrue(self.item("apply_dialog").isVisible())
+        self.assertEqual(self.text("apply_dlg_title"), "Add covers to Steam")
+        self.assertEqual(self.text("apply_dlg_p0"), "2 covers will be added to the Steam account \u201cAlice\u201d.")
+        self.click("apply_dlg_confirm")
         self.wait_for(lambda: self.ap.applied)
         self.assertEqual(self.log, [("apply", None), "start"])
         self.assertTrue(self.text("add_status").startswith("Done. 2 covers added to the Steam account \u201cAlice\u201d"))
@@ -3925,8 +3925,8 @@ class AddScreen(AddWindow):
         self.start_window()
         self.click("add_main")
         QTest.qWait(60)
-        self.click("dlg_cancel")
-        self.assertEqual((self.log, self.ap.applied, self.item("add_dialog").isVisible()), ([], False, False))
+        self.click("apply_dlg_cancel")
+        self.assertEqual((self.log, self.ap.applied, self.item("apply_dialog").isVisible()), ([], False, False))
 
     def test_the_button_says_applying_and_waits_while_it_works(self):
         import threading
@@ -4073,9 +4073,9 @@ class HomeScreen(AddWindow):
         self.undo_ready()
         self.click("home_restore")
         QTest.qWait(60)
-        self.assertTrue(self.item("home_dialog").isVisible())
-        self.assertEqual(self.text("dlg_title"), "Restore previous artwork")
-        self.click("dlg_confirm")
+        self.assertTrue(self.item("apply_dialog").isVisible())
+        self.assertEqual(self.text("apply_dlg_title"), "Restore previous artwork")
+        self.click("apply_dlg_confirm")
         self.wait_for(lambda: not self.ap.busy)
         self.assertTrue(self.text("home_status").startswith("Restored your previous artwork (5 files)."))
         self.assertIn(("restore", "b1"), self.log)
@@ -4088,8 +4088,8 @@ class HomeScreen(AddWindow):
         self.click("home_reset")
         self.wait_for(lambda: self.ap.asking)
         QTest.qWait(60)
-        self.assertEqual([self.text(n) for n in ("dlg_cancel", "dlg_alternate", "dlg_confirm")], ["Cancel", "Remove all", "Remove only ours"])
-        self.click("dlg_alternate")
+        self.assertEqual([self.text(n) for n in ("apply_dlg_cancel", "apply_dlg_alternate", "apply_dlg_confirm")], ["Cancel", "Remove all", "Remove only ours"])
+        self.click("apply_dlg_alternate")
         self.wait_for(lambda: not self.ap.busy)
         self.assertEqual(self.log[0], ("reset", None, ["a"], True))
 
@@ -4159,6 +4159,106 @@ class HomeScreen(AddWindow):
             self.click("main_dlg_confirm")
         self.assertEqual(opened.call_count, 0)
 
+    def test_the_reset_question_still_comes_when_the_user_left_home_during_the_scan(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.ours = ["a"]
+        self.click("home_reset")
+        self.shell.go(2)                                                # away, while the covers are being looked for
+        self.wait_for(lambda: self.ap.asking)
+        QTest.qWait(60)
+        self.assertTrue(self.item("apply_dialog").isVisible())
+        self.assertEqual(self.text("apply_dlg_title"), "Reset to Steam's default art")
+        self.click("apply_dlg_cancel")
+        self.settle()
+        self.assertEqual((self.ap.busy, self.ap.asking), (False, False))
+
+    def test_the_buttons_follow_a_make_run_while_home_is_shown(self):
+        self.open_home()
+        self.undo_ready()
+        self.shell.make._set_state(running=True)
+        self.app.processEvents()
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
+        self.shell.make._set_state(running=False)
+        self.app.processEvents()
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [True, True])
+
+    def test_a_failed_restore_is_shown_in_a_box_wherever_the_user_is(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.ask_restore_fails = True
+        self.sc.restore_backup = lambda *a, **k: (_ for _ in ()).throw(self.sc.SteamcaseError("Steam's folder is read-only."))
+        self.click("home_restore")
+        QTest.qWait(60)
+        self.click("apply_dlg_confirm")
+        self.shell.go(2)
+        self.wait_for(lambda: self.item("main_dialog").isVisible())
+        QTest.qWait(60)
+        self.assertEqual((self.text("main_dlg_title"), self.text("main_dlg_p0")), ("Could not finish", "Steam's folder is read-only."))
+        self.assertFalse(self.item("main_dlg_cancel").isVisible())
+
+    def test_two_questions_never_show_at_once_the_second_waits(self):
+        from unittest import mock
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        reply = {"newer": False, "current": "1.0", "latest": "1.0", "url": "https://github.com/x"}
+        self.click("home_restore")
+        QTest.qWait(60)
+        with mock.patch.object(self.sc, "check_for_update", return_value=reply):
+            self.shell.updates.check()
+            self.wait_for(lambda: not self.shell.updates.checking)
+        QTest.qWait(60)
+        self.assertTrue(self.item("apply_dialog").isVisible())
+        self.assertFalse(self.item("main_dialog").isVisible())           # the answer waits for the question in front
+        self.click("apply_dlg_cancel")
+        QTest.qWait(60)
+        self.assertTrue(self.item("main_dialog").isVisible())            # and comes when it is closed
+        self.click("main_dlg_confirm")
+        self.assertFalse(self.item("main_dialog").isVisible())
+
+    def test_the_updates_link_says_checking_while_it_checks_and_keeps_its_focus(self):
+        import threading
+        from unittest import mock
+        self.open_home()
+        gate = threading.Event()
+        reply = {"newer": False, "current": "1.0", "latest": "1.0", "url": "https://github.com/x"}
+        self.root.requestActivate()
+        self.item("footer_updates").forceActiveFocus()
+        with mock.patch.object(self.sc, "check_for_update", lambda: (gate.wait(5), reply)[1]):
+            self.click("footer_updates")
+            self.assertEqual(self.text("footer_updates"), "Checking\u2026")
+            self.assertTrue(self.item("footer_updates").property("activeFocus"))
+            gate.set()
+            self.wait_for(lambda: not self.shell.updates.checking)
+        self.assertEqual(self.text("footer_updates"), "Check for updates")
+
+    def test_a_locked_row_tells_a_screen_reader_it_is_unavailable(self):
+        from PySide6.QtGui import QAccessible
+        self.open_home(covers=True)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.item("home_row_make")).state().disabled)
+        self.assertFalse(QAccessible.queryAccessibleInterface(self.item("home_row_look")).state().disabled)
+
+    def test_the_hint_has_its_line_before_the_probe_answers_so_nothing_jumps(self):
+        self.open_home()
+        card = self.item("home_section_undo")
+        before = card.height()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.app.processEvents()
+        self.assertEqual(card.height(), before)
+
+    def test_the_hint_is_silent_when_covers_are_ready_to_apply(self):
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertNotEqual(self.ap.undoHint, "")
+        self.shell.make._files = ["x.png"]
+        self.shell.make.doneChanged.emit()
+        self.assertEqual(self.ap.undoHint, "")
+
     def test_the_navigation_links_are_buttons_for_the_keyboard_and_screen_readers(self):
         from PySide6.QtGui import QAccessible
         self.open_home()
@@ -4203,7 +4303,7 @@ class MakeAddFlow(AddWindow):
         self.assertEqual(self.text("screen_title"), "Add them to Steam")
         self.click("add_main")
         self.settle()
-        self.click("dlg_confirm")
+        self.click("apply_dlg_confirm")
         self.wait_for(lambda: self.shell.apply.applied)
         self.assertEqual(self.shell.steps[5]["state"], "done")
         self.assertEqual(self.log, [("apply", None), "start"])
@@ -5002,6 +5102,64 @@ class ApplyState(QtCase, FakeStore):
         self.ap.reset()
         self.wait_for(lambda: not self.ap.busy)
         self.assertEqual((self.ap.status, self.ap.statusKind, self.ap.busy), ("Cannot read Steam's artwork.", "error", False))
+
+    def test_an_old_scan_answer_is_dropped(self):
+        self.undo_ready()
+        asked = []
+        self.ap.confirmNeeded.connect(lambda *a: asked.append(a))
+        self.ap._req = 5
+        self.ap._busy = True
+        self.ap._on_scanned(4, ["a"], "Alice", 0, None)
+        self.assertEqual(asked, [])
+        self.ap._busy = False
+
+    def test_a_job_that_ends_while_a_probe_is_running_is_probed_again(self):
+        import threading
+        gate, calls = threading.Event(), []
+        real = self.sc.list_backups
+
+        def slow(steam, user=None):
+            calls.append(1)
+            gate.wait(5)
+            return list(self.backups)
+        self.sc.list_backups = slow
+        self.addCleanup(lambda: setattr(self.sc, "list_backups", real))
+        self.ap.refreshUndo()
+        self.wait_for(lambda: bool(calls))
+        self.ap.refreshUndo()                                           # asked again while one is running: remembered
+        gate.set()
+        self.wait_for(lambda: len(calls) >= 2)
+        self.assertGreaterEqual(len(calls), 2)
+
+    def test_the_scan_stops_when_it_is_no_longer_wanted(self):
+        self.undo_ready()
+        seen = []
+        real = self.sc.find_our_covers
+
+        def spy(steam, user=None, progress=None, cancelled=None):
+            seen.append(cancelled)
+            return []
+        self.sc.find_our_covers = spy
+        self.addCleanup(lambda: setattr(self.sc, "find_our_covers", real))
+        self.ap.reset()
+        self.wait_for(lambda: bool(seen))
+        self.assertFalse(seen[0]())
+        self.ap._req += 1                                               # another request took over
+        self.assertTrue(seen[0]())
+        self.wait_for(lambda: not self.ap.busy)
+
+    def test_a_failure_of_restore_reset_or_apply_is_also_announced_for_a_box(self):
+        self.covers_ready()
+        failures = []
+        self.ap.failed.connect(failures.append)
+        self.apply_error = self.sc.SteamcaseError("No covers found in x. Make them first.")
+        self.go()
+        self.assertEqual(failures, ["No covers found in x. Make them first."])
+        self.scan_error = "Cannot read Steam's artwork."
+        self.undo_ready()
+        self.ap.reset()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(failures[-1], "Cannot read Steam's artwork.")
 
     def test_one_account_is_shown_and_not_offered(self):
         self.ap.refresh()

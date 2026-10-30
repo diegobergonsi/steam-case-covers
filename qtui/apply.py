@@ -30,12 +30,13 @@ class Apply(QObject):
     statusChanged = Signal()
     appliedChanged = Signal()
     watchingChanged = Signal()
+    failed = Signal(str)                    # the words of an error, for a box the user cannot miss wherever they are
     undoChanged = Signal()                  # whether there is anything to restore or reset
     confirmNeeded = Signal(str, list, str, str)     # the title, the paragraphs [{"text", "kind"}], the label of the "yes" button and of a second way forward ("": none)
     _probed = Signal(bool)                  # whether Steam runs (from the probe thread)
     _stage = Signal(int, str)               # request, what the worker is doing now
     _finished = Signal(int, object, object)         # request, the words of the result, the words of the error
-    _undone = Signal(bool, bool)                    # is there a backup, is there art of ours to reset (from the probe thread)
+    _undone = Signal(bool, bool, object)            # is there a backup, is there art of ours to reset, for which account (from the probe thread)
     _scanned = Signal(int, object, object, int, object)     # request, our covers, the account's name, other custom art, the words of an error
 
     def __init__(self, shell, make, covers_dir, parent=None):
@@ -50,7 +51,7 @@ class Apply(QObject):
         self._busy = self._asking = self._applied = False
         self._pending = None                            # (mode, names) waiting for the answer to the question
         self._mode = "apply"
-        self._backup = self._art = self._undo_known = self._undoing = False
+        self._backup = self._art = self._undo_known = self._undoing = self._again = False
         self._status, self._kind = "", "wait"
         self._req = 0
         self._probed.connect(self._on_probed)
@@ -59,7 +60,8 @@ class Apply(QObject):
         self._undone.connect(self._on_undone)
         self._scanned.connect(self._on_scanned)
         make.runningChanged.connect(self._make_changed)
-        make.doneChanged.connect(self.canApplyChanged)       # the accounts are read when the screen opens (refresh), not at start-up
+        make.doneChanged.connect(self.canApplyChanged)
+        make.doneChanged.connect(self.undoChanged)       # the accounts are read when the screen opens (refresh), not at start-up
 
     # ----- Steam -----
     @Property(bool, notify=steamChanged)
@@ -221,6 +223,7 @@ class Apply(QObject):
 
     def _make_changed(self):
         self.canApplyChanged.emit()
+        self.undoChanged.emit()
         if self._make.canCancel and (self._applied or self._status):         # only when covers are really being made, not when a question is asked
             self._set_applied(False)                    # new covers are coming: what was said about the old ones is no longer true
             self._set_status("", "wait")
@@ -248,15 +251,17 @@ class Apply(QObject):
     @Property(str, notify=undoChanged)
     def undoHint(self):
         """Why Restore is greyed out; gone as soon as there is something to say instead."""
-        if self._undo_known and not self._backup and not self._status and self._idle():
+        if self._undo_known and not self._backup and not self._status and self._idle() and not self.canApply:
             return "Nothing to undo yet: \u201cRestore previous artwork\u201d works once you have used \u201cApply to Steam\u201d in this app."
         return ""
 
     @Slot()
     def refreshUndo(self):
-        if not self._undoing:
-            self._undoing = True
-            threading.Thread(target=self._undo_probe, args=(self._acc(),), daemon=True).start()
+        if self._undoing:
+            self._again = True                          # something changed while a look was running: look again when it returns
+            return
+        self._undoing = True
+        threading.Thread(target=self._undo_probe, args=(self._acc(),), daemon=True).start()
 
     def _undo_probe(self, account):
         """Off the UI thread: looking in Steam's folders."""
@@ -269,12 +274,16 @@ class Apply(QObject):
         except (sc.SteamcaseError, OSError):
             pass
         try:
-            self._undone.emit(backup, art)
+            self._undone.emit(backup, art, account)
         except RuntimeError:
             pass
 
-    def _on_undone(self, backup, art):
+    def _on_undone(self, backup, art, account):
         self._undoing = False
+        if self._again or account != self._choice:        # the answer is already out of date
+            self._again = False
+            self.refreshUndo()
+            return
         self._undo_known = True
         self._backup, self._art = backup, art
         self.undoChanged.emit()
@@ -331,7 +340,8 @@ class Apply(QObject):
         other = 0
         try:
             steam = sc.steam_dir()
-            names = sc.find_our_covers(steam, account, progress=lambda i, n: self._tell(req, "Checking Steam's artwork\u2026 %d of %d" % (i, n)))
+            names = sc.find_our_covers(steam, account, progress=lambda i, n: self._tell(req, "Checking Steam's artwork\u2026 %d of %d" % (i, n)),
+                                       cancelled=lambda: req != self._req)
             who = sc.account_label(steam, sc.pick_account(steam, account))
             extra, others = sc.find_other_art(steam, account, names)
             other = len(extra) + len(others)
@@ -358,6 +368,7 @@ class Apply(QObject):
             self._set_status(error, "error")
             self.canApplyChanged.emit()
             self.undoChanged.emit()
+            self.failed.emit(error)
             return
         if not names and not other:
             self._busy = False
@@ -478,6 +489,7 @@ class Apply(QObject):
         self.undoChanged.emit()
         if error:
             self._set_status(error, "error")
+            self.failed.emit(error)
         else:
             self._set_status(text, "ok")
             self._set_applied(self._mode == "apply")         # a restore or a reset undoes what was applied

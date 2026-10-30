@@ -40,6 +40,7 @@ ScreenFrame {
                     activeFocusOnTab: !locked
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.label + ", " + screen.stateText[modelData.state]
+                    enabled: !locked                          // a disabled item is announced as unavailable
                     Accessible.onPressAction: if (!locked) shell.go(index + 1)
                     Rectangle {
                         anchors.fill: parent
@@ -114,9 +115,10 @@ ScreenFrame {
             text: screen.apply.status
             kind: screen.apply.statusKind
         }
-        StatusLine {                                  // why Restore is greyed out
+        FontMetrics { id: hintFont; font.pixelSize: Theme.smallSize }
+        StatusLine {                                  // why Restore is greyed out; its line is always there, so nothing jumps when the probe answers
             objectName: "home_hint"
-            visible: text !== ""
+            height: Math.max(implicitHeight, hintFont.height)
             text: screen.apply.undoHint
             color: Theme.faint
             font.pixelSize: Theme.smallSize
@@ -130,16 +132,4 @@ ScreenFrame {
             onClicked: shell.go(shell.returning ? shell.resume : 1)
         }
     ]
-
-    ConfirmDialog {
-        id: dialog
-        objectName: "home_dialog"
-        onConfirmed: screen.apply.confirm()
-        onDeclined: screen.apply.decline()
-        onAlternated: screen.apply.confirmAlternate()
-    }
-    Connections {
-        target: screen.apply
-        function onConfirmNeeded(title, paragraphs, go, alt) { dialog.ask(title, paragraphs, go, alt) }
-    }
 }

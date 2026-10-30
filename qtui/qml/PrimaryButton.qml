@@ -53,6 +53,7 @@ Rectangle {
         hoverEnabled: true
         enabled: root.enabled
         cursorShape: Qt.PointingHandCursor
+        onPressed: if (root.activeFocusOnTab) root.forceActiveFocus()       // a clicked button has the focus, so the keyboard can carry on from it
         onClicked: root.clicked()
     }
     Keys.onPressed: (event) => {                  // Return, numpad Enter and Space; a held key does not repeat the action

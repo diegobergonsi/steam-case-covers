@@ -74,8 +74,7 @@ ApplicationWindow {
             objectName: "footer_updates"
             y: nav.height - Theme.navRowHeight - Theme.s8
             width: nav.width
-            text: "Check for updates"
-            enabled: !shell.updates.checking
+            text: shell.updates.checking ? "Checking\u2026" : "Check for updates"
             onActivated: shell.updates.check()
         }
     }
@@ -100,19 +99,48 @@ ApplicationWindow {
         }
     }
 
-    ConfirmDialog {                                               // answers of the update check and of the Discord link
+    // Two dialogs are never open at once: the window's own (the questions of Apply, the answers of the update check) take turns.
+    property Item lastFocus: null                                 // where the keyboard was before a question, for the way back
+    onActiveFocusItemChanged: if (activeFocusItem && !String(activeFocusItem.objectName).match(/_dlg_/)) lastFocus = activeFocusItem
+    property var waiting: []
+    function show(dialog, args) {
+        if (applyDialog.visible || messages.visible) waiting.push([dialog, args]); else dialog.ask.apply(dialog, args)
+    }
+    function next() {
+        if (!applyDialog.visible && !messages.visible && waiting.length > 0) {
+            var item = waiting.shift()
+            item[0].ask.apply(item[0], item[1])
+        }
+    }
+    ConfirmDialog {                                               // the questions of Apply: add to Steam, restore, reset (wherever the user is)
+        id: applyDialog
+        objectName: "apply_dialog"
+        prefix: "apply_dlg"
+        focusBack: win.lastFocus
+        onConfirmed: shell.apply.confirm()
+        onDeclined: shell.apply.decline()
+        onAlternated: shell.apply.confirmAlternate()
+        onVisibleChanged: if (!visible) win.next()
+    }
+    ConfirmDialog {                                               // answers of the update check and of the Discord link, and errors
         id: messages
         objectName: "main_dialog"
         prefix: "main_dlg"
         property string link: ""
         onConfirmed: if (link !== "") shell.updates.openLink(link)
+        onVisibleChanged: if (!visible) win.next()
+    }
+    Connections {
+        target: shell.apply
+        function onConfirmNeeded(title, paragraphs, go, alt) { win.show(applyDialog, [title, paragraphs, go, alt]) }
+        function onFailed(text) { win.show(messages, ["Could not finish", [{"text": text, "kind": "main"}], "OK", "", true]) }
     }
     Connections {
         target: shell.updates
         function onMessage(title, paragraphs, ok, cancel, link) {
             messages.link = link
             messages.cancelText = cancel !== "" ? cancel : "Cancel"
-            messages.ask(title, paragraphs, ok, "", cancel === "")
+            win.show(messages, [title, paragraphs, ok, "", cancel === ""])
         }
     }
 }

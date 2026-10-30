@@ -64,23 +64,10 @@ ScreenFrame {
 
     footer: [
         PrimaryButton {                               // one button for the whole step, so the keyboard focus stays: Apply, then the way home
-            id: mainButton
             objectName: "add_main"
             text: screen.apply.busy ? "Applying\u2026" : screen.apply.applied ? "Go to Home \u2192" : "Apply to Steam"
             enabled: screen.apply.applied || screen.apply.canApply
             onClicked: screen.apply.applied ? shell.go(0) : screen.apply.apply()
         }
     ]
-
-    ConfirmDialog {
-        id: dialog
-        objectName: "add_dialog"
-        focusBack: mainButton
-        onConfirmed: screen.apply.confirm()
-        onDeclined: screen.apply.decline()
-    }
-    Connections {
-        target: screen.apply
-        function onConfirmNeeded(title, paragraphs, go, alt) { dialog.ask(title, paragraphs, go, alt) }
-    }
 }
