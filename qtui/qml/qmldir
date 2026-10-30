@@ -3,3 +3,11 @@ NavItem 1.0 NavItem.qml
 PrimaryButton 1.0 PrimaryButton.qml
 QuietButton 1.0 QuietButton.qml
 Card 1.0 Card.qml
+ScreenFrame 1.0 ScreenFrame.qml
+Section 1.0 Section.qml
+ButtonRow 1.0 ButtonRow.qml
+StatusLine 1.0 StatusLine.qml
+InfoTip 1.0 InfoTip.qml
+SwitchRow 1.0 SwitchRow.qml
+GameListScreen 1.0 GameListScreen.qml
+PlaceholderScreen 1.0 PlaceholderScreen.qml

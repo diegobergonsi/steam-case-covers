@@ -10,6 +10,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 import steamcase as sc
+from qtui.system import SAVE_KEY
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _styled = False
@@ -37,6 +38,8 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     engine.warnings.connect(lambda errors: problems.extend(e.toString() for e in errors))
     ctx = engine.rootContext()
     ctx.setContextProperty("shell", shell)
+    ctx.setContextProperty("saveKey", SAVE_KEY)
+    ctx.setContextProperty("familyHelp", sc.FAMILY_HELP)
     ctx.setContextProperty("discordIcon", _asset_url(assets_dir, "discord.png"))
     engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
     if problems or not engine.rootObjects():

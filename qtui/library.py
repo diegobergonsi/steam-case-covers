@@ -40,6 +40,11 @@ class Library(QObject):
     def path(self):
         return self._path
 
+    @Property(str, constant=True)
+    def downloadsUrl(self):
+        """The Downloads folder as a URL, for the Qt file dialog."""
+        return QUrl.fromLocalFile(self._downloads).toString()
+
     @Property(bool, notify=readyChanged)
     def ready(self):
         """True when a list is loaded or only the installed games are wanted: step 2 may open."""
@@ -113,6 +118,11 @@ class Library(QObject):
             return False
         self._accept(path, count)
         return True
+
+    @Slot(str, result=bool)
+    def useFileUrl(self, url):
+        """The answer of Qt's file dialog (a file: URL)."""
+        return self.useFile(QUrl(url).toLocalFile())
 
     @Slot()
     def poll(self):

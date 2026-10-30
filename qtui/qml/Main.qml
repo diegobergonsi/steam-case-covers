@@ -17,15 +17,12 @@ ApplicationWindow {
     color: Theme.bg
 
     readonly property int screenMs: Theme.dur(260)          // read by the tests
-    readonly property var titles: ({
-        "home": "Put every game in a physical case", "game_list": "Get your game list", "look": "Choose the look",
-        "hundred": "Highlight your 100% games", "make": "Make your covers", "add": "Add them to Steam"
-    })
     readonly property int navWidth: 210
     readonly property int rowHeight: 40
     readonly property int rowsTop: 72
 
     Binding { target: Theme; property: "reduce"; value: shell.reduceEffects }
+    Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.library.poll() }       // notices the saved game list
 
     Rectangle {                                                   // the navigation
         id: nav
@@ -96,37 +93,10 @@ ApplicationWindow {
             NumberAnimation { target: screen; property: "opacity"; from: 0; to: 1; duration: Theme.dur(260) }
             NumberAnimation { target: screen; property: "x"; from: win.navWidth + Theme.s32 + 30; to: win.navWidth + Theme.s32; duration: Theme.dur(260); easing.type: Easing.OutCubic }
         }
-        Text {
-            id: heading
-            y: Theme.s32
-            width: parent.width
-            text: win.titles[screen.key]
-            color: Theme.text
-            font.pixelSize: Theme.titleSize
-            font.bold: true
-            elide: Text.ElideRight
-        }
-        Card {
-            y: heading.y + heading.height + Theme.s24
-            width: parent.width
-            height: 120
-            Text {
-                anchors.fill: parent
-                anchors.margins: Theme.s16
-                text: "This screen is built in the next plan."
-                color: Theme.muted
-                font.pixelSize: Theme.bodySize
-                wrapMode: Text.WordWrap
-            }
-        }
-        PrimaryButton {
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.s32
-            visible: shell.current < shell.steps.length - 1
-            enabled: visible && shell.steps[shell.current + 1].state !== "locked"
-            text: shell.current === 0 ? "Start →" : "Next →"
-            onClicked: shell.next()
+        Loader {
+            anchors.fill: parent
+            source: screen.key === "game_list" ? "GameListScreen.qml" : "PlaceholderScreen.qml"
+            onLoaded: item.stepKey = Qt.binding(function() { return screen.key })
         }
     }
 }

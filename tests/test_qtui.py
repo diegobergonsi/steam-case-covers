@@ -295,6 +295,124 @@ class FilePicker(unittest.TestCase):
 
 
 @need_qt
+class GameListScreen(unittest.TestCase):
+    """Step 1 as the approved wireframe, in the real window (offscreen, effects reduced so nothing is still sliding when a test clicks)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        import time
+        from qtui.shell import Shell
+        from qtui.app import create_engine
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, started=time.time() - 1000)
+        self.shell.reduceEffects = True
+        self.engine = create_engine(self.shell)
+        self.addCleanup(self.close, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.lib = self.shell.library
+        self.shell.go(1)
+        self.app.processEvents()
+
+    def close(self, engine):
+        from qtui.app import close_engine
+        close_engine(engine)
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+    def click(self, name):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        it = self.item(name)
+        centre = it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, centre)
+        self.app.processEvents()
+
+    def test_it_shows_the_title_and_the_waiting_status(self):
+        self.assertEqual(self.item("screen_title").property("text"), "Get your game list")
+        self.assertEqual(self.item("gamelist_status").property("text"), "Waiting for userdata.json\u2026")
+
+    def test_the_three_ways_to_get_the_file_sit_in_one_row(self):
+        ys = [self.item(n).mapToScene(__import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(0, 0)).y() for n in ("gamelist_open", "gamelist_browse", "gamelist_copy")]
+        self.assertLess(max(ys) - min(ys), 1.0, ys)
+        self.assertEqual([self.item(n).property("text") for n in ("gamelist_open", "gamelist_browse", "gamelist_copy")],
+                         ["Open the page in my browser", "Browse\u2026", "Copy link"])
+
+    def test_copy_link_works_from_the_screen(self):
+        from unittest import mock
+        with mock.patch("steamcase.library_login_url", return_value="https://example.test/login"):
+            self.click("gamelist_copy")
+        self.assertEqual(QGuiApplication.clipboard().text(), "https://example.test/login")
+        self.assertTrue(self.item("gamelist_status").property("text").startswith("Link copied."))
+
+    def test_next_is_locked_until_a_list_is_ready_and_then_goes_to_look(self):
+        nxt = self.item("gamelist_next")
+        self.assertFalse(nxt.property("enabled"))
+        self.click("gamelist_next")
+        self.assertEqual(self.shell.current, 1)
+        self.click("gamelist_installed")
+        self.assertTrue(self.lib.ready)
+        self.assertTrue(nxt.property("enabled"))
+        self.click("gamelist_next")
+        self.assertEqual(self.shell.current, 2)
+
+    def test_enter_on_a_locked_next_does_nothing(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.root.requestActivate()
+        self.item("gamelist_next").forceActiveFocus()
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "", False))
+        self.app.processEvents()
+        self.assertEqual(self.shell.current, 1)
+
+    def test_there_is_exactly_one_filled_button_at_a_time(self):
+        names = ("gamelist_open", "gamelist_browse", "gamelist_copy", "gamelist_next")
+        def filled():
+            return [n for n in names if self.item(n).property("filled") and self.item(n).property("enabled") and self.item(n).property("visible")]
+        self.assertEqual(filled(), ["gamelist_open"])
+        self.lib.installedOnly = True
+        self.app.processEvents()
+        self.assertEqual(filled(), ["gamelist_next"])
+
+    def test_the_info_tip_explains_family_games(self):
+        import steamcase as sc
+        self.assertEqual(self.item("gamelist_installed_tip").property("text"), sc.FAMILY_HELP)
+
+    def test_the_status_colour_follows_its_kind(self):
+        status = self.item("gamelist_status")
+        waiting = status.property("color").name()
+        self.lib.installedOnly = True
+        self.app.processEvents()
+        ok = status.property("color").name()
+        self.assertNotEqual(waiting, ok)
+        self.assertEqual(ok, "#66c0f4")
+
+    def test_a_saved_file_appears_on_screen_by_itself(self):
+        with open(os.path.join(self.downloads, "userdata.json"), "w") as f:
+            json.dump({"rgOwnedApps": [1, 2]}, f)
+        self.lib.poll(); self.lib.poll()
+        self.app.processEvents()
+        self.assertEqual(self.item("gamelist_status").property("text"), "Got it: userdata.json (2 items in your library).")
+        self.assertTrue(self.item("gamelist_next").property("enabled"))
+
+    def test_the_qt_dialog_answer_is_turned_into_a_path(self):
+        good = os.path.join(self.tmp, "mine.json")
+        with open(good, "w") as f:
+            json.dump({"rgOwnedApps": [1]}, f)
+        from PySide6.QtCore import QUrl
+        self.assertTrue(self.lib.useFileUrl(QUrl.fromLocalFile(good).toString()))
+        self.assertEqual(self.lib.path, good)
+
+
+@need_qt
 class LibraryActions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

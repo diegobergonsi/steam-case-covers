@@ -7,6 +7,7 @@ Rectangle {
     id: root
     property string text: ""
     signal clicked()
+    readonly property bool filled: true          // exactly one enabled filled button per screen (rule 2 of the guide)
 
     implicitWidth: label.implicitWidth + Theme.s32
     implicitHeight: 36
