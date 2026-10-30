@@ -11,7 +11,7 @@ Item {
     signal activated()
 
     readonly property bool locked: stepState === "locked"
-    height: 40
+    height: Theme.navRowHeight
     activeFocusOnTab: !locked
     Accessible.role: Accessible.Button
     Accessible.onPressAction: if (!locked) activated()
@@ -19,10 +19,10 @@ Item {
 
     Rectangle {                                   // keyboard focus ring
         anchors.fill: parent
-        anchors.margins: 1
+        anchors.margins: Theme.hairline
         radius: Theme.radiusField
         color: "transparent"
-        border.width: root.activeFocus ? 2 : 0
+        border.width: root.activeFocus ? Theme.focusRing : 0
         border.color: Theme.text
     }
     Text {

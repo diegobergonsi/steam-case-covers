@@ -12,12 +12,13 @@ Item {
     signal toggled(bool value)
 
     width: parent ? parent.width : 0
-    implicitHeight: 32
+    implicitHeight: Theme.fieldRowHeight
     height: implicitHeight
     activeFocusOnTab: true
     Accessible.role: Accessible.CheckBox
     Accessible.name: label
     Accessible.checked: checked
+    Accessible.checkable: true
     Accessible.onToggleAction: row.toggled(!row.checked)
     Accessible.onPressAction: row.toggled(!row.checked)
 
@@ -25,26 +26,26 @@ Item {
         anchors.fill: parent
         radius: Theme.radiusField
         color: "transparent"
-        border.width: row.activeFocus ? 2 : 0
+        border.width: row.activeFocus ? Theme.focusRing : 0
         border.color: Theme.text
     }
     Rectangle {
         id: track
         x: Theme.s4
         anchors.verticalCenter: parent.verticalCenter
-        width: 38
-        height: 22
+        width: Theme.switchWidth
+        height: Theme.switchHeight
         radius: height / 2
         color: row.checked ? Theme.accent : Theme.edge
         Behavior on color { ColorAnimation { duration: Theme.dur(200) } }
         Rectangle {
             id: knob
-            y: 3
-            width: 16
-            height: 16
+            y: Theme.knobInset
+            width: Theme.knobSize
+            height: Theme.knobSize
             radius: width / 2
             color: Theme.text
-            x: row.checked ? track.width - width - 3 : 3
+            x: row.checked ? track.width - width - Theme.knobInset : Theme.knobInset
             Behavior on x { NumberAnimation { duration: Theme.dur(200); easing.type: Easing.OutCubic } }
         }
     }

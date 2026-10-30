@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The object the QML window talks to: which step is shown, which steps are open, and the remembered switches."""
-import time
-
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from qtui import settings, steps, system
@@ -16,14 +14,14 @@ class Shell(QObject):
     currentChanged = Signal()
     reduceEffectsChanged = Signal()
 
-    def __init__(self, settings_path=None, downloads=None, started=None, parent=None):
+    def __init__(self, settings_path=None, downloads=None, parent=None):
         super().__init__(parent)
         self._path = settings_path
         self._values = settings.load_settings(settings_path)
         self._facts = {k: False for k in FACTS}
         self._current = 0
         self._steps = self._build()
-        self._library = Library(self, downloads or system.downloads_dir(), time.time() if started is None else started, self)
+        self._library = Library(self, downloads or system.downloads_dir(), self)
 
     def _build(self):
         states = steps.step_states(**self._facts)

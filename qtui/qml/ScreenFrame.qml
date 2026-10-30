@@ -45,7 +45,7 @@ Item {
         Column {
             id: body
             width: scroller.width - Theme.s8              // the shadows of the sections need a little room on the right
-            spacing: Theme.s16
+            spacing: Theme.s24                            // sections sit 24 px apart (rule 7 of the guide)
         }
     }
     Row {

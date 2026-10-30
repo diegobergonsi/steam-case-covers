@@ -13,6 +13,7 @@ ScreenFrame {
     subtitle: "Steam keeps it on a web page you save once."
 
     Section {
+        objectName: "gamelist_section_list"
         heading: "Your game list"
         Text {
             width: parent.width
@@ -22,14 +23,14 @@ ScreenFrame {
             text: "Open the page and log in if asked. Press " + saveKey + " and keep the name userdata.json. The app notices the file by itself."
         }
         ButtonRow {
-            // the one filled button of the screen is "Open the page" until a list is ready, then "Next" takes over
-            PrimaryButton { objectName: "gamelist_open"; text: "Open the page in my browser"; visible: !screen.library.ready; onClicked: screen.library.openDownloadPage() }
-            QuietButton { objectName: "gamelist_open_quiet"; text: "Open the page in my browser"; visible: screen.library.ready; onClicked: screen.library.openDownloadPage() }
+            // the one filled button of the screen is "Open the page" until a list is ready, then it turns quiet and "Next" takes over (same button: focus stays)
+            PrimaryButton { objectName: "gamelist_open"; text: "Open the page in my browser"; quiet: screen.library.ready; onClicked: screen.library.openDownloadPage() }
             QuietButton { objectName: "gamelist_browse"; text: "Browse…"; onClicked: screen.library.browse() }
             QuietButton { objectName: "gamelist_copy"; text: "Copy link"; onClicked: screen.library.copyLink() }
         }
     }
     Section {
+        objectName: "gamelist_section_skip"
         heading: "Or skip it"
         SwitchRow {
             objectName: "gamelist_installed"

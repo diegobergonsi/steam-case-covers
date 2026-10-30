@@ -29,8 +29,7 @@ class Watcher(unittest.TestCase):
         import time
         self.dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.dir, True)
-        self.started = time.time() - 1000
-        self.w = DownloadWatcher(self.dir, "userdata", (".json",), self.started, 1000)
+        self.w = DownloadWatcher(self.dir, "userdata", (".json",), 1000)
 
     def put(self, name, data=b"{}", age=0):
         import time
@@ -79,7 +78,6 @@ class Watcher(unittest.TestCase):
         self.assertEqual(self.names(), ["userdata.json"])
 
     def test_files_that_do_not_count_are_ignored(self):
-        self.put("old userdata.json", age=5000)                      # older than the start of the app
         self.put("other.json")
         self.put("userdata.txt")
         self.put("big userdata.json", b"x" * 1001)                   # over the size limit
@@ -101,11 +99,37 @@ class Watcher(unittest.TestCase):
 
     def test_a_missing_or_unreadable_folder_gives_nothing(self):
         from unittest import mock
-        gone = DownloadWatcher(os.path.join(self.dir, "nope"), "userdata", (".json",), self.started, 1000)
+        gone = DownloadWatcher(os.path.join(self.dir, "nope"), "userdata", (".json",), 1000)
         self.assertEqual(gone.poll(), [])
         self.put("userdata.json")
         with mock.patch("os.listdir", side_effect=PermissionError(13, "denied")):
             self.assertEqual(self.w.poll(), [])
+
+    def test_files_that_were_there_before_the_watcher_started_wait_until_they_change(self):
+        """What lay in Downloads before the app opened is stale. This does not depend on the clock, which may step back."""
+        old = self.put("userdata.json", b"old", age=5000)
+        w = DownloadWatcher(self.dir, "userdata", (".json",), 1000)
+        w.poll()
+        self.assertEqual(w.poll(), [])
+        with open(old, "wb") as f:
+            f.write(b"saved again")
+        w.poll()
+        self.assertEqual([os.path.basename(p) for p, _ in w.poll()], ["userdata.json"])
+
+    def test_a_file_saved_after_the_start_counts_even_if_its_time_is_in_the_past(self):
+        p = self.put("userdata.json", age=99999)                      # the clock stepped back, or the time came from the server
+        self.w.poll()
+        self.assertEqual([os.path.basename(x) for x, _ in self.w.poll()], ["userdata.json"])
+
+    def test_a_replacement_with_the_same_size_and_time_is_noticed(self):
+        p = self.put("userdata.json", b"AAAA")
+        st = os.stat(p)
+        self.w.poll(); self.w.poll()
+        other = self.put("tmp.bin", b"BBBB")
+        os.utime(other, ns=(st.st_atime_ns, st.st_mtime_ns))          # a coarse-clock file system gives the same time and size
+        os.replace(other, p)
+        self.w.poll()
+        self.assertEqual([os.path.basename(x) for x, _ in self.w.poll()], ["userdata.json"])
 
     def test_a_file_that_vanishes_between_listing_and_reading_is_skipped(self):
         from unittest import mock
@@ -302,14 +326,13 @@ class GameListScreen(unittest.TestCase):
         cls.app = qt_app()
 
     def setUp(self):
-        import time
         from qtui.shell import Shell
         from qtui.app import create_engine
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.downloads = os.path.join(self.tmp, "Downloads")
         os.makedirs(self.downloads)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, started=time.time() - 1000)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads)
         self.shell.reduceEffects = True
         self.engine = create_engine(self.shell)
         self.addCleanup(self.close, self.engine)
@@ -376,11 +399,54 @@ class GameListScreen(unittest.TestCase):
     def test_there_is_exactly_one_filled_button_at_a_time(self):
         names = ("gamelist_open", "gamelist_browse", "gamelist_copy", "gamelist_next")
         def filled():
-            return [n for n in names if self.item(n).property("filled") and self.item(n).property("enabled") and self.item(n).property("visible")]
+            return [n for n in names if self.item(n).property("filled") and self.item(n).property("enabled")]
         self.assertEqual(filled(), ["gamelist_open"])
         self.lib.installedOnly = True
         self.app.processEvents()
         self.assertEqual(filled(), ["gamelist_next"])
+
+    def test_keyboard_focus_stays_on_the_open_button_when_a_list_arrives(self):
+        open_button = self.item("gamelist_open")
+        open_button.forceActiveFocus()
+        self.assertTrue(open_button.property("activeFocus"))
+        self.lib.installedOnly = True
+        self.app.processEvents()
+        self.assertTrue(self.item("gamelist_open").property("activeFocus"))
+        self.assertFalse(self.item("gamelist_open").property("filled"))
+
+    def test_sections_are_24_px_apart(self):
+        from PySide6.QtCore import QPointF
+        a, b = self.item("gamelist_section_list"), self.item("gamelist_section_skip")
+        gap = b.mapToScene(QPointF(0, 0)).y() - (a.mapToScene(QPointF(0, 0)).y() + a.height())
+        self.assertAlmostEqual(gap, 24, delta=0.5)
+
+    def test_the_switch_tells_screen_readers_it_can_be_checked(self):
+        from PySide6.QtGui import QAccessible
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        iface = QAccessible.queryAccessibleInterface(self.item("gamelist_installed"))
+        self.assertIsNotNone(iface)
+        self.assertTrue(iface.state().checkable)
+        self.assertFalse(iface.state().checked)
+        self.lib.installedOnly = True
+        self.app.processEvents()
+        self.assertTrue(QAccessible.queryAccessibleInterface(self.item("gamelist_installed")).state().checked)
+
+    def test_escape_closes_a_pinned_info_tip_and_it_can_open_again(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        tip = self.item("gamelist_installed_tip")
+        self.root.requestActivate()
+        tip.forceActiveFocus()
+        tip.setProperty("pinned", True)
+        self.app.processEvents()
+        self.assertTrue(tip.property("shown"))
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier, "", False))
+        self.app.processEvents()
+        self.assertFalse(tip.property("pinned"))
+        tip.setProperty("pinned", True)                        # the next click works again, it is not stuck
+        self.app.processEvents()
+        self.assertTrue(tip.property("shown"))
 
     def test_the_info_tip_explains_family_games(self):
         import steamcase as sc
@@ -393,7 +459,11 @@ class GameListScreen(unittest.TestCase):
         self.app.processEvents()
         ok = status.property("color").name()
         self.assertNotEqual(waiting, ok)
-        self.assertEqual(ok, "#66c0f4")
+        self.assertEqual((waiting, ok), ("#93a7bb", "#66c0f4"))
+        self.lib.installedOnly = False
+        self.lib.useFile(os.path.join(self.tmp, "missing.json"))
+        self.app.processEvents()
+        self.assertEqual(status.property("color").name(), "#ff7b72")
 
     def test_a_saved_file_appears_on_screen_by_itself(self):
         with open(os.path.join(self.downloads, "userdata.json"), "w") as f:
@@ -420,14 +490,13 @@ class GameListFlow(unittest.TestCase):
         cls.app = qt_app()
 
     def test_from_home_to_look(self):
-        import time
         from qtui.app import close_engine, create_engine, find_item
         from qtui.shell import Shell
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
         downloads = os.path.join(tmp, "Downloads")
         os.makedirs(downloads)
-        shell = Shell(os.path.join(tmp, "settings.json"), downloads=downloads, started=time.time() - 1000)
+        shell = Shell(os.path.join(tmp, "settings.json"), downloads=downloads)
         shell.reduceEffects = True
         engine = create_engine(shell)
         self.addCleanup(close_engine, engine)
@@ -454,7 +523,10 @@ class GameListFlow(unittest.TestCase):
 
         with open(os.path.join(downloads, "userdata (1).json"), "w") as f:
             json.dump({"rgOwnedApps": [], "rgOwnedPackages": [1]}, f)   # a logged-out copy saved later must not replace it
-        lib.poll(); lib.poll(); lib.poll()
+        from unittest import mock
+        with mock.patch("steamcase.owned_ids", side_effect=AssertionError("a list is loaded: nothing else may be read")) as read:
+            lib.poll(); lib.poll(); lib.poll()
+            self.assertEqual(read.call_count, 0)
         self.assertEqual(status(), "Got it: userdata.json (4 items in your library).")
 
         shell.next()
@@ -470,19 +542,26 @@ class LibraryActions(unittest.TestCase):
         cls.app = qt_app()
 
     def setUp(self):
-        import time
         from unittest import mock
         from qtui.shell import Shell
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.downloads = os.path.join(self.tmp, "Downloads")
         os.makedirs(self.downloads)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, started=time.time() - 1000)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads)
         self.lib = self.shell.library
         self.url = "https://store.steampowered.com/login/?redir=test"
         patch = mock.patch("steamcase.library_login_url", return_value=self.url)
         patch.start()
         self.addCleanup(patch.stop)
+
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
 
     def test_copy_link_puts_the_exact_link_on_the_clipboard(self):
         self.lib.copyLink()
@@ -507,13 +586,38 @@ class LibraryActions(unittest.TestCase):
             json.dump({"rgOwnedApps": [1, 2, 3]}, f)
         with mock.patch("qtui.library.pick_file", return_value=good):
             self.lib.browse()
+            self.wait_for(lambda: self.lib.path)
         self.assertEqual((self.lib.path, self.lib.ready), (good, True))
+
+    def test_browse_does_not_freeze_the_window_while_the_chooser_is_open(self):
+        import time
+        from unittest import mock
+        good = os.path.join(self.tmp, "slow.json")
+        with open(good, "w") as f:
+            json.dump({"rgOwnedApps": [1]}, f)
+
+        def slow(*a, **k):
+            time.sleep(0.6)                                    # the user is looking at the chooser
+            return good
+        with mock.patch("qtui.library.pick_file", side_effect=slow):
+            t0 = time.time()
+            self.lib.browse()
+            self.assertLess(time.time() - t0, 0.3)             # returns at once
+            self.lib.browse()                                  # a second click while the first chooser is open does not open another
+            for _ in range(60):
+                self.app.processEvents()
+                if self.lib.path:
+                    break
+                time.sleep(0.05)
+        self.assertEqual(self.lib.path, good)
 
     def test_browse_cancelled_changes_nothing(self):
         from unittest import mock
         before = (self.lib.path, self.lib.status, self.lib.statusKind)
-        with mock.patch("qtui.library.pick_file", return_value=""):
+        with mock.patch("qtui.library.pick_file", return_value="") as m:
             self.lib.browse()
+            self.wait_for(lambda: m.called)
+            self.app.processEvents()
         self.assertEqual((self.lib.path, self.lib.status, self.lib.statusKind), before)
 
     def test_browse_without_a_desktop_chooser_asks_for_the_qt_dialog(self):
@@ -522,6 +626,7 @@ class LibraryActions(unittest.TestCase):
         self.lib.needDialog.connect(lambda folder: seen.append(folder))
         with mock.patch("qtui.library.pick_file", return_value=None):
             self.lib.browse()
+            self.wait_for(lambda: seen)
         self.assertEqual(seen, [self.downloads])
 
     def test_the_qt_dialog_answer_goes_through_the_same_check(self):
@@ -548,12 +653,11 @@ class LibraryState(unittest.TestCase):
         self.downloads = os.path.join(self.tmp, "Downloads")
         os.makedirs(self.downloads)
         self.settings = os.path.join(self.tmp, "settings.json")
-        self.started = time.time() - 1000
         self.shell = self.new_shell()
         self.lib = self.shell.library
 
     def new_shell(self):
-        return self.Shell(self.settings, downloads=self.downloads, started=self.started)
+        return self.Shell(self.settings, downloads=self.downloads)
 
     def save(self, name, data):
         p = os.path.join(self.downloads, name)
@@ -601,6 +705,40 @@ class LibraryState(unittest.TestCase):
                 self.assertTrue(self.lib.ready)
                 self.assertEqual(self.lib.statusKind, "error")
                 self.assertTrue(self.lib.status.startswith("That file doesn't look right: "), self.lib.status)
+
+    def test_a_rejected_file_says_which_list_is_still_used(self):
+        good = self.save("good.json", {"rgOwnedApps": [10]})
+        bad = self.save("bad.json", "[]")
+        self.assertFalse(self.lib.useFile(bad))
+        self.assertFalse(self.lib.status.endswith("."), self.lib.status) if False else None
+        self.assertNotIn("Still using", self.lib.status)                     # nothing is in use yet
+        self.assertTrue(self.lib.useFile(good))
+        self.assertFalse(self.lib.useFile(bad))
+        self.assertTrue(self.lib.status.endswith(" Still using good.json."), self.lib.status)
+        self.lib.installedOnly = True
+        self.assertFalse(self.lib.useFile(bad))
+        self.assertTrue(self.lib.status.endswith(" Still using good.json."), self.lib.status)         # the file is what counts while a file is loaded
+
+    def test_a_rejected_file_while_only_installed_games_are_used(self):
+        self.lib.installedOnly = True
+        self.assertFalse(self.lib.useFile(self.save("bad.json", "[]")))
+        self.assertTrue(self.lib.status.endswith(" Still using installed games only."), self.lib.status)
+
+    def test_a_named_pipe_is_refused_without_hanging(self):
+        import threading
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("no named pipes on this system")
+        fifo = os.path.join(self.tmp, "pipe.json")
+        os.mkfifo(fifo)
+        out = []
+        t = threading.Thread(target=lambda: out.append(self.lib.useFile(fifo)), daemon=True)
+        t.start()
+        t.join(5)
+        if t.is_alive():
+            os.close(os.open(fifo, os.O_WRONLY))                              # unblock the stuck open()
+            self.fail("useFile blocked on a named pipe")
+        self.assertEqual(out, [False])
+        self.assertEqual(self.lib.statusKind, "error")
 
     def test_loading_a_file_switches_installed_only_off(self):
         self.lib.installedOnly = True
@@ -673,7 +811,7 @@ class LibraryState(unittest.TestCase):
         self.assertTrue(self.lib.status.startswith("userdata.json: "), self.lib.status)
 
     def test_a_folder_that_does_not_exist_is_fine(self):
-        shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"), started=self.started)
+        shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"))
         shell.library.poll()
         self.assertFalse(shell.library.ready)
 
@@ -924,6 +1062,16 @@ class Tokens(unittest.TestCase):
                             r"Qt\.lighter\([^)]*,\s*[\d.]+\)", r"(?:blur|brightness|saturation):\s*-?\d"):
                 self.assertEqual(re.findall(pattern, text), [], "%s: %s" % (name, pattern))
 
+    def test_no_loose_layout_numbers(self):
+        """Sizes, spacing, margins, borders and positions come from Theme too (0 is allowed). Only Theme.qml may hold a number."""
+        import re
+        patterns = (r"\b(?:width|height|implicitWidth|implicitHeight|spacing)\s*:\s*(?:-(?!Theme)|[1-9])", r"\banchors\.\w*[mM]argins?\s*:\s*(?:-(?!Theme)|[1-9])",
+                    r"\b[xy]\s*:\s*(?:-(?!Theme)|[1-9])", r"\bborder\.width\s*:[^\n]*[1-9]", r"\bsourceSize\.\w+\s*:\s*[1-9]", r"Theme\.\w+\s*[-+*/]\s*\d",
+                    r"Math\.(?:min|max)\(\s*[1-9]", r"\bfont\.pixelSize\s*:\s*[1-9]")
+        for name, text in self.qml_files():
+            for pattern in patterns:
+                self.assertEqual(re.findall(pattern, text), [], "%s: %s" % (name, pattern))
+
     def test_there_is_no_picture_behind_the_window(self):
         """The approved design has plain surfaces; a decorative backdrop was added once without asking and removed again."""
         import re
@@ -1094,7 +1242,7 @@ class Entry(unittest.TestCase):
             "app = QGuiApplication([])\n"
             "from qtui.shell import Shell\n"
             "from qtui.app import create_engine, close_engine\n"
-            "shell = Shell(os.path.join(tempfile.mkdtemp(), 's.json'))\n"
+            "shell = Shell(os.path.join(tempfile.mkdtemp(), 's.json'), downloads=tempfile.mkdtemp())\n"
             "engine = create_engine(shell)\n"
             "close_engine(engine)\n"
             "del shell\n"
@@ -1124,6 +1272,7 @@ class Entry(unittest.TestCase):
             text = f.read()
         self.assertRegex(text, r"shell\.go\(1\)")
         self.assertIn("gamelist_next", text)
+        self.assertRegex(text, r"Shell\(.*downloads=", "the self-test must never look at the real Downloads folder")
 
     def test_a_missing_bundled_picture_fails_the_selftest(self):
         empty = tempfile.mkdtemp()

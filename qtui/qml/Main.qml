@@ -8,18 +8,16 @@ import "."
 ApplicationWindow {
     id: win
     objectName: "window"
-    width: 900
-    height: 560
-    minimumWidth: 640
-    minimumHeight: 420
+    width: Theme.windowWidth
+    height: Theme.windowHeight
+    minimumWidth: Theme.windowMinWidth
+    minimumHeight: Theme.windowMinHeight
     visible: true
     title: "Steam Case Covers"
     color: Theme.bg
 
     readonly property int screenMs: Theme.dur(260)          // read by the tests
-    readonly property int navWidth: 210
-    readonly property int rowHeight: 40
-    readonly property int rowsTop: 72
+    readonly property int navWidth: Theme.navWidth
 
     Binding { target: Theme; property: "reduce"; value: shell.reduceEffects }
     Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.library.poll() }       // notices the saved game list
@@ -34,10 +32,10 @@ ApplicationWindow {
         Rectangle {                                               // the highlight glides to the chosen step
             x: Theme.s8
             width: nav.width - 2 * Theme.s8
-            height: win.rowHeight - 6
+            height: Theme.navHighlightHeight
             radius: Theme.radiusField
             color: Theme.raised
-            y: win.rowsTop + shell.current * win.rowHeight + 3
+            y: Theme.navTop + shell.current * Theme.navRowHeight + Theme.navHighlightInset
             Behavior on y { NumberAnimation { duration: Theme.dur(200); easing.type: Easing.OutCubic } }
         }
         Text {
@@ -49,7 +47,7 @@ ApplicationWindow {
             font.bold: true
         }
         Column {
-            y: win.rowsTop
+            y: Theme.navTop
             width: nav.width
             Repeater {
                 model: shell.steps
@@ -67,7 +65,7 @@ ApplicationWindow {
             x: Theme.s24
             y: nav.height - 84
             spacing: Theme.s8
-            Image { visible: discordIcon !== ""; source: discordIcon; width: 20; height: 20; sourceSize.width: 40; sourceSize.height: 40; fillMode: Image.PreserveAspectFit }
+            Image { visible: discordIcon !== ""; source: discordIcon; width: Theme.iconSize; height: Theme.iconSize; sourceSize.width: Theme.iconPixels; sourceSize.height: Theme.iconPixels; fillMode: Image.PreserveAspectFit }
             Text { objectName: "footer_discord"; text: "Discord"; color: Theme.muted; font.pixelSize: Theme.bodySize }
         }
         Text {
@@ -91,7 +89,7 @@ ApplicationWindow {
         ParallelAnimation {
             id: enter
             NumberAnimation { target: screen; property: "opacity"; from: 0; to: 1; duration: Theme.dur(260) }
-            NumberAnimation { target: screen; property: "x"; from: win.navWidth + Theme.s32 + 30; to: win.navWidth + Theme.s32; duration: Theme.dur(260); easing.type: Easing.OutCubic }
+            NumberAnimation { target: screen; property: "x"; from: win.navWidth + Theme.s32 + Theme.slideOffset; to: win.navWidth + Theme.s32; duration: Theme.dur(260); easing.type: Easing.OutCubic }
         }
         Loader {
             anchors.fill: parent

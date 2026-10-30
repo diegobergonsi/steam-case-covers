@@ -37,6 +37,32 @@ QtObject {
     readonly property int bodySize: 14
     readonly property int smallSize: 12
 
+    // sizes of the window and of the controls (docs/ui-guide.md)
+    readonly property int windowWidth: 900
+    readonly property int windowHeight: 560
+    readonly property int windowMinWidth: 640
+    readonly property int windowMinHeight: 420
+    readonly property int navWidth: 210
+    readonly property int navTop: 72
+    readonly property int navRowHeight: 40
+    readonly property int navHighlightInset: 3
+    readonly property int navHighlightHeight: navRowHeight - 2 * navHighlightInset
+    readonly property int controlHeight: 36
+    readonly property int fieldRowHeight: 32
+    readonly property int infoSize: 24
+    readonly property int iconSize: 20
+    readonly property int iconPixels: 40
+    readonly property int switchWidth: 38
+    readonly property int switchHeight: 22
+    readonly property int knobSize: 16
+    readonly property int knobInset: 3
+    readonly property int tipMaxWidth: 360
+    readonly property int tipTextSize: 13
+    readonly property int hairline: 1
+    readonly property int focusRing: 2
+    readonly property int ringOffset: 3
+    readonly property int slideOffset: 30
+
     // elevation and states (docs/ui-guide.md)
     readonly property real cardShadowBlur: 0.8
     readonly property real cardShadowOpacity: 0.45

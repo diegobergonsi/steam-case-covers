@@ -7,12 +7,16 @@ Rectangle {
     id: root
     property string text: ""
     signal clicked()
-    readonly property bool filled: true          // exactly one enabled filled button per screen (rule 2 of the guide)
+    property bool quiet: false                     // the outlined look, for everything that is not the screen's main action
+    readonly property bool filled: !quiet          // exactly one enabled filled button per screen (rule 2 of the guide)
 
     implicitWidth: label.implicitWidth + Theme.s32
-    implicitHeight: 36
+    implicitHeight: Theme.controlHeight
     radius: height / 2
-    color: !enabled ? Theme.raised : area.containsMouse ? Qt.lighter(Theme.accent, Theme.hoverLift) : Theme.accent
+    color: quiet ? (area.containsMouse ? Theme.raised : "transparent") : !enabled ? Theme.raised : area.containsMouse ? Qt.lighter(Theme.accent, Theme.hoverLift) : Theme.accent
+    border.width: quiet ? Theme.hairline : 0
+    border.color: Theme.edge
+    opacity: quiet && !enabled ? Theme.disabledOpacity : 1
     scale: area.pressed ? 0.95 : 1
     activeFocusOnTab: enabled
     Accessible.role: Accessible.Button
@@ -23,10 +27,10 @@ Rectangle {
 
     Rectangle {                                   // keyboard focus ring
         anchors.fill: parent
-        anchors.margins: -3
+        anchors.margins: -Theme.ringOffset
         radius: height / 2
         color: "transparent"
-        border.width: root.activeFocus ? 2 : 0
+        border.width: root.activeFocus ? Theme.focusRing : 0
         border.color: Theme.text
     }
     Text {
@@ -35,7 +39,7 @@ Rectangle {
         text: root.text
         font.pixelSize: Theme.bodySize
         font.bold: true
-        color: root.enabled ? Theme.accentInk : Theme.faint
+        color: root.quiet ? Theme.text : root.enabled ? Theme.accentInk : Theme.faint
     }
     MouseArea {
         id: area

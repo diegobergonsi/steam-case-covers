@@ -2,6 +2,8 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Step 1 of the window: the game list. The saved userdata.json is noticed by itself, checked, and unlocks the next step."""
 import os
+import stat
+import threading
 
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
@@ -21,14 +23,17 @@ class Library(QObject):
     readyChanged = Signal()
     statusChanged = Signal()
     needDialog = Signal(str)                # the desktop has no file chooser of its own: show Qt's, starting in this folder
+    _picked = Signal(object)                # the answer of the file chooser, which runs on another thread
 
-    def __init__(self, shell, downloads, started, parent=None):
+    def __init__(self, shell, downloads, parent=None):
         super().__init__(parent)
         self._shell = shell
         self._downloads = downloads
-        self._watcher = DownloadWatcher(downloads, "userdata", (".json",), started, sc.MAX_LIBRARY_FILE)
+        self._watcher = DownloadWatcher(downloads, "userdata", (".json",), sc.MAX_LIBRARY_FILE)
         self._path = ""
         self._count = 0
+        self._choosing = False              # a file chooser is open
+        self._picked.connect(self._on_picked)
         self._reported = {}                 # path -> signature of the version whose error is already on screen
         self._installed = shell.switchValue("installed_only")
         self._status, self._kind = "", "wait"
@@ -97,6 +102,11 @@ class Library(QObject):
     def _check(path):
         """(number of items, "") for a good game list, (0, reason) otherwise."""
         try:
+            if not stat.S_ISREG(os.stat(os.path.expanduser(path)).st_mode):         # a named pipe or a device would block the read for ever
+                return 0, "Could not read %s as a game list (not a regular file)." % os.path.basename(path)
+        except OSError:
+            pass                                                                      # missing or unreadable: the engine words it
+        try:
             return len(sc.owned_ids(path)), ""
         except sc.SteamcaseError as e:
             return 0, str(e)
@@ -115,7 +125,12 @@ class Library(QObject):
         """Check a file the user chose and use it. A bad file changes nothing but the status."""
         count, why = self._check(path)
         if why:
-            self._set_status("That file doesn't look right: %s" % why, "error")
+            text = "That file doesn't look right: %s" % why
+            if self._path:                                      # say what is still in use: the old pop-up left that text on screen
+                text += " Still using %s." % os.path.basename(self._path)
+            elif self._installed:
+                text += " Still using installed games only."
+            self._set_status(text, "error")
             return False
         self._accept(path, count)
         return True
@@ -155,7 +170,21 @@ class Library(QObject):
 
     @Slot()
     def browse(self):
-        path = pick_file("Choose your userdata.json", self._downloads)
+        """Open the desktop's file chooser on another thread, so the window keeps painting while it is open."""
+        if self._choosing:
+            return
+        self._choosing = True
+
+        def ask():
+            try:
+                path = pick_file("Choose your userdata.json", self._downloads)
+            except Exception:
+                path = None                                     # no chooser worked: Qt's own dialog
+            self._picked.emit(path)
+        threading.Thread(target=ask, daemon=True).start()
+
+    def _on_picked(self, path):
+        self._choosing = False
         if path is None:
             self.needDialog.emit(self._downloads)
         elif path:
