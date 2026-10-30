@@ -22,3 +22,7 @@ def downloads_dir():
         if os.path.isdir(p):
             return os.path.normpath(p)
     return os.path.join(home, "Downloads")
+
+
+CUSTOM_ART_HELP = ("For games where you set your own art (in Steam's menu or from SteamGridDB), your art goes inside the case instead of Steam's. "
+                   "The app keeps a copy of it in its own folder and never changes your files. Games without art of your own use Steam's.")

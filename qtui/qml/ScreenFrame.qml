@@ -35,6 +35,7 @@ Item {
     }
     Flickable {
         id: scroller
+        objectName: "screen_scroller"
         y: sub.y + sub.height + Theme.s16
         width: parent.width
         height: Math.max(0, footerRow.y - y - Theme.s16)

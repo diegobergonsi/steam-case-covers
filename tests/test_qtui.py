@@ -228,6 +228,15 @@ class Tones(unittest.TestCase):
         with self.assertRaises(ValueError):
             tones.track_colors(0, 0, 0, "other")
 
+    def test_the_slider_track_runs_through_the_real_case_colours(self):
+        import steamcase as sc
+        g = tones.track_gradient(120, 60, 80, "sat", 5)
+        self.assertEqual(g, [sc.case_color(120, v, 80) for v in (0, 25, 50, 75, 100)])
+        g = tones.track_gradient(120, 60, 80, "val")
+        self.assertEqual((len(g), g[0], g[-1]), (24, sc.case_color(120, 60, 0), sc.case_color(120, 60, 100)))
+        with self.assertRaises(ValueError):
+            tones.track_gradient(0, 0, 0, "hue")
+
     def test_the_hue_gradient_starts_at_the_original_blue(self):
         colours = tones.hue_colors()
         self.assertEqual(len(colours), 36)
@@ -910,6 +919,129 @@ class LibraryState(unittest.TestCase):
         shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"), covers_dir=os.path.join(self.tmp, "covers"))
         shell.library.poll()
         self.assertFalse(shell.library.ready)
+
+
+@need_qt
+class LookScreen(unittest.TestCase):
+    """Step 2 as the approved wireframe, in the real window (effects reduced so nothing is still sliding)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True               # step 2 is open
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.look = self.shell.look
+        self.shell.go(2)
+        self.app.processEvents()
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+    def centre(self, name):
+        from PySide6.QtCore import QPointF
+        it = self.item(name)
+        return it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
+
+    def reveal(self, name):
+        """Scroll the page so the item is in view, as a person would."""
+        from PySide6.QtCore import QPointF
+        scroller = self.item("screen_scroller")
+        y = self.item(name).mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+        scroller.setProperty("contentY", max(0, y - 40))
+        self.app.processEvents()
+
+    def click(self, name):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.reveal(name)
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, self.centre(name))
+        self.app.processEvents()
+
+    def pos(self, name):
+        from PySide6.QtCore import QPointF
+        return self.item(name).mapToScene(QPointF(0, 0))
+
+    def test_it_shows_its_title_and_the_nine_swatches(self):
+        self.assertEqual(self.item("screen_title").property("text"), "Choose the look")
+        self.assertEqual([self.item("look_swatch_%d" % i).property("name") for i in (0, 6, 8)], ["Blue", "Black", "Silver"])
+
+    def test_a_swatch_sets_the_tone_and_only_it_is_selected(self):
+        self.click("look_swatch_3")
+        self.assertEqual((self.look.hue, self.look.sat, self.look.val), (134, 100, 100))
+        self.assertEqual([i for i in range(9) if self.item("look_swatch_%d" % i).property("selected")], [3])
+        self.assertTrue(self.look.previewSource.startswith("image://preview/"))
+
+    def test_a_slider_changes_the_colour_and_a_grey_says_it_ignores_it(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        c = self.centre("look_hue")
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, c)
+        self.app.processEvents()
+        self.assertGreater(self.look.hue, 100)
+        self.assertEqual(self.item("look_hint").property("text"), "")
+        self.click("look_swatch_7")
+        self.assertEqual(self.item("look_hint").property("text"), "Colour has no effect on grey or black.")
+        self.assertEqual(self.item("look_tone_name").property("text"), "Graphite")
+
+    def test_the_theme_chips_set_the_theme(self):
+        self.click("look_theme_chip_halloween")
+        self.assertEqual(self.look.theme, "halloween")
+        self.click("look_theme_chip_classic")
+        self.assertEqual(self.look.theme, "classic")
+
+    def test_the_art_switches_change_and_are_remembered(self):
+        for name in ("look_custom_art", "look_skip_blurry"):
+            self.reveal(name)
+            it = self.item(name)
+            from PySide6.QtCore import QPoint, QPointF, Qt
+            from PySide6.QtTest import QTest
+            p = it.mapToScene(QPointF(60, it.height() / 2)).toPoint()        # on the label: the empty space to its right is not part of the switch
+            QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, p)
+            self.app.processEvents()
+        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt)
+        self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
+        self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("steamcase").AUTO_ART_HELP)
+
+    def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
+        self.assertTrue(self.item("look_next").property("filled"))
+        self.assertEqual(self.shell.steps[3]["state"], "locked")
+        self.click("look_next")
+        self.assertEqual(self.shell.current, 3)
+        self.assertEqual(self.shell.steps[3]["state"], "active")
+
+    def test_the_preview_sits_left_of_the_sections_and_above_them_when_narrow(self):
+        self.root.setProperty("width", 1000)
+        self.app.processEvents()
+        self.assertLess(self.pos("look_preview").x(), self.pos("look_section_colour").x())
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.app.processEvents()
+        self.assertLess(self.pos("look_preview").y(), self.pos("look_section_colour").y())
+
+    def test_nothing_sticks_out_of_its_card_at_the_narrowest_window(self):
+        from PySide6.QtCore import QPointF
+        self.root.setProperty("minimumWidth", 420)
+        self.root.setProperty("width", 420)
+        self.app.processEvents()
+        for sec in ("look_section_colour", "look_section_theme", "look_section_art"):
+            s = self.item(sec)
+            right = s.mapToScene(QPointF(s.width(), 0)).x()
+            names = {"look_section_colour": ["look_hue", "look_sat", "look_val", "look_swatch_8"], "look_section_theme": ["look_theme"],
+                     "look_section_art": ["look_custom_art", "look_skip_blurry"]}[sec]
+            for n in names:
+                it = self.item(n)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, "%s sticks out of %s" % (n, sec))
 
 
 @need_qt

@@ -64,3 +64,11 @@ def track_colors(hue, sat, val, which):
 def hue_colors(steps=36):
     """The hue slider's gradient: the case colour at `steps` evenly spaced hues, starting at the original blue."""
     return [sc.case_color(round(i * 360 / steps) % 360) for i in range(steps)]
+
+
+def track_gradient(hue, sat, val, which, steps=24):
+    """The case colour along the whole colourfulness ("sat") or brightness ("val") slider, `steps` colours from one end to the other: what the track should look like."""
+    hue, sat, val = clamp_tone(hue, sat, val)
+    if which not in ("sat", "val"):
+        raise ValueError("unknown slider: %r" % (which,))
+    return [sc.case_color(hue, round(i * 100 / (steps - 1)), val) if which == "sat" else sc.case_color(hue, sat, round(i * 100 / (steps - 1))) for i in range(steps)]

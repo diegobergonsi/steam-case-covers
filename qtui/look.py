@@ -134,6 +134,13 @@ class Look(QObject):
         except ValueError:
             return "#000000", "#000000"       # never an exception into QML
 
+    @Slot(str, result="QVariantList")
+    def trackColors(self, which):
+        try:
+            return tones.track_gradient(*self._tone, which)
+        except ValueError:
+            return []
+
     @Slot(result="QVariantList")
     def hueColors(self):
         return tones.hue_colors()
