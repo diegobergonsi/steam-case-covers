@@ -5,7 +5,9 @@ The words are those of the Tk window (gui.App._replace_reason); a test keeps the
 import os
 
 import steamcase as sc
-from qtui.hundred import MARKS, STYLES
+
+STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon", "Normal case"), ("none", "No special case")]    # values: sc.CASES, or "none"
+MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
 
 
 def look_label(treatment):

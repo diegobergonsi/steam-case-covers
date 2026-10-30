@@ -11,12 +11,11 @@ from PySide6.QtGui import QDesktopServices, QGuiApplication
 import completion
 import steamcase as sc
 from qtui.filepicker import pick_file
+from qtui.reasons import MARKS, STYLES
 from qtui.system import GAMES_PAGE_URL, SAVE_KEY, THEME_NOTE
 from qtui.watcher import DownloadWatcher
 
 WAITING = "No games page loaded. Your covers keep the look they have."
-STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon", "Normal case"), ("none", "No special case")]    # values: sc.CASES, or "none"
-MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
 
 
 class Hundred(QObject):

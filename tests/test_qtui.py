@@ -3193,5 +3193,319 @@ class ReplaceReasons(FakeStore):
                     self.assertEqual(got, want, (folder, tone, completed, treatment, theme, art, games))
 
 
+@need_qt
+class MakeState(QtCase, FakeStore):
+    """Step 4's object: it reads the choices of the earlier steps, asks before replacing covers, makes them on a worker thread and tells how it went."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        super().setUp()
+        import threading
+        from unittest import mock
+        import steamcase as sc
+        from qtui.shell import Shell
+        self.sc = sc
+        self.games, self.family, self.art, self.art_problems = {1: None, 2: None}, set(), {}, []
+        self.calls = []                                                  # the keyword arguments of every make_covers run
+        self.gate = None                                                 # an Event: the run waits for it after its first cover
+        self.reached = threading.Event()
+        real_make = sc.make_covers
+
+        def make_covers(games, out, **kw):
+            self.calls.append(dict(kw, games=dict(games)))
+            if self.gate is not None:
+                inner = kw["progress"]
+
+                def progress(*a):
+                    inner(*a)
+                    if a[0] == 1:
+                        self.reached.set()
+                        self.gate.wait(10)
+                kw["progress"] = progress
+            return real_make(games, out, **kw)
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: (dict(self.games), set(self.family))),
+                            ("find_custom_art", lambda steam, account, originals=None, problems=None: (problems.extend(self.art_problems) if problems is not None else None) or dict(self.art)),
+                            ("make_covers", make_covers)):
+            patcher = mock.patch.object(sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=self.covers)
+        self.shell.library.installedOnly = True
+        self.make = self.shell.make
+
+    def tearDown(self):
+        if self.gate is not None:
+            self.gate.set()
+        self.make.decline()
+        self.wait_for(lambda: not self.make.running)
+        super().tearDown()
+
+    def wait_for(self, condition, seconds=5):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def run_it(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running and not self.make.asking)
+
+    def test_it_starts_idle_and_ready(self):
+        m = self.make
+        self.assertEqual((m.running, m.asking, m.done, m.fileCount, m.canMake, m.progress), (False, False, False, 0, True, 0.0))
+        self.assertEqual((m.status, m.statusKind), ("Not started.", "wait"))
+
+    def test_it_makes_the_covers_and_says_so(self):
+        seen = []
+        self.make.progressChanged.connect(lambda: seen.append((self.make.finished, self.make.total)))
+        self.run_it()
+        m = self.make
+        self.assertEqual((m.status, m.statusKind, m.done, m.fileCount, m.progress), ("Done. 2 covers ready.", "ok", True, 2, 1.0))
+        self.assertEqual(sorted(os.listdir(self.covers)), ["Game_1_1.png", "Game_2_2.png"])
+        self.assertIn((2, 2), seen)
+
+    def test_covers_made_opens_the_next_step_once_the_earlier_ones_are_done(self):
+        for fact in ("look_done", "hundred_done"):
+            self.shell.setFact(fact, True)
+        self.assertEqual(self.shell.steps[5]["state"], "locked")
+        self.run_it()
+        self.assertEqual(self.shell.steps[4]["state"], "done")
+        self.assertEqual(self.shell.steps[5]["state"], "active")
+
+    def test_nothing_starts_while_it_runs_or_a_page_is_being_read(self):
+        import threading
+        self.gate = threading.Event()
+        self.make.start()
+        self.make.start()
+        self.wait_for(self.reached.is_set)
+        self.make.start()
+        self.assertEqual(len(self.calls), 1)
+        self.gate.set()
+        self.wait_for(lambda: not self.make.running)
+        self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
+        self.assertFalse(self.make.canMake)
+        self.make.start()
+        self.assertEqual((self.make.running, len(self.calls)), (False, 1))
+        self.wait_for(lambda: not self.shell.hundred.busy)
+        self.assertTrue(self.make.canMake)
+        self.make.start()
+        self.assertTrue(self.make.running)
+
+    def test_cancel_stops_the_run_and_keeps_what_was_made(self):
+        import threading
+        self.games = {1: None, 2: None, 3: None}
+        self.gate = threading.Event()
+        self.make.start()
+        self.wait_for(self.reached.is_set)
+        self.make.cancel()
+        self.assertEqual((self.make.status, self.make.statusKind), ("Stopping\u2026", "wait"))
+        self.gate.set()
+        self.wait_for(lambda: not self.make.running)
+        self.assertTrue(self.make.status.startswith("Stopped. "), self.make.status)
+        self.assertTrue(self.make.done)
+        self.assertEqual(self.make.fileCount, len(os.listdir(self.covers)))
+        self.assertLess(self.make.fileCount, 3)
+
+    def test_a_changed_colour_asks_first_and_declining_changes_nothing(self):
+        self.run_it()
+        before = (self.make.status, self.make.statusKind, self.make.fileCount)
+        asked = []
+        self.make.confirmNeeded.connect(lambda title, text: asked.append((title, text)))
+        self.shell.look.setTone(90, 100, 100)
+        self.make.start()
+        self.assertEqual(asked, [("Change the colour of your covers?", "This replaces the covers you already made in another colour.")])
+        self.assertTrue(self.make.asking)
+        self.assertEqual(len(self.calls), 1)
+        self.make.start()                                               # one question at a time
+        self.assertEqual(len(asked), 1)
+        self.make.decline()
+        self.assertEqual((self.make.asking, self.make.running, self.make.status, self.make.statusKind, self.make.fileCount), (False, False) + before)
+        self.assertEqual(len(self.calls), 1)
+        self.make.confirm()                                             # an answer nobody asked for does nothing
+        self.assertEqual(len(self.calls), 1)
+
+    def test_confirming_makes_the_covers_again_in_the_new_colour(self):
+        self.run_it()
+        self.shell.look.setTone(90, 100, 100)
+        self.make.start()
+        self.make.confirm()
+        self.wait_for(lambda: not self.make.running)
+        self.assertEqual(len(self.calls), 2)
+        self.assertFalse(self.sc.covers_in_other_colour(self.covers, 90, 100, 100))
+        self.assertEqual(self.make.status, "Done. 2 covers ready.")
+
+    def test_no_question_when_nothing_would_be_replaced(self):
+        self.run_it()
+        asked = []
+        self.make.confirmNeeded.connect(lambda *a: asked.append(a))
+        self.run_it()
+        self.assertEqual((asked, len(self.calls)), ([], 2))
+
+    def test_what_the_run_gets_is_what_the_steps_chose(self):
+        self.shell.look.setTone(120, 50, 80)
+        self.shell.look.theme = "halloween"
+        self.shell.setSwitch("skip_auto_art", True)
+        self.run_it()
+        call = self.calls[0]
+        self.assertEqual((call["hue"], call["sat"], call["val"], call["theme"], call["skip_auto_art"]), (120, 50, 80, "halloween", True))
+        self.assertEqual((call["completed"], call["treatment"], call["custom_art"]), (None, None, {}))
+
+    def test_a_loaded_page_and_its_style_go_to_the_run(self):
+        self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (3, 3), 2: (1, 4)}))
+        self.wait_for(lambda: not self.shell.hundred.busy)
+        self.shell.hundred.style = "gold-case"
+        self.run_it()
+        self.assertEqual((self.calls[0]["completed"], self.calls[0]["treatment"]), ({1}, self.sc.compose_treatment("gold-case", "full")))
+        self.assertIn("1 of them is 100% and is highlighted.", self.make.status)
+
+    def test_the_choices_are_read_when_it_starts_not_while_it_runs(self):
+        import threading
+        self.gate = threading.Event()
+        self.shell.look.setTone(120, 100, 100)
+        self.make.start()
+        self.wait_for(self.reached.is_set)
+        self.shell.look.setTone(10, 100, 100)
+        self.gate.set()
+        self.wait_for(lambda: not self.make.running)
+        self.assertEqual(self.calls[0]["hue"], 120)
+
+    def test_own_art_is_looked_for_off_the_ui_thread_and_only_for_the_games_in_the_library(self):
+        mine = self.mine()
+        self.art = {1: mine, 99: mine}
+        self.shell.setSwitch("use_custom_art", True)
+        self.make.start()
+        self.assertEqual((self.make.running, self.make.searching, self.make.status), (True, True, "Looking for your own art\u2026"))
+        self.wait_for(lambda: not self.make.running)
+        self.assertEqual(self.calls[0]["custom_art"], {1: mine})
+        self.assertFalse(self.make.searching)
+
+    def test_own_art_that_could_not_be_copied_is_told_after_the_run(self):
+        self.art, self.art_problems = {1: self.mine()}, ["x"]
+        self.shell.setSwitch("use_custom_art", True)
+        self.run_it()
+        self.assertIn("Could not keep a copy of your own art for 1 game: Apply moves that file into the backup, and Restore brings it back.", self.make.status)
+
+    def test_turning_own_art_off_asks_before_going_back_to_steams_art(self):
+        self.art = {1: self.mine()}
+        self.shell.setSwitch("use_custom_art", True)
+        self.run_it()
+        asked = []
+        self.make.confirmNeeded.connect(lambda title, text: asked.append(title))
+        self.shell.setSwitch("use_custom_art", False)
+        self.make.start()
+        self.assertEqual(asked, ["Go back to Steam's art?"])
+
+    def test_a_failed_art_search_says_why_and_leaves_the_screen_usable(self):
+        def broken(steam, account, originals=None, problems=None):
+            raise self.sc.SteamcaseError("Cannot read your art folder.")
+        self.shell.setSwitch("use_custom_art", True)
+        with unittest.mock.patch.object(self.sc, "find_custom_art", broken):
+            self.run_it()
+        self.assertEqual((self.make.status, self.make.statusKind, self.make.running, self.make.searching, self.make.canMake),
+                         ("Cannot read your art folder.", "error", False, False, True))
+        self.assertEqual(self.calls, [])
+
+    def test_an_unknown_failure_never_leaves_it_stuck(self):
+        def broken(steam, account, originals=None, problems=None):
+            raise ValueError("boom")
+        self.shell.setSwitch("use_custom_art", True)
+        with unittest.mock.patch.object(self.sc, "find_custom_art", broken):
+            self.run_it()
+        self.assertEqual((self.make.status, self.make.statusKind, self.make.running), ("Unexpected problem: boom", "error", False))
+
+    def test_no_games_gives_the_old_words(self):
+        self.games = {}
+        self.run_it()
+        self.assertEqual((self.make.status, self.make.statusKind, self.make.running), ("No games found. Install a game first, or load your userdata.json.", "error", False))
+
+    def test_the_engine_failing_midway_is_reported(self):
+        with unittest.mock.patch.object(self.sc, "make_covers", side_effect=RuntimeError("disk")):
+            self.run_it()
+        self.assertEqual((self.make.status, self.make.statusKind, self.make.running), ("Unexpected problem: disk", "error", False))
+
+    def test_a_failed_run_keeps_the_covers_of_the_run_before(self):
+        self.run_it()
+        self.games = {}
+        self.run_it()
+        self.assertEqual((self.make.done, self.make.fileCount), (True, 2))
+
+    def test_a_new_run_replaces_the_files(self):
+        self.run_it()
+        self.games = {3: None}
+        self.run_it()
+        self.assertEqual(self.make.fileCount, 1)
+        self.assertEqual(os.path.basename(self.make.files()[0]), "Game_3_3.png")
+
+    def test_the_result_sentence_has_every_part_of_the_old_one(self):
+        from qtui.make import result_text
+        base = {"ok": 3, "missing": [], "failed": [], "cancelled": False, "family": 0, "completed": 0, "not_games": 0, "unlisted": 0}
+        self.assertEqual(result_text(base, []), ("Done. 3 covers ready.", "ok"))
+        self.assertEqual(result_text(dict(base, ok=1, cancelled=True), []), ("Stopped. 1 covers ready.", "ok"))
+        self.assertEqual(result_text(dict(base, missing=[1]), [])[0], "Done. 3 covers ready. 1 game has no portrait on Steam.")
+        self.assertIn("2 games have no portrait on Steam.", result_text(dict(base, missing=[1, 2]), [])[0])
+        self.assertIn("1 of them is a family game and has a green corner.", result_text(dict(base, family=1), [])[0])
+        self.assertIn("2 of them are family games and have a green corner.", result_text(dict(base, family=2), [])[0])
+        self.assertIn("1 of them is 100% and is highlighted.", result_text(dict(base, completed=1), [])[0])
+        self.assertIn("2 of them are 100% and are highlighted.", result_text(dict(base, completed=2), [])[0])
+        self.assertIn("Skipped 5 items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists).", result_text(dict(base, not_games=3, unlisted=2), [])[0])
+        self.assertEqual(result_text(dict(base, failed=[1]), []),
+                         ("Done. 3 covers ready. 1 could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only those.", "wait"))
+        self.assertEqual(result_text(dict(base, ok=0), []), ("Done. 0 covers ready.", "wait"))
+        self.assertIn("Could not keep a copy of your own art for 2 games: Apply moves those files into the backup, and Restore brings them back.", result_text(base, ["a", "b"])[0])
+
+    def test_the_choices_name_what_the_earlier_steps_chose_and_where_to_change_it(self):
+        def keys(): return [c["key"] for c in self.make.choices]
+        self.assertEqual(keys(), ["games", "colour", "theme", "hundred", "art"])
+        by = lambda: {c["key"]: c for c in self.make.choices}
+        self.assertEqual([by()[k]["step"] for k in keys()], [1, 2, 2, 3, 2])
+        self.assertEqual(by()["games"]["value"], "Installed games")
+        self.assertEqual((by()["theme"]["value"], by()["hundred"]["value"], by()["art"]["value"]), ("Classic case", "Skipped", "Steam's art"))
+        seen = []
+        self.make.choicesChanged.connect(lambda: seen.append(1))
+        self.shell.look.theme = "halloween"
+        self.shell.look.setTone(120, 100, 100)
+        self.shell.setSwitch("skip_auto_art", True)
+        self.shell.look.skipAutoArt = False
+        self.shell.look.useCustomArt = True
+        self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
+        self.wait_for(lambda: not self.shell.hundred.busy)
+        self.shell.hundred.style = "none"
+        self.assertEqual(by()["theme"]["value"], "Halloween")
+        self.assertEqual(by()["colour"]["value"], self.shell.look.toneName)
+        self.assertEqual(by()["art"]["value"], "Your own art")
+        self.assertEqual(by()["hundred"]["value"], "No special case")
+        self.shell.hundred.style = "gold-case"
+        self.assertEqual(by()["hundred"]["value"], "Gold case, rosette only")
+        self.shell.look.skipAutoArt = True
+        self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped")
+        self.assertGreaterEqual(len(seen), 5)
+        self.shell.library.installedOnly = False
+        self.assertEqual(by()["games"]["value"], "Not chosen yet")
+
+    def test_the_covers_folder_opens_or_says_where_it_is(self):
+        from unittest import mock
+        with mock.patch("qtui.make.QDesktopServices.openUrl", return_value=True) as opened:
+            self.make.openFolder()
+        self.assertTrue(os.path.isdir(self.covers))
+        self.assertEqual(os.path.normpath(opened.call_args[0][0].toLocalFile()), os.path.normpath(self.covers))
+        with mock.patch("qtui.make.QDesktopServices.openUrl", return_value=False):
+            self.make.openFolder()
+        self.assertEqual((self.make.status, self.make.statusKind), ("Could not open the folder. It is here: %s" % os.path.abspath(self.covers), "error"))
+
+    def test_an_answer_that_cannot_be_delivered_is_dropped_quietly(self):
+        import shiboken6
+        from qtui.make import Make
+        gone = Make(self.shell, self.covers)
+        shiboken6.delete(gone)
+        gone._make_worker(1, {"lib": None, "skip": False, "tone": (0, 100, 100), "completed": None, "treatment": None, "theme": None}, {})
+        gone._art_worker(2, {"lib": None, "account": None})
+
+
 if __name__ == "__main__":
     unittest.main()

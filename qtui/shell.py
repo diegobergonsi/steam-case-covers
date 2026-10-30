@@ -8,6 +8,7 @@ from qtui import settings, steps, system
 from qtui.hundred import Hundred
 from qtui.library import Library
 from qtui.look import Look
+from qtui.make import Make
 
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
 
@@ -27,6 +28,7 @@ class Shell(QObject):
         self._library = Library(self, downloads or system.downloads_dir(), self)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
+        self._make = Make(self, covers_dir or sc.default_covers_dir(), parent=self)
 
     def _build(self):
         states = steps.step_states(**self._facts)
@@ -46,6 +48,10 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def hundred(self):
         return self._hundred
+
+    @Property(QObject, constant=True)
+    def make(self):
+        return self._make
 
     @Slot()
     def poll(self):
