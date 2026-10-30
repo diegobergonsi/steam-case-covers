@@ -14,6 +14,7 @@ Item {
     height: 40
     activeFocusOnTab: !locked
     Accessible.role: Accessible.Button
+    Accessible.onPressAction: if (!locked) activated()
     Accessible.name: label + (locked ? ", locked" : stepState === "done" ? ", done" : "")
 
     Rectangle {                                   // keyboard focus ring
@@ -48,6 +49,10 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: root.activated()
     }
-    Keys.onReturnPressed: if (!locked) activated()
-    Keys.onSpacePressed: if (!locked) activated()
+    Keys.onPressed: (event) => {                  // Return, numpad Enter and Space; a held key does not repeat the action
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            if (!event.isAutoRepeat && !locked) activated()
+            event.accepted = true
+        }
+    }
 }

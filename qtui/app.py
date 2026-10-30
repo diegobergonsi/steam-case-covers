@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Builds the QML window around a Shell. A QML error is an error here, not a warning on a blank window."""
 import os
+import sys
 
 from PySide6.QtCore import QUrl
 from PySide6.QtQml import QQmlApplicationEngine
@@ -49,3 +50,24 @@ def find_item(root, name):
             return item
         stack.extend(item.childItems())
     return None
+
+
+MAX_LOG = 20000
+
+
+def report_error(text, path=None):
+    """Say why the window could not start. A packaged app has no console, so the message also goes to qtui-error.log next to the settings file
+    (the first 20000 characters). Never raises: reporting an error must not become a second one."""
+    try:
+        if sys.stderr is not None:
+            print(text, file=sys.stderr)
+    except Exception:
+        pass
+    try:
+        from qtui import settings
+        path = path or os.path.join(os.path.dirname(settings.settings_path()), "qtui-error.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text[:MAX_LOG])
+    except Exception:
+        pass

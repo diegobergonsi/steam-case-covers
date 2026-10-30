@@ -183,6 +183,23 @@ class ShellObject(unittest.TestCase):
         self.shell.reduceEffects = True
         self.assertEqual(seen, {"steps": 1, "current": 1, "reduce": 1})
 
+    def test_the_window_never_stays_on_a_step_that_became_locked(self):
+        self.shell.setFact("ready", True)
+        self.shell.setFact("look_done", True)
+        self.shell.go(3)
+        self.assertEqual(self.shell.current, 3)
+        seen = []
+        self.shell.currentChanged.connect(lambda: seen.append(self.shell.current))
+        self.shell.setFact("ready", False)                      # e.g. installed-only switched off
+        self.assertEqual(self.states()["hundred"], "locked")
+        self.assertEqual(self.shell.current, 1)                 # back to the last step that is still open
+        self.assertEqual(seen, [1])
+
+    def test_home_stays_when_nothing_is_locked_under_it(self):
+        self.shell.setFact("ready", True)
+        self.shell.setFact("ready", False)
+        self.assertEqual(self.shell.current, 0)
+
     def test_a_corrupt_settings_file_gives_defaults(self):
         with open(self.path, "w") as f:
             f.write("{{{")
@@ -199,6 +216,24 @@ def contrast(a, b):
         return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
     hi, lo = sorted((lum(a), lum(b)), reverse=True)
     return (hi + 0.05) / (lo + 0.05)
+
+
+class BundledAssets(unittest.TestCase):
+    def test_the_list_matches_what_the_build_recipe_bundles(self):
+        import re
+        from qtui.assets import REQUIRED_ASSETS
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "steamcase-qt.spec")) as f:
+            listed = re.search(r"ASSETS = \[(.*?)\]", f.read(), re.S).group(1)
+        self.assertEqual(sorted(REQUIRED_ASSETS), sorted(re.findall(r'"([\w.]+)"', listed)))
+
+    def test_missing_assets_are_named(self):
+        from qtui.assets import REQUIRED_ASSETS, missing_assets
+        empty = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, empty, True)
+        self.assertEqual(missing_assets(empty), sorted(REQUIRED_ASSETS))
+        open(os.path.join(empty, "discord.png"), "w").close()
+        self.assertNotIn("discord.png", missing_assets(empty))
+        self.assertEqual(missing_assets(os.path.join(os.path.dirname(QML_DIR), "..", "assets")), [])
 
 
 class Tokens(unittest.TestCase):
@@ -317,6 +352,30 @@ class ShellWindow(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             create_engine(self.shell, qml_dir=os.path.join(bad, "qml"))
 
+    def press(self, name, key, repeat=False):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.root.requestActivate()
+        self.item(name).forceActiveFocus()
+        self.app.processEvents()
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, "", repeat))
+        self.app.processEvents()
+
+    def test_every_activation_key_works_on_a_nav_item(self):
+        from PySide6.QtCore import Qt
+        self.shell.setFact("ready", True)
+        for key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
+            with self.subTest(key=key):
+                self.shell.go(0)
+                self.press("nav_look", key)
+                self.assertEqual(self.shell.current, 2)
+
+    def test_holding_a_key_does_not_repeat_the_action(self):
+        from PySide6.QtCore import Qt
+        self.shell.setFact("ready", True)
+        self.press("nav_look", Qt.Key_Return, repeat=True)
+        self.assertEqual(self.shell.current, 0)
+
     def test_the_os_reduced_motion_setting_is_recorded(self):
         has = hasattr(QGuiApplication.styleHints(), "reducedMotion")
         print("\nQt exposes the OS reduced-motion setting: %s" % has)       # not verified in advance: the answer goes into CONTEXT.md
@@ -345,6 +404,40 @@ class Entry(unittest.TestCase):
         subprocess.run([sys.executable, "-m", "qtui", "--selftest"], cwd=self.ROOT, env=env, capture_output=True, text=True, timeout=120)
         written = [n for _, _, names in os.walk(home) for n in names if not n.endswith(".qmlc")]          # Qt's own compiled-QML cache is fine
         self.assertEqual(written, [])
+
+    def test_a_startup_failure_is_written_to_a_log_file(self):
+        """The packaged app has no console, so a message on stderr is lost."""
+        bad = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, bad, True)
+        shutil.copytree(QML_DIR, os.path.join(bad, "qml"))
+        with open(os.path.join(bad, "qml", "Main.qml"), "a") as f:
+            f.write("\nthis is not qml\n")
+        log = os.path.join(bad, "qtui-error.log")
+        self.run_selftest("--qml-dir", os.path.join(bad, "qml"), "--log", log)
+        with open(log) as f:
+            self.assertIn("Main.qml", f.read())
+
+    def test_a_missing_bundled_picture_fails_the_selftest(self):
+        empty = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, empty, True)
+        r = self.run_selftest("--assets-dir", empty)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("discord.png", r.stderr)
+        self.assertNotIn("selftest ok", r.stdout)
+
+    def test_report_error_survives_no_console_and_no_folder(self):
+        from unittest import mock
+        from qtui.app import report_error
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, True)
+        log = os.path.join(folder, "sub", "qtui-error.log")
+        with mock.patch.object(sys, "stderr", None):                   # a windowed app has no stderr
+            report_error("x" * 100000, log)
+        with open(log) as f:
+            self.assertTrue(0 < len(f.read()) <= 20000)
+        blocker = os.path.join(folder, "file")
+        open(blocker, "w").close()
+        report_error("boom", os.path.join(blocker, "log"))             # an unwritable place: no exception
 
     def test_a_broken_qml_file_fails_the_selftest(self):
         bad = tempfile.mkdtemp()

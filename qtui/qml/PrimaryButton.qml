@@ -15,6 +15,7 @@ Rectangle {
     scale: area.pressed ? 0.95 : 1
     activeFocusOnTab: enabled
     Accessible.role: Accessible.Button
+    Accessible.onPressAction: if (enabled) clicked()
     Accessible.name: text
     Behavior on scale { NumberAnimation { duration: Theme.dur(90) } }
     Behavior on color { ColorAnimation { duration: Theme.dur(120) } }
@@ -43,6 +44,10 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
     }
-    Keys.onReturnPressed: if (enabled) clicked()
-    Keys.onSpacePressed: if (enabled) clicked()
+    Keys.onPressed: (event) => {                  // Return, numpad Enter and Space; a held key does not repeat the action
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            if (!event.isAutoRepeat && enabled) clicked()
+            event.accepted = true
+        }
+    }
 }

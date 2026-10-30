@@ -3,6 +3,7 @@
 # PyInstaller recipe of the Qt window. Build with:  pyinstaller steamcase-qt.spec
 import os, sys
 
+# keep in step with qtui/assets.py (a test compares them)
 ASSETS = ["frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "halloween_overlay.png"]
 # assets/version.txt only exists in release builds (the workflow writes the tag into it); source runs report "dev"
 if os.path.exists("assets/version.txt"):

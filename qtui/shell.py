@@ -65,6 +65,9 @@ class Shell(QObject):
             self._facts[name] = bool(value)
             self._steps = self._build()
             self.stepsChanged.emit()
+            if self._steps[self._current]["state"] == "locked":              # e.g. installed-only was switched off under a later step
+                self._current = max(i for i in range(self._current) if self._steps[i]["state"] != "locked")
+                self.currentChanged.emit()
 
     @Slot(str, result=bool)
     def switchValue(self, key):

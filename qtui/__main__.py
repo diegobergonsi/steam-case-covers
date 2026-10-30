@@ -8,21 +8,27 @@ import tempfile
 
 from PySide6.QtGui import QGuiApplication
 
+import steamcase as sc
 from qtui import steps
-from qtui.app import create_engine, find_item
+from qtui.app import create_engine, find_item, report_error
+from qtui.assets import missing_assets
 from qtui.shell import Shell
 
 
-def selftest(shell, qml_dir):
-    """Build the window and check that every navigation entry exists. Returns the exit code."""
+def selftest(shell, qml_dir, assets_dir, log):
+    """Build the window and check that the bundled pictures and every navigation entry exist. Returns the exit code."""
+    gone = missing_assets(assets_dir)
+    if gone:                                        # the window itself tolerates a missing picture, the build must not
+        report_error("missing bundled files: %s" % ", ".join(gone), log)
+        return 1
     try:
-        engine = create_engine(shell, qml_dir=qml_dir)
+        engine = create_engine(shell, qml_dir=qml_dir, assets_dir=assets_dir)
     except RuntimeError as e:
-        print(e, file=sys.stderr)
+        report_error(str(e), log)
         return 1
     missing = [k for k in steps.STEPS if find_item(engine.rootObjects()[0], "nav_" + k) is None]
     if missing:
-        print("missing navigation entries: %s" % ", ".join(missing), file=sys.stderr)
+        report_error("missing navigation entries: %s" % ", ".join(missing), log)
         return 1
     print("selftest ok")
     return 0
@@ -32,16 +38,19 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="qtui", description="Steam Case Covers, Qt window.")
     ap.add_argument("--selftest", action="store_true", help="build the window without showing it, check it, and exit")
     ap.add_argument("--qml-dir", help=argparse.SUPPRESS)
+    ap.add_argument("--assets-dir", help=argparse.SUPPRESS)
+    ap.add_argument("--log", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     app = QGuiApplication(sys.argv[:1])
+    assets_dir = args.assets_dir if args.assets_dir is not None else os.path.join(sc.HERE, "assets")
     if args.selftest:
         with tempfile.TemporaryDirectory() as tmp:                      # never the user's real settings file
-            return selftest(Shell(os.path.join(tmp, "settings.json")), args.qml_dir)
+            return selftest(Shell(os.path.join(tmp, "settings.json")), args.qml_dir, assets_dir, args.log)
     shell = Shell()
     try:
-        engine = create_engine(shell, qml_dir=args.qml_dir)
+        engine = create_engine(shell, qml_dir=args.qml_dir, assets_dir=assets_dir)
     except RuntimeError as e:
-        print(e, file=sys.stderr)
+        report_error(str(e), args.log)
         return 1
     code = app.exec()
     del engine
