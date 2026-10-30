@@ -40,7 +40,7 @@ ScreenFrame {
             groupName: "Steam account"
             width: parent.width
             visible: screen.apply.canChoose
-            enabled: !screen.apply.busy
+            enabled: !screen.apply.busy && !screen.make.running
             model: screen.apply.accounts
             current: screen.apply.accountId !== "" ? screen.apply.accountId : screen.apply.accounts.length ? screen.apply.accounts[0].key : ""
             onChosen: (key) => screen.apply.chooseAccount(key)
@@ -57,13 +57,14 @@ ScreenFrame {
         heading: "Result"
         StatusLine {
             objectName: "add_status"
-            text: screen.apply.status !== "" ? screen.apply.status : screen.make.fileCount + " covers are ready to add."
+            text: screen.apply.status !== "" ? screen.apply.status : screen.apply.readyText
             kind: screen.apply.status !== "" ? screen.apply.statusKind : "wait"
         }
     }
 
     footer: [
         PrimaryButton {                               // one button for the whole step, so the keyboard focus stays: Apply, then the way home
+            id: mainButton
             objectName: "add_main"
             text: screen.apply.busy ? "Applying\u2026" : screen.apply.applied ? "Go to Home \u2192" : "Apply to Steam"
             enabled: screen.apply.applied || screen.apply.canApply
@@ -74,6 +75,7 @@ ScreenFrame {
     ConfirmDialog {
         id: dialog
         objectName: "add_dialog"
+        focusBack: mainButton
         onConfirmed: screen.apply.confirm()
         onDeclined: screen.apply.decline()
     }

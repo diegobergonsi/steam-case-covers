@@ -12,6 +12,7 @@ FocusScope {
     property string confirmText: "OK"
     property string cancelText: "Cancel"
     property var returnTo: null                         // the item that had the focus before, so the keyboard comes back to it
+    property Item focusBack: null                       // set by the screen: the button the keyboard goes back to (it may be greyed out while the question is open)
     signal confirmed()
     signal declined()
 
@@ -26,14 +27,15 @@ FocusScope {
         title = heading
         paragraphs = texts
         confirmText = yes ? yes : "OK"
-        returnTo = Window.window ? Window.window.activeFocusItem : null
+        returnTo = focusBack ? focusBack : Window.window ? Window.window.activeFocusItem : null
         visible = true
         cancel.forceActiveFocus()
     }
     function close(answer) {
         visible = false
-        if (returnTo) returnTo.forceActiveFocus()
+        var back = returnTo
         if (answer) confirmed(); else declined()
+        Qt.callLater(function() { if (back && back.enabled && back.visible) back.forceActiveFocus() })       // after the screen has re-enabled its button
     }
 
     Keys.onPressed: (event) => {
@@ -69,6 +71,7 @@ FocusScope {
             width: card.width - 2 * Theme.s24
             spacing: Theme.s12
             Text {
+                id: titleText
                 objectName: "dlg_title"
                 width: parent.width
                 text: dialog.title
@@ -77,18 +80,33 @@ FocusScope {
                 font.pixelSize: Theme.sectionSize
                 font.bold: true
             }
-            Repeater {
-                model: dialog.paragraphs
-                delegate: Text {
-                    objectName: "dlg_p" + index
-                    width: content.width
-                    text: modelData.text
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: Theme.bodySize
-                    color: modelData.kind === "warn" ? Theme.warning : modelData.kind === "muted" ? Theme.muted : Theme.text
+            Flickable {                                 // a lot of words scroll; the buttons stay in view
+                id: body
+                width: content.width
+                height: Math.min(words.implicitHeight, Math.max(Theme.touchSize, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12))
+                contentWidth: width
+                contentHeight: words.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: words
+                    width: body.width
+                    spacing: Theme.s12
+                    Repeater {
+                        model: dialog.paragraphs
+                        delegate: Text {
+                            objectName: "dlg_p" + index
+                            width: words.width
+                            text: modelData.text
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: Theme.bodySize
+                            color: modelData.kind === "warn" ? Theme.warning : modelData.kind === "muted" ? Theme.muted : Theme.text
+                        }
+                    }
                 }
             }
             ButtonRow {
+                id: buttons
                 width: content.width
                 QuietButton {
                     id: cancel

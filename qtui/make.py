@@ -61,13 +61,15 @@ class Make(QObject):
         self._req = 0
         self._snap = None
         self._pending = None                            # (snapshot, own art, problems) waiting for the answer to the question
+        self._question = ("", "")                      # what is being asked, kept here so a screen that opens late can still show it
+        self._can = True
         self._before = (STATUS_IDLE, "wait")            # the status to go back to when the question is declined
         self._status, self._kind = STATUS_IDLE, "wait"
         self._finished = self._total = 0
         self._art_done.connect(self._on_art)
         self._progressed.connect(self._on_progress)
         self._made.connect(self._on_made)
-        shell.hundred.busyChanged.connect(self.runningChanged)
+        shell.hundred.busyChanged.connect(self._availability)
         for signal in (shell.look.toneChanged, shell.look.themeChanged, shell.look.treatmentChanged, shell.look.artChanged,
                        shell.hundred.pathChanged, shell.hundred.styleChanged, shell.hundred.marksChanged,
                        shell.library.pathChanged, shell.library.installedOnlyChanged):
@@ -93,7 +95,22 @@ class Make(QObject):
 
     @Property(bool, notify=runningChanged)
     def canMake(self):
-        return not self._running and not self._asking and not self._shell.hundred.busy
+        apply = getattr(self._shell, "_apply", None)          # covers must not change while they are being added to Steam
+        return not self._running and not self._asking and not self._shell.hundred.busy and not (apply is not None and apply.busy)
+
+    @Property(str, notify=runningChanged)
+    def questionTitle(self):
+        return self._question[0]
+
+    @Property(str, notify=runningChanged)
+    def questionText(self):
+        return self._question[1]
+
+    def _availability(self):
+        """Tell the window when canMake changed because of something outside (a page being read, covers being added to Steam)."""
+        if self.canMake != self._can:
+            self._can = self.canMake
+            self.runningChanged.emit()
 
     @Property(bool, notify=doneChanged)
     def done(self):
@@ -164,6 +181,7 @@ class Make(QObject):
         self._asking = self._asking if asking is None else asking
         self._making = self._making if making is None else making
         if before != (self._running, self._searching, self._asking, self._making):
+            self._can = self.canMake
             self.runningChanged.emit()
 
     # ----- Make covers -----
@@ -222,7 +240,9 @@ class Make(QObject):
         why = reasons.replace_reason(self._covers, snap["tone"], snap["completed"], snap["treatment"], snap["theme"], custom_art, games)
         if why:
             self._pending = (snap, custom_art, list(problems))
+            self._question = why
             self._set_state(asking=True)
+            self.runningChanged.emit()
             self.confirmNeeded.emit(why[0], why[1])
             return
         self._run(snap, custom_art, problems)
@@ -232,6 +252,7 @@ class Make(QObject):
         if self._asking and self._pending:
             snap, art, problems = self._pending
             self._pending = None
+            self._question = ("", "")
             self._set_state(asking=False)
             self._run(snap, art, problems)
 
@@ -239,11 +260,15 @@ class Make(QObject):
     def decline(self):
         if self._asking:
             self._pending = None
+            self._question = ("", "")
             self._set_state(asking=False, running=False)
             self._set_status(*self._before)
 
     def _run(self, snap, custom_art, problems):
         self._problems = list(problems)
+        if self._files:                                 # what Apply may add is what this run makes: a run that fails offers nothing
+            self._files = []
+            self.doneChanged.emit()
         self._cancel.clear()
         self._finished, self._total = 0, 0
         self.progressChanged.emit()
@@ -293,12 +318,13 @@ class Make(QObject):
         if error:
             self._set_status(error, "error")
             return
-        if res["files"]:                                # a run that made nothing keeps the covers of the run before
+        if res["files"]:
             self._files = list(res["files"])
             self.doneChanged.emit()
             self._shell.setFact("covers_made", True)
-        self._finished = self._total = max(self._total, self._finished)
-        self.progressChanged.emit()
+        if not res["cancelled"]:                        # a stopped run leaves the bar where it stopped
+            self._finished = self._total = max(self._total, self._finished)
+            self.progressChanged.emit()
         self._set_status(*result_text(res, self._problems))
 
     @Slot()

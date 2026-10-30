@@ -12,6 +12,7 @@ import steamcase as sc
 
 MAX_NAME = 28                               # a long account name must not push the buttons off the window
 OPEN_NOTE = "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first."
+CHECKING_NOTE = "Checking whether Steam is open\u2026"
 CLOSED_NOTE = "Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it."
 CLOSE_WARNING = "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first."
 
@@ -41,6 +42,7 @@ class Apply(QObject):
         self._steam_open, self._known = False, False
         self._watching, self._probing = False, False
         self._accounts, self._who, self._choice = [], "", None
+        self._raw = {}                                  # folder id -> the name as Steam knows it
         self._busy = self._asking = self._applied = False
         self._status, self._kind = "", "wait"
         self._req = 0
@@ -57,9 +59,9 @@ class Apply(QObject):
 
     @Property(str, notify=steamChanged)
     def note(self):
-        """The warning follows reality; until Steam has been asked it says nothing."""
+        """The warning follows reality; until Steam has been asked it says so, and takes the space the answer will need."""
         if not self._known:
-            return ""
+            return CHECKING_NOTE
         return OPEN_NOTE if self._steam_open else CLOSED_NOTE
 
     @Property(str, notify=steamChanged)
@@ -126,7 +128,7 @@ class Apply(QObject):
         try:
             if self._choice and self._choice not in [a for a, _ in sc.list_accounts(sc.steam_dir())]:
                 self._choice = None
-                self.accountChanged.emit()
+                self.refresh()                          # the label follows: it must name the account that will really be used
         except sc.SteamcaseError:
             self._choice = None
         return self._choice
@@ -144,7 +146,8 @@ class Apply(QObject):
             who = sc.account_label(steam, self._acc() or sc.pick_account(steam))
         except (sc.SteamcaseError, OSError):
             accounts, who = [], ""
-        found = [{"key": a, "label": label} for a, label in accounts]
+        found = [{"key": a, "label": _short("Account %s" % label if label.isdigit() else label)} for a, label in accounts]
+        self._raw = dict(accounts)
         if (found, who) != (self._accounts, self._who):
             self._accounts, self._who = found, who
             self.accountChanged.emit()
@@ -154,7 +157,7 @@ class Apply(QObject):
         if self._busy or self._make.running or key not in [a["key"] for a in self._accounts]:
             return
         self._choice = key
-        self._who = dict((a["key"], a["label"]) for a in self._accounts)[key]
+        self._who = self._raw.get(key, key)
         self.accountChanged.emit()
         self._set_status("", "wait")
 
@@ -177,6 +180,11 @@ class Apply(QObject):
     @Property(bool, notify=canApplyChanged)
     def canApply(self):
         return not self._busy and self._make.done and not self._make.running
+
+    @Property(str, notify=canApplyChanged)
+    def readyText(self):
+        n = len(self._make.files())
+        return "1 cover is ready to add." if n == 1 else "%d covers are ready to add." % n
 
     @Property(bool, notify=appliedChanged)
     def applied(self):
@@ -203,7 +211,7 @@ class Apply(QObject):
 
     def _make_changed(self):
         self.canApplyChanged.emit()
-        if self._make.running and (self._applied or self._status):
+        if self._make.canCancel and (self._applied or self._status):         # only when covers are really being made, not when a question is asked
             self._set_applied(False)                    # new covers are coming: what was said about the old ones is no longer true
             self._set_status("", "wait")
 

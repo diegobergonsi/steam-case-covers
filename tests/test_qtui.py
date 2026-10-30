@@ -1467,6 +1467,21 @@ class Components(QtCase):
         self.assertGreaterEqual(self.item("dlg_confirm").height(), 36)
         self.assertLessEqual(card.y() + card.height(), 420)
 
+    def test_a_dialog_with_a_lot_to_say_scrolls_and_keeps_its_buttons_in_view(self):
+        from PySide6.QtCore import QMetaObject
+        self.load('ConfirmDialog { id: dlg; objectName: "dlg" }\nfunction openIt() { var long = []; for (var i = 0; i < 12; i++) long.push({"text": "A long sentence that says what will happen to your covers, number " + i + ".", "kind": "main"}); dlg.ask("Many words", long, "Go") }', 360, 260)
+        self.root.requestActivate()
+        QMetaObject.invokeMethod(self.root, "openIt")
+        from PySide6.QtTest import QTest
+        QTest.qWait(60)
+        card = self.item("dlg_card")
+        self.assertLessEqual(card.y() + card.height(), 260)
+        self.assertGreaterEqual(card.y(), 0)
+        for name in ("dlg_confirm", "dlg_cancel"):
+            it = self.item(name)
+            from PySide6.QtCore import QPointF
+            self.assertLessEqual(it.mapToScene(QPointF(0, it.height())).y(), 260, name)
+
     SUMMARY = ('property int last: -1\nChoiceSummary { objectName: "sum"; x: 10; y: 10; width: @W@; onChosen: (step) => win.last = step;\n'
                '  model: [{"key": "colour", "label": "Colour", "value": "Teal", "step": 2}, {"key": "hundred", "label": "100% games", "value": "Gold case, rosette and ribbon", "step": 3},'
                ' {"key": "art", "label": "Art", "value": "Your own art, blurry art skipped", "step": 2}] }')
@@ -3503,6 +3518,9 @@ class MakeScreen(QtCase, FakeStore):
 
     def test_the_covers_folder_button_asks_the_system_to_open_it(self):
         from unittest import mock
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
         with mock.patch("qtui.make.QDesktopServices.openUrl", return_value=True) as opened:
             self.click("make_folder")
         self.assertEqual(opened.call_count, 1)
@@ -3520,6 +3538,57 @@ class MakeScreen(QtCase, FakeStore):
                 self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
         main = self.item("make_main")
         self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
+
+    def test_leaving_the_screen_while_looking_for_art_still_shows_the_question(self):
+        from unittest import mock
+        import steamcase as sc
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.shell.look.setTone(90, 100, 100)
+        self.shell.setSwitch("use_custom_art", True)
+        with mock.patch.object(sc, "find_custom_art", lambda steam, account, originals=None, problems=None: {}):
+            self.click("make_again")
+            self.shell.go(2)                                            # away, while the art is being looked for
+            self.wait_for(lambda: self.make.asking)
+            self.shell.go(4)
+            self.settle()
+            self.assertTrue(self.item("make_dialog").isVisible())
+            self.assertEqual(self.text("dlg_title"), self.make.questionTitle)
+            self.click("dlg_cancel")
+            self.settle()
+        self.assertFalse(self.make.running)
+
+    def test_make_again_and_the_folder_button_follow_their_conditions(self):
+        import threading
+        from unittest import mock
+        import completion
+        self.assertFalse(self.item("make_folder").property("enabled"))        # no covers yet
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertTrue(self.item("make_folder").property("enabled"))
+        gate = threading.Event()
+        real = completion.read_games_page
+        with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
+            self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
+            self.app.processEvents()
+            self.assertFalse(self.item("make_again").property("enabled"))
+            gate.set()
+            self.wait_for(lambda: not self.shell.hundred.busy)
+        self.assertTrue(self.item("make_again").property("enabled"))
+
+    def test_the_keyboard_comes_back_to_the_main_button_after_the_question(self):
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.shell.look.setTone(90, 100, 100)
+        self.root.requestActivate()
+        self.click("make_again")
+        self.settle()
+        self.click("dlg_cancel")
+        self.settle()
+        self.assertTrue(self.item("make_main").property("activeFocus"))
 
     def test_the_preview_follows_the_look(self):
         before = self.item("make_preview").property("source")
@@ -3622,6 +3691,31 @@ class AddScreen(AddWindow):
         self.assertTrue(self.item("add_accounts").property("visible"))
         self.click("add_accounts_chip_222")
         self.assertEqual((self.ap.accountId, self.text("add_account")), ("222", "Steam account: Bob"))
+
+    def test_one_cover_reads_in_the_singular(self):
+        self.start_window()
+        self.shell.make._files = ["x.png"]
+        self.shell.make.doneChanged.emit()
+        self.app.processEvents()
+        self.assertEqual(self.text("add_status"), "1 cover is ready to add.")
+
+    def test_the_account_chips_wait_while_covers_are_being_made(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.start_window()
+        self.assertTrue(self.item("add_accounts").property("enabled"))
+        self.shell.make._set_state(running=True)
+        self.app.processEvents()
+        self.assertFalse(self.item("add_accounts").property("enabled"))
+        self.shell.make._set_state(running=False)
+
+    def test_the_keyboard_comes_back_to_the_apply_button_after_declining(self):
+        self.start_window()
+        self.root.requestActivate()
+        self.click("add_main")
+        self.settle()
+        self.click("dlg_cancel")
+        self.settle()
+        self.assertTrue(self.item("add_main").property("activeFocus"))
 
     def test_the_restart_switch_is_the_remembered_one(self):
         self.start_window()
@@ -3977,11 +4071,60 @@ class MakeState(QtCase, FakeStore):
             self.run_it()
         self.assertEqual((self.make.status, self.make.statusKind, self.make.running), ("Unexpected problem: disk", "error", False))
 
-    def test_a_failed_run_keeps_the_covers_of_the_run_before(self):
+    def test_a_failed_run_offers_no_covers_it_did_not_make(self):
         self.run_it()
         self.games = {}
         self.run_it()
+        self.assertEqual((self.make.done, self.make.fileCount), (False, 0))
+
+    def test_declining_the_question_keeps_the_covers_of_the_run_before(self):
+        self.run_it()
+        self.shell.look.setTone(90, 100, 100)
+        self.make.start()
+        self.make.decline()
         self.assertEqual((self.make.done, self.make.fileCount), (True, 2))
+
+    def test_the_question_waits_in_the_object_for_a_screen_that_opens_late(self):
+        self.run_it()
+        self.shell.look.setTone(90, 100, 100)
+        self.art = {1: self.mine()}
+        self.shell.setSwitch("use_custom_art", True)
+        self.make.start()                                              # the art is looked for on a worker thread; nobody listens to the signal
+        self.wait_for(lambda: self.make.asking)
+        self.assertEqual(self.make.questionTitle, "Change the colour of your covers?")
+        self.assertIn("another colour", self.make.questionText)
+        self.make.decline()
+        self.assertEqual((self.make.questionTitle, self.make.questionText), ("", ""))
+        self.make.start()
+        self.wait_for(lambda: self.make.asking)
+        self.make.confirm()
+        self.assertEqual(self.make.questionTitle, "")
+        self.wait_for(lambda: not self.make.running)
+
+    def test_a_stopped_run_does_not_fill_the_bar(self):
+        import threading
+        self.games = {1: None, 2: None, 3: None, 4: None}
+        self.gate = threading.Event()
+        self.make.start()
+        self.wait_for(self.reached.is_set)
+        self.make.cancel()
+        self.gate.set()
+        self.wait_for(lambda: not self.make.running)
+        self.assertLess(self.make.progress, 1.0)
+        self.assertLess(self.make.finished, self.make.total)
+
+    def test_it_waits_while_covers_are_being_added_to_steam(self):
+        seen = []
+        self.make.runningChanged.connect(lambda: seen.append(self.make.canMake))
+        self.shell.apply._busy = True
+        self.shell.apply.canApplyChanged.emit()
+        self.assertFalse(self.make.canMake)
+        self.assertIn(False, seen)
+        self.make.start()
+        self.assertEqual((self.make.running, self.calls), (False, []))
+        self.shell.apply._busy = False
+        self.shell.apply.canApplyChanged.emit()
+        self.assertTrue(self.make.canMake)
 
     def test_a_new_run_replaces_the_files(self):
         self.run_it()
@@ -4202,16 +4345,17 @@ class ApplyState(QtCase, FakeStore):
         self.assertEqual(self.log[0], "close")
 
     def test_with_steam_closed_the_note_is_calm(self):
-        self.assertEqual((self.ap.note, self.ap.noteKind), ("", "wait"))        # not known yet: no claim either way
+        self.assertEqual((self.ap.note, self.ap.noteKind), ("Checking whether Steam is open\u2026", "wait"))        # not known yet: no claim either way, and no jump later
         self.ap.watching = True
-        self.wait_for(lambda: self.ap.note != "")
+        self.wait_for(lambda: self.ap.noteKind == "calm")
         self.assertEqual((self.ap.steamOpen, self.ap.noteKind), (False, "calm"))
         self.assertEqual(self.ap.note, "Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it.")
 
     def test_steam_not_closing_changes_nothing_and_says_what_to_do(self):
         self.covers_ready()
         self.running, self.close_ok = True, False
-        self.go()
+        with unittest.mock.patch("qtui.apply.sys.platform", "linux"):          # the macOS words are tested apart
+            self.go()
         self.assertEqual(self.log, ["close"])
         self.assertEqual((self.ap.applied, self.ap.busy, self.ap.statusKind), (False, False, "error"))
         self.assertEqual(self.ap.status, "Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again.")
@@ -4285,6 +4429,48 @@ class ApplyState(QtCase, FakeStore):
         self.make.start()
         self.assertEqual((self.ap.applied, self.ap.status), (False, ""))
         self.wait_for(lambda: not self.make.running)
+
+    def test_declining_a_question_keeps_what_was_said_about_the_last_apply(self):
+        self.covers_ready()
+        self.go()
+        said = self.ap.status
+        self.shell.look.setTone(90, 100, 100)
+        self.make.start()
+        self.assertTrue(self.make.asking)
+        self.make.decline()
+        self.assertEqual((self.ap.applied, self.ap.status), (True, said))
+        self.make.start()
+        self.make.confirm()
+        self.assertEqual((self.ap.applied, self.ap.status), (False, ""))
+        self.wait_for(lambda: not self.make.running)
+
+    def test_no_new_covers_while_adding_and_no_adding_while_making_is_not_possible_to_mix(self):
+        self.covers_ready()
+        self.ap._busy = True
+        self.ap.canApplyChanged.emit()
+        self.make.start()
+        self.assertFalse(self.make.running)
+        self.ap._busy = False
+
+    def test_accounts_without_a_name_read_account_number_and_long_names_are_cut(self):
+        self.accounts = [("111", "111"), ("222", "B" * 40)]
+        self.ap.refresh()
+        self.assertEqual([c["label"] for c in self.ap.accounts], ["Account 111", "B" * 27 + "\u2026"])
+
+    def test_an_account_that_has_gone_also_leaves_the_label(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.ap.refresh()
+        self.ap.chooseAccount("222")
+        self.assertEqual(self.ap.accountLabel, "Steam account: Bob")
+        self.accounts = [("111", "Alice")]
+        self.assertIsNone(self.ap.accountChoice())
+        self.assertEqual(self.ap.accountLabel, "Steam account: Alice")
+
+    def test_the_ready_text_counts_covers_correctly(self):
+        self.make._files = ["a.png"]
+        self.assertEqual(self.ap.readyText, "1 cover is ready to add.")
+        self.make._files = ["a.png", "b.png"]
+        self.assertEqual(self.ap.readyText, "2 covers are ready to add.")
 
     def test_one_account_is_shown_and_not_offered(self):
         self.ap.refresh()

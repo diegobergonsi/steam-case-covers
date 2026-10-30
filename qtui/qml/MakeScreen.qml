@@ -48,7 +48,7 @@ ScreenFrame {
                 ProgressBar { objectName: "make_progress"; label: "Making the covers"; value: screen.make.progress }
                 StatusLine { objectName: "make_status"; text: screen.make.status; kind: screen.make.statusKind }
                 ButtonRow {
-                    QuietButton { objectName: "make_folder"; text: "Open covers folder"; onClicked: screen.make.openFolder() }
+                    QuietButton { objectName: "make_folder"; text: "Open covers folder"; enabled: screen.make.done; onClicked: screen.make.openFolder() }
                 }
             }
         }
@@ -59,9 +59,11 @@ ScreenFrame {
             objectName: "make_again"
             text: "Make again"
             visible: screen.make.done && !screen.make.running
+            enabled: screen.make.canMake
             onClicked: screen.make.start()
         },
         PrimaryButton {                               // one button for the whole job, so the keyboard focus stays: Make covers, Cancel, Next
+            id: mainButton
             objectName: "make_main"
             text: screen.make.running ? "Cancel" : screen.make.done ? "Next: Add to Steam \u2192" : "Make covers"
             quiet: screen.make.running
@@ -73,14 +75,17 @@ ScreenFrame {
     ConfirmDialog {
         id: dialog
         objectName: "make_dialog"
+        focusBack: mainButton
         onConfirmed: screen.make.confirm()
         onDeclined: screen.make.decline()
     }
+    function openQuestion() {
+        dialog.ask(make.questionTitle, [{"text": make.questionText, "kind": "main"},
+                                        {"text": "Steam keeps showing your current art until you add the new covers in step 5.", "kind": "muted"}], "Replace them")
+    }
+    Component.onCompleted: if (make.asking && make.questionTitle !== "") openQuestion()       // the question came while another screen was shown
     Connections {
         target: screen.make
-        function onConfirmNeeded(title, sentence) {
-            dialog.ask(title, [{"text": sentence, "kind": "main"},
-                               {"text": "Steam keeps showing your current art until you add the new covers in step 5.", "kind": "muted"}], "Replace them")
-        }
+        function onConfirmNeeded(title, sentence) { screen.openQuestion() }
     }
 }

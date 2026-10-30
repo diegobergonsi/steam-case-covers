@@ -32,6 +32,7 @@ class Shell(QObject):
         covers = covers_dir or sc.default_covers_dir()
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
+        self._apply.canApplyChanged.connect(self._make._availability)
 
     def _build(self):
         states = steps.step_states(**self._facts)
