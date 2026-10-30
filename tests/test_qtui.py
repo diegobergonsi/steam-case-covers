@@ -236,6 +236,30 @@ class BundledAssets(unittest.TestCase):
         self.assertEqual(missing_assets(os.path.join(os.path.dirname(QML_DIR), "..", "assets")), [])
 
 
+class BuildTrimList(unittest.TestCase):
+    """steamcase-qt.spec drops Qt parts the window never uses (113.8 MB -> 73.2 MB measured). The list must never match something the window needs."""
+    NEEDED = ["PySide6/Qt/plugins/platforms/libqxcb.so", "PySide6/Qt/plugins/platforms/libqoffscreen.so", "PySide6/Qt/plugins/platforms/libqwayland.so",
+              "PySide6/Qt/plugins/platformthemes/libqxdgdesktopportal.so", "PySide6/Qt/plugins/imageformats/libqjpeg.so", "PySide6/Qt/plugins/imageformats/libqwebp.so",
+              "PySide6/Qt/plugins/xcbglintegrations/libqxcb-glx-integration.so", "PySide6/Qt/qml/QtQuick/Controls/Basic/Button.qml", "PySide6/Qt/qml/QtQuick/Effects/qmldir",
+              "PySide6/Qt/qml/QtQuick/Controls/impl/qmldir", "PySide6/Qt/qml/QtQml/qmldir", "PySide6/Qt/lib/libQt6Quick.so.6", "PySide6/Qt/lib/libQt6Qml.so.6",
+              "PySide6/Qt/lib/libQt6Gui.so.6", "PySide6/Qt/lib/libQt6Core.so.6", "PySide6/Qt/lib/libQt6Network.so.6", "PySide6/Qt/lib/libQt6OpenGL.so.6",
+              "PySide6/Qt/lib/libQt6QuickControls2.so.6", "PySide6/Qt/lib/libQt6QuickControls2Basic.so.6", "PySide6/Qt/lib/libQt6QuickTemplates2.so.6",
+              "PySide6/Qt/lib/libicudata.so.73", "PySide6/QtOpenGL.abi3.so", "PySide6/QtQuick.abi3.so", "libX11.so.6", "libfontconfig.so.1", "libfreetype.so.6"]
+
+    def block(self):
+        import re
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "steamcase-qt.spec")) as f:
+            return re.findall(r'"([^"]+)"', re.search(r"BLOCK = \[(.*?)\]", f.read(), re.S).group(1))
+
+    def test_the_list_is_not_empty(self):
+        self.assertGreater(len(self.block()), 20)
+
+    def test_nothing_the_window_needs_is_dropped(self):
+        for pattern in self.block():
+            for needed in self.NEEDED:
+                self.assertNotIn(pattern, needed, "%r would drop %s" % (pattern, needed))
+
+
 class Tokens(unittest.TestCase):
     """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
     GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",

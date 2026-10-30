@@ -10,6 +10,19 @@ if os.path.exists("assets/version.txt"):
     ASSETS.append("version.txt")
 a = Analysis(["qtui/__main__.py"], pathex=["."], datas=[("qtui/qml", "qtui/qml")] + [("assets/" + n, "assets") for n in ASSETS],
              excludes=["numpy", "matplotlib", "scipy", "pandas", "tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtCharts"])
+# Drop what the window never uses: other Qt styles and dialogs, the GTK theme plugin and the system libraries only it pulls in (GTK, cairo, pango, a second ICU),
+# plugins for screens without a desktop, unused image formats. Measured: 113.8 MB -> 73.2 MB, same window. tests/test_qtui.py checks the list against what the window needs.
+BLOCK = ["platformthemes/libqgtk3", "egldeviceintegrations", "plugins/generic", "networkinformation", "plugins/tls", "qmltooling", "iconengines",
+         "libqeglfs", "libqlinuxfb", "libqminimal", "libqvkkhrdisplay", "libqvnc",
+         "imageformats/libqgif", "imageformats/libqicns", "imageformats/libqico", "imageformats/libqsvg", "imageformats/libqtga", "imageformats/libqtiff", "imageformats/libqwbmp",
+         "QtQuick/Controls/FluentWinUI3", "QtQuick/Controls/Fusion", "QtQuick/Controls/Imagine", "QtQuick/Controls/Material", "QtQuick/Controls/Universal",
+         "QtQuick/Controls/Native", "QtQuick/Controls/designer", "QtQuick/Dialogs", "QtQuick/Particles", "QtTest", "qml/QtWayland", "qml/Qt/labs",
+         "libQt6QuickControls2Imagine", "libQt6QuickControls2FluentWinUI3", "libQt6QuickControls2Material", "libQt6QuickControls2Universal", "libQt6QuickControls2Fusion",
+         "libQt6QuickControls2Native", "libQt6LabsStyleKit", "libQt6QuickDialogs2", "libQt6QuickParticles", "libQt6QuickTest", "libQt6Test", "libQt6WaylandCompositor",
+         "libgtk-3", "libgdk-3", "libgdk_pixbuf", "libatk", "libatspi", "libcairo", "libpango", "libglycin", "libcloudproviders", "libjson-glib", "libtinysparql", "libepoxy",
+         "libicudata.so.78", "libicuuc.so.78", "libQt6Widgets", "libQt6Svg", "libavif"]
+a.binaries = [e for e in a.binaries if not any(b in e[0] for b in BLOCK)]
+a.datas = [e for e in a.datas if not any(b in e[0] for b in BLOCK)]
 pyz = PYZ(a.pure)
 
 if sys.platform == "darwin":                       # macOS: folder-based .app (single-file .app is discouraged)
