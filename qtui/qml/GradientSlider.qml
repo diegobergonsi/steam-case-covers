@@ -15,7 +15,7 @@ Item {
     signal moved(int value)
 
     readonly property real handleSize: Theme.touchSize
-    readonly property real span: Math.max(1, width - handleSize)
+    readonly property real span: Math.max(Theme.hairline, width - handleSize)
     implicitHeight: handleSize
     activeFocusOnTab: true
     Accessible.role: Accessible.Slider
@@ -70,7 +70,7 @@ Item {
         width: slider.handleSize
         height: slider.handleSize
         radius: width / 2
-        x: (slider.value - slider.from) / Math.max(1, slider.to - slider.from) * slider.span
+        x: (slider.value - slider.from) / Math.max(Theme.hairline, slider.to - slider.from) * slider.span
         anchors.verticalCenter: parent.verticalCenter
         color: Theme.text
         border.width: Theme.focusRing
