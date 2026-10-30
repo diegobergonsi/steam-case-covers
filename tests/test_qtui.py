@@ -3529,8 +3529,8 @@ class MakeScreen(QtCase, FakeStore):
 
 
 @need_qt
-class AddScreen(QtCase, FakeStore):
-    """Step 5 in the real window: the Steam note, the account, the restart switch, the question, the result and the way home."""
+class AddWindow(QtCase, FakeStore):
+    """The real window with Steam faked, for the tests of step 5 and of the whole way: the engine's Steam functions are replaced and logged."""
     @classmethod
     def setUpClass(cls):
         cls.app = qt_app()
@@ -3583,6 +3583,14 @@ class AddScreen(QtCase, FakeStore):
     def text(self, name):
         return self.item(name).property("text")
 
+    def settle(self):
+        from PySide6.QtTest import QTest
+        QTest.qWait(60)
+        self.app.processEvents()
+
+
+class AddScreen(AddWindow):
+    """Step 5 in the real window: the Steam note, the account, the restart switch, the question, the result and the way home."""
     def test_it_has_its_title_sections_and_ready_text(self):
         self.start_window()
         self.assertEqual(self.text("screen_title"), "Add them to Steam")
@@ -3691,6 +3699,46 @@ class AddScreen(QtCase, FakeStore):
                 self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
         main = self.item("add_main")
         self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
+
+
+@need_qt
+class MakeAddFlow(AddWindow):
+    """The whole way as a person walks it, with real clicks in the real window: game list, look, 100% games (skipped), make, add, home."""
+    def test_from_the_game_list_to_home(self):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        for fact in ("look_done", "hundred_done"):                       # start from the beginning: nothing done yet
+            self.shell.setFact(fact, False)
+        self.shell.library.installedOnly = False
+        self.made = True                                                 # the covers are made by the clicks below
+        self.start_window()
+        self.shell.go(1)
+        self.app.processEvents()
+        self.click("gamelist_installed_label")
+        self.settle()
+        self.click("gamelist_next")
+        self.assertEqual(self.text("screen_title"), "Choose the look")
+        self.click("look_next")
+        self.assertEqual(self.text("screen_title"), "Highlight your 100% games")
+        self.click("hundred_next")                                       # skip
+        self.assertEqual(self.text("screen_title"), "Make your covers")
+        self.assertEqual(self.shell.steps[4]["state"], "active")
+        self.assertEqual(self.shell.steps[5]["state"], "locked")
+        self.click("make_main")
+        self.wait_for(lambda: self.shell.make.done and not self.shell.make.running)
+        self.settle()
+        self.assertEqual(self.shell.steps[5]["state"], "active")
+        self.click("make_main")
+        self.assertEqual(self.text("screen_title"), "Add them to Steam")
+        self.click("add_main")
+        self.settle()
+        self.click("dlg_confirm")
+        self.wait_for(lambda: self.shell.apply.applied)
+        self.assertEqual(self.shell.steps[5]["state"], "done")
+        self.assertEqual(self.log, [("apply", None), "start"])
+        self.click("add_main")
+        self.assertEqual(self.shell.current, 0)
+        self.assertEqual(os.path.basename(sorted(os.listdir(self.covers))[0]), "Game_1_1.png")
 
 
 @need_qt
