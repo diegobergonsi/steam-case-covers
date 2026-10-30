@@ -6,6 +6,7 @@ import json, os, shutil, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qtui import settings as st
+from qtui import steps as sp
 
 
 class Settings(unittest.TestCase):
@@ -62,6 +63,36 @@ class Settings(unittest.TestCase):
         import steamcase as sc
         self.assertEqual(os.path.dirname(st.settings_path()), os.path.dirname(sc.default_covers_dir()))
         self.assertEqual(os.path.basename(st.settings_path()), "settings.json")
+
+
+class StepStates(unittest.TestCase):
+    def states(self, **facts):
+        return sp.step_states(**dict(dict(ready=False, look_done=False, hundred_done=False, covers_made=False, applied=False), **facts))
+
+    def test_the_steps_and_their_labels(self):
+        self.assertEqual(sp.STEPS, ("home", "game_list", "look", "hundred", "make", "add"))
+        self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
+
+    def test_nothing_done_only_the_game_list_is_active(self):
+        self.assertEqual(self.states(), {"home": "open", "game_list": "active", "look": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
+
+    def test_each_fact_moves_the_active_step_one_on(self):
+        order = [("ready", "look"), ("look_done", "hundred"), ("hundred_done", "make"), ("covers_made", "add")]
+        facts = {}
+        for fact, active in order:
+            facts[fact] = True
+            got = self.states(**facts)
+            self.assertEqual([k for k, v in got.items() if v == "active"], [active], fact)
+
+    def test_everything_done(self):
+        got = self.states(ready=True, look_done=True, hundred_done=True, covers_made=True, applied=True)
+        self.assertEqual(got, {"home": "open", "game_list": "done", "look": "done", "hundred": "done", "make": "done", "add": "done"})
+
+    def test_an_inconsistent_state_never_unlocks_a_later_step(self):
+        self.assertEqual(self.states(covers_made=True)["make"], "locked")                     # covers but no game list
+        self.assertEqual(self.states(hundred_done=True)["hundred"], "locked")                 # hundred done, look not
+        got = self.states(ready=True, applied=True)
+        self.assertEqual((got["look"], got["add"]), ("active", "locked"))
 
 
 if __name__ == "__main__":
