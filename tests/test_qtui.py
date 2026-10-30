@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qtui import settings as st
 from qtui import steps as sp
 from qtui import system
+from qtui import tones
 from qtui.watcher import DownloadWatcher
 
 try:
@@ -176,6 +177,62 @@ class SystemHelpers(unittest.TestCase):
             with mock.patch.object(sys, "platform", platform):
                 self.assertEqual(importlib.reload(system).SAVE_KEY, key, platform)
         importlib.reload(system)
+
+
+class Tones(unittest.TestCase):
+    def test_clamping(self):
+        self.assertEqual(tones.clamp_tone(90, 80, 70), (90, 80, 70))
+        self.assertEqual(tones.clamp_tone(-30, 150, -5), (330, 100, 0))
+        self.assertEqual(tones.clamp_tone(360, 0, 100), (0, 0, 100))
+        self.assertEqual(tones.clamp_tone(725, 50, 50), (5, 50, 50))
+        self.assertEqual(tones.clamp_tone(10.6, 99.5, 0.4), (11, 100, 0))
+        for bad in ((None, 1, 1), ("x", 1, 1), (1, [], 1), (float("nan"), 1, 1), (1, 1, float("inf"))):
+            self.assertEqual(tones.clamp_tone(*bad), (0, 100, 100), bad)
+
+    def test_names_as_the_old_window_wrote_them(self):
+        self.assertEqual(tones.tone_name(0, 100, 100), "Original")
+        self.assertEqual(tones.tone_name(0, 0, 14), "Black")
+        self.assertEqual(tones.tone_name(200, 0, 34), "Graphite")          # a grey has no hue
+        self.assertEqual(tones.tone_name(0, 0, 78), "Silver")
+        self.assertEqual(tones.tone_name(90, 80, 70), "Custom \u00b7 90\u00b0 80% 70%")
+
+    def test_the_hint_only_for_grey_and_black(self):
+        self.assertEqual(tones.tone_hint(10, 0, 50), "Colour has no effect on grey or black.")
+        self.assertEqual(tones.tone_hint(10, 50, 0), "Colour has no effect on grey or black.")
+        self.assertEqual(tones.tone_hint(10, 50, 50), "")
+
+    def test_nine_swatches_six_colours_then_three_greys(self):
+        import steamcase as sc
+        sw = tones.swatches()
+        self.assertEqual(len(sw), 9)
+        self.assertEqual([x["hue"] for x in sw[:6]], list(sc.HUE_SWATCHES))
+        self.assertEqual([(x["sat"], x["val"]) for x in sw[:6]], [(100, 100)] * 6)
+        self.assertEqual([x["name"] for x in sw[6:]], ["Black", "Graphite", "Silver"])
+        for x in sw:
+            self.assertEqual(x["color"], sc.case_color(x["hue"], x["sat"], x["val"]))
+            self.assertTrue(x["name"])
+
+    def test_same_tone_ignores_the_hue_of_greys(self):
+        self.assertTrue(tones.same_tone((10, 0, 50), (200, 0, 50)))
+        self.assertTrue(tones.same_tone((10, 50, 0), (200, 50, 0)))                 # without light the hue shows nothing
+        self.assertFalse(tones.same_tone((10, 50, 0), (10, 80, 0)))                 # the engine keeps colourfulness apart, and so do the swatches
+        self.assertFalse(tones.same_tone((10, 50, 50), (200, 50, 50)))
+        self.assertFalse(tones.same_tone((10, 50, 50), (10, 60, 50)))
+
+    def test_slider_tracks(self):
+        import steamcase as sc
+        lo, hi = tones.track_colors(120, 60, 80, "sat")
+        self.assertEqual((lo, hi), (sc.case_color(120, 0, 80), sc.case_color(120, 100, 80)))
+        lo, hi = tones.track_colors(120, 60, 80, "val")
+        self.assertEqual((lo, hi), (sc.case_color(120, 60, 0), sc.case_color(120, 60, 100)))
+        with self.assertRaises(ValueError):
+            tones.track_colors(0, 0, 0, "other")
+
+    def test_the_hue_gradient_starts_at_the_original_blue(self):
+        colours = tones.hue_colors()
+        self.assertEqual(len(colours), 36)
+        self.assertEqual(colours[0], "#1636c8")
+        self.assertEqual(len(set(colours)), len(colours))
 
 
 class Settings(unittest.TestCase):
