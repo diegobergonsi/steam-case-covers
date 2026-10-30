@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qtui import settings as st
 from qtui import steps as sp
 from qtui import system
+from qtui.watcher import DownloadWatcher
 
 try:
     from PySide6.QtGui import QGuiApplication
@@ -20,6 +21,97 @@ QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def qt_app():
     """One Qt application for the whole test process (a second one cannot be made)."""
     return QGuiApplication.instance() or QGuiApplication([])
+
+
+class Watcher(unittest.TestCase):
+    """Waits for a download to finish: a file counts when two polls in a row see it unchanged, and it is handed over once per version."""
+    def setUp(self):
+        import time
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.started = time.time() - 1000
+        self.w = DownloadWatcher(self.dir, "userdata", (".json",), self.started, 1000)
+
+    def put(self, name, data=b"{}", age=0):
+        import time
+        p = os.path.join(self.dir, name)
+        with open(p, "wb") as f:
+            f.write(data)
+        t = time.time() - age
+        os.utime(p, (t, t))
+        return p
+
+    def names(self):
+        return sorted(os.path.basename(p) for p, _ in self.w.poll())
+
+    def test_a_file_is_returned_on_the_second_poll_only(self):
+        self.put("userdata.json")
+        self.assertEqual(self.names(), [])
+        self.assertEqual(self.names(), ["userdata.json"])
+
+    def test_the_same_version_is_returned_once(self):
+        self.put("userdata.json")
+        self.names()
+        self.assertEqual(self.names(), ["userdata.json"])
+        self.assertEqual(self.names(), [])
+        self.assertEqual(self.names(), [])
+
+    def test_a_growing_file_waits_until_it_stops(self):
+        p = self.put("userdata.json", b"1")
+        self.names()
+        with open(p, "ab") as f:
+            f.write(b"22")
+        self.assertEqual(self.names(), [])                          # changed since the last poll
+        self.assertEqual(self.names(), ["userdata.json"])
+
+    def test_a_changed_version_is_returned_again(self):
+        p = self.put("userdata.json", b"1")
+        self.names(); self.names()
+        with open(p, "wb") as f:
+            f.write(b"two")
+        self.assertEqual(self.names(), [])
+        self.assertEqual(self.names(), ["userdata.json"])
+
+    def test_forget_brings_a_file_back(self):
+        p = self.put("userdata.json")
+        self.names(); self.names()
+        self.w.forget(p)
+        self.assertEqual(self.names(), ["userdata.json"])
+
+    def test_files_that_do_not_count_are_ignored(self):
+        self.put("old userdata.json", age=5000)                      # older than the start of the app
+        self.put("other.json")
+        self.put("userdata.txt")
+        self.put("big userdata.json", b"x" * 1001)                   # over the size limit
+        os.makedirs(os.path.join(self.dir, "userdata folder.json"))   # a directory named like a match
+        os.symlink(os.path.join(self.dir, "other.json"), os.path.join(self.dir, "userdata link.json"))
+        self.names()
+        self.assertEqual(self.names(), [])
+
+    def test_matching_ignores_case_and_takes_browser_copies(self):
+        self.put("USERDATA (1).JSON")
+        self.names()
+        self.assertEqual(self.names(), ["USERDATA (1).JSON"])
+
+    def test_several_files_come_back_together(self):
+        self.put("userdata.json")
+        self.put("userdata (1).json")
+        self.names()
+        self.assertEqual(self.names(), ["userdata (1).json", "userdata.json"])
+
+    def test_a_missing_or_unreadable_folder_gives_nothing(self):
+        from unittest import mock
+        gone = DownloadWatcher(os.path.join(self.dir, "nope"), "userdata", (".json",), self.started, 1000)
+        self.assertEqual(gone.poll(), [])
+        self.put("userdata.json")
+        with mock.patch("os.listdir", side_effect=PermissionError(13, "denied")):
+            self.assertEqual(self.w.poll(), [])
+
+    def test_a_file_that_vanishes_between_listing_and_reading_is_skipped(self):
+        from unittest import mock
+        self.put("userdata.json")
+        with mock.patch("os.lstat", side_effect=FileNotFoundError()):
+            self.assertEqual(self.w.poll(), [])
 
 
 class SystemHelpers(unittest.TestCase):
