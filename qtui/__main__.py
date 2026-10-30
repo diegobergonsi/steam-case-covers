@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The Qt window.  Run:  python -m qtui        Check that it builds (no window is shown):  python -m qtui --selftest"""
 import argparse
+import gc
 import os
 import sys
 import tempfile
@@ -59,6 +60,8 @@ def main(argv=None):
     except RuntimeError as e:
         report_error(str(e), args.log)
         return 1
+    gc.collect()
+    gc.freeze()                                         # the window's own objects live as long as the app: never collect them from an image thread
     code = app.exec()
     close_engine(engine)
     return code

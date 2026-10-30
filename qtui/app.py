@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Builds the QML window around a Shell. A QML error is an error here, not a warning on a blank window."""
+import gc
 import os
 import sys
 
@@ -89,3 +90,4 @@ def close_engine(engine):
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)         # processEvents alone does not run deleteLater
     engine.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    gc.collect()                                                           # Qt objects with timers must die on the main thread, not in whichever thread the collector happens to run

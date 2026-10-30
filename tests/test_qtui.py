@@ -1163,7 +1163,8 @@ class PreviewImages(unittest.TestCase):
         self.assertEqual(bytes(a.constBits()), bytes(b.constBits()))
 
     def test_many_threads_at_once_all_get_a_valid_picture(self):
-        import threading
+        import gc, threading
+        gc.collect()                                                       # leftovers of earlier tests die here, on the main thread
         results, errors = [], []
 
         def work(i):
