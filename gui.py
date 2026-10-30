@@ -31,6 +31,8 @@ STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon",
 MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
 THEME_CHOICES = [("classic", "Classic"), ("halloween", "Halloween")]                                                              # values: "classic", sc.THEMES
 THEME_NOTE = "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web."
+CUSTOM_ART_HELP = ("For games where you set your own art (in Steam's menu or from SteamGridDB), your art goes inside the case instead of Steam's. "
+                   "The app keeps a copy of it in its own folder and never changes your files. Games without art of your own use Steam's.")
 
 
 def look_label(treatment):
@@ -107,6 +109,7 @@ class App(tk.Tk):
         self.library_path = None          # chosen userdata.json
         self.installed_only = tk.BooleanVar(value=False)
         self.skip_auto = tk.BooleanVar(value=False)
+        self.use_custom_art = tk.BooleanVar(value=False)
         self.hue = tk.IntVar(value=0)     # case colour: degrees turned from the original blue
         self.sat = tk.IntVar(value=100)   # its colourfulness and brightness, 0..100 (100: as the original blue)
         self.val = tk.IntVar(value=100)
@@ -413,6 +416,10 @@ class App(tk.Tk):
         self.sw_skip = Switch(r, "Skip blurry covers", self.skip_auto)
         self.sw_skip.pack(side="left")
         InfoBadge(r, sc.AUTO_ART_HELP).pack(side="left", padx=px(6))
+        r = self._row(body)
+        self.sw_custom_art = Switch(r, "Use my own custom art where I have it", self.use_custom_art)
+        self.sw_custom_art.pack(side="left")
+        InfoBadge(r, CUSTOM_ART_HELP).pack(side="left", padx=px(6))
         self.row_make = r = self._flow(body, pady=px(6))
         self.btn_make = RoundedButton(r, "Make covers", self.start_make, primary=True)
         r.add(self.btn_make)
@@ -688,8 +695,22 @@ class App(tk.Tk):
         if self._thumbs:
             self.preview.pack(fill="x", pady=(px(12), 0))
 
-    def _replace_reason(self, tone, completed, treatment, theme=None):
-        """Why Make covers would rebuild covers already in the folder, as (title, sentence) for the prompt; None when nothing is rebuilt."""
+    def _replace_reason(self, tone, completed, treatment, theme=None, custom_art=sc.KEEP):
+        """Why Make covers would rebuild covers already in the folder, as (title, sentence) for the prompt; None when nothing is rebuilt.
+        `custom_art` is what make_covers gets ({} when the option is off); sc.KEEP leaves the art of existing covers out of it."""
+        look = App._replace_reason_look(self, tone, completed, treatment, theme)
+        if custom_art == sc.KEEP or not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art):
+            return look
+        if custom_art:
+            title, extra = "Use your own art?", "The covers you already made for games with your own art are made again with that art inside."
+        else:
+            title, extra = "Go back to Steam's art?", "The covers you made with your own art are made again with Steam's own art."
+        if look is None:
+            return title, "This replaces covers you already made. " + extra
+        return look[0], look[1] + " " + extra
+
+    def _replace_reason_look(self, tone, completed, treatment, theme=None):
+        """The colour, 100% highlight and theme part of _replace_reason; None when none of them rebuilds a cover."""
         if not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment, theme=theme):
             return None
         colour = sc.covers_in_other_colour(self.covers_dir, *tone)
@@ -747,7 +768,16 @@ class App(tk.Tk):
         tone = self._tone()
         completed, treatment = self._completion()           # read here, on the UI thread: the worker never touches Tk variables
         theme = self._theme()
-        why = self._replace_reason(tone, completed, treatment, theme)
+        custom_art = {}                                     # {}: the option is off, covers made from custom art go back to Steam's portrait
+        if self.use_custom_art.get():
+            try:
+                steam = sc.steam_dir()
+                games, _ = sc.load_library(steam, None if self.installed_only.get() else self.library_path)
+                custom_art = {a: p for a, p in sc.find_custom_art(steam, self._acc()).items() if a in games}
+            except sc.SteamcaseError as e:
+                messagebox.showerror("Cannot read your own art", str(e))
+                return
+        why = self._replace_reason(tone, completed, treatment, theme, custom_art)
         if why:
             if not messagebox.askokcancel(why[0],
                                           [(why[1], "main"),
@@ -767,11 +797,12 @@ class App(tk.Tk):
         self.refresh_step1()
         self.refresh_step3()
         skip = self.skip_auto.get()
-        threading.Thread(target=self._worker, args=(lib, skip, tone, (completed, treatment), theme), daemon=True).start()
+        threading.Thread(target=self._worker, args=(lib, skip, tone, (completed, treatment), theme, custom_art), daemon=True).start()
 
-    def _worker(self, lib, skip, tone=(0, 100, 100), look=(None, None), theme=None):
+    def _worker(self, lib, skip, tone=(0, 100, 100), look=(None, None), theme=None, custom_art=None):
         """Runs off the UI thread; talks to the UI only through self.events. `tone` is the case colour (hue, sat, val);
-        `look` is (completed, treatment) for the 100% games, taken by start_make (see _completion); `theme` is None or one of sc.THEMES."""
+        `look` is (completed, treatment) for the 100% games, taken by start_make (see _completion); `theme` is None or one of sc.THEMES;
+        `custom_art` is {appid: path} of the user's own art, found by start_make."""
         hue, sat, val = tone
         completed, treatment = look
         try:
@@ -781,7 +812,7 @@ class App(tk.Tk):
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
             res = sc.make_covers(games, self.covers_dir, skip_auto_art=skip, family=family, hue=hue, sat=sat, val=val,
                                  progress=lambda *a: self.events.put(("progress",) + a),
-                                 cancelled=self.cancel_flag.is_set, completed=completed, treatment=treatment, theme=theme)
+                                 cancelled=self.cancel_flag.is_set, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art)
             self.events.put(("done", res))
         except sc.SteamcaseError as e:
             self.events.put(("error", str(e)))

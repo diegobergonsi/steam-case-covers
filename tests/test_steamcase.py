@@ -1707,8 +1707,13 @@ class ReplaceReason(StoreMocks):
         self.fake = types.SimpleNamespace(covers_dir=self.covers)
         self.games = {1: None, 2: None}
 
-    def made(self, hue=0, completed=None, treatment=None, theme=None):
-        sc.make_covers(self.games, self.covers, hue=hue, completed=completed, treatment=treatment, theme=theme)
+    def made(self, hue=0, completed=None, treatment=None, theme=None, custom_art=None):
+        sc.make_covers(self.games, self.covers, hue=hue, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art)
+
+    def mine(self, colour=(10, 160, 30)):
+        path = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), colour).save(path, format="JPEG")
+        return path
 
     def reason(self, tone, completed, treatment, theme=None):
         got = self.gui.App._replace_reason(self.fake, tone, completed, treatment, theme)
@@ -1716,6 +1721,30 @@ class ReplaceReason(StoreMocks):
         title, sentence = got
         self.assertTrue(title.strip() and sentence.strip() and "%" not in title.replace("100%", "") and "%" not in sentence.replace("100%", ""), got)
         return got
+
+    def test_turning_custom_art_on_asks_before_replacing_existing_covers(self):
+        self.made()
+        got = self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {1: self.mine()})
+        self.assertIsNotNone(got)
+        self.assertIn("your own art", got[1])
+
+    def test_turning_custom_art_off_asks_too(self):
+        self.made(custom_art={1: self.mine()})
+        got = self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {})
+        self.assertIsNotNone(got)
+        self.assertIn("Steam's own art", got[1])
+
+    def test_no_custom_art_question_when_nothing_changes(self):
+        mine = self.mine()
+        self.made(custom_art={1: mine})
+        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {1: mine}))
+        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None))     # not asked about: covers keep their art
+
+    def test_a_colour_change_with_custom_art_says_both(self):
+        self.made()
+        got = self.gui.App._replace_reason(self.fake, (90, 100, 100), None, None, None, {1: self.mine()})
+        self.assertIn("colour", got[1])
+        self.assertIn("your own art", got[1])
 
     def test_nothing_to_rebuild_gives_no_prompt(self):
         self.made(completed={1}, treatment="ribbon")
