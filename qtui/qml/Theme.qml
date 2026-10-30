@@ -64,6 +64,7 @@ QtObject {
     readonly property int previewWidth: 200
     readonly property int previewHeight: 300
     readonly property int sectionMinWidth: 300          // below this the sections no longer fit beside the preview
+    readonly property int minSpan: 1                    // a length that is never zero, to divide by
     readonly property int hairline: 1
     readonly property int focusRing: 2
     readonly property int ringOffset: 3

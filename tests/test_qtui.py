@@ -16,6 +16,14 @@ try:
 except ImportError:
     QGuiApplication = None
 need_qt = unittest.skipIf(QGuiApplication is None, "PySide6 missing")
+
+
+class QtCase(unittest.TestCase):
+    """A Qt test: leftovers (objects with timers) are collected here, on the main thread, never by a worker thread that happens to run the collector."""
+    def tearDown(self):
+        import gc
+        gc.collect()
+        super().tearDown()
 QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
 
 
@@ -392,7 +400,7 @@ class FilePicker(unittest.TestCase):
 
 
 @need_qt
-class GameListScreen(unittest.TestCase):
+class GameListScreen(QtCase):
     """Step 1 as the approved wireframe, in the real window (offscreen, effects reduced so nothing is still sliding when a test clicks)."""
     @classmethod
     def setUpClass(cls):
@@ -588,7 +596,7 @@ class GameListScreen(unittest.TestCase):
 
 
 @need_qt
-class GameListFlow(unittest.TestCase):
+class GameListFlow(QtCase):
     """The whole of step 1 as a person lives it: Home, the page is saved slowly, the app notices, Look opens."""
     @classmethod
     def setUpClass(cls):
@@ -641,7 +649,7 @@ class GameListFlow(unittest.TestCase):
 
 
 @need_qt
-class LibraryActions(unittest.TestCase):
+class LibraryActions(QtCase):
     @classmethod
     def setUpClass(cls):
         cls.app = qt_app()
@@ -743,7 +751,7 @@ class LibraryActions(unittest.TestCase):
 
 
 @need_qt
-class LibraryState(unittest.TestCase):
+class LibraryState(QtCase):
     """The game list of step 1: the saved file noticed by itself, validated, and the 'installed games only' switch."""
     @classmethod
     def setUpClass(cls):
@@ -922,7 +930,7 @@ class LibraryState(unittest.TestCase):
 
 
 @need_qt
-class LookScreen(unittest.TestCase):
+class LookScreen(QtCase):
     """Step 2 as the approved wireframe, in the real window (effects reduced so nothing is still sliding)."""
     @classmethod
     def setUpClass(cls):
@@ -975,7 +983,7 @@ class LookScreen(unittest.TestCase):
 
     def test_it_shows_its_title_and_the_nine_swatches(self):
         self.assertEqual(self.item("screen_title").property("text"), "Choose the look")
-        self.assertEqual([self.item("look_swatch_%d" % i).property("name") for i in (0, 6, 8)], ["Blue", "Black", "Silver"])
+        self.assertEqual([self.item("look_swatch_%d" % i).property("name") for i in (0, 6, 8)], ["Original", "Black", "Silver"])
 
     def test_a_swatch_sets_the_tone_and_only_it_is_selected(self):
         self.click("look_swatch_3")
@@ -993,7 +1001,7 @@ class LookScreen(unittest.TestCase):
         self.assertEqual(self.item("look_hint").property("text"), "")
         self.click("look_swatch_7")
         self.assertEqual(self.item("look_hint").property("text"), "Colour has no effect on grey or black.")
-        self.assertEqual(self.item("look_tone_name").property("text"), "Graphite")
+        self.assertEqual(self.item("look_section_colour_note").property("text"), "Graphite")
 
     def test_keyboard_focus_stays_on_a_swatch_after_it_is_picked(self):
         """A changed tone must not rebuild the swatches: the one that has the focus would be destroyed and the keyboard user would lose their place."""
@@ -1011,6 +1019,60 @@ class LookScreen(unittest.TestCase):
         self.look.hue = 200                                       # another change of tone
         self.app.processEvents()
         self.assertTrue(self.item("look_swatch_2").property("activeFocus"), "another change of tone rebuilt the swatches")
+
+    def test_the_tone_name_is_at_the_right_of_the_heading(self):
+        note = self.item("look_section_colour_note")
+        self.assertEqual(note.property("text"), "Original")
+        self.click("look_swatch_7")
+        self.assertEqual(self.item("look_section_colour_note").property("text"), "Graphite")
+        sec = self.item("look_section_colour")
+        from PySide6.QtCore import QPointF
+        self.assertGreater(note.mapToScene(QPointF(0, 0)).x(), sec.mapToScene(QPointF(sec.width() / 2, 0)).x())     # in the right half
+
+    def test_a_label_is_never_cut_off_at_a_middle_or_narrow_width(self):
+        for width in (810, 640):
+            self.root.setProperty("width", width)
+            self.app.processEvents()
+            for name in ("look_custom_art_label", "look_skip_blurry_label"):
+                self.reveal(name)
+                label = self.item(name)
+                self.assertFalse(label.property("truncated"), "%s is cut off at %d px" % (name, width))
+                self.assertLessEqual(label.property("contentWidth"), label.width() + 0.5, "%s overflows at %d px" % (name, width))
+
+    def test_swatches_are_radio_buttons_with_one_tab_stop_and_arrow_keys(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        stops = [i for i in range(9) if self.item("look_swatch_%d" % i).property("activeFocusOnTab")]
+        self.assertEqual(stops, [0])                                  # the selected one (the original)
+        self.root.requestActivate()
+        self.item("look_swatch_0").forceActiveFocus()
+        for key, expect in ((Qt.Key_Right, 1), (Qt.Key_Right, 2), (Qt.Key_Left, 1), (Qt.Key_End, 8), (Qt.Key_Home, 0)):
+            QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, "", False))
+            self.app.processEvents()
+            self.assertEqual(self.look.selectedSwatch, expect, key)
+            self.assertTrue(self.item("look_swatch_%d" % expect).property("activeFocus"), "the focus did not follow the choice at %d" % expect)
+        self.look.setTone(123, 45, 67)                                # none selected: the first is the tab stop
+        self.app.processEvents()
+        self.assertEqual([i for i in range(9) if self.item("look_swatch_%d" % i).property("activeFocusOnTab")], [0])
+
+    def test_a_slider_track_is_not_redrawn_for_its_own_value(self):
+        screen = self.item("look_screen")
+        calls = dict(screen.property("calls").toVariant())
+        self.look.sat = 40                                            # moves the colourfulness slider itself: its own track does not change
+        self.app.processEvents()
+        after = dict(screen.property("calls").toVariant())
+        self.assertEqual(after["sat"], calls["sat"])
+        self.assertGreater(after["val"], calls["val"])                # the brightness track does show the new colourfulness
+        self.look.hue = 200
+        self.app.processEvents()
+        self.assertGreater(dict(screen.property("calls").toVariant())["sat"], after["sat"])
+
+    def test_related_items_are_8_px_apart_and_the_small_size_is_for_hints(self):
+        import re
+        with open(os.path.join(QML_DIR, "LookScreen.qml")) as f:
+            text = f.read()
+        self.assertEqual(re.findall(r"spacing:\s*Theme\.s4\b", text), [])
+        self.assertLessEqual(len(re.findall(r"Theme\.smallSize", text)), 1)       # only the readable-text note
 
     def test_the_theme_chips_set_the_theme(self):
         self.click("look_theme_chip_halloween")
@@ -1030,6 +1092,7 @@ class LookScreen(unittest.TestCase):
         self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt)
         self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
         self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("steamcase").AUTO_ART_HELP)
+        self.assertTrue(self.shell.switchValue("use_custom_art") and self.shell.switchValue("skip_auto_art"))        # saved, not only shown
 
     def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
         self.assertTrue(self.item("look_next").property("filled"))
@@ -1062,7 +1125,7 @@ class LookScreen(unittest.TestCase):
 
 
 @need_qt
-class LookFlow(unittest.TestCase):
+class LookFlow(QtCase):
     """Step 2 as a person lives it: pick a colour, a swatch, a theme and the art options; the preview follows; Next opens the 100% games step."""
     @classmethod
     def setUpClass(cls):
@@ -1131,7 +1194,7 @@ class LookFlow(unittest.TestCase):
 
 
 @need_qt
-class Components(unittest.TestCase):
+class Components(QtCase):
     """GradientSlider, Swatch, ChoiceChips and PreviewCard, each in a small window of its own (any QML warning fails the test)."""
     @classmethod
     def setUpClass(cls):
@@ -1228,7 +1291,58 @@ class Components(unittest.TestCase):
         iface = QAccessible.queryAccessibleInterface(s)
         self.assertEqual(iface.role(), QAccessible.Role.Slider)
         self.assertEqual(iface.text(QAccessible.Text.Name), "Colour")
-        self.assertIn("120", iface.text(QAccessible.Text.Description))
+        self.assertEqual(iface.text(QAccessible.Text.Description), "120 (0 to 359)")
+
+    def touch(self, kind, x, y):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtTest import QTest
+        if not hasattr(self, "_touch"):
+            self._touch = QTest.createTouchDevice()
+        seq = QTest.touchEvent(self.root, self._touch)
+        getattr(seq, kind)(0, QPoint(int(x), int(y)), self.root)
+        seq.commit()
+        self.app.processEvents()
+
+    def test_a_swipe_that_starts_on_the_track_with_a_finger_does_not_move_the_slider(self):
+        """On the Steam Deck a swipe over a slider must scroll the page, not change the colour; a tap on the track still jumps, the handle still drags."""
+        self.load(self.SLIDER)
+        s = self.item("s")
+        y = 20 + s.height() / 2
+        self.touch("press", 20 + 200, y)
+        self.touch("move", 20 + 260, y)
+        self.touch("release", 20 + 260, y)
+        self.assertEqual(s.property("value"), 0)                     # a swipe: nothing changed
+        self.touch("press", 20 + 200, y)
+        self.touch("release", 20 + 200, y)
+        self.assertAlmostEqual(s.property("value"), 247, delta=12)   # a tap on the track jumps there (200 - 18) / 264 of the range
+        handle_x = 20 + s.property("handleSize") / 2 + (s.property("value") / 359) * (300 - s.property("handleSize"))
+        self.touch("press", handle_x, y)
+        self.touch("move", 20 + 60, y)
+        self.touch("release", 20 + 60, y)
+        self.assertLess(s.property("value"), 100)                    # the handle drags
+
+    def test_the_card_never_waits_for_a_render_on_the_window_thread(self):
+        self.load('PreviewCard { objectName: "p"; x: 20; y: 20; source: "image://preview/0/100/100/classic/none/1" }', 300, 400)
+        self.assertTrue(self.item("p").property("frontAsynchronous"))
+
+    def test_a_picture_that_fails_to_render_leaves_the_old_one(self):
+        import time
+        from unittest import mock
+        self.load('PreviewCard { objectName: "p"; x: 20; y: 20; source: "image://preview/0/100/100/classic/none/1" }', 300, 400)
+        p = self.item("p")
+        end = time.time() + 5
+        while time.time() < end and not p.property("showing"):
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.assertTrue(p.property("showing"))
+        with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
+            p.setProperty("source", "image://preview/200/100/100/classic/none/2")
+            end = time.time() + 3
+            while time.time() < end and p.property("status") not in (3,):                       # Image.Error
+                self.app.processEvents()
+                time.sleep(0.02)
+        self.assertEqual(p.property("status"), 3)
+        self.assertTrue(p.property("showing"), "the card went blank after a failed render")
 
     SWATCH = 'Swatch { objectName: "w"; x: 20; y: 20; color: "#336699"; name: "Blue"; selected: false; property int n: 0; onPicked: n++ }'
 
@@ -1285,6 +1399,26 @@ class Components(unittest.TestCase):
         self.key("c_chip_halloween", Qt.Key_Right)                    # nothing after the last one
         self.assertEqual(c.property("last"), "")
 
+    def test_arrow_keys_move_the_focus_with_the_choice_and_warn_about_nothing(self):
+        from PySide6.QtCore import Qt, QtMsgType, qInstallMessageHandler
+        warnings = []
+        qInstallMessageHandler(lambda kind, ctx, msg: warnings.append(msg) if kind in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg) else None)
+        self.addCleanup(qInstallMessageHandler, None)
+        self.load('ChoiceChips { objectName: "c"; x: 20; y: 20; width: 380; model: [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}, {"key": "c", "label": "C"}];\n'
+                  '  current: "a"; onChosen: (k) => current = k }')
+        self.key("c_chip_a", Qt.Key_Right)
+        self.assertEqual(self.item("c").property("current"), "b")
+        self.assertTrue(self.item("c_chip_b").property("activeFocus"), "the focus stayed on the old chip")
+        self.assertTrue(self.item("c_chip_b").property("activeFocusOnTab"))
+        self.assertFalse(self.item("c_chip_a").property("activeFocusOnTab"))
+        self.key("c_chip_b", Qt.Key_Left)
+        self.assertEqual(self.item("c").property("current"), "a")
+        self.assertTrue(self.item("c_chip_a").property("activeFocus"))
+        self.key("c_chip_a", Qt.Key_End)
+        self.assertEqual(self.item("c").property("current"), "c")
+        self.assertTrue(self.item("c_chip_c").property("activeFocus"))
+        self.assertEqual([w for w in warnings if "activeFocusOnTab" in w], [])
+
     def test_only_the_chosen_chip_is_a_tab_stop_and_they_are_radio_buttons(self):
         from PySide6.QtGui import QAccessible
         self.load(self.CHIPS)
@@ -1314,12 +1448,17 @@ class Components(unittest.TestCase):
         while time.time() < end and p.property("status") != 1:
             self.app.processEvents()
             time.sleep(0.02)
+        end = time.time() + 5
+        while time.time() < end and not p.property("showing"):                 # the shown picture loads asynchronously too
+            self.app.processEvents()
+            time.sleep(0.02)
         p.setProperty("source", "image://preview/120/100/100/classic/none/2")
+        self.app.processEvents()
         self.assertTrue(p.property("showing"), "the card went blank while the next picture loaded")
 
 
 @need_qt
-class PreviewImages(unittest.TestCase):
+class PreviewImages(QtCase):
     """The sample cover QML shows, made by the engine and handed over as an image (Qt calls the provider from its image threads)."""
     @classmethod
     def setUpClass(cls):
@@ -1365,11 +1504,11 @@ class PreviewImages(unittest.TestCase):
                 self.assertEqual((img.width(), img.height()), (50, 75))
                 self.assertEqual(img.pixelColor(25, 37).alpha(), 0)
 
-    def test_an_engine_failure_gives_the_placeholder_not_an_exception(self):
+    def test_an_engine_failure_gives_no_picture_so_the_old_one_stays(self):
         from unittest import mock
         with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
             img = self.get("0/100/100/classic/none/1", 50, 75)
-        self.assertEqual((img.width(), img.height(), img.pixelColor(25, 37).alpha()), (50, 75, 0))
+        self.assertTrue(img.isNull())                                     # QML sees an error, not a blank picture that would replace the old one
 
     def test_a_repeated_request_is_not_rendered_again(self):
         import steamcase as sc
@@ -1410,7 +1549,7 @@ class PreviewImages(unittest.TestCase):
 
 
 @need_qt
-class LookState(unittest.TestCase):
+class LookState(QtCase):
     """The Look step: the case colour, the theme and the art switches, with the tone remembered through the covers already made."""
     @classmethod
     def setUpClass(cls):
@@ -1510,6 +1649,26 @@ class LookState(unittest.TestCase):
             look = self.new_shell().look
             self.assertEqual((look.hue, look.sat, look.val, look.theme), (0, 100, 100, "classic"))
 
+    def test_the_themes_come_from_python(self):
+        self.assertEqual([t["key"] for t in self.look.themes], ["classic", "halloween"])
+        self.assertEqual([t["label"] for t in self.look.themes], ["Classic", "Halloween"])
+
+    def test_the_swatch_list_is_constant_and_the_selection_is_a_number(self):
+        before = self.look.swatchList
+        self.look.setTone(123, 45, 67)
+        self.assertEqual(self.look.swatchList, before)                    # nothing to rebuild
+        self.assertEqual(self.look.selectedSwatch, -1)                    # a custom tone is none of the nine
+        self.look.pickSwatch(4)
+        self.assertEqual(self.look.selectedSwatch, 4)
+        self.look.pickSwatch(8)
+        self.assertEqual(self.look.selectedSwatch, 8)
+
+    def test_a_swatch_is_named_like_the_tone_it_sets(self):
+        names = [x["name"] for x in self.look.swatchList]
+        self.assertEqual(names[0], "Original")                            # the tone name of the first swatch
+        self.assertEqual(names[4], "Orange")                              # what the engine calls it, not "Gold" (a case style)
+        self.assertEqual(len(set(names)), 9)
+
     def test_the_theme_takes_only_the_known_values(self):
         self.look.theme = "halloween"
         self.assertEqual(self.look.theme, "halloween")
@@ -1536,6 +1695,21 @@ class LookState(unittest.TestCase):
         self.assertIn("/100/100/100/classic/none/", seen[0])
         self.assertTrue(seen[0].startswith("image://preview/"))
 
+    def test_the_preview_keeps_up_during_a_long_drag(self):
+        """The Tk window redrew during the drag: waiting for the pointer to rest would freeze the picture until the end."""
+        import time
+        seen = []
+        self.look.previewSourceChanged.connect(lambda: seen.append(self.look.previewSource))
+        end = time.time() + 0.45
+        h = 0
+        while time.time() < end:                                           # a change every ~15 ms for 450 ms
+            h = (h + 7) % 360
+            self.look.setTone(h, 100, 100)
+            self.wait(15)
+        self.assertGreaterEqual(len(seen), 3, seen)                       # several pictures on the way, not one at the end
+        self.wait(200)
+        self.assertIn("/%d/100/100/" % h, self.look.previewSource)         # and the last one shows the final tone
+
     def test_the_colours_for_the_sliders_come_from_python(self):
         import steamcase as sc
         self.assertEqual(self.look.colorFor(120, 50, 80), sc.case_color(120, 50, 80))
@@ -1546,7 +1720,7 @@ class LookState(unittest.TestCase):
 
 
 @need_qt
-class ShellObject(unittest.TestCase):
+class ShellObject(QtCase):
     @classmethod
     def setUpClass(cls):
         cls.app = qt_app()
@@ -1682,7 +1856,7 @@ class BuildTrimList(unittest.TestCase):
               "PySide6/Qt/plugins/xcbglintegrations/libqxcb-glx-integration.so", "PySide6/Qt/qml/QtQuick/Controls/Basic/Button.qml", "PySide6/Qt/qml/QtQuick/Effects/qmldir",
               "PySide6/Qt/qml/QtQuick/Controls/impl/qmldir", "PySide6/Qt/qml/QtQml/qmldir", "PySide6/Qt/lib/libQt6Quick.so.6", "PySide6/Qt/lib/libQt6Qml.so.6",
               "PySide6/Qt/lib/libQt6Gui.so.6", "PySide6/Qt/lib/libQt6Core.so.6", "PySide6/Qt/lib/libQt6Network.so.6", "PySide6/Qt/lib/libQt6OpenGL.so.6",
-              "PySide6/Qt/lib/libQt6QuickControls2.so.6", "PySide6/Qt/lib/libQt6QuickControls2Basic.so.6", "PySide6/Qt/lib/libQt6QuickTemplates2.so.6",
+              "PySide6/Qt/lib/libQt6QuickControls2.so.6", "PySide6/Qt/lib/libQt6QuickEffects.so.6", "PySide6/Qt/lib/libQt6QuickControls2Basic.so.6", "PySide6/Qt/lib/libQt6QuickTemplates2.so.6",
               "PySide6/Qt/lib/libicudata.so.73", "PySide6/QtOpenGL.abi3.so", "PySide6/Qt/qml/QtQuick/Dialogs/qmldir", "PySide6/Qt/qml/Qt/labs/folderlistmodel/qmldir", "PySide6/Qt/lib/libQt6QuickDialogs2.so.6", "PySide6/QtQuick.abi3.so", "libX11.so.6", "libfontconfig.so.1", "libfreetype.so.6"]
 
     def block(self):
@@ -1811,6 +1985,16 @@ class Tokens(unittest.TestCase):
             with open(os.path.join(QML_DIR, name)) as f:
                 self.assertNotIn("backdrop", f.read().lower(), name)
 
+    def test_every_component_is_in_the_guide(self):
+        import re
+        with open(os.path.join(QML_DIR, "qmldir")) as f:
+            names = [m.group(1) for m in re.finditer(r"^(\w+) 1\.0 ", f.read(), re.M)]
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
+            guide = f.read()
+        for name in names:
+            if name != "Theme" and not name.endswith("Screen"):
+                self.assertIn("`%s`" % name, guide, "%s is not in the guide's component list" % name)
+
     def test_no_other_file_has_a_colour_of_its_own(self):
         import re
         for name in os.listdir(QML_DIR):
@@ -1820,7 +2004,7 @@ class Tokens(unittest.TestCase):
 
 
 @need_qt
-class ShellWindow(unittest.TestCase):
+class ShellWindow(QtCase):
     """The real QML window, offscreen."""
     @classmethod
     def setUpClass(cls):
@@ -1936,7 +2120,7 @@ class ShellWindow(unittest.TestCase):
 
 
 @need_qt
-class Entry(unittest.TestCase):
+class Entry(QtCase):
     """`python -m qtui --selftest`: builds the window offscreen, checks it, and exits 0 (ok) or 1 (with the QML messages)."""
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -2003,6 +2187,21 @@ class Entry(unittest.TestCase):
         self.assertIn("gamelist_next", text)
         self.assertIn("look_next", text)                      # and the Look screen, which draws the preview and the sliders
         self.assertRegex(text, r"Shell\(.*downloads=", "the self-test must never look at the real Downloads folder")
+
+    def test_the_selftest_checks_that_the_preview_really_draws(self):
+        from unittest import mock
+        from PySide6.QtCore import QSize
+        from qtui.app import check_preview, close_engine, create_engine
+        from qtui.shell import Shell
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        engine = create_engine(Shell(os.path.join(tmp, "s.json"), downloads=tmp, covers_dir=tmp))
+        self.addCleanup(close_engine, engine)
+        self.assertTrue(check_preview(engine))
+        with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
+            self.assertFalse(check_preview(engine, fresh=True))
+        with open(os.path.join(self.ROOT, "qtui", "__main__.py")) as f:
+            self.assertIn("check_preview", f.read())
 
     def test_a_missing_bundled_picture_fails_the_selftest(self):
         empty = tempfile.mkdtemp()

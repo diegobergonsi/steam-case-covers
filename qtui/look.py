@@ -8,11 +8,15 @@ from qtui import tones
 
 COLOUR_NOTE = "Only the original colour is checked for readable text."
 THEMES = ("classic",) + tuple(sc.THEMES)
+THEME_LABELS = {"classic": "Classic", "halloween": "Halloween"}
 PREVIEW_DELAY_MS = 60                       # one preview render per burst of slider changes: the newest tone wins
 
 
 class Look(QObject):
-    toneChanged = Signal()
+    toneChanged = Signal()                  # any of the three (names, notes, swatches follow it)
+    hueChanged = Signal()                   # one signal for each value: a slider's track must not be redrawn when only its own value moved
+    satChanged = Signal()
+    valChanged = Signal()
     themeChanged = Signal()
     treatmentChanged = Signal()
     artChanged = Signal()
@@ -51,7 +55,8 @@ class Look(QObject):
         self.previewSourceChanged.emit()
 
     def _schedule(self):
-        self._timer.start()                 # restarts the quiet moment while changes keep coming
+        if not self._timer.isActive():      # a throttle, not a debounce: during a long drag the picture follows every 60 ms, and the last tone always shows
+            self._timer.start()
 
     @Property(str, notify=previewSourceChanged)
     def previewSource(self):
@@ -61,11 +66,14 @@ class Look(QObject):
     def _set_tone(self, hue, sat, val):
         tone = tones.clamp_tone(hue, sat, val)
         if tone != self._tone:
-            self._tone = tone
+            old, self._tone = self._tone, tone
+            for i, signal in enumerate((self.hueChanged, self.satChanged, self.valChanged)):
+                if old[i] != tone[i]:
+                    signal.emit()
             self.toneChanged.emit()
             self._schedule()
 
-    @Property(int, notify=toneChanged)
+    @Property(int, notify=hueChanged)
     def hue(self):
         return self._tone[0]
 
@@ -73,7 +81,7 @@ class Look(QObject):
     def hue(self, value):
         self._set_tone(value, self._tone[1], self._tone[2])
 
-    @Property(int, notify=toneChanged)
+    @Property(int, notify=satChanged)
     def sat(self):
         return self._tone[1]
 
@@ -81,7 +89,7 @@ class Look(QObject):
     def sat(self, value):
         self._set_tone(self._tone[0], value, self._tone[2])
 
-    @Property(int, notify=toneChanged)
+    @Property(int, notify=valChanged)
     def val(self):
         return self._tone[2]
 
@@ -100,6 +108,23 @@ class Look(QObject):
     @Property(str, notify=toneChanged)
     def colourNote(self):
         return "" if tones.same_tone(self._tone, tones.ORIGINAL) else COLOUR_NOTE
+
+    @Property("QVariantList", constant=True)
+    def swatchList(self):
+        """The nine ready-made tones: the same list for ever, so nothing is rebuilt when the tone changes."""
+        return tones.swatches()
+
+    @Property(int, notify=toneChanged)
+    def selectedSwatch(self):
+        """Which of the nine is the current tone, or -1 for a custom one."""
+        for i, x in enumerate(tones.swatches()):
+            if tones.same_tone(self._tone, (x["hue"], x["sat"], x["val"])):
+                return i
+        return -1
+
+    @Property("QVariantList", constant=True)
+    def themes(self):
+        return [{"key": k, "label": THEME_LABELS.get(k, k.capitalize())} for k in THEMES]
 
     @Property("QVariantList", notify=toneChanged)
     def swatches(self):

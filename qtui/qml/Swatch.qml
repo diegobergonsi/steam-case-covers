@@ -9,11 +9,13 @@ Item {
     property color color: Theme.raised
     property bool selected: false
     property string name: ""
+    property bool tabStop: true                         // one swatch is the Tab stop (the selected one); the arrow keys move between them
     signal picked()
+    signal step(int delta)                              // an arrow key, Home (-100) or End (100): the owner moves the choice and the focus
 
     width: Theme.touchSize
     height: Theme.touchSize
-    activeFocusOnTab: true
+    activeFocusOnTab: tabStop
     Accessible.role: Accessible.RadioButton
     Accessible.name: name
     Accessible.checkable: true
@@ -43,9 +45,14 @@ Item {
         onClicked: swatch.picked()
     }
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+        var k = event.key
+        if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
             if (!event.isAutoRepeat) swatch.picked()
-            event.accepted = true
-        }
+        } else if (k === Qt.Key_Right || k === Qt.Key_Down) swatch.step(1)
+        else if (k === Qt.Key_Left || k === Qt.Key_Up) swatch.step(-1)
+        else if (k === Qt.Key_Home) swatch.step(-100)
+        else if (k === Qt.Key_End) swatch.step(100)
+        else return
+        event.accepted = true
     }
 }

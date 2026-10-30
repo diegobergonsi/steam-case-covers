@@ -10,6 +10,7 @@ Item {
     property url source
     readonly property int status: back.status
     readonly property bool showing: front.status === Image.Ready
+    readonly property bool frontAsynchronous: front.asynchronous
     width: Theme.previewWidth
     height: Theme.previewHeight
 
@@ -25,6 +26,7 @@ Item {
     Image {                                             // what is shown: always a finished picture
         id: front
         anchors.fill: parent
+        asynchronous: true                               // the window thread never waits for a render
         cache: false
         sourceSize: Qt.size(card.width, card.height)
         layer.enabled: true

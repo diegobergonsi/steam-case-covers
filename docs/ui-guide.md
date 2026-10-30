@@ -63,4 +63,10 @@ Never loops, bounces, or anything over 400 ms. With "reduce effects" everything 
 
 ## Components
 
-Primary button, quiet button, chip, switch, colour picker, slider, progress bar, navigation item, step badge, card, message, info tip. A new component is added to this list first.
+Every piece of a screen is one of these, in `qtui/qml/`. A new component is added to this list first (rule 5), and every size, colour and time in it comes from `Theme`.
+
+- Buttons: `PrimaryButton` (the one filled button of a screen; `quiet: true` is the outlined look) and `QuietButton` (the quiet look).
+- Frame of a screen: `ScreenFrame` (title, subtitle, sections that scroll, a footer that never scrolls away), `Section` (a card with a heading and an optional note at its right), `Card`, `ButtonRow` (buttons with one goal in one row, wrapping when narrow).
+- Navigation: `NavItem`.
+- Choices: `SwitchRow` (a switch with a label that wraps and an optional info tip), `ChoiceChips` (one choice out of a few, arrow keys move it), `Swatch` (a ready-made colour, arrow keys move between them), `GradientSlider` (a slider whose track shows what it does; a swipe with a finger scrolls, a tap or the handle moves it).
+- Information: `StatusLine` (what is happening), `InfoTip` (the small "i"), `PreviewCard` (the sample cover with a soft shadow; the old picture stays while the next one loads).

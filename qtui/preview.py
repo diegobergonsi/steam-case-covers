@@ -65,7 +65,7 @@ class PreviewProvider(QQuickImageProvider):
                 pil = pil.resize((want.width(), want.height()), sc.Image.LANCZOS)
                 image = QImage(pil.tobytes(), pil.width, pil.height, pil.width * 4, QImage.Format_RGBA8888).copy()      # copy: the bytes object goes away
             except Exception:
-                return _placeholder(want)       # a preview is a nicety: never let it break the step
+                return QImage()                 # no picture at all: QML sees an error and keeps the old one (a blank picture would replace it)
             self._cache[key] = image
             while len(self._cache) > CACHE_SIZE:
                 self._cache.popitem(last=False)

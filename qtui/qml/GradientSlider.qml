@@ -15,12 +15,12 @@ Item {
     signal moved(int value)
 
     readonly property real handleSize: Theme.touchSize
-    readonly property real span: Math.max(Theme.hairline, width - handleSize)
+    readonly property real span: Math.max(Theme.minSpan, width - handleSize)
     implicitHeight: handleSize
     activeFocusOnTab: true
     Accessible.role: Accessible.Slider
     Accessible.name: label
-    Accessible.description: String(value)
+    Accessible.description: value + " (" + from + " to " + to + ")"
     Accessible.onIncreaseAction: slider.step(1)
     Accessible.onDecreaseAction: slider.step(-1)
 
@@ -70,18 +70,35 @@ Item {
         width: slider.handleSize
         height: slider.handleSize
         radius: width / 2
-        x: (slider.value - slider.from) / Math.max(Theme.hairline, slider.to - slider.from) * slider.span
+        x: (slider.value - slider.from) / Math.max(Theme.minSpan, slider.to - slider.from) * slider.span
         anchors.verticalCenter: parent.verticalCenter
         color: Theme.text
         border.width: Theme.focusRing
         border.color: Theme.bg
     }
     MouseArea {
+        id: area
         anchors.fill: parent
-        preventStealing: true
         cursorShape: Qt.PointingHandCursor
-        onPressed: (mouse) => { slider.forceActiveFocus(); slider.pointTo(mouse.x) }
-        onPositionChanged: (mouse) => { if (pressed) slider.pointTo(mouse.x) }
+        property bool dragging: false
+        property bool touch: false
+        property real pressX: 0
+        // a mouse jumps and drags from anywhere; a finger drags only the handle and taps to jump, so a swipe that starts on the track scrolls the page
+        onPressed: (mouse) => {
+            slider.forceActiveFocus()
+            touch = mouse.source !== Qt.MouseEventNotSynthesized
+            pressX = mouse.x
+            dragging = !touch || Math.abs(mouse.x - (handle.x + handle.width / 2)) <= handle.width / 2
+            preventStealing = dragging
+            if (!touch) slider.pointTo(mouse.x)
+        }
+        onPositionChanged: (mouse) => { if (pressed && dragging) slider.pointTo(mouse.x) }
+        onReleased: (mouse) => {
+            if (touch && !dragging && Math.abs(mouse.x - pressX) < Theme.s8) slider.pointTo(mouse.x)
+            dragging = false
+            preventStealing = false
+        }
+        onCanceled: { dragging = false; preventStealing = false }
     }
     Keys.onPressed: (event) => {
         var k = event.key

@@ -93,3 +93,14 @@ def close_engine(engine):
     engine.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     gc.collect()                                                           # Qt objects with timers must die on the main thread, not in whichever thread the collector happens to run
+
+
+def check_preview(engine, fresh=False):
+    """True when the preview provider really draws a cover (not a blank one): the packaged self-test needs this, a build can start and still lack the engine's pictures.
+    `fresh` asks for a tone nobody asked for before, so a cached picture cannot answer."""
+    from PySide6.QtCore import QSize
+    provider = engine.imageProvider("preview")
+    if provider is None:
+        return False
+    image = provider.requestImage("5/55/55/classic/none/1" if fresh else "0/100/100/classic/none/1", QSize(), QSize(40, 60))
+    return (not image.isNull()) and image.pixelColor(20, 30).alpha() > 0

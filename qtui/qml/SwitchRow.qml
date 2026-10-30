@@ -12,7 +12,7 @@ Item {
     signal toggled(bool value)
 
     width: parent ? parent.width : 0
-    implicitHeight: Theme.fieldRowHeight
+    implicitHeight: Math.max(Theme.fieldRowHeight, caption.contentHeight + 2 * Theme.s4)
     height: implicitHeight
     activeFocusOnTab: true
     Accessible.role: Accessible.CheckBox
@@ -51,17 +51,18 @@ Item {
     }
     Text {
         id: caption
+        objectName: row.objectName + "_label"
         x: track.x + track.width + Theme.s12
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.min(implicitWidth, parent.width - x - (tipItem.visible ? tipItem.width + Theme.s12 : 0))
+        width: parent.width - x - (tipItem.visible ? tipItem.width + Theme.s12 : 0)
         text: row.label
         color: Theme.text
         font.pixelSize: Theme.bodySize
-        elide: Text.ElideRight
+        wrapMode: Text.WordWrap                          // a long label wraps, it is never cut off
     }
     MouseArea {
         x: 0
-        width: caption.x + caption.width
+        width: caption.x + caption.contentWidth
         height: parent.height
         cursorShape: Qt.PointingHandCursor
         onClicked: row.toggled(!row.checked)
@@ -71,7 +72,7 @@ Item {
         objectName: row.objectName + "_tip"
         visible: row.tip !== ""
         text: row.tip
-        x: caption.x + caption.width + Theme.s8
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
     }
     Keys.onPressed: (event) => {

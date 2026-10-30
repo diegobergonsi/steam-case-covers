@@ -6,12 +6,19 @@ import "."
 
 ScreenFrame {
     id: screen
+    objectName: "look_screen"
     readonly property var look: shell.look
     title: "Choose the look"
     subtitle: "The preview changes as you pick."
 
     // the track shows the case in its current colour; reading the three values here makes the binding follow them
-    function stopsFor(which) { var tone = [look.hue, look.sat, look.val]; return look.trackColors(which) }
+    // each track depends on the other two values only: the track of a slider does not change when that slider moves (nor is it redrawn)
+    property var calls: ({"sat": 0, "val": 0})
+    function stopsFor(which) {
+        var other = which === "sat" ? [look.hue, look.val] : [look.hue, look.sat]
+        calls[which] += 1
+        return look.trackColors(which)
+    }
 
     Item {
         id: layout
@@ -36,32 +43,39 @@ ScreenFrame {
             Section {
                 objectName: "look_section_colour"
                 heading: "Case colour"
-                Text { objectName: "look_tone_name"; width: parent.width; text: screen.look.toneName; color: Theme.muted; font.pixelSize: Theme.bodySize; elide: Text.ElideRight }
+                note: screen.look.toneName
                 Column {
                     width: parent.width
-                    spacing: Theme.s4
-                    Text { text: "Colour"; color: Theme.muted; font.pixelSize: Theme.smallSize }
+                    spacing: Theme.s8
+                    Text { text: "Colour"; color: Theme.muted; font.pixelSize: Theme.bodySize }
                     GradientSlider { objectName: "look_hue"; width: parent.width; label: "Colour"; from: 0; to: 359; value: screen.look.hue
                         stops: screen.look.hueColors(); onMoved: (v) => screen.look.hue = v }
-                    Text { text: "Colourfulness"; color: Theme.muted; font.pixelSize: Theme.smallSize }
+                    Text { text: "Colourfulness"; color: Theme.muted; font.pixelSize: Theme.bodySize }
                     GradientSlider { objectName: "look_sat"; width: parent.width; label: "Colourfulness"; from: 0; to: 100; value: screen.look.sat
                         stops: screen.stopsFor("sat"); onMoved: (v) => screen.look.sat = v }
-                    Text { text: "Brightness"; color: Theme.muted; font.pixelSize: Theme.smallSize }
+                    Text { text: "Brightness"; color: Theme.muted; font.pixelSize: Theme.bodySize }
                     GradientSlider { objectName: "look_val"; width: parent.width; label: "Brightness"; from: 0; to: 100; value: screen.look.val
                         stops: screen.stopsFor("val"); onMoved: (v) => screen.look.val = v }
                 }
                 Flow {
                     width: parent.width
-                    spacing: Theme.s4
+                    spacing: Theme.s8
                     Repeater {
-                        model: screen.look.swatches.length          // a number, not the list: a new tone must not rebuild the swatches (the focused one would be destroyed)
+                        id: swatchRepeater
+                        model: screen.look.swatchList.length        // a number, and a list that never changes: a new tone rebuilds nothing (the focused swatch would be destroyed)
                         delegate: Swatch {
                             objectName: "look_swatch_" + index
-                            readonly property var info: screen.look.swatches[index]
+                            readonly property var info: screen.look.swatchList[index]
                             color: info.color
                             name: info.name
-                            selected: info.selected
+                            selected: screen.look.selectedSwatch === index
+                            tabStop: selected || (screen.look.selectedSwatch < 0 && index === 0)
                             onPicked: screen.look.pickSwatch(index)
+                            onStep: (delta) => {
+                                var to = Math.max(0, Math.min(screen.look.swatchList.length - 1, index + delta))
+                                swatchRepeater.itemAt(to).forceActiveFocus()          // the focus moves first, then the choice
+                                screen.look.pickSwatch(to)
+                            }
                         }
                     }
                 }
@@ -74,7 +88,7 @@ ScreenFrame {
                 ChoiceChips {
                     objectName: "look_theme"
                     width: parent.width
-                    model: [{"key": "classic", "label": "Classic"}, {"key": "halloween", "label": "Halloween"}]
+                    model: screen.look.themes
                     current: screen.look.theme
                     onChosen: (key) => screen.look.theme = key
                 }

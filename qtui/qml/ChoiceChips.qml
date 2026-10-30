@@ -15,10 +15,14 @@ Flow {
     function move(index, delta) {
         var n = chips.model.length
         var to = index + delta
-        if (to >= 0 && to < n) chips.chosen(chips.model[to].key)
+        if (to >= 0 && to < n) {
+            rep.itemAt(to).forceActiveFocus()                  // the focus moves first: the old chip stops being a Tab stop only after it has lost it
+            chips.chosen(chips.model[to].key)
+        }
     }
 
     Repeater {
+        id: rep
         model: chips.model
         delegate: Rectangle {
             id: chip

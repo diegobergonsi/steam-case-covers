@@ -6,7 +6,7 @@ import math
 import steamcase as sc
 
 ORIGINAL = (0, 100, 100)
-HUE_NAMES = {0: "Blue", 42: "Violet", 84: "Magenta", 134: "Red", 176: "Gold", 276: "Green"}       # by the degrees of sc.HUE_SWATCHES
+HUE_NAMES = {0: "Original", 42: "Violet", 84: "Magenta", 134: "Red", 176: "Orange", 276: "Green"}       # by the degrees of sc.HUE_SWATCHES
 GREY_HINT = "Colour has no effect on grey or black."
 
 

@@ -12,7 +12,7 @@ from PySide6.QtGui import QGuiApplication
 
 import steamcase as sc
 from qtui import steps
-from qtui.app import close_engine, create_engine, find_item, report_error
+from qtui.app import check_preview, close_engine, create_engine, find_item, report_error
 from qtui.assets import missing_assets
 from qtui.shell import Shell
 
@@ -39,6 +39,8 @@ def selftest(shell, qml_dir, assets_dir, log):
     QCoreApplication.processEvents()
     if find_item(root, "look_next") is None:
         missing.append("the Look screen")
+    if not check_preview(engine):
+        missing.append("the preview picture")
     close_engine(engine)
     if missing:
         report_error("missing from the window: %s" % ", ".join(missing), log)
