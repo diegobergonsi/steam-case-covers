@@ -1583,6 +1583,71 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
 
 
 # ---------- command line ----------
+ART_EXT_ORDER = ("jpg", "jpeg", "webp", "png")          # which file Steam shows first when an app has several; ours follows it
+_ART_NAME = re.compile(r"^([0-9]{1,10})p\.(jpg|jpeg|webp|png)$")
+_ORIGINAL_NAME = re.compile(r"^([0-9]{1,10})\.(jpg|jpeg|webp|png)$")
+
+
+def originals_dir():
+    """Per-user folder where the app keeps a copy of the user's own art, so Apply moving the file out of Steam's grid folder loses nothing."""
+    return os.path.join(os.path.dirname(default_covers_dir()), "originals")
+
+
+def _usable_art(path):
+    """True for a plain image file this app can put in a case: not a link, not too big, a PNG, JPEG or WEBP that decodes."""
+    try:
+        if not _is_plain_file(path) or os.path.getsize(path) > MAX_DOWNLOAD or Image is None:
+            return False
+        with Image.open(path, formats=["PNG", "JPEG", "WEBP"]) as im:
+            if im.width * im.height > MAX_PIXELS:
+                return False
+        with Image.open(path, formats=["PNG", "JPEG", "WEBP"]) as im:
+            im.verify()
+        return True
+    except Exception:
+        return False
+
+
+def find_custom_art(steam, user=None, originals=None):
+    """{appid: path} of the user's own portraits (set by hand in Steam or from SteamGridDB), for `make_covers(custom_art=...)`.
+    A plain image in the grid folder that is not one of our covers wins (`.jpg`, `.jpeg`, `.webp`, then `.png`, like Steam) and is copied into
+    `originals` (default: `originals_dir()`); an app the grid folder holds only our cover for keeps the copy made earlier. A link, a file that is
+    too big or does not decode is ignored. Originals are never deleted."""
+    originals = originals or originals_dir()
+    grid = grid_dir(steam, user)
+    found = {}
+    names = sorted(os.listdir(grid)) if os.path.isdir(grid) else []
+    options = {}
+    for n in names:
+        m = _ART_NAME.match(n)
+        if m:
+            options.setdefault(int(m.group(1)), {})[m.group(2)] = os.path.join(grid, n)
+    for appid, by_ext in options.items():
+        for ext in ART_EXT_ORDER:
+            path = by_ext.get(ext)
+            if not path or not _usable_art(path) or (ext == "png" and is_steamcase_cover(path)):
+                continue
+            keep = os.path.join(originals, "%d.%s" % (appid, ext))
+            try:
+                os.makedirs(originals, exist_ok=True)
+                if not (os.path.isfile(keep) and filecmp.cmp(path, keep, shallow=False)):
+                    _safe_copy(path, keep)
+                for other in ART_EXT_ORDER:                    # one original per app: a copy of another format is stale
+                    stale = os.path.join(originals, "%d.%s" % (appid, other))
+                    if other != ext and _is_plain_file(stale):
+                        os.remove(stale)
+                found[appid] = keep
+            except OSError:
+                found[appid] = path                            # cannot keep a copy: use the file where it is
+            break
+    for n in sorted(os.listdir(originals)) if os.path.isdir(originals) else []:
+        m = _ORIGINAL_NAME.match(n)
+        path = os.path.join(originals, n)
+        if m and int(m.group(1)) not in found and _usable_art(path):
+            found[int(m.group(1))] = path
+    return found
+
+
 def _collect(args):
     steam = steam_dir(args.steam_dir)
     games, family = load_library(steam, args.library)

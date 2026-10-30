@@ -2927,5 +2927,62 @@ class ReleaseMessage(unittest.TestCase):
                 self.assertFalse("curl" in line and "secrets." in line, line)           # the secret goes through the environment, never into the command line text
 
 
+class CustomArt(Base):
+    """The user's own portraits in Steam's grid folder: found, and kept in the app's own folder."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.originals = os.path.join(self.tmp, "originals")
+
+    def art(self, name, colour=(10, 120, 30), fmt="JPEG", folder=None):
+        path = os.path.join(folder or self.grid, name)
+        sc.Image.new("RGB", (100, 150), colour).save(path, format=fmt)
+        return path
+
+    def test_a_custom_jpg_is_found_and_copied_to_originals(self):
+        src = self.art("100p.jpg")
+        found = sc.find_custom_art(self.steam, originals=self.originals)
+        self.assertEqual(found, {100: os.path.join(self.originals, "100.jpg")})
+        self.assertEqual(self.read(found[100]), self.read(src))
+
+    def test_our_own_cover_is_not_custom_art(self):
+        plain = self.art("x.jpg", folder=self.tmp)
+        sc.build_cover(plain, os.path.join(self.grid, "101p.png"), sc.load_frame(0))
+        self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
+
+    def test_the_original_survives_apply_moving_the_jpg(self):
+        src = self.art("100p.jpg")
+        sc.find_custom_art(self.steam, originals=self.originals)
+        os.remove(src)
+        found = sc.find_custom_art(self.steam, originals=self.originals)
+        self.assertEqual(found, {100: os.path.join(self.originals, "100.jpg")})
+
+    def test_jpg_wins_over_png(self):
+        self.art("102p.jpg", (200, 0, 0))
+        self.art("102p.png", (0, 0, 200), fmt="PNG")
+        found = sc.find_custom_art(self.steam, originals=self.originals)
+        self.assertEqual(found, {102: os.path.join(self.originals, "102.jpg")})
+        self.assertFalse(os.path.exists(os.path.join(self.originals, "102.png")))
+
+    def test_new_art_replaces_the_old_original(self):
+        self.art("100p.jpg", (10, 10, 10))
+        sc.find_custom_art(self.steam, originals=self.originals)
+        src = self.art("100p.jpg", (250, 250, 250))
+        found = sc.find_custom_art(self.steam, originals=self.originals)
+        self.assertEqual(self.read(found[100]), self.read(src))
+
+    def test_bad_files_are_ignored(self):
+        with open(os.path.join(self.grid, "103p.jpg"), "w") as f:
+            f.write("not an image")
+        real = self.art("real.jpg", folder=self.tmp)
+        os.symlink(real, os.path.join(self.grid, "104p.jpg"))
+        self.art("105p.jpg")
+        with mock.patch.object(sc, "MAX_DOWNLOAD", 50):
+            found = sc.find_custom_art(self.steam, originals=self.originals)
+        self.assertEqual(found, {})
+
+
 if __name__ == "__main__":
     unittest.main()
