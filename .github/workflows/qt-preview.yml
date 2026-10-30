@@ -52,11 +52,13 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           # An ad-hoc signature (free, no Apple account): a downloaded unsigned app is otherwise reported as "damaged".
-          xattr -cr dist/SteamCaseCoversQt.app
-          codesign --force --deep --sign - dist/SteamCaseCoversQt.app
-          codesign --verify --deep --strict --verbose=2 dist/SteamCaseCoversQt.app
-          dist/SteamCaseCoversQt.app/Contents/MacOS/SteamCaseCoversQt --selftest
-          ditto -c -k --keepParent dist/SteamCaseCoversQt.app ${{ matrix.asset }}
+          # the same steps as the release build, which names the app after the project in the download
+          mv dist/SteamCaseCoversQt.app dist/SteamCaseCovers.app
+          xattr -cr dist/SteamCaseCovers.app
+          codesign --force --deep --sign - dist/SteamCaseCovers.app
+          codesign --verify --deep --strict --verbose=2 dist/SteamCaseCovers.app
+          dist/SteamCaseCovers.app/Contents/MacOS/SteamCaseCoversQt --selftest
+          ditto -c -k --keepParent dist/SteamCaseCovers.app ${{ matrix.asset }}
       - name: Selftest (built app) - Linux
         if: runner.os == 'Linux'
         run: |

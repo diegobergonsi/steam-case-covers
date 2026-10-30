@@ -2961,6 +2961,65 @@ class QtPreviewWorkflow(unittest.TestCase):
         self.assertTrue(any(l.startswith("PySide6-Essentials==") for l in lines), lines)
 
 
+class ReleaseWorkflow(unittest.TestCase):
+    """.github/workflows/release.yml ships the Qt window under the file names the downloads always had. It is run only by a tag or by hand: this class is the guard."""
+    PATH = os.path.join(os.path.dirname(QML_DIR), "..", ".github", "workflows", "release.yml")
+
+    def text(self):
+        with open(self.PATH) as f:
+            return f.read()
+
+    def test_it_still_runs_on_a_version_tag_or_by_hand(self):
+        t = self.text()
+        self.assertIn('tags: ["v*"]', t)
+        self.assertIn("workflow_dispatch:", t)
+
+    def test_it_builds_and_tests_the_qt_window_not_the_tk_one(self):
+        t = self.text()
+        for needle in ("requirements-qt.txt", "python -m qtui --selftest", "pyinstaller --noconfirm steamcase-qt.spec", "QT_QPA_PLATFORM: offscreen", "unittest discover -s tests", "libegl1"):
+            self.assertIn(needle, t)
+        for gone in ("gui.py", "steamcase.spec", "requirements-build.txt"):
+            self.assertNotIn(gone, t)
+
+    def test_the_downloads_keep_their_names(self):
+        t = self.text()
+        for name in ("SteamCaseCovers-windows.exe", "SteamCaseCovers-macos.zip", "SteamCaseCovers-linux"):
+            self.assertIn("asset: " + name, t)
+        self.assertNotIn("asset: SteamCaseCoversQt", t)
+
+    def test_the_built_app_is_checked_on_each_system_before_it_is_kept(self):
+        t = self.text()
+        self.assertIn("dist\\SteamCaseCoversQt.exe", t)
+        self.assertIn("dist/SteamCaseCovers.app/Contents/MacOS/SteamCaseCoversQt --selftest", t)
+        self.assertIn("dist/SteamCaseCoversQt --selftest", t)
+        self.assertIn("codesign --force --deep --sign -", t)
+
+    def test_the_preview_rehearses_the_same_macos_steps(self):
+        with open(QtPreviewWorkflow.PATH) as f:
+            preview = f.read()
+        for step in ("mv dist/SteamCaseCoversQt.app dist/SteamCaseCovers.app", "codesign --force --deep --sign - dist/SteamCaseCovers.app",
+                     "dist/SteamCaseCovers.app/Contents/MacOS/SteamCaseCoversQt --selftest", "ditto -c -k --keepParent dist/SteamCaseCovers.app"):
+            self.assertIn(step, preview)
+            self.assertIn(step, self.text())
+
+    def test_the_names_inside_match_what_the_spec_builds(self):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "steamcase-qt.spec")) as f:
+            spec = f.read()
+        self.assertEqual(spec.count('name="SteamCaseCoversQt"'), 3)         # the Windows/Linux file, the macOS program, the macOS folder
+        self.assertIn('BUNDLE(coll, name="SteamCaseCoversQt.app"', spec)
+
+    def test_the_release_part_is_untouched(self):
+        t = self.text()
+        for needle in ("echo \"$TAG\" > assets/version.txt", "tools/release_message.py body", "sha256sum", "attest-build-provenance", "softprops/action-gh-release",
+                       "prerelease: ${{ startsWith(github.ref_name, 'v0.') }}", "contents: write"):
+            self.assertIn(needle, t)
+
+    def test_every_action_is_pinned_by_commit(self):
+        import re
+        for u in re.findall(r"uses:\s*(\S+)", self.text()):
+            self.assertRegex(u, r"@[0-9a-f]{40}$", u)
+
+
 class ChecksWorkflow(unittest.TestCase):
     def test_the_qt_tests_run_in_the_normal_checks(self):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", ".github", "workflows", "checks.yml")) as f:
