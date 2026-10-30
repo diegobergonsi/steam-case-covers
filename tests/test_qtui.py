@@ -170,6 +170,26 @@ class Watcher(unittest.TestCase):
 
 
 class SystemHelpers(unittest.TestCase):
+
+    def test_a_packaged_linux_app_gives_its_children_the_systems_libraries_again(self):
+        from unittest import mock
+        with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "platform", "linux"):
+            with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/tmp/_MEI123", "LD_LIBRARY_PATH_ORIG": "/usr/lib/x"}):
+                system.restore_child_env()
+                self.assertEqual(os.environ["LD_LIBRARY_PATH"], "/usr/lib/x")
+            with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/tmp/_MEI123"}, clear=False):
+                os.environ.pop("LD_LIBRARY_PATH_ORIG", None)
+                system.restore_child_env()
+                self.assertNotIn("LD_LIBRARY_PATH", os.environ)
+
+    def test_the_environment_is_left_alone_from_source_and_on_other_systems(self):
+        from unittest import mock
+        for frozen, platform in ((False, "linux"), (True, "win32"), (True, "darwin")):
+            with self.subTest(frozen=frozen, platform=platform):
+                with mock.patch.object(sys, "frozen", frozen, create=True), mock.patch.object(sys, "platform", platform):
+                    with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/tmp/_MEI123", "LD_LIBRARY_PATH_ORIG": "/usr/lib/x"}):
+                        system.restore_child_env()
+                        self.assertEqual(os.environ["LD_LIBRARY_PATH"], "/tmp/_MEI123")
     def setUp(self):
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, True)
@@ -3124,6 +3144,10 @@ class Entry(QtCase):
     """`python -m qtui --selftest`: builds the window offscreen, checks it, and exits 0 (ok) or 1 (with the QML messages)."""
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()                          # some tests here build a window in this process; they must pass alone, too
+
     def run_selftest(self, *extra):
         import subprocess
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
@@ -3216,6 +3240,23 @@ class Entry(QtCase):
                 with open(log) as f:
                     self.assertIn(text, f.read())
                 self.assertNotIn("selftest ok", r.stdout)
+
+    def test_version_prints_the_version_like_the_old_window(self):
+        import subprocess
+        import steamcase as sc
+        r = subprocess.run([sys.executable, "-m", "qtui", "--version"], cwd=self.ROOT, env=dict(os.environ, QT_QPA_PLATFORM="offscreen"), capture_output=True, text=True, timeout=60)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "steam-case-covers %s" % sc.APP_VERSION), r.stderr)
+
+    def test_check_network_says_whether_steam_can_be_reached(self):
+        import contextlib, io
+        from unittest import mock
+        import steamcase as sc
+        from qtui.__main__ import main
+        for answer, code, text in (((True, "Steam answered."), 0, "network ok: Steam answered."), ((False, "No route."), 1, "network FAILED: No route.")):
+            out = io.StringIO()
+            with mock.patch.object(sc, "check_network", return_value=answer), contextlib.redirect_stdout(out):
+                self.assertEqual(main(["--check-network"]), code)
+            self.assertEqual(out.getvalue().strip(), text)
 
     def test_the_selftest_checks_that_the_preview_really_draws(self):
         from unittest import mock

@@ -11,7 +11,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QGuiApplication
 
 import steamcase as sc
-from qtui import steps
+from qtui import steps, system
 from qtui.app import check_preview, close_engine, create_engine, find_item, report_error
 from qtui.assets import missing_assets
 from qtui.shell import Shell
@@ -73,12 +73,22 @@ def main(argv=None):
     ap.add_argument("--qml-dir", help=argparse.SUPPRESS)
     ap.add_argument("--assets-dir", help=argparse.SUPPRESS)
     ap.add_argument("--log", help=argparse.SUPPRESS)
+    ap.add_argument("--version", action="store_true", help="print the version and exit")
+    ap.add_argument("--check-network", action="store_true", help="for bug reports: does this computer reach Steam?")
     args = ap.parse_args(argv)
+    if args.version:
+        print("steam-case-covers %s" % sc.APP_VERSION)
+        return 0
+    if args.check_network:
+        ok, msg = sc.check_network()
+        print(("network ok: " if ok else "network FAILED: ") + msg)
+        return 0 if ok else 1
     app = QGuiApplication(sys.argv[:1])
     assets_dir = args.assets_dir if args.assets_dir is not None else os.path.join(sc.HERE, "assets")
     if args.selftest:
         with tempfile.TemporaryDirectory() as tmp:                      # never the user's real settings file
             return selftest(Shell(os.path.join(tmp, "settings.json"), downloads=tmp, covers_dir=tmp), args.qml_dir, assets_dir, args.log)
+    system.restore_child_env()
     shell = Shell()
     try:
         engine = create_engine(shell, qml_dir=args.qml_dir, assets_dir=assets_dir)

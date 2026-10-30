@@ -8,6 +8,17 @@ import sys
 SAVE_KEY = "Cmd+S" if sys.platform == "darwin" else "Ctrl+S"      # the shortcut that saves a web page
 
 
+def restore_child_env():
+    """Packaged Linux app: PyInstaller points LD_LIBRARY_PATH at its bundled libraries (Qt, OpenSSL...). Programs we launch (a browser through xdg-open,
+    Steam, the file chooser) would load those and crash, so undo it. This does not touch the libraries this process has found already."""
+    if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
+        orig = os.environ.get("LD_LIBRARY_PATH_ORIG")
+        if orig is None:
+            os.environ.pop("LD_LIBRARY_PATH", None)
+        else:
+            os.environ["LD_LIBRARY_PATH"] = orig
+
+
 def downloads_dir():
     """The user's Downloads folder (honours the Linux XDG setting)."""
     home = os.path.expanduser("~")
