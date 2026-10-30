@@ -81,6 +81,6 @@ ScreenFrame {
     }
     Connections {
         target: screen.apply
-        function onConfirmNeeded(title, paragraphs, go) { dialog.ask(title, paragraphs, go) }
+        function onConfirmNeeded(title, paragraphs, go, alt) { dialog.ask(title, paragraphs, go, alt) }
     }
 }

@@ -4278,6 +4278,10 @@ class ApplyState(QtCase, FakeStore):
         self.close_ok = True
         self.start_error = None
         self.apply_error = None
+        self.backups, self.restored = [], 5
+        self.ours, self.extra, self.other, self.scan_error = [], [], [], None
+        self.grid = os.path.join(self.tmp, "grid")
+        os.makedirs(self.grid)
 
         def steam_running():
             self.probes.append(threading.current_thread())
@@ -4301,7 +4305,13 @@ class ApplyState(QtCase, FakeStore):
                             ("steam_running", steam_running), ("close_steam", close_steam), ("start_steam", start_steam), ("apply_covers", apply_covers),
                             ("list_accounts", lambda steam: list(self.accounts)),
                             ("pick_account", lambda steam, forced=None: forced or self.accounts[0][0]),
-                            ("account_label", lambda steam, acc: dict(self.accounts).get(acc, str(acc)))):
+                            ("account_label", lambda steam, acc: dict(self.accounts).get(acc, str(acc))),
+                            ("list_backups", lambda steam, user=None: list(self.backups)),
+                            ("restore_backup", lambda steam, backup, user=None, keep=False, originals=None: (self.log.append(("restore", backup)), self.backups.pop(0), self.restored)[2]),
+                            ("find_our_covers", self.find_ours), ("find_other_art", lambda steam, user=None, ours=(): (list(self.extra), list(self.other))),
+                            ("reset_to_default", lambda steam, user=None, names=None, everything=False: (self.log.append(("reset", user, list(names or []), everything)),
+                                                                                                      {"removed": len(names or []), "account_name": "Alice"})[1]),
+                            ("grid_dir", lambda steam, user=None: self.grid)):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -4310,6 +4320,13 @@ class ApplyState(QtCase, FakeStore):
         self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=self.covers)
         self.shell.library.installedOnly = True
         self.make, self.ap = self.shell.make, self.shell.apply
+
+    def find_ours(self, steam, user=None, progress=None, cancelled=None):
+        if self.scan_error:
+            raise self.sc.SteamcaseError(self.scan_error)
+        if progress:
+            progress(1, 2)
+        return list(self.ours)
 
     def wait_for(self, condition, seconds=5):
         import time
@@ -4348,7 +4365,7 @@ class ApplyState(QtCase, FakeStore):
 
     def test_the_question_names_the_account_and_the_backup(self):
         self.covers_ready()
-        title, paragraphs, go = self.go()
+        title, paragraphs, go, alt = self.go()
         self.assertEqual(title, "Add covers to Steam")
         self.assertEqual(paragraphs, [{"text": "2 covers will be added to the Steam account \u201cAlice\u201d.", "kind": "main"},
                                       {"text": "Your current artwork is backed up first. You can undo this from the Home screen.", "kind": "muted"}])
@@ -4397,7 +4414,7 @@ class ApplyState(QtCase, FakeStore):
         self.wait_for(lambda: self.ap.steamOpen)
         self.assertEqual(self.ap.noteKind, "warn")
         self.assertEqual(self.ap.note, "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first.")
-        title, paragraphs, go = self.go()
+        title, paragraphs, go, alt = self.go()
         self.assertEqual(paragraphs[-1], {"text": "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.", "kind": "warn"})
         self.assertEqual(go, "Close Steam and add them")
         self.assertEqual(self.log[0], "close")
@@ -4529,6 +4546,143 @@ class ApplyState(QtCase, FakeStore):
         self.assertEqual(self.ap.readyText, "1 cover is ready to add.")
         self.make._files = ["a.png", "b.png"]
         self.assertEqual(self.ap.readyText, "2 covers are ready to add.")
+
+    def undo_ready(self, backups=("b1",), art=True):
+        self.backups = list(backups)
+        if art:
+            open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore or self.ap.canReset)
+
+    def ask(self, call):
+        asked = []
+        self.ap.confirmNeeded.connect(lambda *a: asked.append(a))
+        call()
+        self.wait_for(lambda: bool(asked))
+        return asked[0] if asked else None
+
+    def test_undo_is_probed_off_the_ui_thread_and_the_hint_says_why_it_is_greyed(self):
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertEqual((self.ap.canRestore, self.ap.canReset), (False, False))
+        self.assertEqual(self.ap.undoHint, "Nothing to undo yet: \u201cRestore previous artwork\u201d works once you have used \u201cApply to Steam\u201d in this app.")
+        self.undo_ready()
+        self.assertEqual((self.ap.canRestore, self.ap.canReset, self.ap.undoHint), (True, True, ""))
+
+    def test_restore_asks_closes_steam_and_puts_the_old_art_back(self):
+        self.undo_ready(("b1", "b2"))
+        self.running = True
+        self.ap.watching = True
+        self.wait_for(lambda: self.ap.steamOpen)
+        title, paragraphs, go, alt = self.ask(self.ap.restore)
+        self.assertEqual(title, "Restore previous artwork")
+        self.assertEqual(paragraphs[:2], [{"text": "Your artwork from before the last Apply will be put back on the Steam account \u201cAlice\u201d.", "kind": "main"},
+                                          {"text": "The covers added by that Apply are removed.", "kind": "muted"}])
+        self.assertEqual((paragraphs[2]["kind"], go, alt), ("warn", "Close Steam and restore", ""))
+        self.assertEqual(self.log, [])
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log, ["close", ("restore", "b1"), "start"])
+        self.assertEqual(self.ap.status, "Restored your previous artwork (5 files). 1 older backup left: press Restore again to go one step further back. Steam is starting.")
+        self.assertEqual((self.ap.statusKind, self.ap.applied), ("ok", False))
+
+    def test_restore_does_nothing_without_a_backup_or_while_busy(self):
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.undoKnown)
+        asked = []
+        self.ap.confirmNeeded.connect(lambda *a: asked.append(a))
+        self.ap.restore()
+        self.undo_ready()
+        self.ap._busy = True
+        self.ap.canApplyChanged.emit()
+        self.ap.restore()
+        self.ap.reset()
+        self.assertEqual(asked, [])
+        self.assertEqual((self.ap.canRestore, self.ap.canReset), (False, False))
+        self.ap._busy = False
+
+    def test_restoring_after_an_apply_forgets_that_it_was_applied(self):
+        self.covers_ready()
+        self.go()
+        self.assertTrue(self.ap.applied)
+        self.undo_ready()
+        self.ask(self.ap.restore)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertFalse(self.ap.applied)
+        self.assertNotEqual(self.shell.steps[5]["state"], "done")
+
+    def test_reset_looks_first_then_asks_and_removes_only_ours(self):
+        self.undo_ready()
+        self.ours = ["a", "b"]
+        title, paragraphs, go, alt = self.ask(self.ap.reset)
+        self.assertEqual(title, "Reset to Steam's default art")
+        self.assertEqual([p["text"] for p in paragraphs], [
+            "2 covers made by this app will be removed from the Steam account \u201cAlice\u201d. Steam goes back to its own default art for them.",
+            "A backup is kept, so \u201cRestore previous artwork\u201d brings everything back."])
+        self.assertEqual((go, alt), ("Reset", ""))
+        self.assertTrue(self.ap.busy)                                   # nothing else can start meanwhile
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log, [("reset", None, ["a", "b"], False), "start"])
+        self.assertEqual(self.ap.status, "Done. 2 covers removed from the Steam account \u201cAlice\u201d: Steam shows its own default art again. "
+                                         "Press \u201cRestore previous artwork\u201d to bring them back. Steam is starting.")
+
+    def test_reset_with_art_from_elsewhere_offers_only_ours_or_all(self):
+        self.undo_ready()
+        self.ours, self.extra, self.other = ["a"], ["x"], ["y", "z"]
+        title, paragraphs, go, alt = self.ask(self.ap.reset)
+        self.assertEqual((go, alt), ("Remove only ours", "Remove all"))
+        self.assertEqual(paragraphs[1]["text"], "Found 3 more custom covers that this app did not make (from SteamGridDB or set by hand in Steam).")
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log[0], ("reset", None, ["a"], False))
+        self.log.clear()
+        self.undo_ready()
+        self.ask(self.ap.reset)
+        self.ap.confirmAlternate()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log[0], ("reset", None, ["a"], True))
+
+    def test_reset_with_only_art_from_elsewhere_offers_remove_all(self):
+        self.undo_ready()
+        self.other = ["y"]
+        title, paragraphs, go, alt = self.ask(self.ap.reset)
+        self.assertEqual((go, alt), ("Remove all", ""))
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log[0], ("reset", None, [], True))
+
+    def test_reset_with_steam_open_names_the_consequence(self):
+        self.undo_ready()
+        self.ours, self.other = ["a"], ["y"]
+        self.running = True
+        self.ap.watching = True
+        self.wait_for(lambda: self.ap.steamOpen)
+        title, paragraphs, go, alt = self.ask(self.ap.reset)
+        self.assertEqual((go, alt, paragraphs[-1]["kind"]), ("Close Steam and remove only ours", "Close Steam and remove all", "warn"))
+
+    def test_reset_with_nothing_to_remove_says_so(self):
+        self.undo_ready()
+        self.ap.reset()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.ap.status, "No custom covers were found in \u201cAlice\u201d. Nothing to reset.")
+        self.assertEqual(self.log, [])
+
+    def test_declining_the_reset_question_changes_nothing_and_frees_the_screen(self):
+        self.undo_ready()
+        self.ours = ["a"]
+        self.ask(self.ap.reset)
+        self.ap.decline()
+        self.assertEqual((self.ap.busy, self.ap.status, self.log), (False, "", []))
+        self.assertTrue(self.ap.canReset)
+
+    def test_a_scan_that_fails_is_reported(self):
+        self.undo_ready()
+        self.scan_error = "Cannot read Steam's artwork."
+        self.ap.reset()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual((self.ap.status, self.ap.statusKind, self.ap.busy), ("Cannot read Steam's artwork.", "error", False))
 
     def test_one_account_is_shown_and_not_offered(self):
         self.ap.refresh()
