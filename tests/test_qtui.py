@@ -2321,6 +2321,7 @@ class HundredState(QtCase):
         first = self.page({1: (1, 1)}, "first.html")
         second = self.page({2: (2, 2), 3: (4, 4)}, "second.html")
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
 
         def slow(path):
@@ -2626,6 +2627,7 @@ class HundredScreen(QtCase):
         import completion
         self.load_page()
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
         with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
             self.h.loadPage(write_games_page(self.tmp, {5: (2, 2)}, "second.html"))
@@ -3705,6 +3707,7 @@ class UpdatesState(QtCase):
         from unittest import mock
         import steamcase as sc
         gate, threads = threading.Event(), []
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
 
         def slow():
             threads.append(threading.current_thread())
@@ -3830,6 +3833,8 @@ class MakeScreen(QtCase, FakeStore):
         from unittest import mock
         import steamcase as sc
         gate, reached = threading.Event(), threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = sc.make_covers
 
         def slow(games, out, **kw):
@@ -3896,6 +3901,7 @@ class MakeScreen(QtCase, FakeStore):
         from unittest import mock
         import completion
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
         with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
             self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
@@ -3958,6 +3964,7 @@ class MakeScreen(QtCase, FakeStore):
         self.settle()
         self.assertTrue(self.item("make_folder").property("enabled"))
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
         with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
             self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
@@ -3996,6 +4003,8 @@ class MakeScreen(QtCase, FakeStore):
         from unittest import mock
         import steamcase as sc
         gate, reached = threading.Event(), threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = sc.make_covers
 
         def slow(games, out, **kw):
@@ -4007,6 +4016,7 @@ class MakeScreen(QtCase, FakeStore):
                 gate.wait(10)
             kw["progress"] = progress
             return real(games, out, **kw)
+        self.addCleanup(gate.set)                                       # whatever fails below, the worker is never left waiting
         with mock.patch.object(sc, "make_covers", slow):
             self.click("make_main")
             self.wait_for(reached.is_set)
@@ -4210,6 +4220,7 @@ class AddScreen(AddWindow):
         import threading
         self.start_window()
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = self.sc.apply_covers
         self.sc.apply_covers = lambda *a, **k: gate.wait(5) and real(*a, **k)
         self.addCleanup(lambda: setattr(self.sc, "apply_covers", real))
@@ -4555,6 +4566,7 @@ class HomeScreen(AddWindow):
         from unittest import mock
         self.open_home()
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         reply = {"newer": False, "current": "1.0", "latest": "1.0", "url": "https://github.com/x"}
         self.root.requestActivate()
         self.item("footer_updates").forceActiveFocus()
@@ -5196,6 +5208,7 @@ class ApplyState(QtCase, FakeStore):
         import threading
         self.covers_ready()
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         self.result = dict(self.result)
         real = self.sc.apply_covers
         self.sc.apply_covers = lambda *a, **k: gate.wait(5) and real(*a, **k)
@@ -5507,6 +5520,7 @@ class ApplyState(QtCase, FakeStore):
     def test_a_job_that_ends_while_a_probe_is_running_is_probed_again(self):
         import threading
         gate, calls = threading.Event(), []
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = self.sc.list_backups
 
         def slow(steam, user=None):
@@ -5610,6 +5624,7 @@ class ApplyState(QtCase, FakeStore):
     def test_a_slow_probe_is_not_repeated(self):
         import threading
         gate = threading.Event()
+        self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = self.sc.steam_running
         self.sc.steam_running = lambda: (self.probes.append(1), gate.wait(5))[1] or False
         self.addCleanup(lambda: setattr(self.sc, "steam_running", real))
