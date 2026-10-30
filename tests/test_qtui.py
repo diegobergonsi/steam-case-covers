@@ -3507,5 +3507,314 @@ class MakeState(QtCase, FakeStore):
         gone._art_worker(2, {"lib": None, "account": None})
 
 
+@need_qt
+class ApplyState(QtCase, FakeStore):
+    """Step 5's object: the account, whether Steam runs, the question before anything changes, and the worker that closes Steam, copies the covers and starts it again."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        super().setUp()
+        import threading
+        from unittest import mock
+        import steamcase as sc
+        from qtui.shell import Shell
+        self.sc = sc
+        self.running = False                                            # what steam_running answers
+        self.probes = []                                                # the threads steam_running was asked on
+        self.accounts = [("111", "Alice")]
+        self.log = []                                                   # what the worker did, in order
+        self.result = {"applied": 2, "replaced": 0, "unchanged": 0, "jpg_moved": 0, "backup": "/b", "account_name": "Alice"}
+        self.close_ok = True
+        self.start_error = None
+        self.apply_error = None
+
+        def steam_running():
+            self.probes.append(threading.current_thread())
+            return self.running
+
+        def close_steam(steam, timeout=60):
+            self.log.append("close")
+            return self.close_ok
+
+        def start_steam(steam):
+            self.log.append("start")
+            if self.start_error:
+                raise sc.SteamcaseError(self.start_error)
+
+        def apply_covers(steam, covers, user=None, files=None):
+            self.log.append(("apply", user, [os.path.basename(f) for f in files or []]))
+            if self.apply_error:
+                raise self.apply_error
+            return dict(self.result)
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: ({1: None, 2: None}, set())),
+                            ("steam_running", steam_running), ("close_steam", close_steam), ("start_steam", start_steam), ("apply_covers", apply_covers),
+                            ("list_accounts", lambda steam: list(self.accounts)),
+                            ("pick_account", lambda steam, forced=None: forced or self.accounts[0][0]),
+                            ("account_label", lambda steam, acc: dict(self.accounts).get(acc, str(acc)))):
+            patcher = mock.patch.object(sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=self.covers)
+        self.shell.library.installedOnly = True
+        self.make, self.ap = self.shell.make, self.shell.apply
+
+    def wait_for(self, condition, seconds=5):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def covers_ready(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running)
+        self.assertTrue(self.make.done)
+
+    def go(self):
+        """Apply, answer the question with yes and wait for the worker."""
+        asked = []
+        self.ap.confirmNeeded.connect(lambda *a: asked.append(a))
+        self.ap.apply()
+        self.assertEqual(len(asked), 1)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        return asked[0]
+
+    def test_it_starts_with_nothing_to_apply(self):
+        a = self.ap
+        self.assertEqual((a.busy, a.applied, a.canApply, a.restart, a.status, a.statusKind), (False, False, False, True, "", "wait"))
+        asked = []
+        a.confirmNeeded.connect(lambda *x: asked.append(x))
+        a.apply()
+        self.assertEqual(asked, [])
+
+    def test_with_covers_made_it_can_apply(self):
+        self.covers_ready()
+        self.assertTrue(self.ap.canApply)
+
+    def test_the_question_names_the_account_and_the_backup(self):
+        self.covers_ready()
+        title, paragraphs, go = self.go()
+        self.assertEqual(title, "Add covers to Steam")
+        self.assertEqual(paragraphs, [{"text": "2 covers will be added to the Steam account \u201cAlice\u201d.", "kind": "main"},
+                                      {"text": "Your current artwork is backed up first. You can undo this from the Home screen.", "kind": "muted"}])
+        self.assertEqual(go, "Add them")
+
+    def test_declining_changes_nothing(self):
+        self.covers_ready()
+        self.ap.apply()
+        self.ap.decline()
+        self.ap.confirm()                                               # nobody asked: nothing happens
+        self.assertEqual((self.ap.busy, self.ap.applied, self.log, self.ap.status), (False, False, [], ""))
+
+    def test_applying_with_steam_closed_adds_the_covers_and_starts_steam(self):
+        self.covers_ready()
+        self.go()
+        self.assertEqual(self.log, [("apply", None, ["Game_1_1.png", "Game_2_2.png"]), "start"])      # no choice: the engine picks the account Steam used last
+        self.assertEqual((self.ap.applied, self.ap.busy, self.ap.statusKind), (True, False, "ok"))
+        self.assertEqual(self.ap.status, "Done. 2 covers added to the Steam account \u201cAlice\u201d (0 replaced older art, 0 already up to date). Backup saved in: /b Steam is starting.")
+
+    def test_it_says_working_while_it_works_and_closing_steam_when_it_must(self):
+        import threading
+        self.covers_ready()
+        gate = threading.Event()
+        self.result = dict(self.result)
+        real = self.sc.apply_covers
+        self.sc.apply_covers = lambda *a, **k: gate.wait(5) and real(*a, **k)
+        self.addCleanup(lambda: setattr(self.sc, "apply_covers", real))
+        self.ap.apply()
+        self.ap.confirm()
+        self.assertEqual((self.ap.busy, self.ap.status, self.ap.canApply), (True, "Working\u2026", False))
+        gate.set()
+        self.wait_for(lambda: not self.ap.busy)
+
+    def test_the_applied_fact_opens_nothing_before_the_covers_are_made(self):
+        self.covers_ready()
+        for fact in ("look_done", "hundred_done"):
+            self.shell.setFact(fact, True)
+        self.assertEqual(self.shell.steps[5]["state"], "active")
+        self.go()
+        self.assertEqual(self.shell.steps[5]["state"], "done")
+
+    def test_with_steam_open_the_question_warns_and_steam_is_closed_first(self):
+        self.covers_ready()
+        self.running = True
+        self.ap.watching = True
+        self.wait_for(lambda: self.ap.steamOpen)
+        self.assertEqual(self.ap.noteKind, "warn")
+        self.assertEqual(self.ap.note, "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first.")
+        title, paragraphs, go = self.go()
+        self.assertEqual(paragraphs[-1], {"text": "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.", "kind": "warn"})
+        self.assertEqual(go, "Close Steam and add them")
+        self.assertEqual(self.log[0], "close")
+
+    def test_with_steam_closed_the_note_is_calm(self):
+        self.assertEqual((self.ap.note, self.ap.noteKind), ("", "wait"))        # not known yet: no claim either way
+        self.ap.watching = True
+        self.wait_for(lambda: self.ap.note != "")
+        self.assertEqual((self.ap.steamOpen, self.ap.noteKind), (False, "calm"))
+        self.assertEqual(self.ap.note, "Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it.")
+
+    def test_steam_not_closing_changes_nothing_and_says_what_to_do(self):
+        self.covers_ready()
+        self.running, self.close_ok = True, False
+        self.go()
+        self.assertEqual(self.log, ["close"])
+        self.assertEqual((self.ap.applied, self.ap.busy, self.ap.statusKind), (False, False, "error"))
+        self.assertEqual(self.ap.status, "Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again.")
+
+    def test_on_a_mac_the_words_add_the_permission_hint(self):
+        from unittest import mock
+        self.covers_ready()
+        self.running, self.close_ok = True, False
+        with mock.patch("qtui.apply.sys.platform", "darwin"):
+            self.go()
+        self.assertTrue(self.ap.status.endswith(" If macOS asked for permission, allow it first and then press the button again."), self.ap.status)
+
+    def test_nothing_to_change_is_said_so(self):
+        self.covers_ready()
+        self.result = dict(self.result, applied=0, unchanged=2)
+        self.shell.setSwitch("restart_steam", False)
+        self.go()
+        self.assertEqual(self.ap.status, "Nothing to change: all 2 covers were already in the Steam account \u201cAlice\u201d. Start Steam to see the change.")
+        self.assertEqual((self.ap.applied, self.log), (True, [("apply", None, ["Game_1_1.png", "Game_2_2.png"])]))
+
+    def test_art_set_by_hand_is_said_to_be_in_the_backup(self):
+        self.covers_ready()
+        self.result = dict(self.result, jpg_moved=3, replaced=1, unchanged=1)
+        self.go()
+        self.assertIn("(1 replaced older art, 1 already up to date)", self.ap.status)
+        self.assertIn("Art you had set by hand in Steam (3 games) was moved into the backup; Restore brings it back.", self.ap.status)
+
+    def test_a_steam_that_cannot_be_started_is_told_but_the_covers_are_in(self):
+        self.covers_ready()
+        self.start_error = "no launcher"
+        self.go()
+        self.assertTrue(self.ap.applied)
+        self.assertTrue(self.ap.status.endswith(" Could not start Steam (no launcher). Please open it yourself."), self.ap.status)
+
+    def test_without_the_restart_switch_steam_is_left_alone(self):
+        self.covers_ready()
+        self.ap.restart = False
+        self.assertFalse(self.shell.switchValue("restart_steam"))
+        self.go()
+        self.assertNotIn("start", self.log)
+        self.assertTrue(self.ap.status.endswith(" Start Steam to see the change."))
+
+    def test_engine_and_unknown_failures_leave_the_screen_usable(self):
+        self.covers_ready()
+        self.apply_error = self.sc.SteamcaseError("No covers found in x. Make them first.")
+        self.go()
+        self.assertEqual((self.ap.status, self.ap.statusKind, self.ap.busy, self.ap.applied, self.ap.canApply),
+                         ("No covers found in x. Make them first.", "error", False, False, True))
+        self.apply_error = ValueError("boom")
+        self.go()
+        self.assertEqual((self.ap.status, self.ap.statusKind), ("Unexpected problem: boom", "error"))
+
+    def test_nothing_happens_while_covers_are_being_made_or_applied(self):
+        import threading
+        self.covers_ready()
+        asked = []
+        self.ap.confirmNeeded.connect(lambda *x: asked.append(x))
+        self.make.start()
+        self.assertFalse(self.ap.canApply)
+        self.ap.apply()
+        self.wait_for(lambda: not self.make.running)
+        self.assertEqual(asked, [])
+        self.ap.apply()
+        self.ap.apply()                                                 # one question at a time
+        self.assertEqual(len(asked), 1)
+
+    def test_making_the_covers_again_forgets_the_last_result(self):
+        self.covers_ready()
+        self.go()
+        self.assertTrue(self.ap.applied)
+        self.make.start()
+        self.assertEqual((self.ap.applied, self.ap.status), (False, ""))
+        self.wait_for(lambda: not self.make.running)
+
+    def test_one_account_is_shown_and_not_offered(self):
+        self.ap.refresh()
+        a = self.ap
+        self.assertEqual((a.accountLabel, a.canChoose, a.accountId), ("Steam account: Alice", False, ""))
+        self.assertEqual(a.accounts, [{"key": "111", "label": "Alice"}])
+
+    def test_with_two_accounts_the_user_chooses_and_the_choice_is_used(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.ap.refresh()
+        a = self.ap
+        self.assertEqual((a.accountLabel, a.canChoose), ("Steam account: Alice", True))
+        self.covers_ready()
+        a.chooseAccount("222")
+        self.assertEqual((a.accountLabel, a.accountId), ("Steam account: Bob", "222"))
+        self.result = dict(self.result, account_name="Bob")
+        self.go()
+        self.assertEqual(self.log[0][1], "222")
+        a.chooseAccount("999")                                          # not an account of this Steam: ignored
+        self.assertEqual(a.accountId, "222")
+
+    def test_choosing_an_account_clears_the_last_result(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.ap.refresh()
+        self.covers_ready()
+        self.go()
+        self.assertNotEqual(self.ap.status, "")
+        self.ap.chooseAccount("222")
+        self.assertEqual(self.ap.status, "")
+
+    def test_an_account_that_has_gone_is_not_used(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.ap.refresh()
+        self.ap.chooseAccount("222")
+        self.accounts = [("111", "Alice")]
+        self.covers_ready()
+        self.go()
+        self.assertEqual(self.log[0][1], None)
+        self.assertEqual(self.ap.accountId, "")
+
+    def test_a_long_name_is_cut_and_no_steam_gives_no_account(self):
+        self.accounts = [("111", "A" * 40)]
+        self.ap.refresh()
+        self.assertEqual(self.ap.accountLabel, "Steam account: " + "A" * 27 + "\u2026")
+        with unittest.mock.patch.object(self.sc, "steam_dir", side_effect=self.sc.SteamcaseError("no steam")):
+            self.ap.refresh()
+        self.assertEqual((self.ap.accountLabel, self.ap.accounts, self.ap.canChoose), ("", [], False))
+
+    def test_steam_is_only_asked_about_while_the_screen_is_watching_and_never_on_the_ui_thread(self):
+        import threading
+        self.shell.poll()
+        self.assertEqual(self.probes, [])
+        self.ap.watching = True
+        self.wait_for(lambda: bool(self.probes))
+        self.assertIsNot(self.probes[0], threading.main_thread())
+
+    def test_a_slow_probe_is_not_repeated(self):
+        import threading
+        gate = threading.Event()
+        real = self.sc.steam_running
+        self.sc.steam_running = lambda: (self.probes.append(1), gate.wait(5))[1] or False
+        self.addCleanup(lambda: setattr(self.sc, "steam_running", real))
+        self.ap.watching = True
+        self.ap.poll()
+        self.ap.poll()
+        self.wait_for(lambda: bool(self.probes))
+        self.assertEqual(len(self.probes), 1)
+        gate.set()
+        self.wait_for(lambda: not self.ap._probing)
+
+    def test_a_probe_that_cannot_be_delivered_is_dropped_quietly(self):
+        import shiboken6
+        from qtui.apply import Apply
+        gone = Apply(self.shell, self.make, self.covers)
+        shiboken6.delete(gone)
+        gone._probe()
+        gone._work(1, {"restart": False, "account": None, "files": ["x.png"]})
+
+
 if __name__ == "__main__":
     unittest.main()
