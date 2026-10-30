@@ -10,6 +10,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 import steamcase as sc
+from qtui.preview import PreviewProvider
 from qtui.system import SAVE_KEY
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +35,7 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     if os.path.isfile(icon):                           # the title bar and the task bar; a missing file just leaves the default
         QGuiApplication.setWindowIcon(QIcon(icon))
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewProvider())        # the engine owns it
     problems = []
     engine.warnings.connect(lambda errors: problems.extend(e.toString() for e in errors))
     ctx = engine.rootContext()

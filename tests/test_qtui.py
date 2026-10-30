@@ -913,6 +913,96 @@ class LibraryState(unittest.TestCase):
 
 
 @need_qt
+class PreviewImages(unittest.TestCase):
+    """The sample cover QML shows, made by the engine and handed over as an image (Qt calls the provider from its image threads)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        import steamcase as sc
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        from PySide6.QtCore import QSize
+        from qtui.preview import PreviewProvider
+        self.provider = PreviewProvider()
+        self.QSize = QSize
+
+    def get(self, ident, w=200, h=300):
+        return self.provider.requestImage(ident, self.QSize(), self.QSize(w, h))
+
+    def test_it_returns_the_asked_size(self):
+        img = self.get("0/100/100/classic/none/1", 120, 180)
+        self.assertEqual((img.width(), img.height()), (120, 180))
+        self.assertFalse(img.isNull())
+        self.assertEqual((self.get("0/100/100/classic/none/1").width(), self.get("0/100/100/classic/none/1").height()), (200, 300))
+
+    def test_the_hue_changes_the_picture_but_not_for_greys(self):
+        a, b = self.get("0/100/100/classic/none/1"), self.get("120/100/100/classic/none/2")
+        self.assertNotEqual(a.pixelColor(3, 150).name(), b.pixelColor(3, 150).name())
+        g1, g2 = self.get("10/0/50/classic/none/3"), self.get("200/0/50/classic/none/4")
+        self.assertEqual(g1.pixelColor(3, 150).name(), g2.pixelColor(3, 150).name())
+
+    def test_a_theme_and_a_treatment_change_the_picture(self):
+        import steamcase as sc
+        plain = self.get("0/100/100/classic/none/1")
+        themed = self.get("0/100/100/halloween/none/2")
+        marked = self.get("0/100/100/classic/%s/3" % sc.TREATMENTS[0])
+        self.assertNotEqual(bytes(plain.constBits()), bytes(themed.constBits()))
+        self.assertNotEqual(bytes(plain.constBits()), bytes(marked.constBits()))
+
+    def test_a_bad_request_gives_a_transparent_picture_of_the_asked_size(self):
+        for ident in ("", "x", "1/2/3", "a/b/c/classic/none/1", "0/100/100/pumpkin/none/1", "0/100/100/classic/nonsense/1", "0/100/100/classic/none", "0/100/100/classic/none/1/extra",
+                      "../../etc/passwd", "999999999999/100/100/classic/none/1"):
+            with self.subTest(ident):
+                img = self.get(ident, 50, 75)
+                self.assertEqual((img.width(), img.height()), (50, 75))
+                self.assertEqual(img.pixelColor(25, 37).alpha(), 0)
+
+    def test_an_engine_failure_gives_the_placeholder_not_an_exception(self):
+        from unittest import mock
+        with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
+            img = self.get("0/100/100/classic/none/1", 50, 75)
+        self.assertEqual((img.width(), img.height(), img.pixelColor(25, 37).alpha()), (50, 75, 0))
+
+    def test_a_repeated_request_is_not_rendered_again(self):
+        import steamcase as sc
+        from unittest import mock
+        with mock.patch("steamcase.preview_cover", wraps=sc.preview_cover) as engine:
+            a = self.get("33/100/100/classic/none/1")
+            b = self.get("33/100/100/classic/none/2")                    # only the serial differs
+        self.assertEqual(engine.call_count, 1)
+        self.assertEqual(bytes(a.constBits()), bytes(b.constBits()))
+
+    def test_many_threads_at_once_all_get_a_valid_picture(self):
+        import threading
+        results, errors = [], []
+
+        def work(i):
+            try:
+                img = self.get("%d/100/100/classic/none/%d" % (i * 20, i))
+                results.append((img.width(), img.height()))
+            except Exception as e:
+                errors.append(e)
+        threads = [threading.Thread(target=work, args=(i,)) for i in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(30)
+        self.assertEqual(errors, [])
+        self.assertEqual(results, [(200, 300)] * 8)
+
+    def test_the_provider_is_registered_in_the_window(self):
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        engine = create_engine(Shell(os.path.join(tmp, "s.json"), downloads=tmp, covers_dir=tmp))
+        self.addCleanup(close_engine, engine)
+        self.assertIsNotNone(engine.imageProvider("preview"))
+
+
+@need_qt
 class LookState(unittest.TestCase):
     """The Look step: the case colour, the theme and the art switches, with the tone remembered through the covers already made."""
     @classmethod
