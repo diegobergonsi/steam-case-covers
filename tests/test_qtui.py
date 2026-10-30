@@ -71,6 +71,27 @@ class Settings(unittest.TestCase):
             f.write("x")
         self.assertFalse(st.save_settings(st.DEFAULTS, os.path.join(blocker, "settings.json")))       # a file where the folder should be
 
+    def test_a_named_pipe_as_the_settings_file_does_not_hang_startup(self):
+        import threading
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("no named pipes on this system")
+        os.makedirs(os.path.dirname(self.path))
+        os.mkfifo(self.path)
+        out = []
+        t = threading.Thread(target=lambda: out.append(st.load_settings(self.path)), daemon=True)
+        t.start()
+        t.join(5)
+        if t.is_alive():                                        # unblock the stuck open() so the test run can end
+            fd = os.open(self.path, os.O_WRONLY)
+            os.close(fd)
+            self.fail("load_settings blocked on a named pipe")
+        self.assertEqual(out, [st.DEFAULTS])
+
+    def test_a_failing_cleanup_never_raises(self):
+        from unittest import mock
+        with mock.patch("os.replace", side_effect=OSError("denied")), mock.patch("os.remove", side_effect=OSError("denied")):
+            self.assertFalse(st.save_settings(st.DEFAULTS, self.path))
+
     def test_the_default_path_sits_next_to_the_covers_folder(self):
         import steamcase as sc
         self.assertEqual(os.path.dirname(st.settings_path()), os.path.dirname(sc.default_covers_dir()))
@@ -297,6 +318,14 @@ class QtPreviewWorkflow(unittest.TestCase):
         self.assertTrue(any(l.startswith("PySide6-Essentials==") for l in lines), lines)
 
 
+class ChecksWorkflow(unittest.TestCase):
+    def test_the_qt_tests_run_in_the_normal_checks(self):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", ".github", "workflows", "checks.yml")) as f:
+            text = f.read()
+        for needle in ("qt-tests:", "requirements-qt.txt", "tests.test_qtui", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
+            self.assertIn(needle, text)
+
+
 class Tokens(unittest.TestCase):
     """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
     GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",
@@ -316,6 +345,33 @@ class Tokens(unittest.TestCase):
                              ("accentInk", "accent", 4.5), ("accentInk", "done", 4.5), ("edge", "card", 3.0), ("warning", "card", 4.5), ("error", "card", 4.5)):
             with self.subTest("%s on %s" % (fg, bg)):
                 self.assertGreaterEqual(contrast(t[fg], t[bg]), need)
+
+    def test_the_guide_names_the_steps_like_the_window(self):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
+            text = f.read()
+        self.assertIn("1 Game list, 2 Look, 3 100% games, 4 Make, 5 Add to Steam", text)
+        self.assertNotIn("Extras", text.replace("Extras became", ""))
+
+    def qml_files(self):
+        for name in sorted(os.listdir(QML_DIR)):
+            if name.endswith(".qml") and name != "Theme.qml":
+                with open(os.path.join(QML_DIR, name)) as f:
+                    yield name, f.read()
+
+    def test_only_the_guides_durations_are_used(self):
+        import re
+        for name, text in self.qml_files():
+            self.assertEqual(re.findall(r"duration:\s*\d", text), [], name + ": a duration must go through Theme.dur")
+            for n in re.findall(r"Theme\.dur\((\d+)\)", text):
+                self.assertIn(int(n), (90, 120, 200, 260), "%s: %s ms is not in the guide" % (name, n))
+
+    def test_no_loose_design_numbers(self):
+        """Corner radius, text size, shadow and opacity values come from Theme (sizes of layout boxes may stay in the files)."""
+        import re
+        for name, text in self.qml_files():
+            for pattern in (r"\bradius:\s*\d", r"pixelSize:\s*\d", r"shadow(?:Blur|Opacity|VerticalOffset):\s*-?\d", r"\bopacity:[^\n]*\d\.\d",
+                            r"Qt\.lighter\([^)]*,\s*[\d.]+\)", r"(?:blur|brightness|saturation):\s*-?\d"):
+                self.assertEqual(re.findall(pattern, text), [], "%s: %s" % (name, pattern))
 
     def test_no_other_file_has_a_colour_of_its_own(self):
         import re
@@ -344,11 +400,12 @@ class ShellWindow(unittest.TestCase):
 
     def close(self, engine):
         """Delete the window before its engine: the other way round, every binding complains that `shell` is gone."""
+        from PySide6.QtCore import QCoreApplication, QEvent
         for root in engine.rootObjects():
             root.deleteLater()
-        self.app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)       # deleteLater needs this, processEvents alone does not run it
         engine.deleteLater()
-        self.app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
     def item(self, name):
         """The QML item with this objectName, found in the visual tree (delegates of a Repeater are not QObject children of the window)."""
@@ -437,9 +494,9 @@ class ShellWindow(unittest.TestCase):
         self.press("nav_look", Qt.Key_Return, repeat=True)
         self.assertEqual(self.shell.current, 0)
 
-    def test_the_os_reduced_motion_setting_is_recorded(self):
-        has = hasattr(QGuiApplication.styleHints(), "reducedMotion")
-        print("\nQt exposes the OS reduced-motion setting: %s" % has)       # not verified in advance: the answer goes into CONTEXT.md
+    def test_qt_does_not_expose_the_os_reduced_motion_setting(self):
+        """True for Qt 6.12 (pinned). If this fails after a Qt upgrade, Qt now offers the setting: wire it to Shell.reduceEffects."""
+        self.assertFalse(hasattr(QGuiApplication.styleHints(), "reducedMotion"))
 
 
 @need_qt
@@ -455,6 +512,7 @@ class Entry(unittest.TestCase):
     def test_the_selftest_passes(self):
         r = self.run_selftest()
         self.assertEqual((r.returncode, r.stdout.strip().splitlines()[-1:]), (0, ["selftest ok"]), r.stderr)
+        self.assertEqual(r.stderr, "")
 
     def test_the_selftest_does_not_touch_the_real_settings_file(self):
         import qtui.settings as st

@@ -36,9 +36,9 @@ ApplicationWindow {
         visible: backdropArt !== "" && !Theme.reduce
         blurEnabled: true
         blurMax: 64
-        blur: 1.0
-        brightness: -0.7
-        saturation: 0.1
+        blur: Theme.backdropBlur
+        brightness: Theme.backdropBrightness
+        saturation: Theme.backdropSaturation
     }
 
     Rectangle {                                                   // the navigation: frosted over the backdrop
@@ -52,7 +52,7 @@ ApplicationWindow {
             x: Theme.s8
             width: nav.width - 2 * Theme.s8
             height: win.rowHeight - 6
-            radius: 10
+            radius: Theme.radiusField
             color: Theme.raised
             y: win.rowsTop + shell.current * win.rowHeight + 3
             Behavior on y { NumberAnimation { duration: Theme.dur(200); easing.type: Easing.OutCubic } }
@@ -62,7 +62,7 @@ ApplicationWindow {
             y: Theme.s24
             text: "Case Covers"
             color: Theme.text
-            font.pixelSize: Theme.sectionSize + 2
+            font.pixelSize: Theme.sectionSize
             font.bold: true
         }
         Column {

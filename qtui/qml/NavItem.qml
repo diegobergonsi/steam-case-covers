@@ -20,7 +20,7 @@ Item {
     Rectangle {                                   // keyboard focus ring
         anchors.fill: parent
         anchors.margins: 1
-        radius: 10
+        radius: Theme.radiusField
         color: "transparent"
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.text
@@ -31,7 +31,7 @@ Item {
         text: root.label
         font.pixelSize: Theme.bodySize
         color: root.locked ? Theme.faint : root.selected ? Theme.text : Theme.muted
-        Behavior on color { ColorAnimation { duration: Theme.dur(180) } }
+        Behavior on color { ColorAnimation { duration: Theme.dur(200) } }
     }
     Text {                                        // a finished step also changes its mark, not only its colour
         anchors.right: parent.right

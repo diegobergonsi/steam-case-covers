@@ -3,6 +3,7 @@
 """The five switches the window remembers between sessions. Nothing else is ever saved: no account, no path."""
 import json
 import os
+import stat
 import uuid
 
 import steamcase as sc
@@ -21,7 +22,10 @@ def load_settings(path=None):
     """All five switches. A missing, unreadable, oversized or garbled file gives the defaults, and a value that is not a true/false
     gives the default of that switch only; unknown keys are ignored."""
     try:
-        with open(path or settings_path(), "rb") as f:
+        path = path or settings_path()
+        if not stat.S_ISREG(os.stat(path).st_mode):         # a named pipe or a device would block open() for ever
+            raise OSError("not a regular file")
+        with open(path, "rb") as f:
             raw = f.read(MAX_SETTINGS + 1)
         data = json.loads(raw) if len(raw) <= MAX_SETTINGS else None
     except (OSError, ValueError, RecursionError, MemoryError):
@@ -45,5 +49,8 @@ def save_settings(values, path=None):
     except OSError:
         return False
     finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass

@@ -4,7 +4,7 @@ The rules every screen of the window follows, so a new feature has a place befor
 
 ## Layout
 
-A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 Extras, 4 Make, 5 Add to Steam. Discord (with its icon) and "Check for updates" (always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
+A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 100% games, 4 Make, 5 Add to Steam. Discord (with its icon) and "Check for updates" (always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
 
 ## Eleven rules
 
@@ -49,7 +49,7 @@ Text on the accent button is `#0b141d` (9.2:1).
 | Body | 14 px, muted for help text |
 | Small (status, hints; never the only way to learn something) | 12 px |
 
-Spacing grid: 4, 8, 12, 16, 24, 32, 48 px. Corner radius: 8 (fields), 14 (cards), full (pills). Elevation: flat (a 1 px outline), card (soft shadow, 4 px down, 14 px blur), raised (12 px down, 32 px blur).
+Spacing grid: 4, 8, 12, 16, 24, 32, 48 px. Corner radius: 8 (fields), 14 (cards), full (pills). Elevation: flat (a 1 px outline), card (soft shadow, 4 px down, blur 0.8, opacity 0.45), raised (12 px down, 32 px blur). A disabled control is shown at 60%. A hovered filled button is 15% lighter. The blurred backdrop behind the navigation is dimmed to a brightness of -0.5 and a saturation of 0.4.
 
 ## Motion
 

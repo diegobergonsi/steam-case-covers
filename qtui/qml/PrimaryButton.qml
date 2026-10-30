@@ -11,7 +11,7 @@ Rectangle {
     implicitWidth: label.implicitWidth + Theme.s32
     implicitHeight: 36
     radius: height / 2
-    color: !enabled ? Theme.raised : area.containsMouse ? Qt.lighter(Theme.accent, 1.15) : Theme.accent
+    color: !enabled ? Theme.raised : area.containsMouse ? Qt.lighter(Theme.accent, Theme.hoverLift) : Theme.accent
     scale: area.pressed ? 0.95 : 1
     activeFocusOnTab: enabled
     Accessible.role: Accessible.Button

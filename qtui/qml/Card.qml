@@ -11,8 +11,8 @@ Rectangle {
     layer.effect: MultiEffect {
         shadowEnabled: true
         shadowColor: Theme.shadow
-        shadowBlur: 0.8
-        shadowOpacity: 0.45
-        shadowVerticalOffset: 4
+        shadowBlur: Theme.cardShadowBlur
+        shadowOpacity: Theme.cardShadowOpacity
+        shadowVerticalOffset: Theme.cardShadowOffset
     }
 }
