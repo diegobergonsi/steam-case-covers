@@ -194,6 +194,13 @@ class EngineSelfCheck(unittest.TestCase):
                 problems = selfcheck.engine_problems()
                 self.assertTrue(any(words in p for p in problems), (words, problems))
 
+    def test_the_ribbon_picture_is_checked_too(self):
+        from unittest import mock
+        import steamcase as sc
+        from qtui import selfcheck
+        with mock.patch.object(sc, "COMPLETION_OVERLAY", os.path.join(tempfile.gettempdir(), "no-such-overlay.png")):
+            self.assertTrue(any("completion overlay missing" in p for p in selfcheck.engine_problems()))
+
     def test_a_packaged_linux_app_that_still_hands_its_libraries_to_children_fails(self):
         from unittest import mock
         from qtui import selfcheck
@@ -423,7 +430,7 @@ class StepStates(unittest.TestCase):
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
         self.assertEqual(sp.hint("hundred", "active"), "(optional)")
-        self.assertEqual(sp.hint("look", "locked"), "finish step 1 first")
+        self.assertEqual(sp.hint("look", "locked"), "finish step 1")
         self.assertEqual(sp.hint("look", "done"), "")
 
     def test_nothing_done_only_the_game_list_is_active(self):
@@ -3011,6 +3018,39 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn("dist/SteamCaseCoversQt --selftest", t)
         self.assertIn("codesign --force --deep --sign -", t)
 
+    def test_the_downloads_are_gathered_apart_from_the_repository_pictures(self):
+        import re
+        t = self.text()
+        self.assertNotRegex(t, r"download-artifact[^\n]*\n\s+with:\n\s+path: assets")
+        self.assertIn("path: release-files", t)
+        self.assertIn("cd release-files && sha256sum *", t)
+        self.assertIn("subject-path: release-files/*", t)
+        self.assertIn("files: release-files/*", t)
+
+    def test_the_version_is_stamped_for_tags_only_and_before_the_build(self):
+        t = self.text()
+        stamp = t.index("Stamp the version into the build")
+        self.assertIn("if: startsWith(github.ref, 'refs/tags/')", t[stamp:stamp + 200])
+        self.assertLess(stamp, t.index("pyinstaller --noconfirm steamcase-qt.spec"))
+
+    def test_the_macos_steps_run_in_a_safe_order(self):
+        t = self.text()
+        order = [t.index(x) for x in ("mv dist/SteamCaseCoversQt.app", "xattr -cr dist/SteamCaseCovers.app", "codesign --force --deep --sign -", "codesign --verify", "MacOS/SteamCaseCoversQt --selftest", "ditto -c -k")]
+        self.assertEqual(order, sorted(order))
+
+    def test_a_failing_windows_selftest_leaves_its_reason_in_the_log(self):
+        for path in (self.PATH, QtPreviewWorkflow.PATH):
+            with open(path) as f:
+                t = f.read()
+            self.assertIn('-ArgumentList "--selftest","--log","selftest.log"', t)
+            self.assertIn("Get-Content selftest.log", t)
+
+    def test_the_macos_program_is_named_after_the_project_in_the_dock(self):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "steamcase-qt.spec")) as f:
+            spec = f.read()
+        self.assertIn('"CFBundleName": "SteamCaseCovers"', spec)
+        self.assertIn('"CFBundleDisplayName": "SteamCaseCovers"', spec)
+
     def test_the_preview_rehearses_the_same_macos_steps(self):
         with open(QtPreviewWorkflow.PATH) as f:
             preview = f.read()
@@ -3184,19 +3224,22 @@ class ShellWindow(QtCase):
 
     def test_the_optional_step_says_so_and_a_locked_step_says_why_under_its_name(self):
         from PySide6.QtGui import QAccessible
-        want = {"home": "", "game_list": "", "look": "finish step 1 first", "hundred": "(optional) \u00b7 finish step 2 first", "make": "finish step 3 first", "add": "make the covers first"}
+        want = {"home": "", "game_list": "", "look": "finish step 1", "hundred": "(optional) \u00b7 finish step 2", "make": "finish or skip step 3", "add": "make the covers first"}
         for key, hint in want.items():
             self.assertEqual(self.item("nav_" + key).property("hint"), hint, key)
         hint, row = self.item("nav_hundred_hint"), self.item("nav_hundred")
         self.assertEqual(hint.property("text"), want["hundred"])
         self.assertLessEqual(self.item("nav_hundred_label").height() + hint.height(), row.height())       # both lines fit the row
         self.assertLessEqual(hint.width(), row.width() - 40)                                              # and the words fit beside the margins
+        for key in ("look", "hundred", "make", "add"):                                                  # none of the words is cut at this width
+            h = self.item("nav_%s_hint" % key)
+            self.assertLessEqual(h.property("implicitWidth"), h.width(), key)
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional) \u00b7 finish step 2 first, locked")
+        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional) \u00b7 finish step 2, locked")
         self.shell.setFact("ready", True)                                                               # unlocked: only what is always true remains
         self.shell.setFact("look_done", True)
-        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", "finish step 3 first"))
+        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", "finish or skip step 3"))
 
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
@@ -3970,6 +4013,9 @@ class MakeScreen(QtCase, FakeStore):
                 self.shell.go(step)
                 self.settle()
                 self.assertFalse(self.item(name).property("enabled"), name)
+            self.shell.go(2)
+            self.settle()
+            self.assertTrue(self.item("screen_scroller").property("enabled"))   # the page still scrolls, only its controls are frozen
             self.shell.go(4)
             self.settle()
             self.assertTrue(self.item("make_main").property("enabled"))        # Cancel still works
@@ -4473,6 +4519,36 @@ class HomeScreen(AddWindow):
         self.click("main_dlg_confirm")
         self.assertFalse(self.item("main_dialog").isVisible())
 
+    def test_a_queued_box_keeps_its_own_link_and_a_box_on_screen_keeps_its_own(self):
+        from unittest import mock
+        from PySide6.QtTest import QTest
+        self.open_home()
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.shell.updates.message.emit("Update available", [{"text": "A newer version", "kind": "main"}], "Open GitHub page", "Not now", "https://github.com/x/releases")
+            QTest.qWait(60)
+            self.shell.make.failed.emit("Could not make covers", "No games found.")           # arrives while the update box is open
+            QTest.qWait(60)
+            self.assertEqual(self.text("main_dlg_title"), "Update available")
+            self.click("main_dlg_confirm")                                                         # OK of the box that is on screen: its own link
+            QTest.qWait(60)
+            self.assertEqual([c[0][0].toString() for c in opened.call_args_list], ["https://github.com/x/releases"])
+            self.assertEqual(self.text("main_dlg_title"), "Could not make covers")
+            self.assertFalse(self.item("main_dlg_cancel").isVisible())
+            self.click("main_dlg_confirm")                                                         # the queued box has no link: nothing opens
+            self.assertEqual(opened.call_count, 1)
+
+    def test_pressing_close_again_and_again_leaves_one_box(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.ap._busy = True
+        for _ in range(4):
+            self.root.close()
+        QTest.qWait(60)
+        self.click("main_dlg_confirm")
+        QTest.qWait(60)
+        self.assertFalse(self.item("main_dialog").isVisible())
+        self.ap._busy = False
+
     def test_the_updates_link_says_checking_while_it_checks_and_keeps_its_focus(self):
         import threading
         from unittest import mock
@@ -4850,6 +4926,14 @@ class MakeState(QtCase, FakeStore):
         self.games = {}
         self.run_it()                                                   # a failed run offers none
         self.assertEqual(self.make.thumbs, [])
+
+    def test_the_thumbnails_empty_while_a_new_run_makes_covers_under_the_same_names(self):
+        self.run_it()
+        seen = []
+        self.make.doneChanged.connect(lambda: seen.append(list(self.make.thumbs)))
+        self.run_it()
+        self.assertIn([], seen)                                         # the pictures are dropped, so they are read again from the new files
+        self.assertEqual(len(self.make.thumbs), 2)
 
     def test_a_failed_run_offers_no_covers_it_did_not_make(self):
         self.run_it()

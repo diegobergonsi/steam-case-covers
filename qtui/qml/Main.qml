@@ -23,9 +23,8 @@ ApplicationWindow {
     onClosing: (close) => {                                       // never while Steam's artwork is being changed: it could be left half-done
         if (shell.apply.busy) {
             close.accepted = false
-            messages.link = ""
-            messages.cancelText = "Cancel"
-            win.show(messages, ["Please wait", [{"text": "Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window.", "kind": "main"}], "OK", "", true])
+            if (!win.queued("Please wait"))
+                win.show(messages, ["Please wait", [{"text": "Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window.", "kind": "main"}], "OK", "", true])
         }
     }
     Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.poll() }       // notices the saved game list and games page
@@ -104,10 +103,11 @@ ApplicationWindow {
         Loader {
             anchors.fill: parent
             // the choices of the earlier steps are frozen while the covers are made, as in the old window (the run has its own copy of them)
-            enabled: !(shell.make.running && (screen.key === "game_list" || screen.key === "look" || screen.key === "hundred"))
-            opacity: enabled ? 1 : Theme.disabledOpacity
+            onLoaded: {
+                item.stepKey = Qt.binding(function() { return screen.key })
+                item.frozen = Qt.binding(function() { return shell.make.running && (screen.key === "game_list" || screen.key === "look" || screen.key === "hundred") })
+            }
             source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
-            onLoaded: item.stepKey = Qt.binding(function() { return screen.key })
         }
     }
 
@@ -115,14 +115,22 @@ ApplicationWindow {
     property Item lastFocus: null                                 // where the keyboard was before a question, for the way back
     onActiveFocusItemChanged: if (activeFocusItem && !String(activeFocusItem.objectName).match(/_dlg_/)) lastFocus = activeFocusItem
     property var waiting: []
-    function show(dialog, args) {
-        if (applyDialog.visible || messages.visible) waiting.push([dialog, args]); else dialog.ask.apply(dialog, args)
+    function present(entry) {                                     // the link and the label of Cancel belong to the box, set when it is shown
+        if (entry.dialog === messages) messages.link = entry.link
+        entry.dialog.cancelText = entry.cancel
+        entry.dialog.ask.apply(entry.dialog, entry.args)
+    }
+    function show(dialog, args, link, cancel) {
+        var entry = {"dialog": dialog, "args": args, "link": link ? link : "", "cancel": cancel ? cancel : "Cancel"}
+        if (applyDialog.visible || messages.visible) waiting.push(entry); else present(entry)
+    }
+    function queued(title) {
+        if (messages.visible && messages.title === title) return true
+        for (var i = 0; i < waiting.length; i++) if (waiting[i].args[0] === title) return true
+        return false
     }
     function next() {
-        if (!applyDialog.visible && !messages.visible && waiting.length > 0) {
-            var item = waiting.shift()
-            item[0].ask.apply(item[0], item[1])
-        }
+        if (!applyDialog.visible && !messages.visible && waiting.length > 0) present(waiting.shift())
     }
     ConfirmDialog {                                               // the questions of Apply: add to Steam, restore, reset (wherever the user is)
         id: applyDialog
@@ -132,7 +140,7 @@ ApplicationWindow {
         onConfirmed: shell.apply.confirm()
         onDeclined: shell.apply.decline()
         onAlternated: shell.apply.confirmAlternate()
-        onVisibleChanged: if (!visible) win.next()
+        onVisibleChanged: if (!visible) Qt.callLater(win.next)            // after the answer of this box has been handled
     }
     ConfirmDialog {                                               // answers of the update check and of the Discord link, and errors
         id: messages
@@ -140,7 +148,7 @@ ApplicationWindow {
         prefix: "main_dlg"
         property string link: ""
         onConfirmed: if (link !== "") shell.updates.openLink(link)
-        onVisibleChanged: if (!visible) win.next()
+        onVisibleChanged: if (!visible) Qt.callLater(win.next)            // after the answer of this box has been handled
     }
     Connections {
         target: shell.apply
@@ -149,18 +157,16 @@ ApplicationWindow {
     }
     Connections {
         target: shell.library
-        function onFailed(title, text) { messages.link = ""; win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
     }
     Connections {
         target: shell.make
-        function onFailed(title, text) { messages.link = ""; win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
     }
     Connections {
         target: shell.updates
         function onMessage(title, paragraphs, ok, cancel, link) {
-            messages.link = link
-            messages.cancelText = cancel !== "" ? cancel : "Cancel"
-            win.show(messages, [title, paragraphs, ok, "", cancel === ""])
+            win.show(messages, [title, paragraphs, ok, "", cancel === ""], link, cancel !== "" ? cancel : "Cancel")
         }
     }
 }

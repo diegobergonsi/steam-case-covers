@@ -10,6 +10,7 @@ Item {
     property string title: ""
     property string subtitle: ""
     property string stepKey: ""                       // set by the window
+    property bool frozen: false                       // the controls are greyed and inert (the page still scrolls): the choices must not change while covers are made
     default property alias content: body.data
     property alias footer: footerRow.data
 
@@ -45,6 +46,8 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         Column {
             id: body
+            enabled: !frame.frozen
+            opacity: enabled ? 1 : Theme.disabledOpacity
             width: scroller.width - Theme.s8              // the shadows of the sections need a little room on the right
             spacing: Theme.s24                            // sections sit 24 px apart (rule 7 of the guide)
         }
@@ -54,6 +57,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.s32
+        enabled: !frame.frozen
         spacing: Theme.s8
     }
 }

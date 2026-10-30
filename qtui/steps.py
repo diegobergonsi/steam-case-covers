@@ -6,7 +6,7 @@ STEPS = ("home", "game_list", "look", "hundred", "make", "add")
 LABELS = {"home": "Home", "game_list": "1  Game list", "look": "2  Look", "hundred": "3  100% games", "make": "4  Make", "add": "5  Add to Steam"}
 
 HINTS = {"hundred": "(optional)"}                  # a small line under the name of a step
-LOCKED = {"look": "finish step 1 first", "hundred": "finish step 2 first", "make": "finish step 3 first", "add": "make the covers first"}      # why a step is locked
+LOCKED = {"look": "finish step 1", "hundred": "finish step 2", "make": "finish or skip step 3", "add": "make the covers first"}      # why a step is locked
 
 
 def hint(key, state):

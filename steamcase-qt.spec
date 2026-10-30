@@ -28,7 +28,8 @@ pyz = PYZ(a.pure)
 if sys.platform == "darwin":                       # macOS: folder-based .app (single-file .app is discouraged)
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="SteamCaseCoversQt", console=False)
     coll = COLLECT(exe, a.binaries, a.datas, name="SteamCaseCoversQt")
-    app = BUNDLE(coll, name="SteamCaseCoversQt.app", icon="assets/icon.icns", bundle_identifier="com.github.diegobergonsi.steamcasecovers.qt")
+    app = BUNDLE(coll, name="SteamCaseCoversQt.app", icon="assets/icon.icns", bundle_identifier="com.github.diegobergonsi.steamcasecovers.qt",
+                 info_plist={"CFBundleName": "SteamCaseCovers", "CFBundleDisplayName": "SteamCaseCovers"})     # what the Dock and the menu bar call it
 else:                                              # Windows and Linux: one file
     exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name="SteamCaseCoversQt", console=False,
               icon="assets/icon.ico" if sys.platform.startswith("win") else None)

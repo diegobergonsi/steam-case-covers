@@ -14,7 +14,7 @@ def engine_problems():
     and recognised, the case colour can be changed, and the programs we start do not inherit the bundled libraries."""
     problems = []
     for what, path in (("frame image", sc.FRAME), ("icon", os.path.join(sc.HERE, "assets", "icon.png")), ("Discord icon", os.path.join(sc.HERE, "assets", "discord.png")),
-                       ("Halloween overlay", sc.HALLOWEEN_OVERLAY), ("family corner image", sc.FAMILY_CORNER), ("default art", sc.DEFAULT_ART)):
+                       ("Halloween overlay", sc.HALLOWEEN_OVERLAY), ("family corner image", sc.FAMILY_CORNER), ("completion overlay", sc.COMPLETION_OVERLAY), ("default art", sc.DEFAULT_ART)):
         if not os.path.exists(path):
             problems.append("%s missing: %s" % (what, path))
     system.restore_child_env()

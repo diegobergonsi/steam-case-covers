@@ -45,8 +45,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist\SteamCaseCoversQt.exe -ArgumentList "--selftest" -Wait -PassThru
-          if ($p.ExitCode -ne 0) { exit 1 }
+          $p = Start-Process -FilePath dist\SteamCaseCoversQt.exe -ArgumentList "--selftest","--log","selftest.log" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { if (Test-Path selftest.log) { Get-Content selftest.log }; exit 1 }
           Copy-Item dist\SteamCaseCoversQt.exe ${{ matrix.asset }}
       - name: Selftest (built app) - macOS
         if: runner.os == 'macOS'
