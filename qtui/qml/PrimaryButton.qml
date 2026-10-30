@@ -11,6 +11,9 @@ Rectangle {
     readonly property bool filled: !quiet          // exactly one enabled filled button per screen (rule 2 of the guide)
 
     implicitWidth: label.implicitWidth + Theme.s32
+    // never wider than the content area of a screen (what a section can hold): a longer text is cut with an ellipsis. System fonts differ a lot between computers.
+    readonly property real maxWidth: Math.max(Theme.controlHeight, Window.width - Theme.chromeWidth)
+    width: Math.min(implicitWidth, maxWidth)
     implicitHeight: Theme.controlHeight
     radius: height / 2
     color: quiet ? (area.containsMouse ? Theme.raised : "transparent") : !enabled ? Theme.raised : area.containsMouse ? Qt.lighter(Theme.accent, Theme.hoverLift) : Theme.accent
@@ -36,6 +39,9 @@ Rectangle {
     Text {
         id: label
         anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.width - Theme.s32)
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
         text: root.text
         font.pixelSize: Theme.bodySize
         font.bold: true

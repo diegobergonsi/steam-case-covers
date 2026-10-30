@@ -392,6 +392,19 @@ class GameListScreen(unittest.TestCase):
             it = self.item(name)
             self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, name)         # no button sticks out of its card
 
+    def test_a_button_wider_than_its_card_is_squeezed_not_overflowing(self):
+        """Wider system fonts (the Windows runner's) make a button longer than the card at the narrowest window; here the window is made narrower still."""
+        from PySide6.QtCore import QPointF
+        self.root.setProperty("minimumWidth", 300)
+        self.root.setProperty("width", 420)
+        self.app.processEvents()
+        section = self.item("gamelist_section_list")
+        right = section.mapToScene(QPointF(section.width(), 0)).x()
+        for name in ("gamelist_open", "gamelist_browse", "gamelist_copy"):
+            it = self.item(name)
+            self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, "%s sticks out of its card" % name)
+            self.assertGreater(it.width(), 0, name)
+
     def test_copy_link_works_from_the_screen(self):
         from unittest import mock
         with mock.patch("steamcase.library_login_url", return_value="https://example.test/login"):

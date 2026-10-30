@@ -46,6 +46,7 @@ QtObject {
     readonly property int navTop: 72
     readonly property int navRowHeight: 40
     readonly property int navHighlightInset: 3
+    readonly property int chromeWidth: navWidth + 2 * s32 + s8 + 2 * s16          // the window width that is not inside a section: the nav, the margins, the shadow room and the card padding
     readonly property int navHighlightHeight: navRowHeight - 2 * navHighlightInset
     readonly property int controlHeight: 36
     readonly property int fieldRowHeight: 32
