@@ -1179,6 +1179,24 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
     return False
 
 
+def covers_with_other_art(covers_dir, custom_art):
+    """True if make_covers with this `custom_art` ({appid: path}) would rebuild a cover already in the folder because of its art alone: a cover made
+    from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return False
+    for n in names:
+        appid = appid_of(n)
+        if n.lower().endswith(".png") and appid is not None:
+            path = os.path.join(covers_dir, n)
+            if cover_colour(path) is None:
+                continue
+            if cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
+                return True
+    return False
+
+
 def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
     """True if the covers folder already holds a cover made in a different case colour than (`hue`, `sat`, `val`) (stops at the first one).
     No page loaded: each cover keeps its treatment, so a "gold-case" cover stays gold and is not counted (see covers_in_other_look)."""
@@ -1622,7 +1640,8 @@ _ORIGINAL_NAME = re.compile(r"^([0-9]{1,10})\.(jpg|jpeg|webp|png)$")
 
 
 def originals_dir():
-    """Per-user folder where the app keeps a copy of the user's own art, so Apply moving the file out of Steam's grid folder loses nothing."""
+    """Per-user folder where the app keeps a copy of the user's own art, so Apply moving the file out of Steam's grid folder loses nothing.
+    Each Steam account has its own folder inside it (find_custom_art)."""
     return os.path.join(os.path.dirname(default_covers_dir()), "originals")
 
 
@@ -1635,7 +1654,7 @@ def _usable_art(path):
             if im.width * im.height > MAX_PIXELS:
                 return False
         with Image.open(path, formats=["PNG", "JPEG", "WEBP"]) as im:
-            im.verify()
+            im.load()                       # a truncated or corrupt file fails here, not later in the middle of Make (verify() does nothing for JPEG and WEBP)
         return True
     except Exception:
         return False
@@ -1644,9 +1663,11 @@ def _usable_art(path):
 def find_custom_art(steam, user=None, originals=None):
     """{appid: path} of the user's own portraits (set by hand in Steam or from SteamGridDB), for `make_covers(custom_art=...)`.
     A plain image in the grid folder that is not one of our covers wins (`.jpg`, `.jpeg`, `.webp`, then `.png`, like Steam) and is copied into
-    `originals` (default: `originals_dir()`); an app the grid folder holds only our cover for keeps the copy made earlier. A link, a file that is
-    too big or does not decode is ignored. Originals are never deleted."""
-    originals = originals or originals_dir()
+    `originals` (default: `originals_dir()`, one folder per Steam account inside it); an app the grid folder holds only our cover for keeps the copy
+    made earlier, and only while the grid still holds our cover: once it does not (Reset, or the art was cleared in Steam) the game goes back to
+    Steam's portrait. A link, a file that is too big or does not decode is ignored. The app never deletes an original.
+    One account's art never reaches another account's covers."""
+    originals = os.path.join(originals or originals_dir(), pick_account(steam, user))
     grid = grid_dir(steam, user)
     found = {}
     names = sorted(os.listdir(grid)) if os.path.isdir(grid) else []
@@ -1677,7 +1698,9 @@ def find_custom_art(steam, user=None, originals=None):
         m = _ORIGINAL_NAME.match(n)
         path = os.path.join(originals, n)
         if m and int(m.group(1)) not in found and _usable_art(path):
-            found[int(m.group(1))] = path
+            ours = os.path.join(grid, "%sp.png" % m.group(1))
+            if _is_plain_file(ours) and is_steamcase_cover(ours):
+                found[int(m.group(1))] = path
     return found
 
 

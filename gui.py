@@ -699,7 +699,7 @@ class App(tk.Tk):
         """Why Make covers would rebuild covers already in the folder, as (title, sentence) for the prompt; None when nothing is rebuilt.
         `custom_art` is what make_covers gets ({} when the option is off); sc.KEEP leaves the art of existing covers out of it."""
         look = App._replace_reason_look(self, tone, completed, treatment, theme)
-        if custom_art == sc.KEEP or not sc.covers_in_other_look(self.covers_dir, *tone, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art):
+        if custom_art == sc.KEEP or not sc.covers_with_other_art(self.covers_dir, custom_art):
             return look
         if custom_art:
             title, extra = "Use your own art?", "The covers you already made for games with your own art are made again with that art inside."
@@ -768,21 +768,38 @@ class App(tk.Tk):
         tone = self._tone()
         completed, treatment = self._completion()           # read here, on the UI thread: the worker never touches Tk variables
         theme = self._theme()
-        custom_art = {}                                     # {}: the option is off, covers made from custom art go back to Steam's portrait
-        if self.use_custom_art.get():
-            try:
-                steam = sc.steam_dir()
-                games, _ = sc.load_library(steam, None if self.installed_only.get() else self.library_path)
-                custom_art = {a: p for a, p in sc.find_custom_art(steam, self._acc()).items() if a in games}
-            except sc.SteamcaseError as e:
-                messagebox.showerror("Cannot read your own art", str(e))
-                return
+        if not self.use_custom_art.get():
+            self._begin_make(tone, completed, treatment, theme, {})      # {}: the option is off, covers made from custom art go back to Steam's portrait
+            return
+        self.running = True                                 # looking at a big grid folder takes a while: not on the UI thread
+        self._status_before = (self.step2_status.cget("text"), self.step2_status.cget("fg"))          # back if the user cancels the prompt
+        self.step2_status.configure(text="Looking for your own art…", fg=MUTED)
+        lib = None if self.installed_only.get() else self.library_path
+        threading.Thread(target=self._find_art, args=(lib, self._acc(), tone, completed, treatment, theme), daemon=True).start()
+
+    def _find_art(self, lib, account, tone, completed, treatment, theme):
+        """Runs off the UI thread: the user's own art for the games in the library, handed back to _begin_make through self.events."""
+        try:
+            steam = sc.steam_dir()
+            games, _ = sc.load_library(steam, lib)
+            art = {a: p for a, p in sc.find_custom_art(steam, account).items() if a in games}
+            self.events.put(("art", tone, completed, treatment, theme, art))
+        except sc.SteamcaseError as e:
+            self.events.put(("art_error", str(e)))
+        except Exception as e:                      # never leave the UI stuck in "running"
+            self.events.put(("art_error", "Unexpected problem: %s" % e))
+
+    def _begin_make(self, tone, completed, treatment, theme, custom_art):
+        """The rest of start_make once the art is known: ask before replacing covers, then make them."""
         why = self._replace_reason(tone, completed, treatment, theme, custom_art)
         if why:
             if not messagebox.askokcancel(why[0],
                                           [(why[1], "main"),
                                            ("Steam keeps showing your current art until you add the new covers in step 3.", "muted")],
                                           ok="Replace them", cancel="Cancel"):
+                if self.running:                                # set by start_make while it looked for your art
+                    self.running = False
+                    self.step2_status.configure(text=self._status_before[0], fg=self._status_before[1])
                 return
         lib = None if self.installed_only.get() else self.library_path
         self.running = True
@@ -873,6 +890,12 @@ class App(tk.Tk):
                     self.step2_status.configure(text="%d of %d · %s" % (done, total, name if len(name) <= 60 else name[:57] + "…"), fg=MUTED)
                 elif ev[0] == "done":
                     self.finish_make(ev[1])
+                elif ev[0] == "art":
+                    self._begin_make(*ev[1:])
+                elif ev[0] == "art_error":
+                    self.running = False
+                    self.step2_status.configure(text=ev[1], fg=RED)
+                    messagebox.showerror("Cannot read your own art", ev[1])
                 elif ev[0] == "page":
                     self.on_page(*ev[1:])
                 elif ev[0] == "update":
