@@ -9,10 +9,16 @@ from qtui import settings as st
 from qtui import steps as sp
 
 try:
-    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
 except ImportError:
-    QCoreApplication = None
-need_qt = unittest.skipIf(QCoreApplication is None, "PySide6 missing")
+    QGuiApplication = None
+need_qt = unittest.skipIf(QGuiApplication is None, "PySide6 missing")
+QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
+
+
+def qt_app():
+    """One Qt application for the whole test process (a second one cannot be made)."""
+    return QGuiApplication.instance() or QGuiApplication([])
 
 
 class Settings(unittest.TestCase):
@@ -105,7 +111,7 @@ class StepStates(unittest.TestCase):
 class ShellObject(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        cls.app = qt_app()
 
     def setUp(self):
         from qtui.shell import Shell
@@ -183,6 +189,137 @@ class ShellObject(unittest.TestCase):
         shell = self.Shell(self.path)
         self.assertFalse(shell.reduceEffects)
         self.assertTrue(shell.switchValue("restart_steam"))
+
+
+def contrast(a, b):
+    """WCAG contrast ratio of two #rrggbb colours."""
+    def lum(h):
+        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+class Tokens(unittest.TestCase):
+    """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
+    GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",
+             "edge": "#5d7a96", "done": "#5ba32b", "warning": "#f0b429", "error": "#ff7b72", "accentInk": "#0b141d", "shadow": "#000000"}
+
+    def theme(self):
+        import re
+        with open(os.path.join(QML_DIR, "Theme.qml")) as f:
+            return dict(re.findall(r'readonly property color (\w+): "(#[0-9a-fA-F]{6})"', f.read()))
+
+    def test_the_colours_are_the_guides(self):
+        self.assertEqual(self.theme(), self.GUIDE)
+
+    def test_contrast_meets_the_guide(self):
+        t = self.theme()
+        for fg, bg, need in (("text", "card", 4.5), ("muted", "card", 4.5), ("faint", "card", 4.5), ("text", "bg", 4.5), ("accent", "bg", 4.5),
+                             ("accentInk", "accent", 4.5), ("accentInk", "done", 4.5), ("edge", "card", 3.0), ("warning", "card", 4.5), ("error", "card", 4.5)):
+            with self.subTest("%s on %s" % (fg, bg)):
+                self.assertGreaterEqual(contrast(t[fg], t[bg]), need)
+
+    def test_no_other_file_has_a_colour_of_its_own(self):
+        import re
+        for name in os.listdir(QML_DIR):
+            if name.endswith(".qml") and name != "Theme.qml":
+                with open(os.path.join(QML_DIR, name)) as f:
+                    self.assertEqual(re.findall(r"#[0-9a-fA-F]{3,8}\b", f.read()), [], name)
+
+
+@need_qt
+class ShellWindow(unittest.TestCase):
+    """The real QML window, offscreen."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui.shell import Shell
+        from qtui.app import create_engine
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"))
+        self.engine = create_engine(self.shell)
+        self.addCleanup(self.close, self.engine)
+        self.root = self.engine.rootObjects()[0]
+
+    def close(self, engine):
+        """Delete the window before its engine: the other way round, every binding complains that `shell` is gone."""
+        for root in engine.rootObjects():
+            root.deleteLater()
+        self.app.processEvents()
+        engine.deleteLater()
+        self.app.processEvents()
+
+    def item(self, name):
+        """The QML item with this objectName, found in the visual tree (delegates of a Repeater are not QObject children of the window)."""
+        stack = [self.root.contentItem()]
+        while stack:
+            it = stack.pop()
+            if it.objectName() == name:
+                return it
+            stack.extend(it.childItems())
+        self.fail("no item named %s" % name)
+
+    def test_the_window_has_six_nav_items_and_the_footer(self):
+        self.assertEqual([self.item("nav_" + k).property("label") for k in ("home", "game_list", "look", "hundred", "make", "add")],
+                         ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
+        self.assertEqual(self.item("footer_updates").property("text"), "Check for updates")
+        self.assertEqual(self.item("footer_discord").property("text"), "Discord")
+
+    def click(self, name):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        it = self.item(name)
+        centre = it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, centre)
+        self.app.processEvents()
+
+    def test_a_locked_item_ignores_clicks_and_unlocks_with_the_game_list(self):
+        self.click("nav_look")
+        self.assertEqual(self.shell.current, 0)
+        self.shell.setFact("ready", True)
+        self.app.processEvents()
+        self.click("nav_look")
+        self.assertEqual(self.shell.current, 2)
+
+    def test_a_locked_item_is_not_a_tab_stop(self):
+        self.assertFalse(self.item("nav_look").property("activeFocusOnTab"))
+        self.assertTrue(self.item("nav_game_list").property("activeFocusOnTab"))
+        self.shell.setFact("ready", True)
+        self.app.processEvents()
+        self.assertTrue(self.item("nav_look").property("activeFocusOnTab"))
+
+    def test_reduce_effects_makes_every_duration_zero(self):
+        self.assertEqual(self.root.property("screenMs"), 260)
+        self.shell.reduceEffects = True
+        self.app.processEvents()
+        self.assertEqual(self.root.property("screenMs"), 0)
+
+    def test_the_window_opens_without_the_art_files(self):
+        from qtui.app import create_engine
+        empty = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, empty, True)
+        engine = create_engine(self.shell, assets_dir=empty)           # no discord.png, no default art
+        self.addCleanup(self.close, engine)
+        self.assertEqual(len(engine.rootObjects()), 1)
+
+    def test_a_qml_error_is_an_error(self):
+        from qtui.app import create_engine
+        bad = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, bad, True)
+        shutil.copytree(QML_DIR, os.path.join(bad, "qml"))
+        with open(os.path.join(bad, "qml", "Main.qml"), "a") as f:
+            f.write("\nthis is not qml\n")
+        with self.assertRaises(RuntimeError):
+            create_engine(self.shell, qml_dir=os.path.join(bad, "qml"))
+
+    def test_the_os_reduced_motion_setting_is_recorded(self):
+        has = hasattr(QGuiApplication.styleHints(), "reducedMotion")
+        print("\nQt exposes the OS reduced-motion setting: %s" % has)       # not verified in advance: the answer goes into CONTEXT.md
 
 
 if __name__ == "__main__":

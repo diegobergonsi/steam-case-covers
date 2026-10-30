@@ -1,0 +1,5 @@
+singleton Theme 1.0 Theme.qml
+NavItem 1.0 NavItem.qml
+PrimaryButton 1.0 PrimaryButton.qml
+QuietButton 1.0 QuietButton.qml
+Card 1.0 Card.qml
