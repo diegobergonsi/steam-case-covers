@@ -430,7 +430,8 @@ class StepStates(unittest.TestCase):
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
         self.assertEqual(sp.hint("hundred", "active"), "(optional)")
-        self.assertEqual(sp.hint("look", "locked"), "finish step 1")
+        self.assertEqual(sp.hint("look", "locked"), "after step 1")
+        self.assertEqual(sp.hint("hundred", "locked"), "(optional)")           # what it is matters more than why it waits: the longer words would not fit the list
         self.assertEqual(sp.hint("look", "done"), "")
 
     def test_nothing_done_only_the_game_list_is_active(self):
@@ -3224,7 +3225,7 @@ class ShellWindow(QtCase):
 
     def test_the_optional_step_says_so_and_a_locked_step_says_why_under_its_name(self):
         from PySide6.QtGui import QAccessible
-        want = {"home": "", "game_list": "", "look": "finish step 1", "hundred": "(optional) \u00b7 finish step 2", "make": "finish or skip step 3", "add": "make the covers first"}
+        want = {"home": "", "game_list": "", "look": "after step 1", "hundred": "(optional)", "make": "after step 3", "add": "after step 4"}
         for key, hint in want.items():
             self.assertEqual(self.item("nav_" + key).property("hint"), hint, key)
         hint, row = self.item("nav_hundred_hint"), self.item("nav_hundred")
@@ -3236,10 +3237,10 @@ class ShellWindow(QtCase):
             self.assertLessEqual(h.property("implicitWidth"), h.width(), key)
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional) \u00b7 finish step 2, locked")
+        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional), locked")
         self.shell.setFact("ready", True)                                                               # unlocked: only what is always true remains
         self.shell.setFact("look_done", True)
-        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", "finish or skip step 3"))
+        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", "after step 3"))
 
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
