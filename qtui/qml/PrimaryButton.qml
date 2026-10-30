@@ -12,7 +12,7 @@ Rectangle {
 
     implicitWidth: label.implicitWidth + Theme.s32
     // never wider than the content area of a screen (what a section can hold): a longer text is cut with an ellipsis. System fonts differ a lot between computers.
-    readonly property real maxWidth: Math.max(Theme.controlHeight, Window.width - Theme.chromeWidth)
+    property real maxWidth: Math.max(Theme.controlHeight, Window.width - Theme.chromeWidth)
     width: Math.min(implicitWidth, maxWidth)
     implicitHeight: Theme.controlHeight
     radius: height / 2

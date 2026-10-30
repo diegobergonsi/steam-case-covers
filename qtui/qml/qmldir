@@ -17,3 +17,6 @@ ChoiceChips 1.0 ChoiceChips.qml
 PreviewCard 1.0 PreviewCard.qml
 LookScreen 1.0 LookScreen.qml
 HundredScreen 1.0 HundredScreen.qml
+ConfirmDialog 1.0 ConfirmDialog.qml
+ChoiceSummary 1.0 ChoiceSummary.qml
+ProgressBar 1.0 ProgressBar.qml

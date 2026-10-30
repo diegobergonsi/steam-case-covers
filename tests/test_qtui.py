@@ -1388,6 +1388,131 @@ class Components(QtCase):
         QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, "", repeat))
         self.app.processEvents()
 
+    DIALOG = ('property string last: ""\n'
+              'ConfirmDialog { id: dlg; objectName: "dlg"; onConfirmed: win.last = "yes"; onDeclined: win.last = "no" }\n'
+              'function openIt() { dlg.ask("Add covers to Steam", [{"text": "2 covers will be added to the Steam account \u201cAlice\u201d.", "kind": "main"},'
+              ' {"text": "Your current artwork is backed up first.", "kind": "muted"}, {"text": "Steam will be closed automatically.", "kind": "warn"}], "Close Steam and add them") }')
+
+    def open_dialog(self, w=620, h=420):
+        from PySide6.QtCore import QMetaObject
+        self.load(self.DIALOG, w, h)
+        self.root.requestActivate()
+        self.assertFalse(self.item("dlg").isVisible())
+        QMetaObject.invokeMethod(self.root, "openIt")
+        from PySide6.QtTest import QTest
+        QTest.qWait(60)                                                        # one frame: the layout is polished before it is drawn
+        self.app.processEvents()
+
+    def test_a_dialog_is_closed_until_asked_and_then_shows_the_words(self):
+        self.open_dialog()
+        d = self.item("dlg")
+        self.assertTrue(d.isVisible())
+        self.assertEqual(self.item("dlg_title").property("text"), "Add covers to Steam")
+        self.assertEqual(self.item("dlg_p0").property("text"), "2 covers will be added to the Steam account \u201cAlice\u201d.")
+        self.assertEqual(self.item("dlg_confirm").property("text"), "Close Steam and add them")
+        self.assertEqual(self.item("dlg_cancel").property("text"), "Cancel")
+        from PySide6.QtGui import QColor
+        self.assertEqual(QColor(self.item("dlg_p2").property("color")).name(), "#f0b429")        # the warning has the warning colour
+        self.assertEqual(QColor(self.item("dlg_p1").property("color")).name(), "#93a7bb")
+
+    def test_the_safe_button_has_the_focus_and_only_the_confirm_is_filled(self):
+        self.open_dialog()
+        self.assertTrue(self.item("dlg_cancel").property("activeFocus"))
+        self.assertTrue(self.item("dlg_confirm").property("filled"))
+        self.assertFalse(self.item("dlg_cancel").property("filled"))
+
+    def test_escape_and_the_quiet_button_decline_and_close(self):
+        from PySide6.QtCore import Qt
+        for how in ("escape", "enter on cancel", "click"):
+            with self.subTest(how=how):
+                self.open_dialog()
+                self.root.setProperty("last", "")
+                if how == "escape":
+                    self.key("dlg_cancel", Qt.Key_Escape)
+                elif how == "enter on cancel":
+                    self.key("dlg_cancel", Qt.Key_Return)
+                else:
+                    b = self.item("dlg_cancel")
+                    p = b.mapToScene(__import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(b.width() / 2, b.height() / 2))
+                    self.mouse("click", p.x(), p.y())
+                self.assertEqual(self.root.property("last"), "no")
+                self.assertFalse(self.item("dlg").isVisible())
+
+    def test_tab_moves_between_the_two_buttons_and_enter_confirms(self):
+        from PySide6.QtCore import Qt
+        self.open_dialog()
+        self.key("dlg_cancel", Qt.Key_Tab)
+        self.assertTrue(self.item("dlg_confirm").property("activeFocus"))
+        self.key("dlg_confirm", Qt.Key_Tab)                                    # the focus never leaves the dialog
+        self.assertTrue(self.item("dlg_cancel").property("activeFocus"))
+        self.key("dlg_cancel", Qt.Key_Backtab)
+        self.assertTrue(self.item("dlg_confirm").property("activeFocus"))
+        self.key("dlg_confirm", Qt.Key_Return)
+        self.assertEqual(self.root.property("last"), "yes")
+        self.assertFalse(self.item("dlg").isVisible())
+
+    def test_a_click_outside_the_card_does_nothing(self):
+        self.open_dialog()
+        self.mouse("click", 3, 3)
+        self.assertEqual((self.root.property("last"), self.item("dlg").isVisible()), ("", True))
+
+    def test_the_dialog_fits_a_narrow_window(self):
+        self.open_dialog(w=360, h=420)
+        card = self.item("dlg_card")
+        self.assertLessEqual(card.width(), 360 - 2 * 32)
+        for name in ("dlg_title", "dlg_p0", "dlg_p1", "dlg_p2", "dlg_confirm", "dlg_cancel"):
+            it = self.item(name)
+            self.assertLessEqual(it.x() + it.width(), card.width() + 0.5, name)
+        self.assertGreaterEqual(self.item("dlg_confirm").height(), 36)
+        self.assertLessEqual(card.y() + card.height(), 420)
+
+    SUMMARY = ('property int last: -1\nChoiceSummary { objectName: "sum"; x: 10; y: 10; width: @W@; onChosen: (step) => win.last = step;\n'
+               '  model: [{"key": "colour", "label": "Colour", "value": "Teal", "step": 2}, {"key": "hundred", "label": "100% games", "value": "Gold case, rosette and ribbon", "step": 3},'
+               ' {"key": "art", "label": "Art", "value": "Your own art, blurry art skipped", "step": 2}] }')
+
+    def test_a_choice_summary_names_each_choice_and_leads_back_to_its_step(self):
+        self.load(self.SUMMARY.replace("@W@", "560"), 600, 200)
+        for key, step in (("colour", 2), ("hundred", 3), ("art", 2)):
+            with self.subTest(key=key):
+                chip = self.item("sum_chip_" + key)
+                self.assertGreaterEqual(chip.height(), 36)
+                from PySide6.QtCore import QPointF
+                p = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
+                self.root.setProperty("last", -1)
+                self.mouse("click", p.x(), p.y())
+                self.assertEqual(self.root.property("last"), step)
+
+    def test_a_choice_summary_wraps_and_never_exceeds_its_width(self):
+        self.load(self.SUMMARY.replace("@W@", "240"), 300, 300)
+        s = self.item("sum")
+        ys = set()
+        for key in ("colour", "hundred", "art"):
+            chip = self.item("sum_chip_" + key)
+            self.assertLessEqual(chip.x() + chip.width(), 240.5, key)
+            ys.add(round(chip.y()))
+        self.assertGreater(len(ys), 1)                                         # they wrap onto more rows
+        self.assertGreaterEqual(s.height(), 36)
+
+    def test_a_choice_summary_chip_works_from_the_keyboard(self):
+        from PySide6.QtCore import Qt
+        self.load(self.SUMMARY.replace("@W@", "560"), 600, 200)
+        self.key("sum_chip_hundred", Qt.Key_Return)
+        self.assertEqual(self.root.property("last"), 3)
+        self.root.setProperty("last", -1)
+        self.key("sum_chip_art", Qt.Key_Space)
+        self.assertEqual(self.root.property("last"), 2)
+
+    def test_a_progress_bar_shows_the_share_and_never_leaves_its_track(self):
+        self.load('ProgressBar { objectName: "bar"; x: 10; y: 10; width: 300; value: 0.5 }', 340, 80)
+        bar = self.item("bar")
+        self.assertEqual(bar.height(), 8)
+        for value, share in ((0.5, 0.5), (1.5, 1.0), (-1, 0.0), (0.25, 0.25)):
+            bar.setProperty("value", value)
+            from PySide6.QtTest import QTest
+            QTest.qWait(300)
+            self.app.processEvents()
+            self.assertAlmostEqual(self.item("bar_fill").width(), 300 * share, delta=1, msg=str(value))
+
     SLIDER = ('GradientSlider { objectName: "s"; x: 20; y: 20; width: 300; label: "Colour"; from: 0; to: 359; value: 0; stops: ["#ff0000", "#00ff00", "#0000ff"];\n'
               '  onMoved: (v) => value = v }')
 

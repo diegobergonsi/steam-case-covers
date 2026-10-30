@@ -69,6 +69,8 @@ QtObject {
     readonly property int focusRing: 2
     readonly property int ringOffset: 3
     readonly property int slideOffset: 30
+    readonly property int dialogWidth: 440
+    readonly property int progressHeight: 8
 
     // elevation and states (docs/ui-guide.md)
     readonly property real cardShadowBlur: 0.8
@@ -76,6 +78,7 @@ QtObject {
     readonly property int cardShadowOffset: 4
     readonly property real disabledOpacity: 0.6
     readonly property real hoverLift: 1.15
+    readonly property real scrimOpacity: 0.6              // the dimmed window behind a question
 
     // "Reduce effects": set from the shell; every duration goes through dur()
     property bool reduce: false
