@@ -4,7 +4,7 @@ The rules every screen of the window follows, so a new feature has a place befor
 
 ## Layout
 
-A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 Extras, 4 Make, 5 Add to Steam. Discord and Check for updates sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
+A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 Extras, 4 Make, 5 Add to Steam. Discord (with its icon) and "Check for updates" (always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
 
 ## Eleven rules
 
