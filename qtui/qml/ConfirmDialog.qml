@@ -15,6 +15,9 @@ FocusScope {
     property Item focusBack: null                       // set by the screen: the button the keyboard goes back to (it may be greyed out while the question is open)
     signal confirmed()
     signal declined()
+    signal alternated()
+    property string alternateText: ""                  // a third choice between Cancel and the confirm; empty: none
+    property bool single: false                          // an information box: only the confirm button ("OK")
 
     parent: Window.contentItem
     anchors.fill: parent
@@ -23,18 +26,30 @@ FocusScope {
     Accessible.role: Accessible.Dialog
     Accessible.name: title
 
-    function ask(heading, texts, yes) {
+    function ask(heading, texts, yes, alt, info) {
         title = heading
         paragraphs = texts
         confirmText = yes ? yes : "OK"
+        alternateText = alt ? alt : ""
+        single = info === true
         returnTo = focusBack ? focusBack : Window.window ? Window.window.activeFocusItem : null
         visible = true
-        cancel.forceActiveFocus()
+        var first = single ? confirm : cancel
+        first.forceActiveFocus()
     }
-    function close(answer) {
+    function step(delta) {                              // the focus moves between the visible buttons and never leaves the dialog
+        var list = []
+        if (cancel.visible) list.push(cancel)
+        if (alternate.visible) list.push(alternate)
+        list.push(confirm)
+        var at = 0
+        for (var i = 0; i < list.length; i++) if (list[i].activeFocus) at = i
+        list[(at + delta + list.length) % list.length].forceActiveFocus()
+    }
+    function close(answer, alt) {
         visible = false
         var back = returnTo
-        if (answer) confirmed(); else declined()
+        if (alt === true) alternated(); else if (answer) confirmed(); else declined()
         Qt.callLater(function() { if (back && back.enabled && back.visible) back.forceActiveFocus() })       // after the screen has re-enabled its button
     }
 
@@ -42,8 +57,11 @@ FocusScope {
         if (event.key === Qt.Key_Escape) {
             close(false)
             event.accepted = true
-        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            if (cancel.activeFocus) confirm.forceActiveFocus(); else cancel.forceActiveFocus()
+        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Right) {
+            step(1)
+            event.accepted = true
+        } else if (event.key === Qt.Key_Backtab || event.key === Qt.Key_Left) {
+            step(-1)
             event.accepted = true
         }
     }
@@ -111,9 +129,18 @@ FocusScope {
                 QuietButton {
                     id: cancel
                     objectName: "dlg_cancel"
+                    visible: !dialog.single
                     text: dialog.cancelText
                     maxWidth: content.width
                     onClicked: dialog.close(false)
+                }
+                QuietButton {
+                    id: alternate
+                    objectName: "dlg_alternate"
+                    visible: dialog.alternateText !== "" && !dialog.single
+                    text: dialog.alternateText
+                    maxWidth: content.width
+                    onClicked: dialog.close(false, true)
                 }
                 PrimaryButton {
                     id: confirm

@@ -1482,6 +1482,64 @@ class Components(QtCase):
             from PySide6.QtCore import QPointF
             self.assertLessEqual(it.mapToScene(QPointF(0, it.height())).y(), 260, name)
 
+    THREE = ('property string last: ""\nConfirmDialog { id: dlg; objectName: "dlg"; onConfirmed: win.last = "yes"; onDeclined: win.last = "no"; onAlternated: win.last = "alt" }\n'
+             'function openIt() { dlg.ask("Reset", [{"text": "a", "kind": "main"}], "Remove only ours", "Remove all") }\n'
+             'function openPlain() { dlg.ask("Plain", [{"text": "a", "kind": "main"}], "Yes") }\n'
+             'function openInfo() { dlg.ask("Info", [{"text": "b", "kind": "main"}], "OK", "", true) }')
+
+    def open_fn(self, fn, w=620, h=420):
+        from PySide6.QtCore import QMetaObject
+        from PySide6.QtTest import QTest
+        self.load(self.THREE, w, h)
+        self.root.requestActivate()
+        QMetaObject.invokeMethod(self.root, fn)
+        QTest.qWait(60)
+
+    def test_a_third_button_sits_between_cancel_and_confirm_and_answers_for_itself(self):
+        self.open_fn("openIt")
+        xs = [self.item(n).x() for n in ("dlg_cancel", "dlg_alternate", "dlg_confirm")]
+        self.assertEqual(xs, sorted(xs))
+        self.assertEqual(self.item("dlg_alternate").property("text"), "Remove all")
+        self.assertFalse(self.item("dlg_alternate").property("filled"))
+        self.assertTrue(self.item("dlg_cancel").property("activeFocus"))
+        from PySide6.QtCore import QPointF
+        b = self.item("dlg_alternate")
+        p = b.mapToScene(QPointF(b.width() / 2, b.height() / 2))
+        self.mouse("click", p.x(), p.y())
+        self.assertEqual(self.root.property("last"), "alt")
+        self.assertFalse(self.item("dlg").isVisible())
+
+    def test_tab_cycles_through_all_the_buttons_both_ways(self):
+        from PySide6.QtCore import Qt
+        self.open_fn("openIt")
+        order = ["dlg_cancel", "dlg_alternate", "dlg_confirm", "dlg_cancel"]
+        for here, there in zip(order, order[1:]):
+            self.key(here, Qt.Key_Tab)
+            self.assertTrue(self.item(there).property("activeFocus"), there)
+        self.key("dlg_cancel", Qt.Key_Backtab)
+        self.assertTrue(self.item("dlg_confirm").property("activeFocus"))
+
+    def test_without_a_third_text_there_is_no_third_button(self):
+        self.open_fn("openPlain")
+        self.assertFalse(self.item("dlg_alternate").isVisible())
+        from PySide6.QtCore import Qt
+        self.key("dlg_cancel", Qt.Key_Tab)
+        self.assertTrue(self.item("dlg_confirm").property("activeFocus"))
+
+    def test_an_info_dialog_has_only_the_confirm_button(self):
+        from PySide6.QtCore import Qt
+        self.open_fn("openInfo")
+        self.assertFalse(self.item("dlg_cancel").isVisible())
+        self.assertTrue(self.item("dlg_confirm").property("activeFocus"))
+        self.key("dlg_confirm", Qt.Key_Tab)                                     # the focus has nowhere else to go
+        self.assertTrue(self.item("dlg_confirm").property("activeFocus"))
+        self.key("dlg_confirm", Qt.Key_Return)
+        self.assertEqual(self.root.property("last"), "yes")
+        self.open_fn("openInfo")
+        self.key("dlg_confirm", Qt.Key_Escape)
+        self.assertEqual(self.root.property("last"), "no")
+        self.assertFalse(self.item("dlg").isVisible())
+
     SUMMARY = ('property int last: -1\nChoiceSummary { objectName: "sum"; x: 10; y: 10; width: @W@; onChosen: (step) => win.last = step;\n'
                '  model: [{"key": "colour", "label": "Colour", "value": "Teal", "step": 2}, {"key": "hundred", "label": "100% games", "value": "Gold case, rosette and ribbon", "step": 3},'
                ' {"key": "art", "label": "Art", "value": "Your own art, blurry art skipped", "step": 2}] }')
