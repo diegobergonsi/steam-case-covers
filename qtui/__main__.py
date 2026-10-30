@@ -42,7 +42,7 @@ def selftest(shell, qml_dir, assets_dir, log):
     shell.setFact("look_done", True)                # step 3 needs the look to be done
     shell.go(3)
     QCoreApplication.processEvents()
-    if find_item(root, "hundred_next") is None or find_item(root, "hundred_skip") is None:
+    if find_item(root, "hundred_next") is None:
         missing.append("the 100% games screen")
     if not check_preview(engine):
         missing.append("the preview picture")

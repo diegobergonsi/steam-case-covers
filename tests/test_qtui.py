@@ -18,6 +18,15 @@ except ImportError:
 need_qt = unittest.skipIf(QGuiApplication is None, "PySide6 missing")
 
 
+def open(path, mode="r", *args, **kwargs):          # noqa: A001 - every text file in these tests is UTF-8, on every system
+    """The built-in open, reading and writing text as UTF-8 unless an encoding is given."""
+    import builtins
+    if "b" not in mode:
+        kwargs.setdefault("encoding", "utf-8")
+    return builtins.open(path, mode, *args, **kwargs)
+
+
+
 class QtCase(unittest.TestCase):
     """A Qt test: leftovers (objects with timers) are collected here, on the main thread, never by a worker thread that happens to run the collector."""
     def tearDown(self):
@@ -30,6 +39,19 @@ QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def qt_app():
     """One Qt application for the whole test process (a second one cannot be made)."""
     return QGuiApplication.instance() or QGuiApplication([])
+
+
+class ReadsUtf8(unittest.TestCase):
+    """The files of the window hold quotes, arrows and dots. Windows reads text in cp1252 unless told otherwise, which cannot decode a closing quote."""
+    def test_text_files_in_this_module_are_read_as_utf8(self):
+        path = os.path.join(tempfile.mkdtemp(), "x.qml")
+        self.addCleanup(shutil.rmtree, os.path.dirname(path), True)
+        with __import__("io").open(path, "w", encoding="utf-8") as f:
+            f.write("\u201cdone\u201d \u2192")
+        with open(path) as f:
+            self.assertEqual((f.encoding, f.read()), ("utf-8", "\u201cdone\u201d \u2192"))
+        with open(path, "rb") as f:                                     # binary reads are left alone
+            self.assertIsInstance(f.read(), bytes)
 
 
 class Watcher(unittest.TestCase):
@@ -1264,7 +1286,7 @@ class HundredFlow(QtCase):
         self.shell.poll()                                        # unchanged since: finished
         self.wait_for(lambda: h.loaded)
         self.assertEqual((h.count, os.path.basename(h.path)), (2, "games.html"))
-        self.assertTrue(self.find(self.root, "hundred_next").property("visible"))
+        self.assertEqual(self.find(self.root, "hundred_next").property("text"), "Next: Make \u2192")
         before = look.previewSource
         self.click("hundred_style_chip_gold-border")
         self.click("hundred_marks_chip_rosette")
@@ -1286,8 +1308,7 @@ class HundredFlow(QtCase):
         self.shell.go(3)
         self.app.processEvents()
         self.assertTrue(h.loaded)
-        self.assertTrue(self.find(self.root, "hundred_next").property("visible"))
-        self.assertFalse(self.find(self.root, "hundred_skip").property("visible"))
+        self.assertEqual(self.find(self.root, "hundred_next").property("text"), "Next: Make \u2192")
         self.assertEqual(h.values()[0], {1})
         self.shell.hundred.style = "none"                        # a style chosen earlier is still chosen
         self.shell.go(2)
@@ -1305,8 +1326,7 @@ class HundredFlow(QtCase):
         h.loadPage(bad)
         self.wait_for(lambda: h.statusKind == "error")
         self.assertEqual(self.find(self.root, "hundred_status").property("kind"), "error")
-        self.assertFalse(self.find(self.root, "hundred_next").property("visible"))
-        self.assertTrue(self.find(self.root, "hundred_skip").property("visible"))
+        self.assertEqual(self.find(self.root, "hundred_next").property("text"), "Skip this step \u2192")
         h.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
         self.wait_for(lambda: h.loaded)
         self.assertEqual(self.find(self.root, "hundred_status").property("kind"), "ok")
@@ -2027,6 +2047,42 @@ class HundredState(QtCase):
         self.assertEqual((self.h.path, self.h.values()[0]), (second, {2, 3}))
         self.assertIn("second.html", self.h.status)
 
+    def test_an_empty_path_or_url_starts_nothing(self):
+        for call in (lambda: self.h.loadPage(""), lambda: self.h.loadPageUrl(""), lambda: self.h.loadPageUrl("https://example.com/x.html")):
+            call()
+            self.assertEqual((self.h.busy, self.h.status), (False, "No games page loaded. Your covers keep the look they have."))
+
+    def test_an_answer_that_cannot_be_delivered_is_dropped_quietly(self):
+        import shiboken6
+        from qtui.hundred import Hundred
+        gone = Hundred(self.shell, self.downloads)
+        shiboken6.delete(gone)                                        # the window closed while the worker was still reading
+        gone._worker(1, self.page({1: (1, 1)}))                       # must not raise in the worker thread
+        gone._worker(2, os.path.join(self.tmp, "missing.html"))       # nor for an error answer
+
+    def test_the_choices_notify_with_one_signal_and_only_when_something_changed(self):
+        h = self.h
+        seen = []
+        h.choicesChanged.connect(lambda: seen.append((h.styleEnabled, h.marksEnabled)))
+        marks = []
+        h.marksChanged.connect(lambda: marks.append(h.marks))
+        self.load(self.page({1: (1, 1)}))
+        self.assertIn((True, True), seen)
+        h.style = "none"
+        self.assertEqual(seen[-1], (True, False))
+        self.shell.look.theme = "classic"                              # no change: no signal
+        self.assertEqual(marks, [])
+        self.shell.look.theme = "halloween"
+        self.assertEqual(marks, ["rosette"])
+
+    def test_marks_changed_under_halloween_are_ignored_and_the_ones_before_come_back(self):
+        h, look = self.h, self.shell.look
+        h.marks = "rosette"
+        look.theme = "halloween"
+        h.marks = "full"                                              # greyed: ignored
+        look.theme = "classic"
+        self.assertEqual(h.marks, "rosette")
+
     def test_the_url_of_the_qt_dialog_loads_the_page(self):
         from PySide6.QtCore import QUrl
         path = self.page({1: (1, 1)})
@@ -2262,27 +2318,66 @@ class HundredScreen(QtCase):
 
     def test_open_is_the_filled_button_until_a_page_is_loaded_and_keeps_the_focus(self):
         self.assertTrue(self.item("hundred_open").property("filled"))
-        self.assertFalse(self.item("hundred_next").property("visible"))
-        self.assertTrue(self.item("hundred_skip").property("visible"))
-        self.assertFalse(self.item("hundred_skip").property("filled"))
+        nxt = self.item("hundred_next")
+        self.assertFalse(nxt.property("filled"))                       # the quiet "Skip this step"
+        self.assertEqual(nxt.property("text"), "Skip this step \u2192")
         self.root.requestActivate()
-        self.item("hundred_open").forceActiveFocus()
+        nxt.forceActiveFocus()
         self.load_page()
         self.assertFalse(self.item("hundred_open").property("filled"))
-        self.assertTrue(self.item("hundred_open").property("activeFocus"), "the focus left the button when it changed look")
-        self.assertTrue(self.item("hundred_next").property("visible") and self.item("hundred_next").property("filled"))
-        self.assertFalse(self.item("hundred_skip").property("visible"))
-        self.assertEqual(self.item("hundred_next").property("text"), "Next: Make \u2192")
+        self.assertTrue(nxt.property("filled"))
+        self.assertEqual(nxt.property("text"), "Next: Make \u2192")
+        self.assertTrue(nxt.property("activeFocus"), "a keyboard user on Skip lost the focus when the page loaded")
+        self.assertTrue(self.item("hundred_next") is nxt)              # the same button, not a new one
+
+    def test_the_button_to_go_on_waits_while_a_page_is_being_read(self):
+        import threading
+        from unittest import mock
+        import completion
+        self.load_page()
+        gate = threading.Event()
+        real = completion.read_games_page
+        with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
+            self.h.loadPage(write_games_page(self.tmp, {5: (2, 2)}, "second.html"))
+            self.app.processEvents()
+            self.assertFalse(self.item("hundred_next").property("enabled"))
+            gate.set()
+            self.wait_for(lambda: not self.h.busy)
+        self.assertTrue(self.item("hundred_next").property("enabled"))
+
+    def test_nothing_moves_under_a_finger_when_the_page_loads(self):
+        self.root.setProperty("width", self.root.property("minimumWidth"))        # narrow: the preview block sits above the sections
+        self.app.processEvents()
+        names = ("hundred_section_page", "hundred_section_mark", "hundred_open")
+        slot = lambda n: self.pos(n).y() - self.pos("hundred_section_mark").y()          # where the chips sit inside their card
+        before = {n: self.pos(n).y() for n in names}
+        inside = (slot("hundred_marks"), slot("hundred_style"))
+        self.load_page()
+        self.click("hundred_style_chip_gold-case")                 # the caption now shows
+        self.assertEqual(self.item("hundred_caption").property("text"), "Preview of a 100% game")
+        self.item("screen_scroller").setProperty("contentY", 0)
+        self.app.processEvents()
+        after = {n: self.pos(n).y() for n in names}
+        self.assertEqual(before["hundred_section_page"], after["hundred_section_page"], "the caption moved the sections")
+        self.assertEqual(before["hundred_open"], after["hundred_open"])
+        self.assertEqual(inside, (slot("hundred_marks"), slot("hundred_style")), "the chips moved inside their card when the page loaded")
+
+    def test_the_chip_groups_have_names_for_screen_readers(self):
+        from PySide6.QtGui import QAccessible
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        for name, expect in (("hundred_marks", "Marks"), ("hundred_style", "Case")):
+            iface = QAccessible.queryAccessibleInterface(self.item(name))
+            self.assertEqual((iface.text(QAccessible.Text.Name), iface.role()), (expect, QAccessible.Role.Grouping), name)
 
     def test_the_marks_and_cases_are_greyed_until_a_page_is_loaded(self):
         for n in ("hundred_marks", "hundred_style"):
             self.assertFalse(self.item(n).property("enabled"), n)
         self.assertEqual(self.item("hundred_locked_note").property("text"), "Load your games page first.")
-        self.assertTrue(self.item("hundred_locked_note").property("visible"))
         self.load_page()
         for n in ("hundred_marks", "hundred_style"):
             self.assertTrue(self.item(n).property("enabled"), n)
-        self.assertFalse(self.item("hundred_locked_note").property("visible"))
+        self.assertEqual(self.item("hundred_locked_note").property("text"), "")
 
     def test_the_status_line_follows_the_state(self):
         self.assertEqual(self.item("hundred_status").property("text"), "No games page loaded. Your covers keep the look they have.")
@@ -2328,7 +2423,7 @@ class HundredScreen(QtCase):
 
     def test_skip_goes_on_without_a_page_and_unlocks_make(self):
         self.assertEqual(self.shell.steps[4]["state"], "locked")
-        self.click("hundred_skip")
+        self.click("hundred_next")
         self.assertEqual(self.shell.current, 4)
         self.assertEqual(self.shell.steps[4]["state"], "active")
         self.assertEqual(self.shell.steps[3]["state"], "done")
@@ -2369,10 +2464,10 @@ class HundredScreen(QtCase):
 
     def test_the_tab_stops_are_the_buttons_the_tip_and_one_chip_per_enabled_group(self):
         def stops():
-            return sorted(n for n in ("hundred_open", "hundred_browse", "hundred_copy", "hundred_tip", "hundred_skip", "hundred_next",
+            return sorted(n for n in ("hundred_open", "hundred_browse", "hundred_copy", "hundred_tip", "hundred_next",
                                       "hundred_marks_chip_full", "hundred_marks_chip_rosette", "hundred_style_chip_ribbon", "hundred_style_chip_gold-case")
                           if self.item(n).property("activeFocusOnTab"))
-        self.assertEqual(stops(), ["hundred_browse", "hundred_copy", "hundred_open", "hundred_skip", "hundred_tip"])
+        self.assertEqual(stops(), ["hundred_browse", "hundred_copy", "hundred_next", "hundred_open", "hundred_tip"])
         self.load_page()
         self.assertEqual(stops(), ["hundred_browse", "hundred_copy", "hundred_marks_chip_full", "hundred_next", "hundred_open", "hundred_style_chip_ribbon", "hundred_tip"])
 

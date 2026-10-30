@@ -25,6 +25,7 @@ class Hundred(QObject):
     statusChanged = Signal()
     styleChanged = Signal()
     marksChanged = Signal()
+    choicesChanged = Signal()               # styleEnabled and marksEnabled (they depend on the page, the case and the theme)
     themeNoteChanged = Signal()
     needDialog = Signal(str)                # the desktop has no file chooser of its own: show Qt's, starting in this folder
     _picked = Signal(object)                # the answer of the file chooser, which runs on another thread
@@ -92,11 +93,11 @@ class Hundred(QObject):
     def markChoices(self):
         return [{"key": k, "label": v} for k, v in MARKS]
 
-    @Property(bool, notify=pathChanged)
+    @Property(bool, notify=choicesChanged)
     def styleEnabled(self):
         return self._completed is not None
 
-    @Property(bool, notify=styleChanged)
+    @Property(bool, notify=choicesChanged)
     def marksEnabled(self):
         """Marks can be chosen with a page loaded, a case to put them on, and the classic theme (Halloween has the rosette alone)."""
         return self._completed is not None and self._style in sc.CASES and self._look.theme == "classic"
@@ -141,17 +142,19 @@ class Hundred(QObject):
     def _sync(self):
         """The preview shows a 100% cover in the chosen style, only when a page is loaded."""
         self._look.treatment = self.values()[1] or "none"
-        self.styleChanged.emit()
+        self.choicesChanged.emit()
 
     def _theme_changed(self):
         """Halloween goes with the rosette alone: choosing it picks that and greys the marks out; going back restores what was picked before."""
+        before = self._marks
         if self._look.theme != "classic":
             if self._marks_before is None:
                 self._marks_before = self._marks
             self._marks = "rosette"
         elif self._marks_before is not None:
             self._marks, self._marks_before = self._marks_before, None
-        self.marksChanged.emit()
+        if self._marks != before:
+            self.marksChanged.emit()
         self.themeNoteChanged.emit()
         self._sync()
 
@@ -165,6 +168,8 @@ class Hundred(QObject):
     @Slot(str)
     def loadPage(self, path):
         """Read the saved page on a worker thread. The newest request wins; the answer of an older one is dropped."""
+        if not path:
+            return
         self._req += 1
         self._pending += 1
         self.busyChanged.emit()
@@ -179,12 +184,15 @@ class Hundred(QObject):
     def _worker(self, req, path):
         """Off the UI thread. Only the app ids at 100% come back, never any text from the page (it holds a login token)."""
         try:
-            done = completion.completed_apps(completion.read_games_page(path))
-            self._read.emit(req, path, done, None)
+            done, error = completion.completed_apps(completion.read_games_page(path)), None
         except completion.PageError as e:
-            self._read.emit(req, path, None, str(e))
+            done, error = None, str(e)
         except Exception:                            # never echo what went wrong in detail: it could quote the page
-            self._read.emit(req, path, None, "That file could not be read.")
+            done, error = None, "That file could not be read."
+        try:
+            self._read.emit(req, path, done, error)
+        except RuntimeError:
+            pass                                     # the window is closing: nobody is left to hear the answer
 
     def _on_read(self, req, path, done, error):
         self._pending -= 1
@@ -203,7 +211,6 @@ class Hundred(QObject):
                          "Done with the page? You can delete %s and its folder: they hold a temporary login token for your Steam account, "
                          "which this app does not use or keep." % name)
         self.pathChanged.emit()
-        self.styleChanged.emit()
         self._sync()
 
     @Slot()

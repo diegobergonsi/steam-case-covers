@@ -17,7 +17,7 @@ ScreenFrame {
         id: layout
         width: parent.width
         readonly property bool narrow: width < Theme.previewWidth + Theme.s24 + Theme.sectionMinWidth
-        readonly property real previewBlock: Theme.previewHeight + Theme.s8 + caption.height
+        readonly property real previewBlock: Theme.previewHeight + Theme.s8 + caption.height      // the caption always keeps its line: nothing moves when it shows
         implicitHeight: narrow ? previewBlock + Theme.s24 + sections.implicitHeight : Math.max(previewBlock, sections.implicitHeight)
         height: implicitHeight
 
@@ -27,12 +27,14 @@ ScreenFrame {
             x: layout.narrow ? Math.max(0, (layout.width - width) / 2) : 0
             source: screen.look.previewSource
         }
+        FontMetrics { id: captionFont; font.pixelSize: Theme.bodySize }
         Text {                                            // the text, not the row, comes and goes: nothing moves under a finger
             id: caption
             objectName: "hundred_caption"
             x: preview.x
             y: preview.height + Theme.s8
             width: preview.width
+            height: captionFont.height
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             color: Theme.muted
@@ -88,11 +90,11 @@ ScreenFrame {
                 Text {
                     objectName: "hundred_locked_note"
                     width: parent.width
-                    visible: !screen.hundred.styleEnabled
+                    height: captionFont.height                    // the line stays when the text goes: the chips below do not move
                     wrapMode: Text.WordWrap
                     color: Theme.faint
                     font.pixelSize: Theme.bodySize
-                    text: "Load your games page first."
+                    text: screen.hundred.styleEnabled ? "" : "Load your games page first."
                 }
                 Column {
                     width: parent.width
@@ -100,6 +102,7 @@ ScreenFrame {
                     Text { text: "Marks"; color: Theme.muted; font.pixelSize: Theme.bodySize }
                     ChoiceChips {
                         objectName: "hundred_marks"
+                        groupName: "Marks"
                         width: parent.width
                         enabled: screen.hundred.marksEnabled
                         model: screen.hundred.markChoices
@@ -118,6 +121,7 @@ ScreenFrame {
                     Text { text: "Case"; color: Theme.muted; font.pixelSize: Theme.bodySize }
                     ChoiceChips {
                         objectName: "hundred_style"
+                        groupName: "Case"
                         width: parent.width
                         enabled: screen.hundred.styleEnabled
                         model: screen.hundred.styles
@@ -130,17 +134,11 @@ ScreenFrame {
     }
 
     footer: [
-        PrimaryButton {
-            objectName: "hundred_skip"
-            text: "Skip this step →"
-            quiet: true
-            visible: !screen.hundred.loaded
-            onClicked: { shell.setFact("hundred_done", true); shell.next() }
-        },
-        PrimaryButton {
+        PrimaryButton {                               // one button for both: "Skip" (quiet) without a page, "Next" (filled) with one, so the keyboard focus stays
             objectName: "hundred_next"
-            text: "Next: Make →"
-            visible: screen.hundred.loaded
+            text: screen.hundred.loaded ? "Next: Make \u2192" : "Skip this step \u2192"
+            quiet: !screen.hundred.loaded
+            enabled: !screen.hundred.busy             // a page is being read: Make must not go on with the one read before
             onClicked: { shell.setFact("hundred_done", true); shell.next() }
         }
     ]

@@ -9,7 +9,10 @@ Flow {
     id: chips
     property var model: []
     property string current: ""
+    property string groupName: ""                        // what the group is called for a screen reader
     signal chosen(string key)
+    Accessible.role: Accessible.Grouping
+    Accessible.name: groupName
     spacing: Theme.s8
     opacity: enabled ? 1 : Theme.disabledOpacity          // `enabled: false` greys the pills, stops clicks and keys and takes them out of the Tab order; the choice still shows
 
