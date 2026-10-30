@@ -3071,5 +3071,52 @@ class MakeFromCustomArt(StoreMocks):
         self.assertTrue(sc.is_steamcase_cover(self.cover(1)))
 
 
+class CustomArtCli(StoreMocks):
+    """--use-custom-art on the command line."""
+
+    def setUp(self):
+        super().setUp()
+        self.originals = os.path.join(self.tmp, "originals")
+        patch = mock.patch.object(sc, "originals_dir", return_value=self.originals)         # never the real app folder
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def mine(self, appid, colour=(10, 160, 30)):
+        sc.Image.new("RGB", (100, 150), colour).save(os.path.join(self.grid, "%dp.jpg" % appid), format="JPEG")
+
+    def make(self, out, *extra):
+        lib = self.fake_library(True)
+        return self.run_cli("make", "--steam-dir", self.steam, "--library", lib, "--out", out, *extra)
+
+    def cover(self, out, appid):
+        return os.path.join(out, "Game_%d_%d.png" % (appid, appid))
+
+    def test_use_custom_art_builds_from_the_grid_file(self):
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--use-custom-art")
+        self.assertIsNotNone(sc.cover_art(self.cover(out, 1)))
+        self.assertIsNone(sc.cover_art(self.cover(out, 2)))                       # game 2 has no art of its own
+
+    def test_without_the_flag_steams_portrait_is_used(self):
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out)
+        self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_the_summary_counts_custom_covers(self):
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.assertIn("1 from your own art", self.make(out, "--use-custom-art"))
+        self.assertNotIn("from your own art", self.make(os.path.join(self.tmp, "out2")))
+
+    def test_custom_art_for_a_game_outside_the_library_is_ignored(self):
+        self.mine(9)
+        out = os.path.join(self.tmp, "out")
+        text = self.make(out, "--use-custom-art")
+        self.assertFalse(os.path.exists(self.cover(out, 9)))
+        self.assertNotIn("from your own art", text)
+
+
 if __name__ == "__main__":
     unittest.main()

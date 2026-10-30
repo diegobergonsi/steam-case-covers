@@ -1750,17 +1750,20 @@ def cmd_make(args):
     completed, treatment = _completion_args(args, theme)    # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
     hue, sat, val = _chosen_colour(args)
+    custom_art = {a: p for a, p in find_custom_art(steam, args.user).items() if a in games} if args.use_custom_art else None
 
     def progress(done, total, appid, name, status):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art)
+    own_art = sum(1 for f in res["files"] if cover_art(f))
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
           + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")
-          + (" | with the %s theme" % theme.capitalize() if theme else ""))
+          + (" | with the %s theme" % theme.capitalize() if theme else "")
+          + (" | %d from your own art" % own_art if own_art else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
@@ -1895,6 +1898,11 @@ def main():
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) or rosette (the rosette alone). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
+        p.add_argument("--use-custom-art", action="store_true",
+                       help="put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it; a copy is kept in this app's own folder, "
+                            "your files are not changed. Without it every cover uses Steam's own portrait (covers made from your art are rebuilt)")
+        if name == "make":
+            p.add_argument("--user", help="Steam account folder id inside userdata/ whose custom art --use-custom-art reads (auto: most recent login)")
         p.set_defaults(fn=fn)
     p = sub.add_parser("apply", help="copy covers into Steam"); common(p, apply_=True); p.set_defaults(fn=cmd_apply)
     p = sub.add_parser("reset", help="remove our covers from Steam so it shows its default art again"); common(p, apply_=True)
