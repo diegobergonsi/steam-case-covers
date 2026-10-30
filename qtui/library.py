@@ -3,9 +3,12 @@
 """Step 1 of the window: the game list. The saved userdata.json is noticed by itself, checked, and unlocks the next step."""
 import os
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 import steamcase as sc
+from qtui.filepicker import pick_file
+from qtui.system import SAVE_KEY
 from qtui.watcher import DownloadWatcher
 
 WAITING = "Waiting for userdata.json…"
@@ -17,10 +20,12 @@ class Library(QObject):
     installedOnlyChanged = Signal()
     readyChanged = Signal()
     statusChanged = Signal()
+    needDialog = Signal(str)                # the desktop has no file chooser of its own: show Qt's, starting in this folder
 
     def __init__(self, shell, downloads, started, parent=None):
         super().__init__(parent)
         self._shell = shell
+        self._downloads = downloads
         self._watcher = DownloadWatcher(downloads, "userdata", (".json",), started, sc.MAX_LIBRARY_FILE)
         self._path = ""
         self._count = 0
@@ -121,3 +126,23 @@ class Library(QObject):
                 self._accept(path, count)
                 return
             self._set_status("%s: %s" % (os.path.basename(path), why), "error")
+
+    @Slot()
+    def openDownloadPage(self):
+        QDesktopServices.openUrl(QUrl(sc.library_login_url()))
+        # Qt cannot tell whether a browser really opened, so always show the way out
+        self._set_status("Opening your browser\u2026 Log in to Steam if it asks. You'll then see a page of plain text: save it as userdata.json (%s) and I'll pick it up. "
+                         "Nothing opened? Click \u201cCopy link\u201d and paste it into your browser." % SAVE_KEY, "wait")
+
+    @Slot()
+    def copyLink(self):
+        QGuiApplication.clipboard().setText(sc.library_login_url())
+        self._set_status("Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (%s)." % SAVE_KEY, "ok")
+
+    @Slot()
+    def browse(self):
+        path = pick_file("Choose your userdata.json", self._downloads)
+        if path is None:
+            self.needDialog.emit(self._downloads)
+        elif path:
+            self.useFile(path)

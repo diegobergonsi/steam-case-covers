@@ -254,6 +254,115 @@ class StepStates(unittest.TestCase):
         self.assertEqual((got["look"], got["add"]), ("active", "locked"))
 
 
+class FilePicker(unittest.TestCase):
+    """The desktop's own file chooser (kdialog or zenity on Linux), as the Tk window used it; None means 'show the Qt dialog instead'."""
+    def run_picker(self, tools, results, platform="linux"):
+        from unittest import mock
+        from qtui import filepicker
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd[0])
+            r = results.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return mock.Mock(returncode=r[0], stdout=r[1])
+        with mock.patch.object(sys, "platform", platform), mock.patch("shutil.which", side_effect=lambda n: "/usr/bin/" + n if n in tools else None), \
+                mock.patch("subprocess.run", side_effect=fake_run):
+            return filepicker.pick_file("Choose", self.start, ("JSON files", "*.json")), calls
+
+    def setUp(self):
+        self.start = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.start, True)
+
+    def test_kdialog_is_preferred_and_its_answer_is_returned(self):
+        self.assertEqual(self.run_picker({"kdialog", "zenity"}, [(0, "/home/u/userdata.json\n")]), ("/home/u/userdata.json", ["kdialog"]))
+
+    def test_zenity_is_the_second_choice(self):
+        self.assertEqual(self.run_picker({"zenity"}, [(0, "/x/y.json\n")]), ("/x/y.json", ["zenity"]))
+
+    def test_cancel_returns_an_empty_string(self):
+        self.assertEqual(self.run_picker({"kdialog"}, [(1, "")]), ("", ["kdialog"]))
+
+    def test_a_missing_tool_or_a_crash_means_use_the_qt_dialog(self):
+        self.assertEqual(self.run_picker(set(), []), (None, []))
+        self.assertEqual(self.run_picker({"kdialog"}, [OSError("gone")]), (None, ["kdialog"]))
+        self.assertEqual(self.run_picker({"kdialog", "zenity"}, [(2, ""), (0, "/z.json\n")]), ("/z.json", ["kdialog", "zenity"]))   # a failing tool falls through to the next
+
+    def test_other_systems_always_use_the_qt_dialog(self):
+        for platform in ("win32", "darwin"):
+            self.assertEqual(self.run_picker({"kdialog"}, [], platform), (None, []), platform)
+
+
+@need_qt
+class LibraryActions(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        import time
+        from unittest import mock
+        from qtui.shell import Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, started=time.time() - 1000)
+        self.lib = self.shell.library
+        self.url = "https://store.steampowered.com/login/?redir=test"
+        patch = mock.patch("steamcase.library_login_url", return_value=self.url)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_copy_link_puts_the_exact_link_on_the_clipboard(self):
+        self.lib.copyLink()
+        self.assertEqual(QGuiApplication.clipboard().text(), self.url)
+        self.assertEqual(self.lib.statusKind, "ok")
+        self.assertTrue(self.lib.status.startswith("Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json ("), self.lib.status)
+
+    def test_open_page_opens_the_link_and_always_shows_the_way_out(self):
+        from unittest import mock
+        for opened in (True, False):                              # Qt cannot tell whether a browser really appeared
+            with self.subTest(opened=opened), mock.patch("qtui.library.QDesktopServices.openUrl", return_value=opened) as m:
+                self.lib.openDownloadPage()
+                self.assertEqual(m.call_count, 1)
+                self.assertEqual(m.call_args[0][0].toString(), self.url)
+                self.assertTrue(self.lib.status.startswith("Opening your browser\u2026 Log in to Steam if it asks."), self.lib.status)
+                self.assertIn("Nothing opened? Click \u201cCopy link\u201d and paste it into your browser.", self.lib.status)
+
+    def test_browse_loads_the_chosen_file(self):
+        from unittest import mock
+        good = os.path.join(self.tmp, "mine.json")
+        with open(good, "w") as f:
+            json.dump({"rgOwnedApps": [1, 2, 3]}, f)
+        with mock.patch("qtui.library.pick_file", return_value=good):
+            self.lib.browse()
+        self.assertEqual((self.lib.path, self.lib.ready), (good, True))
+
+    def test_browse_cancelled_changes_nothing(self):
+        from unittest import mock
+        before = (self.lib.path, self.lib.status, self.lib.statusKind)
+        with mock.patch("qtui.library.pick_file", return_value=""):
+            self.lib.browse()
+        self.assertEqual((self.lib.path, self.lib.status, self.lib.statusKind), before)
+
+    def test_browse_without_a_desktop_chooser_asks_for_the_qt_dialog(self):
+        from unittest import mock
+        seen = []
+        self.lib.needDialog.connect(lambda folder: seen.append(folder))
+        with mock.patch("qtui.library.pick_file", return_value=None):
+            self.lib.browse()
+        self.assertEqual(seen, [self.downloads])
+
+    def test_the_qt_dialog_answer_goes_through_the_same_check(self):
+        bad = os.path.join(self.tmp, "bad.json")
+        with open(bad, "w") as f:
+            f.write("[]")
+        self.assertFalse(self.lib.useFile(bad))
+        self.assertEqual(self.lib.statusKind, "error")
+
+
 @need_qt
 class LibraryState(unittest.TestCase):
     """The game list of step 1: the saved file noticed by itself, validated, and the 'installed games only' switch."""
