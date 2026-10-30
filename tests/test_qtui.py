@@ -260,6 +260,43 @@ class BuildTrimList(unittest.TestCase):
                 self.assertNotIn(pattern, needed, "%r would drop %s" % (pattern, needed))
 
 
+class QtPreviewWorkflow(unittest.TestCase):
+    """.github/workflows/qt-preview.yml builds the Qt window on three systems by hand, so it can be tried before a release. It must stay inert and safe."""
+    PATH = os.path.join(os.path.dirname(QML_DIR), "..", ".github", "workflows", "qt-preview.yml")
+
+    def text(self):
+        with open(self.PATH) as f:
+            return f.read()
+
+    def test_it_only_runs_by_hand(self):
+        import re
+        on = re.search(r"^on:\n((?:[ \t]+.*\n|\n)+)", self.text(), re.M).group(1)
+        self.assertEqual(re.findall(r"^\s{2}(\w[\w-]*):", on, re.M), ["workflow_dispatch"])
+
+    def test_it_has_no_secrets_and_read_only_permissions(self):
+        t = self.text()
+        self.assertNotIn("secrets.", t)
+        self.assertIn("permissions:\n  contents: read", t)
+
+    def test_every_action_is_pinned_by_commit(self):
+        import re
+        uses = re.findall(r"uses:\s*(\S+)", self.text())
+        self.assertTrue(uses)
+        for u in uses:
+            self.assertRegex(u, r"@[0-9a-f]{40}$", u)
+
+    def test_it_builds_on_the_three_systems_and_checks_the_built_app(self):
+        t = self.text()
+        for needle in ("windows-latest", "macos-latest", "ubuntu-latest", "steamcase-qt.spec", "--selftest", "unittest discover -s tests", "requirements-qt.txt"):
+            self.assertIn(needle, t)
+
+    def test_the_qt_requirements_are_pinned(self):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "requirements-qt.txt")) as f:
+            lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+        self.assertIn("-r requirements-build.txt", lines)
+        self.assertTrue(any(l.startswith("PySide6-Essentials==") for l in lines), lines)
+
+
 class Tokens(unittest.TestCase):
     """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
     GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",

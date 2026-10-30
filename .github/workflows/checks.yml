@@ -60,7 +60,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install bandit pip-audit
       # Fail on anything of medium severity or higher. Low findings here are normal patterns (fixed-argument subprocess calls, etc.).
-      - run: bandit -r steamcase.py gui.py widgets.py -ll
+      - run: bandit -r steamcase.py gui.py widgets.py qtui -ll
       # Known vulnerabilities in the pinned build dependencies.
       - run: pip-audit -r requirements-build.txt --no-deps --disable-pip
 

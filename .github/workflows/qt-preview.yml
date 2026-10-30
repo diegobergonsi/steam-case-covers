@@ -1,0 +1,71 @@
+name: Qt window preview
+
+# By hand only (Actions tab, "Run workflow"): builds the new Qt window on Windows, macOS and Linux so it can be tried
+# before it is released. Nothing is published, no release is made; the files are kept as downloads for 7 days.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: SteamCaseCoversQt-windows.exe
+          - os: macos-latest
+            asset: SteamCaseCoversQt-macos.zip
+          - os: ubuntu-latest
+            asset: SteamCaseCoversQt-linux
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen          # the tests and the self-test need no screen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Libraries Qt needs on a bare Linux runner
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-image0
+      - run: python -m pip install -r requirements-qt.txt
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+      - name: Selftest (source)
+        run: python -m qtui --selftest
+      - name: Build
+        run: pyinstaller --noconfirm steamcase-qt.spec
+
+      - name: Selftest (built app) - Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\SteamCaseCoversQt.exe -ArgumentList "--selftest" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { exit 1 }
+          Copy-Item dist\SteamCaseCoversQt.exe ${{ matrix.asset }}
+      - name: Selftest (built app) - macOS
+        if: runner.os == 'macOS'
+        run: |
+          # An ad-hoc signature (free, no Apple account): a downloaded unsigned app is otherwise reported as "damaged".
+          xattr -cr dist/SteamCaseCoversQt.app
+          codesign --force --deep --sign - dist/SteamCaseCoversQt.app
+          codesign --verify --deep --strict --verbose=2 dist/SteamCaseCoversQt.app
+          dist/SteamCaseCoversQt.app/Contents/MacOS/SteamCaseCoversQt --selftest
+          ditto -c -k --keepParent dist/SteamCaseCoversQt.app ${{ matrix.asset }}
+      - name: Selftest (built app) - Linux
+        if: runner.os == 'Linux'
+        run: |
+          dist/SteamCaseCoversQt --selftest
+          cp dist/SteamCaseCoversQt ${{ matrix.asset }}
+          chmod +x ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          retention-days: 7
