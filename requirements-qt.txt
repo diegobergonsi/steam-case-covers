@@ -1,0 +1,4 @@
+# For the Qt window (python -m qtui). Python 3.10 or newer.
+PySide6-Essentials>=6.12,<6.13
+pillow>=10.3
+pyinstaller

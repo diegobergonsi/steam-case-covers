@@ -38,3 +38,14 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     if problems or not engine.rootObjects():
         raise RuntimeError("The window could not be built:\n" + "\n".join(problems or ["Main.qml produced no window"]))
     return engine
+
+
+def find_item(root, name):
+    """The QML item with this objectName, searched in the visual tree (the delegates of a Repeater are not QObject children of the window), or None."""
+    stack = [root.contentItem()]
+    while stack:
+        item = stack.pop()
+        if item.objectName() == name:
+            return item
+        stack.extend(item.childItems())
+    return None

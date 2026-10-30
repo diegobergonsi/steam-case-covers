@@ -322,5 +322,41 @@ class ShellWindow(unittest.TestCase):
         print("\nQt exposes the OS reduced-motion setting: %s" % has)       # not verified in advance: the answer goes into CONTEXT.md
 
 
+@need_qt
+class Entry(unittest.TestCase):
+    """`python -m qtui --selftest`: builds the window offscreen, checks it, and exits 0 (ok) or 1 (with the QML messages)."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def run_selftest(self, *extra):
+        import subprocess
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+        return subprocess.run([sys.executable, "-m", "qtui", "--selftest", *extra], cwd=self.ROOT, env=env, capture_output=True, text=True, timeout=120)
+
+    def test_the_selftest_passes(self):
+        r = self.run_selftest()
+        self.assertEqual((r.returncode, r.stdout.strip().splitlines()[-1:]), (0, ["selftest ok"]), r.stderr)
+
+    def test_the_selftest_does_not_touch_the_real_settings_file(self):
+        import qtui.settings as st
+        home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, home, True)
+        import subprocess
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", XDG_DATA_HOME=home, HOME=home, LOCALAPPDATA=home)
+        subprocess.run([sys.executable, "-m", "qtui", "--selftest"], cwd=self.ROOT, env=env, capture_output=True, text=True, timeout=120)
+        written = [n for _, _, names in os.walk(home) for n in names if not n.endswith(".qmlc")]          # Qt's own compiled-QML cache is fine
+        self.assertEqual(written, [])
+
+    def test_a_broken_qml_file_fails_the_selftest(self):
+        bad = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, bad, True)
+        shutil.copytree(QML_DIR, os.path.join(bad, "qml"))
+        with open(os.path.join(bad, "qml", "Main.qml"), "a") as f:
+            f.write("\nthis is not qml\n")
+        r = self.run_selftest("--qml-dir", os.path.join(bad, "qml"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("Main.qml", r.stderr)
+        self.assertNotIn("selftest ok", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
