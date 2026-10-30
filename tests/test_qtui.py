@@ -396,7 +396,7 @@ class GameListScreen(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.downloads = os.path.join(self.tmp, "Downloads")
         os.makedirs(self.downloads)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
         self.shell.reduceEffects = True
         self.engine = create_engine(self.shell)
         self.addCleanup(self.close, self.engine)
@@ -592,7 +592,7 @@ class GameListFlow(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         downloads = os.path.join(tmp, "Downloads")
         os.makedirs(downloads)
-        shell = Shell(os.path.join(tmp, "settings.json"), downloads=downloads)
+        shell = Shell(os.path.join(tmp, "settings.json"), downloads=downloads, covers_dir=os.path.join(tmp, "covers"))
         shell.reduceEffects = True
         engine = create_engine(shell)
         self.addCleanup(close_engine, engine)
@@ -644,7 +644,7 @@ class LibraryActions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.downloads = os.path.join(self.tmp, "Downloads")
         os.makedirs(self.downloads)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
         self.lib = self.shell.library
         self.url = "https://store.steampowered.com/login/?redir=test"
         patch = mock.patch("steamcase.library_login_url", return_value=self.url)
@@ -753,7 +753,7 @@ class LibraryState(unittest.TestCase):
         self.lib = self.shell.library
 
     def new_shell(self):
-        return self.Shell(self.settings, downloads=self.downloads)
+        return self.Shell(self.settings, downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
 
     def save(self, name, data):
         p = os.path.join(self.downloads, name)
@@ -907,9 +907,145 @@ class LibraryState(unittest.TestCase):
         self.assertTrue(self.lib.status.startswith("userdata.json: "), self.lib.status)
 
     def test_a_folder_that_does_not_exist_is_fine(self):
-        shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"))
+        shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"), covers_dir=os.path.join(self.tmp, "covers"))
         shell.library.poll()
         self.assertFalse(shell.library.ready)
+
+
+@need_qt
+class LookState(unittest.TestCase):
+    """The Look step: the case colour, the theme and the art switches, with the tone remembered through the covers already made."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui.shell import Shell
+        self.Shell = Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.settings = os.path.join(self.tmp, "settings.json")
+        self.covers = os.path.join(self.tmp, "covers")
+        os.makedirs(self.covers)
+        self.shell = self.new_shell()
+        self.look = self.shell.look
+
+    def new_shell(self):
+        return self.Shell(self.settings, downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+
+    def make_cover(self, hue=0, sat=100, val=100, theme=None):
+        import steamcase as sc
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        art = os.path.join(self.tmp, "art.png")
+        sc.Image.new("RGB", (100, 150), (10, 120, 30)).save(art)
+        sc.build_cover(art, os.path.join(self.covers, "Game_1_1.png"), sc.load_frame(hue, sat=sat, val=val), hue, sat=sat, val=val, theme=theme)
+
+    def wait(self, ms=250):
+        import time
+        end = time.time() + ms / 1000
+        while time.time() < end:
+            self.app.processEvents()
+            time.sleep(0.01)
+
+    def test_it_starts_at_the_original_tone(self):
+        l = self.look
+        self.assertEqual((l.hue, l.sat, l.val, l.toneName, l.toneHint, l.colourNote, l.theme), (0, 100, 100, "Original", "", "", "classic"))
+        self.assertEqual([x["selected"] for x in l.swatches], [True] + [False] * 8)
+
+    def test_a_tone_changes_all_three_values_with_one_signal(self):
+        seen = []
+        self.look.toneChanged.connect(lambda: seen.append((self.look.hue, self.look.sat, self.look.val)))
+        self.look.setTone(90, 80, 70)
+        self.assertEqual(seen, [(90, 80, 70)])
+        self.assertEqual(self.look.toneName, "Custom \u00b7 90\u00b0 80% 70%")
+        self.assertEqual(self.look.colourNote, "Only the original colour is checked for readable text.")
+        self.look.setTone(90, 80, 70)                                     # no change: no signal
+        self.assertEqual(len(seen), 1)
+
+    def test_values_are_clamped(self):
+        self.look.setTone(-30, 150, -5)
+        self.assertEqual((self.look.hue, self.look.sat, self.look.val), (330, 100, 0))
+        self.look.hue = 725
+        self.assertEqual(self.look.hue, 5)
+        self.look.sat = -4
+        self.assertEqual(self.look.sat, 0)
+
+    def test_the_sliders_set_one_value_each(self):
+        self.look.hue = 120
+        self.look.sat = 55
+        self.look.val = 66
+        self.assertEqual((self.look.hue, self.look.sat, self.look.val), (120, 55, 66))
+
+    def test_a_swatch_sets_its_tone_and_only_it_is_selected(self):
+        import steamcase as sc
+        for i in range(9):
+            with self.subTest(i):
+                self.look.setTone(200, 33, 44)
+                self.look.pickSwatch(i)
+                chosen = [k for k, x in enumerate(self.look.swatches) if x["selected"]]
+                self.assertEqual(chosen, [i])
+                self.assertEqual(sc.tone_key(self.look.hue, self.look.sat, self.look.val), sc.tone_key(self.look.swatches[i]["hue"], self.look.swatches[i]["sat"], self.look.swatches[i]["val"]))
+        self.look.pickSwatch(99)                                          # outside the nine: ignored
+        self.look.pickSwatch(-1)
+        self.assertEqual([k for k, x in enumerate(self.look.swatches) if x["selected"]], [8])
+
+    def test_a_grey_ignores_the_hue_and_says_so(self):
+        self.look.pickSwatch(7)                                           # Graphite
+        self.assertEqual(self.look.toneName, "Graphite")
+        self.look.hue = 200
+        self.assertEqual(self.look.toneName, "Graphite")
+        self.assertEqual(self.look.toneHint, "Colour has no effect on grey or black.")
+        self.assertTrue(self.look.swatches[7]["selected"])
+
+    def test_the_tone_of_the_covers_already_made_is_shown_at_start(self):
+        self.make_cover(90, 80, 70)
+        look = self.new_shell().look
+        self.assertEqual((look.hue, look.sat, look.val), (90, 80, 70))
+
+    def test_the_theme_of_the_covers_already_made_is_shown_at_start(self):
+        self.make_cover(theme="halloween")
+        self.assertEqual(self.new_shell().look.theme, "halloween")
+
+    def test_a_missing_empty_or_garbage_covers_folder_gives_the_defaults(self):
+        for setup in (lambda: shutil.rmtree(self.covers), lambda: None, lambda: (os.makedirs(self.covers, exist_ok=True), open(os.path.join(self.covers, "Game_1_1.png"), "w").write("garbage"))):
+            setup()
+            look = self.new_shell().look
+            self.assertEqual((look.hue, look.sat, look.val, look.theme), (0, 100, 100, "classic"))
+
+    def test_the_theme_takes_only_the_known_values(self):
+        self.look.theme = "halloween"
+        self.assertEqual(self.look.theme, "halloween")
+        self.look.theme = "pumpkin"
+        self.assertEqual(self.look.theme, "halloween")
+        self.look.theme = "classic"
+        self.assertEqual(self.look.theme, "classic")
+
+    def test_the_art_switches_are_remembered(self):
+        self.look.useCustomArt = True
+        self.look.skipAutoArt = True
+        again = self.new_shell().look
+        self.assertTrue(again.useCustomArt and again.skipAutoArt)
+        self.assertTrue(self.new_shell().switchValue("use_custom_art"))
+
+    def test_the_preview_follows_a_burst_of_changes_once(self):
+        seen = []
+        self.look.previewSourceChanged.connect(lambda: seen.append(self.look.previewSource))
+        for h in range(10, 110, 10):
+            self.look.setTone(h, 100, 100)
+        self.assertEqual(seen, [])                                        # not yet: the burst is still going on
+        self.wait(300)
+        self.assertEqual(len(seen), 1)
+        self.assertIn("/100/100/100/classic/none/", seen[0])
+        self.assertTrue(seen[0].startswith("image://preview/"))
+
+    def test_the_colours_for_the_sliders_come_from_python(self):
+        import steamcase as sc
+        self.assertEqual(self.look.colorFor(120, 50, 80), sc.case_color(120, 50, 80))
+        self.assertEqual(self.look.trackStart("sat"), sc.case_color(0, 0, 100))
+        self.assertEqual(self.look.trackEnd("val"), sc.case_color(0, 100, 100))
+        self.assertEqual(len(self.look.hueColors()), 36)
+        self.assertEqual(self.look.trackStart("nonsense"), "#000000")     # never an exception into QML
 
 
 @need_qt
@@ -925,7 +1061,7 @@ class ShellObject(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.path = os.path.join(self.tmp, "settings.json")
         self.dl = os.path.join(self.tmp, "Downloads")
-        self.shell = Shell(self.path, downloads=self.dl)
+        self.shell = Shell(self.path, downloads=self.dl, covers_dir=os.path.join(self.tmp, "covers"))
 
     def states(self):
         return {s["key"]: s["state"] for s in self.shell.steps}
@@ -966,11 +1102,11 @@ class ShellObject(unittest.TestCase):
     def test_reduce_effects_is_saved_and_read_back(self):
         self.assertFalse(self.shell.reduceEffects)
         self.shell.reduceEffects = True
-        self.assertTrue(self.Shell(self.path, downloads=self.dl).reduceEffects)
+        self.assertTrue(self.Shell(self.path, downloads=self.dl, covers_dir=os.path.join(self.tmp, "covers")).reduceEffects)
 
     def test_switches_are_saved_and_unknown_ones_refused(self):
         self.shell.setSwitch("skip_auto_art", True)
-        self.assertTrue(self.Shell(self.path, downloads=self.dl).switchValue("skip_auto_art"))
+        self.assertTrue(self.Shell(self.path, downloads=self.dl, covers_dir=os.path.join(self.tmp, "covers")).switchValue("skip_auto_art"))
         self.shell.setSwitch("account", True)
         self.assertFalse(self.shell.switchValue("account"))
         with open(self.path) as f:
@@ -1009,7 +1145,7 @@ class ShellObject(unittest.TestCase):
     def test_a_corrupt_settings_file_gives_defaults(self):
         with open(self.path, "w") as f:
             f.write("{{{")
-        shell = self.Shell(self.path, downloads=self.dl)
+        shell = self.Shell(self.path, downloads=self.dl, covers_dir=os.path.join(self.tmp, "covers"))
         self.assertFalse(shell.reduceEffects)
         self.assertTrue(shell.switchValue("restart_steam"))
 
@@ -1198,7 +1334,7 @@ class ShellWindow(unittest.TestCase):
         from qtui.app import create_engine
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"))
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
         self.engine = create_engine(self.shell)
         self.addCleanup(self.close, self.engine)
         self.root = self.engine.rootObjects()[0]
@@ -1338,7 +1474,7 @@ class Entry(unittest.TestCase):
             "app = QGuiApplication([])\n"
             "from qtui.shell import Shell\n"
             "from qtui.app import create_engine, close_engine\n"
-            "shell = Shell(os.path.join(tempfile.mkdtemp(), 's.json'), downloads=tempfile.mkdtemp())\n"
+            "shell = Shell(os.path.join(tempfile.mkdtemp(), 's.json'), downloads=tempfile.mkdtemp(), covers_dir=tempfile.mkdtemp())\n"
             "engine = create_engine(shell)\n"
             "close_engine(engine)\n"
             "del shell\n"

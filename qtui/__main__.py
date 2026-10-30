@@ -52,7 +52,7 @@ def main(argv=None):
     assets_dir = args.assets_dir if args.assets_dir is not None else os.path.join(sc.HERE, "assets")
     if args.selftest:
         with tempfile.TemporaryDirectory() as tmp:                      # never the user's real settings file
-            return selftest(Shell(os.path.join(tmp, "settings.json"), downloads=tmp), args.qml_dir, assets_dir, args.log)
+            return selftest(Shell(os.path.join(tmp, "settings.json"), downloads=tmp, covers_dir=tmp), args.qml_dir, assets_dir, args.log)
     shell = Shell()
     try:
         engine = create_engine(shell, qml_dir=args.qml_dir, assets_dir=assets_dir)

@@ -3,8 +3,10 @@
 """The object the QML window talks to: which step is shown, which steps are open, and the remembered switches."""
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+import steamcase as sc
 from qtui import settings, steps, system
 from qtui.library import Library
+from qtui.look import Look
 
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
 
@@ -14,7 +16,7 @@ class Shell(QObject):
     currentChanged = Signal()
     reduceEffectsChanged = Signal()
 
-    def __init__(self, settings_path=None, downloads=None, parent=None):
+    def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
         super().__init__(parent)
         self._path = settings_path
         self._values = settings.load_settings(settings_path)
@@ -22,6 +24,7 @@ class Shell(QObject):
         self._current = 0
         self._steps = self._build()
         self._library = Library(self, downloads or system.downloads_dir(), self)
+        self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
 
     def _build(self):
         states = steps.step_states(**self._facts)
@@ -33,6 +36,10 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def library(self):
         return self._library
+
+    @Property(QObject, constant=True)
+    def look(self):
+        return self._look
 
     @Property("QVariantList", notify=stepsChanged)
     def steps(self):
