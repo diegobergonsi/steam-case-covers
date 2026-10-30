@@ -2984,5 +2984,92 @@ class CustomArt(Base):
         self.assertEqual(found, {})
 
 
+class MakeFromCustomArt(StoreMocks):
+    """make_covers with the user's own art inside the case."""
+
+    def setUp(self):
+        super().setUp()
+        self.downloads = []
+        plain = sc.http_get
+        sc.http_get = lambda url, tries=3: self.downloads.append(url) or plain(url, tries)       # StoreMocks restores the real one afterwards
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def art(self, name="mine.jpg", colour=(10, 160, 30), size=(100, 150)):
+        path = os.path.join(self.tmp, name)
+        sc.Image.new("RGB", size, colour).save(path, format="JPEG")
+        return path
+
+    def centre(self, appid):
+        return sc.Image.open(self.cover(appid)).convert("RGB").getpixel((300, 480))
+
+    def test_a_game_with_custom_art_uses_it_and_downloads_nothing(self):
+        mine = self.art()
+        sc.make_covers({1: None}, self.covers, custom_art={1: mine})
+        r, g, b = self.centre(1)
+        self.assertTrue(g > r + 60 and g > b + 60, (r, g, b))
+        self.assertEqual(sc.cover_art(self.cover(1)), sc.art_note(mine))
+        self.assertEqual(self.downloads, [])
+
+    def test_other_games_keep_steams_portrait(self):
+        sc.make_covers({1: None, 2: None}, self.covers, custom_art={1: self.art()})
+        r, g, b = self.centre(2)
+        self.assertTrue(r > g + 60 and r > b + 60, (r, g, b))
+        self.assertIsNone(sc.cover_art(self.cover(2)))
+        self.assertEqual(len(self.downloads), 1)
+
+    def test_the_cover_is_still_recognised_as_ours(self):
+        mine = self.art()
+        for name, look in (("plain", {}), ("a 100% game", {"completed": {1}, "treatment": "ribbon"}),
+                           ("a theme", {"completed": {1}, "treatment": "rosette", "theme": "halloween"})):
+            with self.subTest(name):
+                sc.make_covers({1: None}, self.covers, custom_art={1: mine}, force=True, **look)
+                self.assertTrue(sc.is_steamcase_cover(self.cover(1)))
+
+    def test_same_source_keeps_the_cover_and_a_changed_source_rebuilds_it(self):
+        mine = self.art()
+        sc.make_covers({1: None}, self.covers, custom_art={1: mine})
+        statuses = []
+        sc.make_covers({1: None}, self.covers, custom_art={1: mine}, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual(statuses, ["exists"])
+        before = sc.cover_art(self.cover(1))
+        mine = self.art(colour=(200, 20, 200))
+        sc.make_covers({1: None}, self.covers, custom_art={1: mine}, progress=lambda *a: statuses.append(a[4]))
+        self.assertEqual(statuses[-1], "ok")
+        self.assertNotEqual(sc.cover_art(self.cover(1)), before)
+
+    def test_switching_off_rebuilds_with_steams_portrait(self):
+        sc.make_covers({1: None}, self.covers, custom_art={1: self.art()})
+        sc.make_covers({1: None}, self.covers)
+        self.assertIsNone(sc.cover_art(self.cover(1)))
+        r, g, b = self.centre(1)
+        self.assertTrue(r > g + 60 and r > b + 60, (r, g, b))
+
+    def test_custom_art_ignores_skip_auto_art(self):
+        blurry = {"type": 0, "name": "Game 1", "assets": {"asset_url_format": "${FILENAME}", "library_capsule_2x": "portrait.png"}}
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: blurry for i in ids}
+        res = sc.make_covers({1: None}, self.covers, skip_auto_art=True)
+        self.assertEqual((res["skipped"], os.path.exists(self.cover(1))), (1, False))            # without custom art the blurry portrait is skipped
+        res = sc.make_covers({1: None}, self.covers, skip_auto_art=True, custom_art={1: self.art()})
+        self.assertEqual((res["ok"], os.path.exists(self.cover(1))), (1, True))
+
+    def test_covers_in_other_look_sees_the_art_change(self):
+        mine = self.art()
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))                                # custom art not asked about: nothing to say
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, custom_art={1: mine}))           # switching on
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, custom_art={}))
+        sc.make_covers({1: None}, self.covers, custom_art={1: mine})
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, custom_art={1: mine}))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, custom_art={}))                  # switching off
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0, custom_art={1: self.art(colour=(1, 2, 3))}))   # changed source
+
+    def test_wide_custom_art_is_cropped_to_the_window(self):
+        sc.make_covers({1: None}, self.covers, custom_art={1: self.art(size=(1000, 500))})
+        self.assertEqual(sc.Image.open(self.cover(1)).size, sc.SIZE)
+        self.assertTrue(sc.is_steamcase_cover(self.cover(1)))
+
+
 if __name__ == "__main__":
     unittest.main()

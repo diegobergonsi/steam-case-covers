@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and gui.py both use them.
 """
-import argparse, completion, filecmp, functools, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -45,6 +45,7 @@ GOLD_HUE = 176                              # the gold of the colour swatches (#
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
 DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatment; plain covers have none
 THEMES = ("halloween",)                     # case themes: decorations drawn on the case, whatever its colour; the classic case has none
+ART_CHUNK = "steamcase-art"                 # PNG note naming the source file of a cover built from the user's own art; covers from Steam's portrait carry none
 THEME_CHUNK = "steamcase-theme"             # PNG note naming a cover's theme; classic covers carry none
 KEEP = "keep"                               # in place of a theme: each existing cover keeps the theme it has
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
@@ -946,9 +947,31 @@ def cover_treatment(path):
     return done if done is None or done in TREATMENTS else False
 
 
-def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None):
+def art_note(path):
+    """The note a cover built from the user's own art `path` carries: "custom " and the start of the file's SHA-256, so a changed file rebuilds it."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return "custom " + h.hexdigest()[:16]
+
+
+def cover_art(path):
+    """The art note of a cover (see art_note), read from its PNG header without decoding the picture; None for a cover made from Steam's portrait.
+    False if this is not a readable PNG or the note is not exactly one we write: the cover is then rebuilt."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return False
+        with Image.open(path, formats=["PNG"]) as im:
+            note = im.info.get(ART_CHUNK)
+    except Exception:
+        return False
+    return note if note is None or re.fullmatch(r"custom [0-9a-f]{16}", note) else False
+
+
+def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None, from_art=None):
     """Write the cover of one portrait into `out_path`, with its colour notes, its `theme` and theme note (None: the classic case) and, for a 100% game,
-    its `treatment` and treatment note. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
+    its `treatment` and treatment note, and `from_art` (an art_note) when the portrait is the user's own. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     if theme is not None and theme not in THEMES:
@@ -966,6 +989,8 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
         note.add_text(DONE_CHUNK, treatment)                   # plain covers carry no note, as before treatments existed
     if theme is not None:
         note.add_text(THEME_CHUNK, theme)                      # classic covers carry none, as before themes existed
+    if from_art is not None:
+        note.add_text(ART_CHUNK, from_art)                          # covers from Steam's portrait carry none
     cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
@@ -985,7 +1010,7 @@ def _wanted_look(appid, path, colour, completed, treatment, theme=None):
 
 
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None, theme=None):
+                completed=None, treatment=None, theme=None, custom_art=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -996,6 +1021,9 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     treatment: one of TREATMENTS (a case and its marks, see compose_treatment) for those games, or None ("No special case": they get plain covers).
     theme: one of THEMES (decorations on every cover, the case keeps its colour) or None (the classic case). It only goes with the rosette-only
     marks: a `treatment` whose marks are "full" raises ValueError.
+    custom_art: {appid: path} of the user's own portraits (see find_custom_art): those games get that picture in the case and nothing is downloaded
+    for them (even a blurry auto-art, whatever `skip_auto_art` says); None: every cover is made from Steam's portrait, and a cover built from
+    custom art before is rebuilt.
     Without a page each existing cover keeps the treatment it was made with. A "gold-case" cover is made in gold whatever the colour asked.
     A cover that exists in another colour, with another treatment or in another theme is rebuilt, one that already looks right is kept
     (the hue means nothing at 0 sat or 0 val). Apps in `completed` that are not in `games` are ignored.
@@ -1017,6 +1045,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
     family = set(family or ())
+    custom_art = custom_art or {}
     frames = {}                                 # (look of the colour, family?) -> frame: each one is made once per run
 
     def frame_for(colour, is_family):
@@ -1073,20 +1102,21 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         urls, auto = portrait_candidates(appid, it)
-        if auto and skip_auto_art:                 # checked first: also drops covers built by an earlier run without this option
+        wanted_art = art_note(custom_art[appid]) if appid in custom_art else None
+        if auto and skip_auto_art and wanted_art is None:                 # checked first: also drops covers built by an earlier run without this option
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
         target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment, theme)
-        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme:
+        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art:
             res["ok"] += 1
             res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "exists")
             continue
         tmp = os.path.join(out, ".tmp_%d_%s" % (appid, uuid.uuid4().hex[:8]))
-        got = neterr = False
-        for u in urls:
+        got, neterr = wanted_art is not None, False
+        for u in [] if got else urls:
             try:
                 b = http_get(u)
             except urllib.error.HTTPError as e:
@@ -1107,7 +1137,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target, theme=theme)
+            build_cover(custom_art[appid] if got and wanted_art else tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target, theme=theme, from_art=wanted_art)
             res["ok"] += 1
             res["family"] += is_family
             res["completed"] += target is not None
@@ -1125,9 +1155,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
-def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None, theme=KEEP):
+def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None, theme=KEEP, custom_art=KEEP):
     """True if make_covers with this colour, `completed`, `treatment` and `theme` would rebuild a cover already in the folder (stops at the first one):
     one in another case colour (a "gold-case" cover is compared as gold), with another treatment or, unless `theme` is KEEP, in another theme.
+    Unless `custom_art` is KEEP, also one whose art differs: custom art newly on, off or changed ({appid: path}, as for make_covers).
     Covers whose colour notes are unreadable are not counted."""
     try:
         names = os.listdir(covers_dir)
@@ -1142,6 +1173,8 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
                 continue
             target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment, theme)     # appid_of gives text; `completed` holds numbers
             if not same_colour(c, colour) or cover_treatment(path) != target or (theme != KEEP and cover_theme(path) != theme):
+                return True
+            if custom_art != KEEP and cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
                 return True
     return False
 
