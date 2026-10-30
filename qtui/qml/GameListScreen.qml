@@ -3,6 +3,7 @@
 // Step 1: get the game list. The wireframe "1 - Game list" of the approved design.
 import QtQuick
 import QtQuick.Dialogs
+import Qt.labs.folderlistmodel           // not used here: Qt's own file dialog needs it, and the packaged self-test must notice if a build lacks it
 import "."
 
 ScreenFrame {

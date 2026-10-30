@@ -639,6 +639,39 @@ class LibraryState(unittest.TestCase):
         self.poll(3)
         self.assertEqual(self.lib.path, first)
 
+    def test_a_file_that_could_not_be_read_is_tried_again_while_it_stays_the_same(self):
+        """Antivirus or the browser may hold the file for a moment: the next poll must retry it, as the old window did."""
+        from unittest import mock
+        self.save("userdata.json", {"rgOwnedApps": [10, 20]})
+        real = __import__("steamcase").owned_ids
+        calls = []
+
+        def flaky(path):
+            calls.append(path)
+            if len(calls) == 1:
+                raise __import__("steamcase").SteamcaseError("Could not read userdata.json as a game list (PermissionError).")
+            return real(path)
+        with mock.patch("steamcase.owned_ids", side_effect=flaky):
+            self.poll(2)                                     # becomes finished on the second poll: the first read fails
+            self.assertFalse(self.lib.ready)
+            self.assertEqual(self.lib.statusKind, "error")
+            self.poll(1)                                     # unchanged file, same version: read again
+        self.assertTrue(self.lib.ready)
+        self.assertEqual(self.lib.status, "Got it: userdata.json (2 items in your library).")
+
+    def test_an_error_already_shown_for_a_file_does_not_come_back_over_another_message(self):
+        self.save("userdata.json", {"rgOwnedApps": [], "rgOwnedPackages": [1]})
+        self.poll(2)
+        self.assertEqual(self.lib.statusKind, "error")
+        from unittest import mock
+        with mock.patch("steamcase.library_login_url", return_value="https://example.test/x"):
+            self.lib.copyLink()
+        self.poll(3)                                         # the same bad file is looked at again, but not reported again
+        self.assertTrue(self.lib.status.startswith("Link copied."), self.lib.status)
+        self.save("userdata.json", {"rgOwnedApps": [], "rgOwnedPackages": [1, 2]})     # a new version of it is reported again
+        self.poll(3)
+        self.assertTrue(self.lib.status.startswith("userdata.json: "), self.lib.status)
+
     def test_a_folder_that_does_not_exist_is_fine(self):
         shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"), started=self.started)
         shell.library.poll()
@@ -783,7 +816,7 @@ class BuildTrimList(unittest.TestCase):
               "PySide6/Qt/qml/QtQuick/Controls/impl/qmldir", "PySide6/Qt/qml/QtQml/qmldir", "PySide6/Qt/lib/libQt6Quick.so.6", "PySide6/Qt/lib/libQt6Qml.so.6",
               "PySide6/Qt/lib/libQt6Gui.so.6", "PySide6/Qt/lib/libQt6Core.so.6", "PySide6/Qt/lib/libQt6Network.so.6", "PySide6/Qt/lib/libQt6OpenGL.so.6",
               "PySide6/Qt/lib/libQt6QuickControls2.so.6", "PySide6/Qt/lib/libQt6QuickControls2Basic.so.6", "PySide6/Qt/lib/libQt6QuickTemplates2.so.6",
-              "PySide6/Qt/lib/libicudata.so.73", "PySide6/QtOpenGL.abi3.so", "PySide6/Qt/qml/QtQuick/Dialogs/qmldir", "PySide6/Qt/lib/libQt6QuickDialogs2.so.6", "PySide6/QtQuick.abi3.so", "libX11.so.6", "libfontconfig.so.1", "libfreetype.so.6"]
+              "PySide6/Qt/lib/libicudata.so.73", "PySide6/QtOpenGL.abi3.so", "PySide6/Qt/qml/QtQuick/Dialogs/qmldir", "PySide6/Qt/qml/Qt/labs/folderlistmodel/qmldir", "PySide6/Qt/lib/libQt6QuickDialogs2.so.6", "PySide6/QtQuick.abi3.so", "libX11.so.6", "libfontconfig.so.1", "libfreetype.so.6"]
 
     def block(self):
         import re

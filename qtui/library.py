@@ -29,6 +29,7 @@ class Library(QObject):
         self._watcher = DownloadWatcher(downloads, "userdata", (".json",), started, sc.MAX_LIBRARY_FILE)
         self._path = ""
         self._count = 0
+        self._reported = {}                 # path -> signature of the version whose error is already on screen
         self._installed = shell.switchValue("installed_only")
         self._status, self._kind = "", "wait"
         self._show_default_status()
@@ -126,16 +127,19 @@ class Library(QObject):
 
     @Slot()
     def poll(self):
-        """One look at the Downloads folder (call it every 1.5 s). Stops looking once a list is loaded. A file that is not a game list
-        is explained once per version of that file."""
+        """One look at the Downloads folder (call it every 1.5 s). Stops looking once a list is loaded. A finished file that is not a game list
+        is explained once per version of that file, and read again on the next look, because it may only have been busy."""
         if self._path:
             return
-        for path, _sig in self._watcher.poll():
+        for path, sig in self._watcher.poll():
             count, why = self._check(path)
             if not why:
                 self._accept(path, count)
                 return
-            self._set_status("%s: %s" % (os.path.basename(path), why), "error")
+            self._watcher.forget(path)                  # look again next time: the file may only have been busy for a moment (antivirus, the browser)
+            if self._reported.get(path) != sig:         # but say why it is refused once per version, not again over another message
+                self._reported[path] = sig
+                self._set_status("%s: %s" % (os.path.basename(path), why), "error")
 
     @Slot()
     def openDownloadPage(self):
