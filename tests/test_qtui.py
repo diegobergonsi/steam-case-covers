@@ -3037,5 +3037,161 @@ class Entry(QtCase):
         self.assertNotIn("selftest ok", r.stdout)
 
 
+class FakeStore(unittest.TestCase):
+    """A fake store and a fake download (a small red JPEG), and a covers folder, for tests that make covers."""
+    def setUp(self):
+        super().setUp()
+        import io
+        import steamcase as sc
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.covers = os.path.join(self.tmp, "covers")
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (100, 150), (200, 60, 60)).save(buf, format="JPEG")
+        jpeg = buf.getvalue()
+        real = (sc.store_items, sc.http_get)
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": "Game %d" % i} for i in ids}
+        sc.http_get = lambda url, tries=3: jpeg
+        self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
+
+    def made(self, games=None, **kw):
+        import steamcase as sc
+        sc.make_covers(games or {1: None, 2: None}, self.covers, **kw)
+
+    def remake(self, **kw):
+        shutil.rmtree(self.covers, ignore_errors=True)
+        self.made(**kw)
+
+    def mine(self, colour=(10, 160, 30)):
+        import steamcase as sc
+        path = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), colour).save(path, format="JPEG")
+        return path
+
+
+class ReplaceReasons(FakeStore):
+    """The sentences of the "replace what you made?" question, over covers made by the engine's own functions."""
+    def reason(self, tone, completed, treatment, theme=None, *rest):
+        from qtui import reasons
+        got = reasons.replace_reason(self.covers, tone, completed, treatment, theme, *rest)
+        self.assertIsNotNone(got)
+        title, sentence = got
+        self.assertTrue(title.strip() and sentence.strip(), got)
+        self.assertNotIn("%", title.replace("100%", ""))
+        self.assertNotIn("%", sentence.replace("100%", ""))
+        return got
+
+    def none(self, *args):
+        from qtui import reasons
+        self.assertIsNone(reasons.replace_reason(self.covers, *args))
+
+    def test_the_labels_name_the_case_then_the_marks(self):
+        from qtui import reasons
+        self.assertEqual(reasons.look_label("gold-case"), "Gold case, rosette and ribbon")
+        self.assertEqual(reasons.look_label("ribbon"), "Normal case, rosette and ribbon")
+        self.assertEqual(reasons.look_label("rosette"), "Normal case, rosette only")
+
+    def test_custom_art_turned_on_asks_before_replacing_covers(self):
+        self.made()
+        got = self.reason((0, 100, 100), None, None, None, {1: self.mine()})
+        self.assertIn("your own art", got[1])
+
+    def test_custom_art_turned_off_asks_too(self):
+        self.made(custom_art={1: self.mine()})
+        self.assertIn("Steam's own art", self.reason((0, 100, 100), None, None, None, {})[1])
+
+    def test_nothing_to_ask_when_nothing_changes(self):
+        mine = self.mine()
+        self.made(custom_art={1: mine})
+        self.none((0, 100, 100), None, None, None, {1: mine})
+        self.none((0, 100, 100), None, None, None)                          # art not asked about: covers keep their art
+
+    def test_covers_of_games_outside_the_run_are_not_mentioned(self):
+        self.made(custom_art={1: self.mine()})
+        self.reason((0, 100, 100), None, None, None, {}, {1, 2})
+        self.none((0, 100, 100), None, None, None, {}, {2, 3})
+
+    def test_a_colour_change_and_art_say_both_but_not_art_when_it_stays(self):
+        self.made()
+        got = self.reason((90, 100, 100), None, None, None, {1: self.mine()})
+        self.assertIn("colour", got[1])
+        self.assertIn("your own art", got[1])
+        self.assertNotIn("art", self.reason((90, 100, 100), None, None, None, {})[1])
+        mine = self.mine()
+        self.remake(custom_art={1: mine})
+        self.assertNotIn("art", self.reason((90, 100, 100), None, None, None, {1: mine})[1])
+
+    def test_no_page_only_a_colour_change(self):
+        self.made()
+        self.assertIn("colour", self.reason((90, 100, 100), None, None)[1])
+
+    def test_nothing_to_rebuild_gives_no_question(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.none((0, 100, 100), {1}, "ribbon", None)
+
+    def test_no_special_case(self):
+        self.made(completed={1}, treatment="ribbon")
+        self.assertIn("No special case", self.reason((0, 100, 100), set(), None)[1])
+
+    def test_a_page_with_no_game_at_100_says_the_highlight_is_lost(self):
+        for treatment in ("ribbon", "gold-case"):
+            self.remake(completed={1}, treatment=treatment)
+            self.assertIn("lose it", self.reason((0, 100, 100), set(), "ribbon")[1])
+
+    def test_a_first_highlight_over_plain_covers(self):
+        import steamcase as sc
+        for treatment in sc.TREATMENTS:
+            self.remake()
+            self.assertIn("highlighted", self.reason((0, 100, 100), {1}, treatment)[1])
+
+    def test_a_change_of_marks_alone_says_which_marks_come(self):
+        self.made(completed={1}, treatment="rosette")
+        self.assertIn("rosette and ribbon", self.reason((0, 100, 100), {1}, "ribbon")[1])
+        self.remake(completed={1}, treatment="ribbon")
+        self.assertIn("rosette only", self.reason((0, 100, 100), {1}, "rosette")[1])
+
+    def test_a_theme_change_alone_says_the_new_covers_get_the_theme(self):
+        self.made()
+        title, text = self.reason((0, 100, 100), None, None, "halloween")
+        self.assertIn("theme", title.lower())
+        self.assertIn("new ones in the Halloween theme", text)
+        self.remake(theme="halloween")
+        self.assertIn("new ones in the Classic case", self.reason((0, 100, 100), None, None, None)[1])
+
+    def test_a_theme_without_a_page_says_the_100_covers_lose_their_ribbon(self):
+        self.made(completed={1}, treatment="ribbon")
+        text = self.reason((0, 100, 100), None, None, "halloween")[1]
+        self.assertIn("lose their ribbon", text)
+        self.assertIn("Rosette and ribbon", text)
+        self.remake(completed={1}, treatment="rosette")
+        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
+        self.remake()
+        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
+
+    def test_it_says_the_same_as_the_old_window(self):
+        """The Tk window's own function is the reference: every kind of change over every kind of folder gives the same words."""
+        import types
+        import steamcase as sc
+        try:
+            import gui
+        except ImportError:
+            self.skipTest("tkinter missing")
+        from qtui import reasons
+        fake = types.SimpleNamespace(covers_dir=self.covers)
+        folders = [dict(), dict(completed={1}, treatment="ribbon"), dict(completed={1}, treatment="gold-case-rosette"), dict(theme="halloween"),
+                   dict(hue=90), dict(completed={1, 2}, treatment="rosette", theme="halloween")]
+        asks = [((0, 100, 100), None, None, None), ((90, 100, 100), None, None, "halloween"), ((0, 100, 100), set(), None, None),
+                ((0, 100, 100), {1}, "gold-border", None), ((40, 80, 90), {1, 2}, "rosette", "halloween"), ((0, 100, 100), {2}, "ribbon", None)]
+        for folder in folders:
+            self.remake(**folder)
+            for tone, completed, treatment, theme in asks:
+                for art, games in ((sc.KEEP, None), ({}, None), ({1: self.mine()}, {1, 2}), ({}, {3})):
+                    want = gui.App._replace_reason(fake, tone, completed, treatment, theme, art, games)
+                    got = reasons.replace_reason(self.covers, tone, completed, treatment, theme, art, games)
+                    self.assertEqual(got, want, (folder, tone, completed, treatment, theme, art, games))
+
+
 if __name__ == "__main__":
     unittest.main()
