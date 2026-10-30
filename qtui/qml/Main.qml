@@ -62,20 +62,21 @@ ApplicationWindow {
                 }
             }
         }
-        Row {                                                     // footer: Discord and updates
-            x: Theme.s24
-            y: nav.height - 84
-            spacing: Theme.s8
-            Image { visible: discordIcon !== ""; source: discordIcon; width: Theme.iconSize; height: Theme.iconSize; sourceSize.width: Theme.iconPixels; sourceSize.height: Theme.iconPixels; fillMode: Image.PreserveAspectFit }
-            Text { objectName: "footer_discord"; text: "Discord"; color: Theme.muted; font.pixelSize: Theme.bodySize }
+        NavLink {                                                 // footer: Discord and updates
+            objectName: "footer_discord"
+            y: nav.height - Theme.navRowHeight - Theme.navRowHeight - Theme.s8
+            width: nav.width
+            text: "Discord"
+            icon: discordIcon
+            onActivated: shell.updates.openDiscord()
         }
-        Text {
+        NavLink {
             objectName: "footer_updates"
-            x: Theme.s24
-            y: nav.height - 48
+            y: nav.height - Theme.navRowHeight - Theme.s8
+            width: nav.width
             text: "Check for updates"
-            color: Theme.muted
-            font.pixelSize: Theme.bodySize
+            enabled: !shell.updates.checking
+            onActivated: shell.updates.check()
         }
     }
 
@@ -94,8 +95,24 @@ ApplicationWindow {
         }
         Loader {
             anchors.fill: parent
-            source: screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
+            source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
             onLoaded: item.stepKey = Qt.binding(function() { return screen.key })
+        }
+    }
+
+    ConfirmDialog {                                               // answers of the update check and of the Discord link
+        id: messages
+        objectName: "main_dialog"
+        prefix: "main_dlg"
+        property string link: ""
+        onConfirmed: if (link !== "") shell.updates.openLink(link)
+    }
+    Connections {
+        target: shell.updates
+        function onMessage(title, paragraphs, ok, cancel, link) {
+            messages.link = link
+            messages.cancelText = cancel !== "" ? cancel : "Cancel"
+            messages.ask(title, paragraphs, ok, "", cancel === "")
         }
     }
 }

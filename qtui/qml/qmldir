@@ -22,3 +22,5 @@ ChoiceSummary 1.0 ChoiceSummary.qml
 ProgressBar 1.0 ProgressBar.qml
 MakeScreen 1.0 MakeScreen.qml
 AddScreen 1.0 AddScreen.qml
+NavLink 1.0 NavLink.qml
+HomeScreen 1.0 HomeScreen.qml

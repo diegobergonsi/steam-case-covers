@@ -234,6 +234,10 @@ class Apply(QObject):
         return not self._busy and not self._asking and not self._make.running
 
     @Property(bool, notify=undoChanged)
+    def asking(self):
+        return self._asking
+
+    @Property(bool, notify=undoChanged)
     def canRestore(self):
         return self._idle() and self._backup
 

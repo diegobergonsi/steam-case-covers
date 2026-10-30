@@ -2965,7 +2965,9 @@ class Tokens(unittest.TestCase):
         import re
         with open(os.path.join(QML_DIR, "Main.qml")) as f:
             main = f.read()
-        self.assertEqual(re.findall(r"\bImage\s*\{", main), ["Image {"], "the only picture in the window is the Discord icon")
+        self.assertEqual(re.findall(r"\bImage\s*\{", main), [], "the window itself has no picture")
+        with open(os.path.join(QML_DIR, "NavLink.qml")) as f:
+            self.assertEqual(re.findall(r"\bImage\s*\{", f.read()), ["Image {"], "the only picture in the window is the Discord icon of a navigation link")
         for name in os.listdir(QML_DIR):
             with open(os.path.join(QML_DIR, name)) as f:
                 self.assertNotIn("backdrop", f.read().lower(), name)
@@ -3201,7 +3203,7 @@ class Entry(QtCase):
         self.assertNotIn("selftest ok", r.stdout)
 
     def test_the_selftest_also_opens_the_make_and_add_screens(self):
-        for screen, text in (("MakeScreen.qml", "the Make screen"), ("AddScreen.qml", "the Add to Steam screen")):
+        for screen, text in (("MakeScreen.qml", "the Make screen"), ("AddScreen.qml", "the Add to Steam screen"), ("HomeScreen.qml", "the Home screen")):
             with self.subTest(screen=screen):
                 bad = tempfile.mkdtemp()
                 self.addCleanup(shutil.rmtree, bad, True)
@@ -3775,13 +3777,23 @@ class AddWindow(QtCase, FakeStore):
         from qtui.app import close_engine, create_engine
         from qtui.shell import Shell
         self.sc, self.running, self.log, self.accounts = sc, False, [], [("111", "Alice")]
+        self.backups, self.restored, self.ours, self.extra, self.other = [], 5, [], [], []
+        self.grid = os.path.join(self.tmp, "grid")
+        os.makedirs(self.grid)
         result = {"applied": 2, "replaced": 0, "unchanged": 0, "jpg_moved": 0, "backup": "/b", "account_name": "Alice"}
         for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: ({1: None, 2: None}, set())),
                             ("steam_running", lambda: self.running), ("close_steam", lambda steam, timeout=60: True),
                             ("start_steam", lambda steam: self.log.append("start")),
                             ("apply_covers", lambda steam, covers, user=None, files=None: self.log.append(("apply", user)) or dict(result)),
                             ("list_accounts", lambda steam: list(self.accounts)), ("pick_account", lambda steam, forced=None: forced or self.accounts[0][0]),
-                            ("account_label", lambda steam, acc: dict(self.accounts).get(acc, str(acc)))):
+                            ("account_label", lambda steam, acc: dict(self.accounts).get(acc, str(acc))),
+                            ("list_backups", lambda steam, user=None: list(self.backups)),
+                            ("restore_backup", lambda steam, backup, user=None, keep=False, originals=None: (self.log.append(("restore", backup)), self.backups.pop(0), self.restored)[2]),
+                            ("find_our_covers", lambda steam, user=None, progress=None, cancelled=None: list(self.ours)),
+                            ("find_other_art", lambda steam, user=None, ours=(): (list(self.extra), list(self.other))),
+                            ("reset_to_default", lambda steam, user=None, names=None, everything=False: (self.log.append(("reset", user, list(names or []), everything)),
+                                                                                                      {"removed": len(names or []), "account_name": "Alice"})[1]),
+                            ("grid_dir", lambda steam, user=None: self.grid)):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -3957,6 +3969,207 @@ class AddScreen(AddWindow):
                 self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
         main = self.item("add_main")
         self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
+
+
+@need_qt
+class ShellHome(QtCase):
+    """What the shell knows for Home: is this a returning user, and which step to continue with."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def shell(self, covers=False):
+        from qtui.shell import Shell
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        folder = os.path.join(tmp, "covers")
+        if covers:
+            os.makedirs(folder)
+            open(os.path.join(folder, "Game_1_1.png"), "wb").close()
+        return Shell(os.path.join(tmp, "settings.json"), downloads=os.path.join(tmp, "Downloads"), covers_dir=folder)
+
+    def test_a_first_visit_is_new_and_continues_with_the_game_list(self):
+        sh = self.shell()
+        self.assertEqual((sh.returning, sh.resume), (False, 1))
+
+    def test_any_progress_makes_a_returning_user_who_continues_where_the_steps_stand(self):
+        sh = self.shell()
+        seen = []
+        sh.stepsChanged.connect(lambda: seen.append(sh.returning))
+        sh.setFact("ready", True)
+        self.assertEqual((sh.returning, sh.resume), (True, 2))
+        sh.setFact("look_done", True)
+        self.assertEqual(sh.resume, 3)
+        self.assertIn(True, seen)
+
+    def test_covers_on_disk_make_a_returning_user(self):
+        self.assertTrue(self.shell(covers=True).returning)
+
+    def test_when_everything_is_done_continue_goes_to_the_start_of_the_steps(self):
+        sh = self.shell()
+        for fact in ("ready", "look_done", "hundred_done", "covers_made", "applied"):
+            sh.setFact(fact, True)
+        self.assertEqual(sh.resume, 1)
+
+
+@need_qt
+class HomeScreen(AddWindow):
+    """Home in the real window: Welcome or Dashboard, the Undo section, and the two links of the navigation."""
+    def open_home(self, covers=False):
+        self.made = True                                                # no covers are made here
+        for fact in ("look_done", "hundred_done"):                      # a person who has not walked the steps yet
+            self.shell.setFact(fact, False)
+        self.shell.library.installedOnly = covers                       # a game list is "done" only for the returning user
+        self.start_window()
+        self.shell.go(0)
+        self.app.processEvents()
+
+    def undo_ready(self, backup=True):
+        self.backups = ["b1"] if backup else []
+        open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.undoKnown and (self.ap.canRestore or not backup))
+        self.app.processEvents()
+
+    def test_the_first_visit_is_a_welcome_with_a_start_button(self):
+        self.open_home()
+        self.assertEqual(self.text("screen_title"), "Cases for your games")
+        self.assertEqual(self.item("home_section_main").property("heading"), "Step by step")
+        self.assertEqual((self.text("home_main"), self.item("home_main").property("filled")), ("Start \u2192", True))
+        self.click("home_main")
+        self.assertEqual(self.shell.current, 1)
+
+    def test_a_returning_user_sees_the_dashboard_and_continues_where_they_stopped(self):
+        self.open_home(covers=True)
+        self.assertEqual(self.text("screen_title"), "Welcome back")
+        self.assertEqual(self.item("home_section_main").property("heading"), "Your progress")
+        self.assertEqual(self.text("home_main"), "Continue \u2192")
+        self.assertEqual([self.text("home_state_" + k) for k in ("game_list", "look", "hundred", "make", "add")], ["Done", "Next", "Locked", "Locked", "Locked"])
+        self.click("home_main")
+        self.assertEqual(self.shell.current, 2)
+
+    def test_a_row_of_the_dashboard_opens_its_step_unless_it_is_locked(self):
+        self.open_home(covers=True)
+        self.click("home_row_game_list")
+        self.assertEqual(self.shell.current, 1)
+        self.shell.go(0)
+        self.app.processEvents()
+        self.click("home_row_make")                                     # locked: nothing happens
+        self.assertEqual(self.shell.current, 0)
+
+    def test_the_undo_section_has_its_buttons_greyed_until_there_is_something_to_undo(self):
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
+        self.assertTrue(self.text("home_hint").startswith("Nothing to undo yet"))
+        self.undo_ready()
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [True, True])
+        self.assertEqual(self.text("home_hint"), "")
+        self.assertFalse(self.item("home_restore").property("filled"))      # the only filled button is Start / Continue
+
+    def test_restore_asks_and_then_says_what_was_done(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.click("home_restore")
+        QTest.qWait(60)
+        self.assertTrue(self.item("home_dialog").isVisible())
+        self.assertEqual(self.text("dlg_title"), "Restore previous artwork")
+        self.click("dlg_confirm")
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertTrue(self.text("home_status").startswith("Restored your previous artwork (5 files)."))
+        self.assertIn(("restore", "b1"), self.log)
+
+    def test_reset_with_art_from_elsewhere_shows_three_buttons(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.ours, self.other = ["a"], ["y"]
+        self.click("home_reset")
+        self.wait_for(lambda: self.ap.asking)
+        QTest.qWait(60)
+        self.assertEqual([self.text(n) for n in ("dlg_cancel", "dlg_alternate", "dlg_confirm")], ["Cancel", "Remove all", "Remove only ours"])
+        self.click("dlg_alternate")
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log[0], ("reset", None, ["a"], True))
+
+    def test_the_home_screen_watches_steam_only_while_it_is_shown(self):
+        self.open_home()
+        self.assertTrue(self.ap.watching)
+        self.shell.go(1)
+        self.app.processEvents()
+        self.assertFalse(self.ap.watching)
+
+    def test_the_steam_note_and_the_restart_switch_are_here_too(self):
+        self.running = True
+        self.open_home()
+        self.wait_for(lambda: self.ap.steamOpen)
+        self.assertTrue(self.text("home_note").startswith("Steam is open."))
+        self.assertTrue(self.item("home_restart").property("checked"))
+
+    def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
+        from PySide6.QtCore import QPointF
+        self.accounts = [("111", "A" * 40)]
+        self.open_home(covers=True)
+        self.undo_ready()
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+        for sec, names in (("home_section_main", ("home_row_look", "home_state_look")), ("home_section_undo", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
+            card = self.item(sec)
+            right = card.mapToScene(QPointF(card.width(), 0)).x()
+            for n in names:
+                it = self.item(n)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
+        main = self.item("home_main")
+        self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
+
+    def test_discord_in_the_navigation_opens_the_invite(self):
+        from unittest import mock
+        import steamcase as sc
+        self.open_home()
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("footer_discord")
+        self.assertEqual(opened.call_args[0][0].toString(), sc.DISCORD_URL)
+
+    def test_check_for_updates_shows_the_answer_in_a_dialog_and_opens_the_page_on_ok(self):
+        from unittest import mock
+        from PySide6.QtTest import QTest
+        self.open_home()
+        reply = {"newer": True, "current": "1.0", "latest": "1.1", "url": "https://github.com/x/releases"}
+        with mock.patch.object(self.sc, "check_for_update", return_value=reply), mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("footer_updates")
+            self.wait_for(lambda: self.item("main_dialog").isVisible())
+            QTest.qWait(60)
+            self.assertEqual(self.text("main_dlg_title"), "Update available")
+            self.assertEqual((self.text("main_dlg_confirm"), self.text("main_dlg_cancel")), ("Open GitHub page", "Not now"))
+            self.click("main_dlg_confirm")
+        self.assertEqual(opened.call_args[0][0].toString(), "https://github.com/x/releases")
+
+    def test_an_information_answer_has_one_button_and_opens_nothing(self):
+        from unittest import mock
+        from PySide6.QtTest import QTest
+        self.open_home()
+        reply = {"newer": False, "current": "1.0", "latest": "1.0", "url": "https://github.com/x"}
+        with mock.patch.object(self.sc, "check_for_update", return_value=reply), mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("footer_updates")
+            self.wait_for(lambda: self.item("main_dialog").isVisible())
+            QTest.qWait(60)
+            self.assertFalse(self.item("main_dlg_cancel").isVisible())
+            self.click("main_dlg_confirm")
+        self.assertEqual(opened.call_count, 0)
+
+    def test_the_navigation_links_are_buttons_for_the_keyboard_and_screen_readers(self):
+        from PySide6.QtGui import QAccessible
+        self.open_home()
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        for name, text in (("footer_discord", "Discord"), ("footer_updates", "Check for updates")):
+            it = self.item(name)
+            self.assertTrue(it.property("activeFocusOnTab"), name)
+            iface = QAccessible.queryAccessibleInterface(it)
+            self.assertEqual((iface.text(QAccessible.Text.Name), iface.role()), (text, QAccessible.Role.Button), name)
+            self.assertGreaterEqual(it.height(), 36)
 
 
 @need_qt

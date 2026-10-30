@@ -16,6 +16,7 @@ FocusScope {
     signal confirmed()
     signal declined()
     signal alternated()
+    property string prefix: "dlg"                       // the objectName prefix of the parts, so two dialogs in one window can be told apart
     property string alternateText: ""                  // a third choice between Cancel and the confirm; empty: none
     property bool single: false                          // an information box: only the confirm button ("OK")
 
@@ -77,7 +78,7 @@ FocusScope {
     }
     Card {
         id: card
-        objectName: "dlg_card"
+        objectName: dialog.prefix + "_card"
         width: Math.min(Theme.dialogWidth, dialog.width - 2 * Theme.s32)
         height: content.implicitHeight + 2 * Theme.s24
         x: (dialog.width - width) / 2
@@ -90,7 +91,7 @@ FocusScope {
             spacing: Theme.s12
             Text {
                 id: titleText
-                objectName: "dlg_title"
+                objectName: dialog.prefix + "_title"
                 width: parent.width
                 text: dialog.title
                 wrapMode: Text.WordWrap
@@ -113,7 +114,7 @@ FocusScope {
                     Repeater {
                         model: dialog.paragraphs
                         delegate: Text {
-                            objectName: "dlg_p" + index
+                            objectName: dialog.prefix + "_p" + index
                             width: words.width
                             text: modelData.text
                             wrapMode: Text.WordWrap
@@ -128,7 +129,7 @@ FocusScope {
                 width: content.width
                 QuietButton {
                     id: cancel
-                    objectName: "dlg_cancel"
+                    objectName: dialog.prefix + "_cancel"
                     visible: !dialog.single
                     text: dialog.cancelText
                     maxWidth: content.width
@@ -136,7 +137,7 @@ FocusScope {
                 }
                 QuietButton {
                     id: alternate
-                    objectName: "dlg_alternate"
+                    objectName: dialog.prefix + "_alternate"
                     visible: dialog.alternateText !== "" && !dialog.single
                     text: dialog.alternateText
                     maxWidth: content.width
@@ -144,7 +145,7 @@ FocusScope {
                 }
                 PrimaryButton {
                     id: confirm
-                    objectName: "dlg_confirm"
+                    objectName: dialog.prefix + "_confirm"
                     text: dialog.confirmText
                     maxWidth: content.width
                     onClicked: dialog.close(true)

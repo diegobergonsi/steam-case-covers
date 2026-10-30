@@ -27,6 +27,7 @@ class Shell(QObject):
         self._facts = {k: False for k in FACTS}
         self._current = 0
         self._steps = self._build()
+        self._had_covers = bool(sc.find_covers(covers_dir or sc.default_covers_dir()))       # covers made in an earlier session
         self._library = Library(self, downloads or system.downloads_dir(), self)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
@@ -42,6 +43,16 @@ class Shell(QObject):
 
     def _save(self):
         settings.save_settings(self._values, self._path)
+
+    @Property(bool, notify=stepsChanged)
+    def returning(self):
+        """Home shows the Dashboard instead of the Welcome: some step is done, or covers from an earlier session are on disk."""
+        return self._had_covers or any(self._facts.values())
+
+    @Property(int, notify=stepsChanged)
+    def resume(self):
+        """The step Continue leads to: the first one not done, or the first step again when all are."""
+        return next((i for i, step in enumerate(self._steps) if step["state"] == "active"), 1)
 
     @Property(QObject, constant=True)
     def library(self):
