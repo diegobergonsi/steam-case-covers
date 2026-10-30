@@ -5,7 +5,7 @@ import os
 import stat
 import threading
 
-from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 import steamcase as sc
@@ -138,7 +138,7 @@ class Library(QObject):
     @Slot(str, result=bool)
     def useFileUrl(self, url):
         """The answer of Qt's file dialog (a file: URL)."""
-        return self.useFile(QUrl(url).toLocalFile())
+        return self.useFile(QDir.toNativeSeparators(QUrl(url).toLocalFile()))      # Qt answers C:/Users/x on Windows, the rest of the app uses C:\\Users\\x
 
     @Slot()
     def poll(self):

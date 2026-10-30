@@ -155,6 +155,13 @@ class SystemHelpers(unittest.TestCase):
             f.write('XDG_DESKTOP_DIR="$HOME/Desktop"\nXDG_DOWNLOAD_DIR="$HOME/Telechargements"\n')
         self.assertEqual(self.downloads(), os.path.join(self.home, "Telechargements"))
 
+    def test_downloads_dir_is_a_clean_native_path(self):
+        os.makedirs(os.path.join(self.home, ".config"))
+        os.makedirs(os.path.join(self.home, "Dl"))
+        with open(os.path.join(self.home, ".config", "user-dirs.dirs"), "w") as f:
+            f.write('XDG_DOWNLOAD_DIR="$HOME//Dl/"\n')                      # a doubled and a trailing slash
+        self.assertEqual(self.downloads(), os.path.join(self.home, "Dl"))
+
     def test_downloads_dir_falls_back_to_downloads_in_home(self):
         self.assertEqual(self.downloads(), os.path.join(self.home, "Downloads"))
         os.makedirs(os.path.join(self.home, ".config"))
@@ -363,11 +370,27 @@ class GameListScreen(unittest.TestCase):
         self.assertEqual(self.item("screen_title").property("text"), "Get your game list")
         self.assertEqual(self.item("gamelist_status").property("text"), "Waiting for userdata.json\u2026")
 
+    def row_ys(self):
+        from PySide6.QtCore import QPointF
+        return [self.item(n).mapToScene(QPointF(0, 0)).y() for n in ("gamelist_open", "gamelist_browse", "gamelist_copy")]
+
     def test_the_three_ways_to_get_the_file_sit_in_one_row(self):
-        ys = [self.item(n).mapToScene(__import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(0, 0)).y() for n in ("gamelist_open", "gamelist_browse", "gamelist_copy")]
-        self.assertLess(max(ys) - min(ys), 1.0, ys)
+        self.root.setProperty("width", 1200)                 # a roomy window: the row depends on the width and the system's font
+        self.app.processEvents()
+        ys = self.row_ys()
+        self.assertLess(max(ys) - min(ys), 1.0, "window %s px wide, rows at %s" % (self.root.property("width"), ys))
         self.assertEqual([self.item(n).property("text") for n in ("gamelist_open", "gamelist_browse", "gamelist_copy")],
                          ["Open the page in my browser", "Browse\u2026", "Copy link"])
+
+    def test_on_a_narrow_window_the_row_wraps_instead_of_overflowing(self):
+        from PySide6.QtCore import QPointF
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.app.processEvents()
+        section = self.item("gamelist_section_list")
+        right = section.mapToScene(QPointF(section.width(), 0)).x()
+        for name in ("gamelist_open", "gamelist_browse", "gamelist_copy"):
+            it = self.item(name)
+            self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, name)         # no button sticks out of its card
 
     def test_copy_link_works_from_the_screen(self):
         from unittest import mock
@@ -477,9 +500,12 @@ class GameListScreen(unittest.TestCase):
         good = os.path.join(self.tmp, "mine.json")
         with open(good, "w") as f:
             json.dump({"rgOwnedApps": [1]}, f)
-        from PySide6.QtCore import QUrl
-        self.assertTrue(self.lib.useFileUrl(QUrl.fromLocalFile(good).toString()))
-        self.assertEqual(self.lib.path, good)
+        from unittest import mock
+        from PySide6.QtCore import QDir, QUrl
+        with mock.patch("qtui.library.QDir.toNativeSeparators", wraps=QDir.toNativeSeparators) as native:
+            self.assertTrue(self.lib.useFileUrl(QUrl.fromLocalFile(good).toString()))
+        native.assert_called_once()                                  # on Windows Qt answers C:/Users/x, the rest of the app uses C:\\Users\\x
+        self.assertEqual(self.lib.path, os.path.normpath(good))
 
 
 @need_qt

@@ -20,5 +20,5 @@ def downloads_dir():
     if m:
         p = m.group(1).replace("$HOME", home)
         if os.path.isdir(p):
-            return p
+            return os.path.normpath(p)
     return os.path.join(home, "Downloads")
