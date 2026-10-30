@@ -5,6 +5,7 @@ import os
 import sys
 
 from PySide6.QtCore import QCoreApplication, QEvent, QUrl
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
@@ -28,13 +29,15 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
         _styled = True
     qml_dir = qml_dir or os.path.join(HERE, "qml")
     assets_dir = assets_dir if assets_dir is not None else os.path.join(sc.HERE, "assets")
+    icon = os.path.join(assets_dir, "icon.png")
+    if os.path.isfile(icon):                           # the title bar and the task bar; a missing file just leaves the default
+        QGuiApplication.setWindowIcon(QIcon(icon))
     engine = QQmlApplicationEngine()
     problems = []
     engine.warnings.connect(lambda errors: problems.extend(e.toString() for e in errors))
     ctx = engine.rootContext()
     ctx.setContextProperty("shell", shell)
     ctx.setContextProperty("discordIcon", _asset_url(assets_dir, "discord.png"))
-    ctx.setContextProperty("backdropArt", _asset_url(assets_dir, "default_art.png"))
     engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
     if problems or not engine.rootObjects():
         raise RuntimeError("The window could not be built:\n" + "\n".join(problems or ["Main.qml produced no window"]))

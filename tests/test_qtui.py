@@ -373,6 +373,16 @@ class Tokens(unittest.TestCase):
                             r"Qt\.lighter\([^)]*,\s*[\d.]+\)", r"(?:blur|brightness|saturation):\s*-?\d"):
                 self.assertEqual(re.findall(pattern, text), [], "%s: %s" % (name, pattern))
 
+    def test_there_is_no_picture_behind_the_window(self):
+        """The approved design has plain surfaces; a decorative backdrop was added once without asking and removed again."""
+        import re
+        with open(os.path.join(QML_DIR, "Main.qml")) as f:
+            main = f.read()
+        self.assertEqual(re.findall(r"\bImage\s*\{", main), ["Image {"], "the only picture in the window is the Discord icon")
+        for name in os.listdir(QML_DIR):
+            with open(os.path.join(QML_DIR, name)) as f:
+                self.assertNotIn("backdrop", f.read().lower(), name)
+
     def test_no_other_file_has_a_colour_of_its_own(self):
         import re
         for name in os.listdir(QML_DIR):
@@ -446,6 +456,9 @@ class ShellWindow(unittest.TestCase):
         self.shell.reduceEffects = True
         self.app.processEvents()
         self.assertEqual(self.root.property("screenMs"), 0)
+
+    def test_the_window_has_the_apps_icon(self):
+        self.assertFalse(QGuiApplication.windowIcon().isNull())
 
     def test_the_window_opens_without_the_art_files(self):
         from qtui.app import create_engine

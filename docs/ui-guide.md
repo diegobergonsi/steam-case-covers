@@ -49,7 +49,7 @@ Text on the accent button is `#0b141d` (9.2:1).
 | Body | 14 px, muted for help text |
 | Small (status, hints; never the only way to learn something) | 12 px |
 
-Spacing grid: 4, 8, 12, 16, 24, 32, 48 px. Corner radius: 8 (fields), 14 (cards), full (pills). Elevation: flat (a 1 px outline), card (soft shadow, 4 px down, blur 0.8, opacity 0.45), raised (12 px down, 32 px blur). A disabled control is shown at 60%. A hovered filled button is 15% lighter. The blurred backdrop behind the navigation is dimmed to a brightness of -0.5 and a saturation of 0.4.
+Spacing grid: 4, 8, 12, 16, 24, 32, 48 px. Corner radius: 8 (fields), 14 (cards), full (pills). Elevation: flat (a 1 px outline), card (soft shadow, 4 px down, blur 0.8, opacity 0.45), raised (12 px down, 32 px blur). A disabled control is shown at 60%. A hovered filled button is 15% lighter. The navigation panel is the background colour, darkened a little. There is no picture behind the window: every surface is plain.
 
 ## Motion
 

@@ -3,7 +3,6 @@
 // The window: a left navigation and one screen at a time (docs/ui-guide.md). The screens here are placeholders; the real ones come in the next plans.
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import "."
 
 ApplicationWindow {
@@ -28,25 +27,12 @@ ApplicationWindow {
 
     Binding { target: Theme; property: "reduce"; value: shell.reduceEffects }
 
-    // the blurred default cover behind everything (a live blur on the GPU); a plain background when effects are reduced or the art is missing
-    Image { id: backdropSource; source: backdropArt; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; visible: false; asynchronous: false }
-    MultiEffect {
-        anchors.fill: parent
-        source: backdropSource
-        visible: backdropArt !== "" && !Theme.reduce
-        blurEnabled: true
-        blurMax: 64
-        blur: Theme.backdropBlur
-        brightness: Theme.backdropBrightness
-        saturation: Theme.backdropSaturation
-    }
-
-    Rectangle {                                                   // the navigation: frosted over the backdrop
+    Rectangle {                                                   // the navigation
         id: nav
         objectName: "nav"
         width: win.navWidth
         height: parent.height
-        color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Theme.reduce || backdropArt === "" ? 1 : 0.82)
+        color: Theme.navBg
 
         Rectangle {                                               // the highlight glides to the chosen step
             x: Theme.s8

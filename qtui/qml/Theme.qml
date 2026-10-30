@@ -18,6 +18,7 @@ QtObject {
     readonly property color error: "#ff7b72"
     readonly property color accentInk: "#0b141d"
     readonly property color shadow: "#000000"
+    readonly property color navBg: Qt.darker(bg, 1.3)          // the navigation panel: the background, a little darker
 
     // spacing grid (4 px) and corner radius
     readonly property int s4: 4
@@ -36,15 +37,12 @@ QtObject {
     readonly property int bodySize: 14
     readonly property int smallSize: 12
 
-    // elevation, states, backdrop (docs/ui-guide.md)
+    // elevation and states (docs/ui-guide.md)
     readonly property real cardShadowBlur: 0.8
     readonly property real cardShadowOpacity: 0.45
     readonly property int cardShadowOffset: 4
     readonly property real disabledOpacity: 0.6
     readonly property real hoverLift: 1.15
-    readonly property real backdropBlur: 1.0
-    readonly property real backdropBrightness: -0.5
-    readonly property real backdropSaturation: 0.4
 
     // "Reduce effects": set from the shell; every duration goes through dur()
     property bool reduce: false
