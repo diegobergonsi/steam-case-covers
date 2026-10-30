@@ -995,6 +995,23 @@ class LookScreen(unittest.TestCase):
         self.assertEqual(self.item("look_hint").property("text"), "Colour has no effect on grey or black.")
         self.assertEqual(self.item("look_tone_name").property("text"), "Graphite")
 
+    def test_keyboard_focus_stays_on_a_swatch_after_it_is_picked(self):
+        """A changed tone must not rebuild the swatches: the one that has the focus would be destroyed and the keyboard user would lose their place."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.root.requestActivate()
+        first = self.item("look_swatch_2")
+        first.forceActiveFocus()
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "", False))
+        self.app.processEvents()
+        self.assertEqual(self.look.hue, 84)
+        again = self.item("look_swatch_2")
+        self.assertTrue(again.property("activeFocus"), "the focused swatch was rebuilt")
+        self.assertTrue(again.property("selected"))
+        self.look.hue = 200                                       # another change of tone
+        self.app.processEvents()
+        self.assertTrue(self.item("look_swatch_2").property("activeFocus"), "another change of tone rebuilt the swatches")
+
     def test_the_theme_chips_set_the_theme(self):
         self.click("look_theme_chip_halloween")
         self.assertEqual(self.look.theme, "halloween")
@@ -1042,6 +1059,75 @@ class LookScreen(unittest.TestCase):
             for n in names:
                 it = self.item(n)
                 self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, "%s sticks out of %s" % (n, sec))
+
+
+@need_qt
+class LookFlow(unittest.TestCase):
+    """Step 2 as a person lives it: pick a colour, a swatch, a theme and the art options; the preview follows; Next opens the 100% games step."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def test_from_the_game_list_to_the_hundred_percent_step(self):
+        import time
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        import steamcase as sc
+        from qtui.app import close_engine, create_engine, find_item
+        from qtui.shell import Shell
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        settings, covers = os.path.join(tmp, "settings.json"), os.path.join(tmp, "covers")
+        os.makedirs(covers)
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        art = os.path.join(tmp, "art.png")                      # a cover made in another colour is already there
+        sc.Image.new("RGB", (100, 150), (10, 120, 30)).save(art)
+        sc.build_cover(art, os.path.join(covers, "Game_1_1.png"), sc.load_frame(90), 90)
+        shell = Shell(settings, downloads=os.path.join(tmp, "Downloads"), covers_dir=covers)
+        shell.reduceEffects = True
+        engine = create_engine(shell)
+        self.addCleanup(close_engine, engine)
+        root = engine.rootObjects()[0]
+        look = shell.look
+        self.assertEqual((look.hue, look.sat, look.val), (90, 100, 100))      # the screen opens on the colour of the covers already made
+        shell.next()
+        shell.library.installedOnly = True
+        shell.next()
+        self.app.processEvents()
+        self.assertEqual(find_item(root, "screen_title").property("text"), "Choose the look")
+
+        def click(name, dx=None):
+            it = find_item(root, name)
+            scroller = find_item(root, "screen_scroller")
+            y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+            scroller.setProperty("contentY", max(0, y - 40))
+            self.app.processEvents()
+            pt = it.mapToScene(QPointF(it.width() / 2 if dx is None else dx, it.height() / 2)).toPoint()
+            QTest.mouseClick(root, Qt.LeftButton, Qt.NoModifier, pt)
+            self.app.processEvents()
+        before = look.previewSource
+        click("look_hue")                                       # drag the colour
+        self.assertNotEqual(look.hue, 90)
+        click("look_swatch_4")                                  # a ready-made colour
+        self.assertEqual((look.hue, look.sat, look.val), (176, 100, 100))
+        click("look_theme_chip_halloween")
+        self.assertEqual(look.theme, "halloween")
+        click("look_custom_art", 60)
+        click("look_skip_blurry", 60)
+        self.assertTrue(look.useCustomArt and look.skipAutoArt)
+        end = time.time() + 2
+        while time.time() < end and look.previewSource == before:
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.assertIn("/176/100/100/halloween/none/", look.previewSource)     # one picture, in the final choice
+        self.assertEqual(shell.steps[3]["state"], "locked")
+        click("look_next")
+        self.assertEqual(shell.current, 3)
+        self.assertEqual(shell.steps[3]["state"], "active")
+        self.assertEqual(find_item(root, "screen_title").property("text"), "Highlight your 100% games")
+        again = Shell(settings, downloads=os.path.join(tmp, "Downloads"), covers_dir=covers).look
+        self.assertTrue(again.useCustomArt and again.skipAutoArt)           # the art options come back after closing
 
 
 @need_qt
@@ -1915,6 +2001,7 @@ class Entry(unittest.TestCase):
             text = f.read()
         self.assertRegex(text, r"shell\.go\(1\)")
         self.assertIn("gamelist_next", text)
+        self.assertIn("look_next", text)                      # and the Look screen, which draws the preview and the sliders
         self.assertRegex(text, r"Shell\(.*downloads=", "the self-test must never look at the real Downloads folder")
 
     def test_a_missing_bundled_picture_fails_the_selftest(self):

@@ -54,12 +54,13 @@ ScreenFrame {
                     width: parent.width
                     spacing: Theme.s4
                     Repeater {
-                        model: screen.look.swatches
+                        model: screen.look.swatches.length          // a number, not the list: a new tone must not rebuild the swatches (the focused one would be destroyed)
                         delegate: Swatch {
                             objectName: "look_swatch_" + index
-                            color: modelData.color
-                            name: modelData.name
-                            selected: modelData.selected
+                            readonly property var info: screen.look.swatches[index]
+                            color: info.color
+                            name: info.name
+                            selected: info.selected
                             onPicked: screen.look.pickSwatch(index)
                         }
                     }

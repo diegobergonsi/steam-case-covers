@@ -34,6 +34,11 @@ def selftest(shell, qml_dir, assets_dir, log):
     QCoreApplication.processEvents()
     if find_item(root, "gamelist_next") is None:
         missing.append("the Game list screen")
+    shell.setFact("ready", True)                    # step 2 needs a ready game list
+    shell.go(2)
+    QCoreApplication.processEvents()
+    if find_item(root, "look_next") is None:
+        missing.append("the Look screen")
     close_engine(engine)
     if missing:
         report_error("missing from the window: %s" % ", ".join(missing), log)
