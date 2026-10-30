@@ -1746,6 +1746,21 @@ class LookState(QtCase):
         self.assertEqual(self.look.trackStart("nonsense"), "#000000")     # never an exception into QML
 
 
+def write_games_page(folder, progress, name="games.html"):
+    """A saved games page like tests/fixtures/games_page.html, with a row per app id in `progress` {appid: (unlocked, total) or None}."""
+    rows = []
+    for appid, counts in progress.items():
+        store = '<a href="https://store.steampowered.com/app/%d"' % appid
+        row = '<div class="row">\n  %s class="img"></a>\n  %s class="name">Game</a>\n' % (store, store)
+        if counts:
+            row += '  <a class="ach" href="https://steamcommunity.com/id/playerone/achievements/%d">ACHIEVEMENTS</a><span class="cnt">%d/%d</span>\n' % ((appid,) + counts)
+        rows.append(row + "</div>\n")
+    path = os.path.join(folder, name)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write('<!DOCTYPE html>\n<html><body><div class="list">\n' + "".join(rows) + "</div></body></html>\n")
+    return path
+
+
 @need_qt
 class HundredState(QtCase):
     """Step 3: the saved games page, read on a worker thread, and the style of the 100% covers."""
@@ -1770,18 +1785,7 @@ class HundredState(QtCase):
         return self.Shell(self.settings, downloads=self.downloads, covers_dir=self.covers)
 
     def page(self, progress, name="games.html", folder=None):
-        """A saved games page like tests/fixtures/games_page.html, with a row per app id in `progress` {appid: (unlocked, total) or None}."""
-        rows = []
-        for appid, counts in progress.items():
-            store = '<a href="https://store.steampowered.com/app/%d"' % appid
-            row = '<div class="row">\n  %s class="img"></a>\n  %s class="name">Game</a>\n' % (store, store)
-            if counts:
-                row += '  <a class="ach" href="https://steamcommunity.com/id/playerone/achievements/%d">ACHIEVEMENTS</a><span class="cnt">%d/%d</span>\n' % ((appid,) + counts)
-            rows.append(row + "</div>\n")
-        path = os.path.join(folder or self.tmp, name)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write('<!DOCTYPE html>\n<html><body><div class="list">\n' + "".join(rows) + "</div></body></html>\n")
-        return path
+        return write_games_page(folder or self.tmp, progress, name)
 
     def wait_for(self, condition, seconds=3):
         import time
@@ -2074,6 +2078,217 @@ class HundredState(QtCase):
         self.assertIn(system.SAVE_KEY, system.PAGE_HELP)
         self.assertEqual(system.THEME_NOTE, "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web.")
         self.assertEqual(system.GAMES_PAGE_URL, "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
+
+
+@need_qt
+class HundredScreen(QtCase):
+    """Step 3 as the approved wireframe, in the real window (effects reduced so nothing is still sliding)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        os.makedirs(os.path.join(self.tmp, "Downloads"))      # Qt's dialog starts in a folder that exists
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True
+        self.shell.setFact("look_done", True)
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.h = self.shell.hundred
+        self.shell.go(3)
+        self.app.processEvents()
+
+    item = LookScreen.item
+    centre = LookScreen.centre
+    reveal = LookScreen.reveal
+    click = LookScreen.click
+    pos = LookScreen.pos
+
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def load_page(self, progress=None, name="games.html"):
+        self.h.loadPage(write_games_page(self.tmp, progress or {1: (3, 3), 2: (1, 4)}, name))
+        self.wait_for(lambda: self.h.loaded)
+        self.app.processEvents()
+
+    def test_it_shows_its_title_and_says_it_is_optional(self):
+        self.assertEqual(self.item("screen_title").property("text"), "Highlight your 100% games")
+        self.assertTrue(self.item("hundred_screen").property("subtitle").startswith("Optional."))
+
+    def test_the_three_ways_to_get_the_page_sit_in_one_row_and_wrap_when_narrow(self):
+        self.root.setProperty("width", 1200)
+        self.app.processEvents()
+        ys = {self.pos(n).y() for n in ("hundred_open", "hundred_browse", "hundred_copy")}
+        self.assertEqual(len(ys), 1, ys)
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.app.processEvents()
+        from PySide6.QtCore import QPointF
+        sec = self.item("hundred_section_page")
+        right = sec.mapToScene(QPointF(sec.width(), 0)).x()
+        for n in ("hundred_open", "hundred_browse", "hundred_copy"):
+            it = self.item(n)
+            self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
+
+    def test_open_is_the_filled_button_until_a_page_is_loaded_and_keeps_the_focus(self):
+        self.assertTrue(self.item("hundred_open").property("filled"))
+        self.assertFalse(self.item("hundred_next").property("visible"))
+        self.assertTrue(self.item("hundred_skip").property("visible"))
+        self.assertFalse(self.item("hundred_skip").property("filled"))
+        self.root.requestActivate()
+        self.item("hundred_open").forceActiveFocus()
+        self.load_page()
+        self.assertFalse(self.item("hundred_open").property("filled"))
+        self.assertTrue(self.item("hundred_open").property("activeFocus"), "the focus left the button when it changed look")
+        self.assertTrue(self.item("hundred_next").property("visible") and self.item("hundred_next").property("filled"))
+        self.assertFalse(self.item("hundred_skip").property("visible"))
+        self.assertEqual(self.item("hundred_next").property("text"), "Next: Make \u2192")
+
+    def test_the_marks_and_cases_are_greyed_until_a_page_is_loaded(self):
+        for n in ("hundred_marks", "hundred_style"):
+            self.assertFalse(self.item(n).property("enabled"), n)
+        self.assertEqual(self.item("hundred_locked_note").property("text"), "Load your games page first.")
+        self.assertTrue(self.item("hundred_locked_note").property("visible"))
+        self.load_page()
+        for n in ("hundred_marks", "hundred_style"):
+            self.assertTrue(self.item(n).property("enabled"), n)
+        self.assertFalse(self.item("hundred_locked_note").property("visible"))
+
+    def test_the_status_line_follows_the_state(self):
+        self.assertEqual(self.item("hundred_status").property("text"), "No games page loaded. Your covers keep the look they have.")
+        self.load_page()
+        self.assertEqual(self.item("hundred_status").property("text"), "Found 1 game at 100% in games.html. The game list from step 1 decides which games get covers.")
+        self.assertTrue(self.item("hundred_note").property("text").startswith("Done with the page?"))
+        self.assertEqual(self.item("hundred_status").property("kind"), "ok")
+
+    def test_choosing_a_case_and_marks_changes_the_preview_after_a_page_is_loaded(self):
+        before = self.shell.look.previewSource
+        self.assertIn("/classic/none/", before)
+        self.load_page()
+        self.click("hundred_style_chip_gold-case")
+        self.assertEqual(self.h.style, "gold-case")
+        self.click("hundred_marks_chip_rosette")
+        self.assertEqual(self.h.marks, "rosette")
+        self.wait_for(lambda: "/gold-case-rosette/" in self.shell.look.previewSource)
+        self.assertIn("/classic/gold-case-rosette/", self.shell.look.previewSource)
+        self.assertEqual(self.item("hundred_caption").property("text"), "Preview of a 100% game")
+
+    def test_no_caption_without_a_page_and_none_for_normal_covers(self):
+        self.assertEqual(self.item("hundred_caption").property("text"), "")
+        self.load_page()
+        self.click("hundred_style_chip_none")
+        self.assertEqual(self.item("hundred_caption").property("text"), "")
+        self.assertFalse(self.item("hundred_marks").property("enabled"))          # no special case: no marks to choose
+        self.assertTrue(self.item("hundred_marks_chip_full").property("selected"))      # the choice still shows
+
+    def test_halloween_greys_the_marks_shows_the_note_and_classic_brings_the_marks_back(self):
+        self.load_page()
+        self.shell.look.theme = "halloween"
+        self.app.processEvents()
+        self.assertFalse(self.item("hundred_marks").property("enabled"))
+        self.assertTrue(self.item("hundred_marks_chip_rosette").property("selected"))
+        note = self.item("hundred_theme_note")
+        self.assertTrue(note.property("visible"))
+        self.assertEqual(note.property("text"), "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web.")
+        self.shell.look.theme = "classic"
+        self.app.processEvents()
+        self.assertTrue(self.item("hundred_marks").property("enabled"))
+        self.assertFalse(self.item("hundred_theme_note").property("visible"))
+        self.assertTrue(self.item("hundred_marks_chip_full").property("selected"))
+
+    def test_skip_goes_on_without_a_page_and_unlocks_make(self):
+        self.assertEqual(self.shell.steps[4]["state"], "locked")
+        self.click("hundred_skip")
+        self.assertEqual(self.shell.current, 4)
+        self.assertEqual(self.shell.steps[4]["state"], "active")
+        self.assertEqual(self.shell.steps[3]["state"], "done")
+        self.assertFalse(self.h.loaded)
+
+    def test_next_goes_on_and_keeps_the_page_and_make_stays_locked_until_then(self):
+        self.load_page()
+        self.assertEqual(self.shell.steps[4]["state"], "locked")
+        self.click("hundred_next")
+        self.assertEqual(self.shell.current, 4)
+        self.assertEqual(self.shell.steps[4]["state"], "active")
+        self.assertTrue(self.h.loaded)
+
+    def test_the_info_tip_carries_the_old_help(self):
+        from qtui import system
+        self.assertEqual(self.item("hundred_tip").property("text"), system.PAGE_HELP)
+
+    def test_open_and_copy_use_the_page_address(self):
+        from unittest import mock
+        with mock.patch("qtui.hundred.QDesktopServices.openUrl", return_value=True) as m:
+            self.click("hundred_open")
+        self.assertIn("steamcommunity.com/my/games", m.call_args[0][0].toString())
+        self.click("hundred_copy")
+        self.assertIn("steamcommunity.com/my/games", QGuiApplication.clipboard().text())
+
+    def test_browse_without_a_desktop_chooser_starts_qts_dialog_in_downloads(self):
+        from unittest import mock
+        from PySide6.QtCore import QObject
+        dialog = self.root.findChild(QObject, "hundred_dialog")
+        self.assertIsNotNone(dialog)
+        with mock.patch("qtui.hundred.pick_file", return_value=None):
+            self.click("hundred_browse")
+            self.wait_for(lambda: dialog.property("visible"))
+        self.assertTrue(dialog.property("visible"))
+        self.assertEqual(dialog.property("currentFolder").toString(), self.h.downloadsUrl)
+        dialog.close()
+        self.app.processEvents()
+
+    def test_the_tab_stops_are_the_buttons_the_tip_and_one_chip_per_enabled_group(self):
+        def stops():
+            return sorted(n for n in ("hundred_open", "hundred_browse", "hundred_copy", "hundred_tip", "hundred_skip", "hundred_next",
+                                      "hundred_marks_chip_full", "hundred_marks_chip_rosette", "hundred_style_chip_ribbon", "hundred_style_chip_gold-case")
+                          if self.item(n).property("activeFocusOnTab"))
+        self.assertEqual(stops(), ["hundred_browse", "hundred_copy", "hundred_open", "hundred_skip", "hundred_tip"])
+        self.load_page()
+        self.assertEqual(stops(), ["hundred_browse", "hundred_copy", "hundred_marks_chip_full", "hundred_next", "hundred_open", "hundred_style_chip_ribbon", "hundred_tip"])
+
+    def test_the_preview_sits_left_of_the_sections_and_above_them_when_narrow(self):
+        self.root.setProperty("width", 1000)
+        self.app.processEvents()
+        self.assertLess(self.pos("hundred_preview").x(), self.pos("hundred_section_page").x())
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.app.processEvents()
+        self.assertLess(self.pos("hundred_preview").y(), self.pos("hundred_section_page").y())
+
+    def test_nothing_sticks_out_of_its_card_at_the_narrowest_window(self):
+        from PySide6.QtCore import QPointF
+        self.load_page()
+        self.shell.look.theme = "halloween"
+        self.root.setProperty("minimumWidth", 420)
+        self.root.setProperty("width", 420)
+        self.app.processEvents()
+        names = {"hundred_section_page": ["hundred_intro", "hundred_open", "hundred_browse", "hundred_copy", "hundred_status", "hundred_note", "hundred_tip"],
+                 "hundred_section_mark": ["hundred_marks", "hundred_style", "hundred_theme_note", "hundred_locked_note"]}
+        for sec, items in names.items():
+            s = self.item(sec)
+            right = s.mapToScene(QPointF(s.width(), 0)).x()
+            for n in items:
+                self.reveal(n)
+                it = self.item(n)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, "%s sticks out of %s" % (n, sec))
+        for n in ("hundred_status", "hundred_note", "hundred_theme_note"):
+            self.assertFalse(self.item(n).property("truncated"), n)
+
+    def test_the_screen_uses_the_guides_numbers_only(self):
+        import re
+        with open(os.path.join(QML_DIR, "HundredScreen.qml")) as f:
+            text = f.read()
+        self.assertEqual(re.findall(r"spacing:\s*Theme\.s4\b", text), [])
 
 
 @need_qt
@@ -2544,6 +2759,20 @@ class Entry(QtCase):
         self.assertIn("gamelist_next", text)
         self.assertIn("look_next", text)                      # and the Look screen, which draws the preview and the sliders
         self.assertRegex(text, r"Shell\(.*downloads=", "the self-test must never look at the real Downloads folder")
+
+    def test_the_selftest_also_opens_the_hundred_percent_screen(self):
+        """Step 3 imports the file dialog too, and a build without its screen must fail the self-test."""
+        bad = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, bad, True)
+        shutil.copytree(QML_DIR, os.path.join(bad, "qml"))
+        with open(os.path.join(bad, "qml", "HundredScreen.qml"), "w") as f:
+            f.write('import QtQuick\nimport "."\nScreenFrame { title: "empty" }\n')
+        log = os.path.join(bad, "qtui-error.log")
+        r = self.run_selftest("--qml-dir", os.path.join(bad, "qml"), "--log", log)
+        self.assertEqual(r.returncode, 1)
+        with open(log) as f:
+            self.assertIn("the 100% games screen", f.read())
+        self.assertNotIn("selftest ok", r.stdout)
 
     def test_the_selftest_checks_that_the_preview_really_draws(self):
         from unittest import mock

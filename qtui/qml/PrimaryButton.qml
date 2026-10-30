@@ -21,7 +21,7 @@ Rectangle {
     border.color: Theme.edge
     opacity: quiet && !enabled ? Theme.disabledOpacity : 1
     scale: area.pressed ? 0.95 : 1
-    activeFocusOnTab: enabled
+    activeFocusOnTab: enabled && visible
     Accessible.role: Accessible.Button
     Accessible.onPressAction: if (enabled) clicked()
     Accessible.name: text

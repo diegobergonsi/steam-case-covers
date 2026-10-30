@@ -93,7 +93,7 @@ ApplicationWindow {
         }
         Loader {
             anchors.fill: parent
-            source: screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : "PlaceholderScreen.qml"
+            source: screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : "PlaceholderScreen.qml"
             onLoaded: item.stepKey = Qt.binding(function() { return screen.key })
         }
     }
