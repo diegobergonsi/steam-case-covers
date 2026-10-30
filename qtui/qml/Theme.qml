@@ -59,6 +59,10 @@ QtObject {
     readonly property int knobInset: 3
     readonly property int tipMaxWidth: 360
     readonly property int tipTextSize: 13
+    readonly property int touchSize: 36                 // the smallest thing a finger must hit (the Steam Deck)
+    readonly property int sliderTrack: 14
+    readonly property int previewWidth: 200
+    readonly property int previewHeight: 300
     readonly property int hairline: 1
     readonly property int focusRing: 2
     readonly property int ringOffset: 3

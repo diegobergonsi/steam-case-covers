@@ -913,6 +913,194 @@ class LibraryState(unittest.TestCase):
 
 
 @need_qt
+class Components(unittest.TestCase):
+    """GradientSlider, Swatch, ChoiceChips and PreviewCard, each in a small window of its own (any QML warning fails the test)."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def load(self, body, w=420, h=240):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtQml import QQmlApplicationEngine
+        from qtui.preview import PreviewProvider
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, True)
+        path = os.path.join(folder, "Harness.qml")
+        with open(path, "w") as f:
+            f.write('import QtQuick\nimport QtQuick.Window\nimport "%s"\nWindow { id: win; width: %d; height: %d; visible: true; color: Theme.bg\n%s\n}\n'
+                    % (QUrl.fromLocalFile(QML_DIR).toString(), w, h, body))
+        engine = QQmlApplicationEngine()
+        engine.addImageProvider("preview", PreviewProvider())
+        problems = []
+        engine.warnings.connect(lambda errors: problems.extend(e.toString() for e in errors))
+        engine.load(QUrl.fromLocalFile(path))
+        self.assertEqual(problems, [])
+        self.assertEqual(len(engine.rootObjects()), 1)
+        from qtui.app import close_engine
+        self.addCleanup(close_engine, engine)
+        self.root = engine.rootObjects()[0]
+        self.app.processEvents()
+        return self.root
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+    def mouse(self, kind, x, y):
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        {"click": QTest.mouseClick, "press": QTest.mousePress, "release": QTest.mouseRelease}[kind](self.root, Qt.LeftButton, Qt.NoModifier, QPoint(int(x), int(y)))
+        self.app.processEvents()
+
+    def drag_to(self, x, y):
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        QTest.mouseMove(self.root, QPoint(int(x), int(y)))
+        self.app.processEvents()
+
+    def key(self, name, key, repeat=False):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.root.requestActivate()
+        self.item(name).forceActiveFocus()
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, "", repeat))
+        self.app.processEvents()
+
+    SLIDER = ('GradientSlider { objectName: "s"; x: 20; y: 20; width: 300; label: "Colour"; from: 0; to: 359; value: 0; stops: ["#ff0000", "#00ff00", "#0000ff"];\n'
+              '  onMoved: (v) => value = v }')
+
+    def test_a_slider_follows_a_click_and_a_drag_and_stays_in_range(self):
+        self.load(self.SLIDER)
+        s = self.item("s")
+        self.assertGreaterEqual(s.height(), 36)                      # a finger on the Steam Deck
+        y = 20 + s.height() / 2
+        self.mouse("click", 20 + 150, y)
+        self.assertAlmostEqual(s.property("value"), 179, delta=8)
+        self.mouse("press", 20 + 150, y)
+        self.drag_to(20 + 290, y)
+        self.assertGreater(s.property("value"), 300)
+        self.drag_to(20 + 900, y)                                    # far beyond the right edge
+        self.assertEqual(s.property("value"), 359)
+        self.drag_to(-500, y)
+        self.assertEqual(s.property("value"), 0)
+        self.mouse("release", 20, y)
+
+    def test_slider_keys(self):
+        self.load(self.SLIDER)
+        from PySide6.QtCore import Qt
+        s = self.item("s")
+        s.setProperty("value", 100)
+        for key, expect in ((Qt.Key_Right, 101), (Qt.Key_Up, 102), (Qt.Key_Left, 101), (Qt.Key_Down, 100), (Qt.Key_PageUp, 110), (Qt.Key_PageDown, 100), (Qt.Key_End, 359), (Qt.Key_Home, 0)):
+            with self.subTest(key=key):
+                self.key("s", key)
+                self.assertEqual(s.property("value"), expect)
+        self.key("s", Qt.Key_Left)                                   # never below the minimum
+        self.assertEqual(s.property("value"), 0)
+
+    def test_a_slider_can_be_reached_with_tab_and_tells_screen_readers_its_value(self):
+        from PySide6.QtGui import QAccessible
+        self.load(self.SLIDER)
+        s = self.item("s")
+        self.assertTrue(s.property("activeFocusOnTab"))
+        s.setProperty("value", 120)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        iface = QAccessible.queryAccessibleInterface(s)
+        self.assertEqual(iface.role(), QAccessible.Role.Slider)
+        self.assertEqual(iface.text(QAccessible.Text.Name), "Colour")
+        self.assertIn("120", iface.text(QAccessible.Text.Description))
+
+    SWATCH = 'Swatch { objectName: "w"; x: 20; y: 20; color: "#336699"; name: "Blue"; selected: false; property int n: 0; onPicked: n++ }'
+
+    def test_a_swatch_is_big_enough_and_picks_on_click_enter_and_space_not_on_repeat(self):
+        from PySide6.QtCore import Qt
+        self.load(self.SWATCH)
+        w = self.item("w")
+        self.assertGreaterEqual(min(w.width(), w.height()), 36)
+        self.mouse("click", 20 + w.width() / 2, 20 + w.height() / 2)
+        self.assertEqual(w.property("n"), 1)
+        self.key("w", Qt.Key_Return)
+        self.key("w", Qt.Key_Enter)
+        self.key("w", Qt.Key_Space)
+        self.assertEqual(w.property("n"), 4)
+        self.key("w", Qt.Key_Space, repeat=True)
+        self.assertEqual(w.property("n"), 4)
+
+    def test_a_swatch_is_a_named_radio_button_for_screen_readers(self):
+        from PySide6.QtGui import QAccessible
+        self.load(self.SWATCH)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        w = self.item("w")
+        iface = QAccessible.queryAccessibleInterface(w)
+        self.assertEqual(iface.role(), QAccessible.Role.RadioButton)
+        self.assertEqual(iface.text(QAccessible.Text.Name), "Blue")
+        self.assertFalse(iface.state().checked)
+        w.setProperty("selected", True)
+        self.app.processEvents()
+        self.assertTrue(QAccessible.queryAccessibleInterface(w).state().checked)
+
+    CHIPS = ('ChoiceChips { objectName: "c"; x: 20; y: 20; width: 380; model: [{"key": "classic", "label": "Classic"}, {"key": "halloween", "label": "Halloween"}];\n'
+             '  current: "classic"; property string last: ""; onChosen: (k) => last = k }')
+
+    def test_chips_report_the_choice_and_leave_it_to_the_owner(self):
+        from PySide6.QtCore import Qt
+        self.load(self.CHIPS)
+        c = self.item("c")
+        chip = self.item("c_chip_halloween")
+        self.assertGreaterEqual(chip.height(), 36)
+        from PySide6.QtCore import QPointF
+        centre = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
+        self.mouse("click", centre.x(), centre.y())
+        self.assertEqual(c.property("last"), "halloween")
+        self.assertEqual(c.property("current"), "classic")            # the owner decides
+        c.setProperty("last", "")
+        self.key("c_chip_classic", Qt.Key_Right)
+        self.assertEqual(c.property("last"), "halloween")
+        c.setProperty("last", "")
+        c.setProperty("current", "halloween")
+        self.key("c_chip_halloween", Qt.Key_Left)
+        self.assertEqual(c.property("last"), "classic")
+        c.setProperty("last", "")
+        self.key("c_chip_halloween", Qt.Key_Right)                    # nothing after the last one
+        self.assertEqual(c.property("last"), "")
+
+    def test_only_the_chosen_chip_is_a_tab_stop_and_they_are_radio_buttons(self):
+        from PySide6.QtGui import QAccessible
+        self.load(self.CHIPS)
+        self.assertTrue(self.item("c_chip_classic").property("activeFocusOnTab"))
+        self.assertFalse(self.item("c_chip_halloween").property("activeFocusOnTab"))
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        iface = QAccessible.queryAccessibleInterface(self.item("c_chip_classic"))
+        self.assertEqual((iface.role(), iface.text(QAccessible.Text.Name), iface.state().checked), (QAccessible.Role.RadioButton, "Classic", True))
+
+    def test_the_preview_card_shows_the_engines_picture(self):
+        import time
+        self.load('PreviewCard { objectName: "p"; x: 20; y: 20; source: "image://preview/0/100/100/classic/none/1" }', 300, 400)
+        p = self.item("p")
+        end = time.time() + 5
+        while time.time() < end and p.property("status") != 1:
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.assertEqual(p.property("status"), 1)                     # Image.Ready
+        self.assertEqual((p.width(), p.height()), (200, 300))
+
+    def test_the_preview_card_keeps_the_old_picture_while_the_next_loads(self):
+        import time
+        self.load('PreviewCard { objectName: "p"; x: 20; y: 20; source: "image://preview/0/100/100/classic/none/1" }', 300, 400)
+        p = self.item("p")
+        end = time.time() + 5
+        while time.time() < end and p.property("status") != 1:
+            self.app.processEvents()
+            time.sleep(0.02)
+        p.setProperty("source", "image://preview/120/100/100/classic/none/2")
+        self.assertTrue(p.property("showing"), "the card went blank while the next picture loaded")
+
+
+@need_qt
 class PreviewImages(unittest.TestCase):
     """The sample cover QML shows, made by the engine and handed over as an image (Qt calls the provider from its image threads)."""
     @classmethod

@@ -11,3 +11,7 @@ InfoTip 1.0 InfoTip.qml
 SwitchRow 1.0 SwitchRow.qml
 GameListScreen 1.0 GameListScreen.qml
 PlaceholderScreen 1.0 PlaceholderScreen.qml
+GradientSlider 1.0 GradientSlider.qml
+Swatch 1.0 Swatch.qml
+ChoiceChips 1.0 ChoiceChips.qml
+PreviewCard 1.0 PreviewCard.qml
