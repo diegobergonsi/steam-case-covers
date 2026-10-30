@@ -44,6 +44,16 @@ def selftest(shell, qml_dir, assets_dir, log):
     QCoreApplication.processEvents()
     if find_item(root, "hundred_next") is None:
         missing.append("the 100% games screen")
+    shell.setFact("hundred_done", True)             # step 4 needs the 100% games step to be done
+    shell.go(4)
+    QCoreApplication.processEvents()
+    if find_item(root, "make_main") is None:
+        missing.append("the Make screen")
+    shell.setFact("covers_made", True)              # step 5 needs covers
+    shell.go(5)
+    QCoreApplication.processEvents()
+    if find_item(root, "add_main") is None:
+        missing.append("the Add to Steam screen")
     if not check_preview(engine):
         missing.append("the preview picture")
     close_engine(engine)

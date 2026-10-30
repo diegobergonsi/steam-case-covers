@@ -6,6 +6,7 @@ import QtQuick
 Item {
     id: root
     property string label: ""
+    property string hint: ""                     // a small line under the name, e.g. "(optional)"
     property string stepState: "locked"          // open | done | active | locked
     property bool selected: false
     signal activated()
@@ -15,7 +16,7 @@ Item {
     activeFocusOnTab: !locked
     Accessible.role: Accessible.Button
     Accessible.onPressAction: if (!locked) activated()
-    Accessible.name: label + (locked ? ", locked" : stepState === "done" ? ", done" : "")
+    Accessible.name: label + (hint !== "" ? " " + hint : "") + (locked ? ", locked" : stepState === "done" ? ", done" : "")
 
     Rectangle {                                   // keyboard focus ring
         anchors.fill: parent
@@ -25,13 +26,23 @@ Item {
         border.width: root.activeFocus ? Theme.focusRing : 0
         border.color: Theme.text
     }
-    Text {
+    Column {
         x: Theme.s16 + Theme.s4
         anchors.verticalCenter: parent.verticalCenter
-        text: root.label
-        font.pixelSize: Theme.bodySize
-        color: root.locked ? Theme.faint : root.selected ? Theme.text : Theme.muted
-        Behavior on color { ColorAnimation { duration: Theme.dur(200) } }
+        Text {
+            objectName: root.objectName + "_label"
+            text: root.label
+            font.pixelSize: Theme.bodySize
+            color: root.locked ? Theme.faint : root.selected ? Theme.text : Theme.muted
+            Behavior on color { ColorAnimation { duration: Theme.dur(200) } }
+        }
+        Text {
+            objectName: root.objectName + "_hint"
+            visible: root.hint !== ""
+            text: root.hint
+            font.pixelSize: Theme.smallSize
+            color: Theme.faint
+        }
     }
     Text {                                        // a finished step also changes its mark, not only its colour
         anchors.right: parent.right

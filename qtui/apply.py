@@ -48,8 +48,7 @@ class Apply(QObject):
         self._stage.connect(self._on_stage)
         self._finished.connect(self._on_finished)
         make.runningChanged.connect(self._make_changed)
-        make.doneChanged.connect(self.canApplyChanged)
-        self.refresh()
+        make.doneChanged.connect(self.canApplyChanged)       # the accounts are read when the screen opens (refresh), not at start-up
 
     # ----- Steam -----
     @Property(bool, notify=steamChanged)

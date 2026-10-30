@@ -55,6 +55,7 @@ ApplicationWindow {
                     objectName: "nav_" + modelData.key
                     width: nav.width
                     label: modelData.label
+                    hint: modelData.hint
                     stepState: modelData.state
                     selected: index === shell.current
                     onActivated: shell.go(index)
@@ -93,7 +94,7 @@ ApplicationWindow {
         }
         Loader {
             anchors.fill: parent
-            source: screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : "PlaceholderScreen.qml"
+            source: screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
             onLoaded: item.stepKey = Qt.binding(function() { return screen.key })
         }
     }

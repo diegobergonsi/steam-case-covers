@@ -358,6 +358,7 @@ class StepStates(unittest.TestCase):
     def test_the_steps_and_their_labels(self):
         self.assertEqual(sp.STEPS, ("home", "game_list", "look", "hundred", "make", "add"))
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
+        self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
 
     def test_nothing_done_only_the_game_list_is_active(self):
         self.assertEqual(self.states(), {"home": "open", "game_list": "active", "look": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
@@ -2852,7 +2853,7 @@ class Tokens(unittest.TestCase):
     def test_the_guide_names_the_steps_like_the_window(self):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
             text = f.read()
-        self.assertIn("1 Game list, 2 Look, 3 100% games, 4 Make, 5 Add to Steam", text)
+        self.assertIn("1 Game list, 2 Look, 3 100% games (optional), 4 Make, 5 Add to Steam", text)
         self.assertNotIn("Extras", text.replace("Extras became", ""))
 
     def qml_files(self):
@@ -2950,6 +2951,19 @@ class ShellWindow(QtCase):
                          ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
         self.assertEqual(self.item("footer_updates").property("text"), "Check for updates")
         self.assertEqual(self.item("footer_discord").property("text"), "Discord")
+
+    def test_the_optional_step_says_so_under_its_name(self):
+        from PySide6.QtGui import QAccessible
+        for key in ("home", "game_list", "look", "make", "add"):
+            self.assertEqual(self.item("nav_" + key).property("hint"), "", key)
+        self.assertEqual(self.item("nav_hundred").property("hint"), "(optional)")
+        hint, row = self.item("nav_hundred_hint"), self.item("nav_hundred")
+        self.assertEqual(hint.property("text"), "(optional)")
+        self.assertLessEqual(self.item("nav_hundred_label").height() + hint.height(), row.height())       # both lines fit the row
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional), locked")
+        self.assertEqual(self.shell.steps[3]["hint"], "(optional)")
 
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
@@ -3112,6 +3126,21 @@ class Entry(QtCase):
         with open(log) as f:
             self.assertIn("the 100% games screen", f.read())
         self.assertNotIn("selftest ok", r.stdout)
+
+    def test_the_selftest_also_opens_the_make_and_add_screens(self):
+        for screen, text in (("MakeScreen.qml", "the Make screen"), ("AddScreen.qml", "the Add to Steam screen")):
+            with self.subTest(screen=screen):
+                bad = tempfile.mkdtemp()
+                self.addCleanup(shutil.rmtree, bad, True)
+                shutil.copytree(QML_DIR, os.path.join(bad, "qml"))
+                with open(os.path.join(bad, "qml", screen), "w") as f:
+                    f.write('import QtQuick\nimport "."\nScreenFrame { title: "empty" }\n')
+                log = os.path.join(bad, "qtui-error.log")
+                r = self.run_selftest("--qml-dir", os.path.join(bad, "qml"), "--log", log)
+                self.assertEqual(r.returncode, 1)
+                with open(log) as f:
+                    self.assertIn(text, f.read())
+                self.assertNotIn("selftest ok", r.stdout)
 
     def test_the_selftest_checks_that_the_preview_really_draws(self):
         from unittest import mock
@@ -3316,6 +3345,352 @@ class ReplaceReasons(FakeStore):
                     want = gui.App._replace_reason(fake, tone, completed, treatment, theme, art, games)
                     got = reasons.replace_reason(self.covers, tone, completed, treatment, theme, art, games)
                     self.assertEqual(got, want, (folder, tone, completed, treatment, theme, art, games))
+
+
+@need_qt
+class MakeScreen(QtCase, FakeStore):
+    """Step 4 in the real window: the choices, the progress, the question before replacing, and the buttons that follow the state."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        import steamcase as sc
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: ({1: None, 2: None}, set()))):
+            patcher = mock.patch.object(sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        os.makedirs(os.path.join(self.tmp, "Downloads"))
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True
+        for fact in ("look_done", "hundred_done"):
+            self.shell.setFact(fact, True)
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.make = self.shell.make
+        self.shell.go(4)
+        self.app.processEvents()
+
+    item = LookScreen.item
+    centre = LookScreen.centre
+    reveal = LookScreen.reveal
+    click = LookScreen.click
+    pos = LookScreen.pos
+    wait_for = HundredScreen.wait_for
+
+    def text(self, name):
+        return self.item(name).property("text")
+
+    def settle(self):
+        """One frame, so the layout is polished (the footer's buttons move apart when a second one appears) before a click."""
+        from PySide6.QtTest import QTest
+        QTest.qWait(60)
+        self.app.processEvents()
+
+    def test_it_has_its_title_and_two_sections(self):
+        self.assertEqual(self.text("screen_title"), "Make your covers")
+        for name in ("make_section_choices", "make_section_progress", "make_preview", "make_choices", "make_progress", "make_status", "make_folder", "make_main"):
+            self.assertIsNotNone(self.item(name), name)
+
+    def test_the_choices_show_what_the_earlier_steps_chose_and_lead_back(self):
+        self.assertIn("Installed games", self.item("make_choices_chip_games").property("Accessible.name") or "Installed games")
+        self.click("make_choices_chip_colour")
+        self.assertEqual(self.shell.current, 2)
+        self.shell.go(4)
+        self.app.processEvents()
+        self.click("make_choices_chip_hundred")
+        self.assertEqual(self.shell.current, 3)
+
+    def test_make_covers_is_the_filled_button_and_runs_the_work(self):
+        main = self.item("make_main")
+        self.assertEqual((self.text("make_main"), main.property("filled"), main.property("enabled")), ("Make covers", True, True))
+        self.assertEqual(self.text("make_status"), "Not started.")
+        self.assertFalse(self.item("make_again").property("visible"))
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertEqual(self.text("make_status"), "Done. 2 covers ready.")
+        self.assertAlmostEqual(self.item("make_progress_fill").width() / self.item("make_progress").width(), 1.0, delta=0.01)
+        self.assertEqual((self.text("make_main"), self.item("make_main").property("filled")), ("Next: Add to Steam \u2192", True))
+        self.assertTrue(self.item("make_again").property("visible"))
+        self.assertFalse(self.item("make_again").property("filled"))
+
+    def test_the_button_becomes_cancel_while_it_runs_and_keeps_the_focus(self):
+        import threading
+        from unittest import mock
+        import steamcase as sc
+        gate, reached = threading.Event(), threading.Event()
+        real = sc.make_covers
+
+        def slow(games, out, **kw):
+            inner = kw["progress"]
+
+            def progress(*a):
+                inner(*a)
+                reached.set()
+                gate.wait(10)
+            kw["progress"] = progress
+            return real(games, out, **kw)
+        main = self.item("make_main")
+        self.root.requestActivate()
+        main.forceActiveFocus()
+        with mock.patch.object(sc, "make_covers", slow):
+            self.click("make_main")
+            self.wait_for(reached.is_set)
+            self.assertEqual((self.text("make_main"), self.item("make_main").property("filled"), self.item("make_main").property("enabled")), ("Cancel", False, True))
+            self.assertTrue(self.item("make_main").property("activeFocus"))
+            self.click("make_main")
+            self.assertEqual(self.text("make_status"), "Stopping\u2026")
+            gate.set()
+            self.wait_for(lambda: not self.make.running)
+        self.assertTrue(self.text("make_status").startswith("Stopped. "))
+
+    def test_replacing_covers_asks_first_and_declining_changes_nothing(self):
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.shell.look.setTone(90, 100, 100)
+        self.click("make_again")
+        self.app.processEvents()
+        from PySide6.QtTest import QTest
+        QTest.qWait(60)
+        self.assertTrue(self.item("make_dialog").isVisible())
+        self.assertEqual(self.text("dlg_title"), "Change the colour of your covers?")
+        self.assertEqual(self.text("dlg_p0"), "This replaces the covers you already made in another colour.")
+        self.assertEqual(self.text("dlg_p1"), "Steam keeps showing your current art until you add the new covers in step 5.")
+        self.assertEqual(self.text("dlg_confirm"), "Replace them")
+        self.click("dlg_cancel")
+        self.settle()
+        self.assertFalse(self.item("make_dialog").isVisible())
+        self.assertFalse(self.make.running)
+        self.assertEqual(self.text("make_status"), "Done. 2 covers ready.")
+        self.click("make_again")
+        QTest.qWait(60)
+        self.click("dlg_confirm")
+        self.wait_for(lambda: not self.make.running and not self.make.asking)
+        self.assertFalse(self.sc_colour_differs(90))
+
+    def sc_colour_differs(self, hue):
+        import steamcase as sc
+        return sc.covers_in_other_colour(self.covers, hue, 100, 100)
+
+    def test_next_opens_add_to_steam(self):
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.click("make_main")
+        self.assertEqual(self.shell.current, 5)
+
+    def test_the_button_waits_while_a_games_page_is_being_read(self):
+        import threading
+        from unittest import mock
+        import completion
+        gate = threading.Event()
+        real = completion.read_games_page
+        with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
+            self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
+            self.app.processEvents()
+            self.assertFalse(self.item("make_main").property("enabled"))
+            gate.set()
+            self.wait_for(lambda: not self.shell.hundred.busy)
+        self.assertTrue(self.item("make_main").property("enabled"))
+
+    def test_the_covers_folder_button_asks_the_system_to_open_it(self):
+        from unittest import mock
+        with mock.patch("qtui.make.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("make_folder")
+        self.assertEqual(opened.call_count, 1)
+
+    def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
+        from PySide6.QtCore import QPointF
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+        for sec, names in (("make_section_choices", ("make_choices",)), ("make_section_progress", ("make_progress", "make_status", "make_folder"))):
+            card = self.item(sec)
+            right = card.mapToScene(QPointF(card.width(), 0)).x()
+            for n in names:
+                it = self.item(n)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
+        main = self.item("make_main")
+        self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
+
+    def test_the_preview_follows_the_look(self):
+        before = self.item("make_preview").property("source")
+        self.shell.look.setTone(90, 100, 100)
+        self.wait_for(lambda: self.item("make_preview").property("source") != before)
+        self.assertNotEqual(self.item("make_preview").property("source"), before)
+
+
+@need_qt
+class AddScreen(QtCase, FakeStore):
+    """Step 5 in the real window: the Steam note, the account, the restart switch, the question, the result and the way home."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        import steamcase as sc
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        self.sc, self.running, self.log, self.accounts = sc, False, [], [("111", "Alice")]
+        result = {"applied": 2, "replaced": 0, "unchanged": 0, "jpg_moved": 0, "backup": "/b", "account_name": "Alice"}
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: ({1: None, 2: None}, set())),
+                            ("steam_running", lambda: self.running), ("close_steam", lambda steam, timeout=60: True),
+                            ("start_steam", lambda steam: self.log.append("start")),
+                            ("apply_covers", lambda steam, covers, user=None, files=None: self.log.append(("apply", user)) or dict(result)),
+                            ("list_accounts", lambda steam: list(self.accounts)), ("pick_account", lambda steam, forced=None: forced or self.accounts[0][0]),
+                            ("account_label", lambda steam, acc: dict(self.accounts).get(acc, str(acc)))):
+            patcher = mock.patch.object(sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        os.makedirs(os.path.join(self.tmp, "Downloads"))
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True
+        for fact in ("look_done", "hundred_done"):
+            self.shell.setFact(fact, True)
+        self.made = False
+        self.start_window = lambda: self._start_window(create_engine, close_engine)
+
+    def _start_window(self, create_engine, close_engine):
+        if not self.made:
+            self.made = True
+            self.shell.make.start()
+            self.wait_for(lambda: self.shell.make.done and not self.shell.make.running)
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.ap = self.shell.apply
+        self.shell.go(5)
+        self.app.processEvents()
+
+    item = LookScreen.item
+    centre = LookScreen.centre
+    reveal = LookScreen.reveal
+    click = LookScreen.click
+    pos = LookScreen.pos
+    wait_for = HundredScreen.wait_for
+
+    def text(self, name):
+        return self.item(name).property("text")
+
+    def test_it_has_its_title_sections_and_ready_text(self):
+        self.start_window()
+        self.assertEqual(self.text("screen_title"), "Add them to Steam")
+        for name in ("add_section_before", "add_section_result", "add_note", "add_account", "add_restart", "add_status", "add_main"):
+            self.assertIsNotNone(self.item(name), name)
+        self.assertEqual(self.text("add_status"), "2 covers are ready to add.")
+        self.assertEqual((self.text("add_main"), self.item("add_main").property("filled"), self.item("add_main").property("enabled")), ("Apply to Steam", True, True))
+
+    def test_the_note_follows_whether_steam_runs_and_the_screen_watches_only_while_open(self):
+        self.running = True
+        self.start_window()
+        self.wait_for(lambda: self.ap.steamOpen)
+        self.assertTrue(self.ap.watching)
+        self.assertEqual(self.text("add_note"), "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first.")
+        from PySide6.QtGui import QColor
+        self.assertEqual(QColor(self.item("add_note").property("color")).name(), "#f0b429")
+        self.shell.go(4)
+        self.app.processEvents()
+        self.assertFalse(self.ap.watching)
+
+    def test_one_account_is_named_and_two_are_offered_as_chips(self):
+        self.start_window()
+        self.assertEqual(self.text("add_account"), "Steam account: Alice")
+        self.assertFalse(self.item("add_accounts").property("visible"))
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.shell.go(4)
+        self.shell.go(5)
+        self.app.processEvents()
+        self.assertTrue(self.item("add_accounts").property("visible"))
+        self.click("add_accounts_chip_222")
+        self.assertEqual((self.ap.accountId, self.text("add_account")), ("222", "Steam account: Bob"))
+
+    def test_the_restart_switch_is_the_remembered_one(self):
+        self.start_window()
+        self.assertTrue(self.item("add_restart").property("checked"))
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        label = self.item("add_restart_label")                          # the label is as wide as the card; the switch answers on the words
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, label.mapToScene(QPointF(10, label.height() / 2)).toPoint())
+        self.app.processEvents()
+        self.assertFalse(self.shell.switchValue("restart_steam"))
+        self.assertFalse(self.item("add_restart").property("checked"))
+
+    def test_apply_asks_then_adds_the_covers_and_the_button_leads_home(self):
+        from PySide6.QtTest import QTest
+        self.start_window()
+        self.click("add_main")
+        QTest.qWait(60)
+        self.assertTrue(self.item("add_dialog").isVisible())
+        self.assertEqual(self.text("dlg_title"), "Add covers to Steam")
+        self.assertEqual(self.text("dlg_p0"), "2 covers will be added to the Steam account \u201cAlice\u201d.")
+        self.click("dlg_confirm")
+        self.wait_for(lambda: self.ap.applied)
+        self.assertEqual(self.log, [("apply", None), "start"])
+        self.assertTrue(self.text("add_status").startswith("Done. 2 covers added to the Steam account \u201cAlice\u201d"))
+        self.assertEqual((self.text("add_main"), self.item("add_main").property("filled")), ("Go to Home \u2192", True))
+        self.click("add_main")
+        self.assertEqual(self.shell.current, 0)
+
+    def test_declining_the_question_changes_nothing(self):
+        from PySide6.QtTest import QTest
+        self.start_window()
+        self.click("add_main")
+        QTest.qWait(60)
+        self.click("dlg_cancel")
+        self.assertEqual((self.log, self.ap.applied, self.item("add_dialog").isVisible()), ([], False, False))
+
+    def test_the_button_says_applying_and_waits_while_it_works(self):
+        import threading
+        self.start_window()
+        gate = threading.Event()
+        real = self.sc.apply_covers
+        self.sc.apply_covers = lambda *a, **k: gate.wait(5) and real(*a, **k)
+        self.addCleanup(lambda: setattr(self.sc, "apply_covers", real))
+        self.ap.apply()
+        self.ap.confirm()
+        self.app.processEvents()
+        self.assertEqual((self.text("add_main"), self.item("add_main").property("enabled")), ("Applying\u2026", False))
+        gate.set()
+        self.wait_for(lambda: self.ap.applied)
+
+    def test_an_error_is_shown_in_the_error_colour(self):
+        from PySide6.QtGui import QColor
+        self.start_window()
+        self.sc.apply_covers = lambda *a, **k: (_ for _ in ()).throw(self.sc.SteamcaseError("No covers found in x. Make them first."))
+        self.ap.apply()
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy and self.ap.status != "Working\u2026")
+        self.app.processEvents()
+        self.assertEqual(self.text("add_status"), "No covers found in x. Make them first.")
+        self.assertEqual(QColor(self.item("add_status").property("color")).name(), "#ff7b72")
+        self.assertEqual(self.text("add_main"), "Apply to Steam")
+
+    def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
+        from PySide6.QtCore import QPointF
+        self.accounts = [("111", "A" * 40), ("222", "B" * 40)]
+        self.start_window()
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+        for sec, names in (("add_section_before", ("add_note", "add_account", "add_accounts", "add_restart")), ("add_section_result", ("add_status",))):
+            card = self.item(sec)
+            right = card.mapToScene(QPointF(card.width(), 0)).x()
+            for n in names:
+                it = self.item(n)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
+        main = self.item("add_main")
+        self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
 
 
 @need_qt

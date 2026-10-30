@@ -5,6 +5,8 @@
 STEPS = ("home", "game_list", "look", "hundred", "make", "add")
 LABELS = {"home": "Home", "game_list": "1  Game list", "look": "2  Look", "hundred": "3  100% games", "make": "4  Make", "add": "5  Add to Steam"}
 
+HINTS = {"hundred": "(optional)"}                  # a small line under the name of a step
+
 
 def step_states(ready, look_done, hundred_done, covers_made, applied):
     """{step: "open" | "done" | "active" | "locked"}. Home is always "open". A step is done only when its own fact is true AND the step before it is done,

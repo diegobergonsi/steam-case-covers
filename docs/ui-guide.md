@@ -4,7 +4,7 @@ The rules every screen of the window follows, so a new feature has a place befor
 
 ## Layout
 
-A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 100% games, 4 Make, 5 Add to Steam. Discord (with its icon) and "Check for updates" (always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
+A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 100% games (optional), 4 Make, 5 Add to Steam. Discord (with its icon) and "Check for updates" (always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
 
 ## Eleven rules
 
@@ -67,7 +67,7 @@ Every piece of a screen is one of these, in `qtui/qml/`. A new component is adde
 
 - Buttons: `PrimaryButton` (the one filled button of a screen; `quiet: true` is the outlined look) and `QuietButton` (the quiet look).
 - Frame of a screen: `ScreenFrame` (title, subtitle, sections that scroll, a footer that never scrolls away), `Section` (a card with a heading and an optional note at its right), `Card`, `ButtonRow` (buttons with one goal in one row, wrapping when narrow).
-- Navigation: `NavItem`.
+- Navigation: `NavItem` (a name, an optional small hint under it such as "(optional)", and a mark when done).
 - Choices: `SwitchRow` (a switch with a label that wraps and an optional info tip), `ChoiceChips` (one choice out of a few, arrow keys move it; `groupName` names it for screen readers; `enabled: false` greys it, makes it inert and keeps the choice visible), `Swatch` (a ready-made colour, arrow keys move between them), `GradientSlider` (a slider whose track shows what it does; a swipe with a finger scrolls, a tap or the handle moves it).
 - Information: `StatusLine` (what is happening), `InfoTip` (the small "i"), `PreviewCard` (the sample cover with a soft shadow; the old picture stays while the next one loads), `ProgressBar` (how far a long job is, 0 to 1; the count goes in a `StatusLine` beside it), `ChoiceSummary` (what earlier steps chose, as chips that lead back to their step; the whole group is one control).
 - Questions: `ConfirmDialog` (covers the window; a question that must be answered before anything changes. It has its own filled button, the confirm; the safe button, Cancel, has the focus; Escape declines; Tab stays inside).

@@ -20,3 +20,5 @@ HundredScreen 1.0 HundredScreen.qml
 ConfirmDialog 1.0 ConfirmDialog.qml
 ChoiceSummary 1.0 ChoiceSummary.qml
 ProgressBar 1.0 ProgressBar.qml
+MakeScreen 1.0 MakeScreen.qml
+AddScreen 1.0 AddScreen.qml
