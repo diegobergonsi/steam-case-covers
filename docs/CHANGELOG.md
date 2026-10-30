@@ -3,6 +3,7 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
+- New: an optional switch in step 2, "Use my own custom art where I have it". For games where you set your own art (in Steam's menu or from SteamGridDB), your picture goes inside the case instead of Steam's portrait; games without art of your own are unchanged. The app copies your art into its own folder (so Apply moving the file out of Steam's folder loses nothing) and never changes your files. Switching it on or off, or changing your art, rebuilds only the covers that change, after asking. On the command line: `--use-custom-art` on `make` and `run` (and `--user` on `make`); without it every cover uses Steam's portrait. Not tested yet: Windows, macOS and art from a real SteamGridDB library.
 - Release pages now show that version's notes from this changelog (instead of a list of pull requests), with a line on how to check the downloads. New releases are also announced on the project's Discord with a short summary (the first sentence of each change) and a link to the full notes. A release needs its section in this file before the tag is pushed, or the release step stops.
 
 ## [1.5.0] - 2026-10-29
