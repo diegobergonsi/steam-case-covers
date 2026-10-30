@@ -20,7 +20,7 @@ ScreenFrame {
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: "Open the page and log in if asked. Press " + saveKey + " and keep the name userdata.json. The app notices the file by itself."
+            text: "Steam keeps your game list on a web page. Open it and log in if asked. A page of text appears: press " + saveKey + " and save it, keeping the name userdata.json. The app notices the file by itself."
         }
         ButtonRow {
             // the one filled button of the screen is "Open the page" until a list is ready, then it turns quiet and "Next" takes over (same button: focus stays)

@@ -11,7 +11,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QGuiApplication
 
 import steamcase as sc
-from qtui import steps, system
+from qtui import selfcheck, steps, system
 from qtui.app import check_preview, close_engine, create_engine, find_item, report_error
 from qtui.assets import missing_assets
 from qtui.shell import Shell
@@ -22,6 +22,10 @@ def selftest(shell, qml_dir, assets_dir, log):
     gone = missing_assets(assets_dir)
     if gone:                                        # the window itself tolerates a missing picture, the build must not
         report_error("missing bundled files: %s" % ", ".join(gone), log)
+        return 1
+    problems = selfcheck.engine_problems()
+    if problems:                                    # a bundle whose engine is broken must not print "selftest ok"
+        report_error("the engine in this build does not work: %s" % "; ".join(problems), log)
         return 1
     try:
         engine = create_engine(shell, qml_dir=qml_dir, assets_dir=assets_dir)

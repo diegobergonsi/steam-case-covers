@@ -8,6 +8,7 @@ Item {
     id: link
     property string text: ""
     property url icon: ""
+    property string description: ""                // read out by a screen reader
     signal activated()
 
     height: Theme.navRowHeight
@@ -15,6 +16,7 @@ Item {
     opacity: enabled ? 1 : Theme.disabledOpacity
     Accessible.role: Accessible.Button
     Accessible.name: text
+    Accessible.description: description
     Accessible.onPressAction: if (enabled) activated()
 
     Rectangle {                                   // keyboard focus ring

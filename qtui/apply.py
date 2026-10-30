@@ -12,7 +12,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import steamcase as sc
 
 MAX_NAME = 28                               # a long account name must not push the buttons off the window
-OPEN_NOTE = "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first."
+OPEN_NOTE = "Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first."
 CHECKING_NOTE = "Checking whether Steam is open\u2026"
 CLOSED_NOTE = "Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it."
 CLOSE_WARNING = "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first."
@@ -196,7 +196,7 @@ class Apply(QObject):
     @Property(str, notify=canApplyChanged)
     def readyText(self):
         n = len(self._make.files())
-        return "1 cover is ready to add." if n == 1 else "%d covers are ready to add." % n
+        return "No covers yet. Make them first." if n == 0 else "1 cover is ready to add." if n == 1 else "%d covers are ready to add." % n
 
     @Property(bool, notify=appliedChanged)
     def applied(self):

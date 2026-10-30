@@ -45,6 +45,7 @@ class Make(QObject):
     progressChanged = Signal()
     statusChanged = Signal()
     choicesChanged = Signal()
+    failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss wherever they are
     confirmNeeded = Signal(str, str)        # the title and the sentence of the question "replace the covers you made?"
     _art_done = Signal(int, object, object, object, object)         # request, {appid: path}, the library's app ids, problems, error words (from the worker)
     _progressed = Signal(int, int, int, str)                        # request, done, total, name
@@ -232,6 +233,7 @@ class Make(QObject):
         if error:
             self._set_state(running=False)
             self._set_status(error, "error")
+            self.failed.emit("Cannot read your own art", error)
             return
         self._begin(self._snap, art, games, problems)
 
@@ -269,6 +271,7 @@ class Make(QObject):
         if self._files:                                 # what Apply may add is what this run makes: a run that fails offers nothing
             self._files = []
             self.doneChanged.emit()
+        self._shell.setFact("covers_made", False)       # step 5 is locked again until this run has covers
         self._cancel.clear()
         self._finished, self._total = 0, 0
         self.progressChanged.emit()
@@ -317,6 +320,7 @@ class Make(QObject):
         self._set_state(running=False, making=False)
         if error:
             self._set_status(error, "error")
+            self.failed.emit("Could not make covers", error)
             return
         if res["files"]:
             self._files = list(res["files"])
@@ -339,3 +343,4 @@ class Make(QObject):
         os.makedirs(folder, exist_ok=True)
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(folder)):
             self._set_status("Could not open the folder. It is here: %s" % folder, "error")
+            self.failed.emit("Covers folder", "Could not open the folder. It is here:\n\n%s" % folder)

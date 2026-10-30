@@ -6,6 +6,13 @@ STEPS = ("home", "game_list", "look", "hundred", "make", "add")
 LABELS = {"home": "Home", "game_list": "1  Game list", "look": "2  Look", "hundred": "3  100% games", "make": "4  Make", "add": "5  Add to Steam"}
 
 HINTS = {"hundred": "(optional)"}                  # a small line under the name of a step
+LOCKED = {"look": "finish step 1 first", "hundred": "finish step 2 first", "make": "finish step 3 first", "add": "make the covers first"}      # why a step is locked
+
+
+def hint(key, state):
+    """The small line under a step's name: what it is ("(optional)") and, while it is locked, what unlocks it."""
+    parts = [HINTS.get(key, "")] + ([LOCKED.get(key, "")] if state == "locked" else [])
+    return " \u00b7 ".join(p for p in parts if p)
 
 
 def step_states(ready, look_done, hundred_done, covers_made, applied):

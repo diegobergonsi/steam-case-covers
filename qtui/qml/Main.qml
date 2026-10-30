@@ -20,6 +20,14 @@ ApplicationWindow {
     readonly property int navWidth: Theme.navWidth
 
     Binding { target: Theme; property: "reduce"; value: shell.reduceEffects }
+    onClosing: (close) => {                                       // never while Steam's artwork is being changed: it could be left half-done
+        if (shell.apply.busy) {
+            close.accepted = false
+            messages.link = ""
+            messages.cancelText = "Cancel"
+            win.show(messages, ["Please wait", [{"text": "Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window.", "kind": "main"}], "OK", "", true])
+        }
+    }
     Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.poll() }       // notices the saved game list and games page
 
     Rectangle {                                                   // the navigation
@@ -66,7 +74,8 @@ ApplicationWindow {
             objectName: "footer_discord"
             y: nav.height - Theme.navRowHeight - Theme.navRowHeight - Theme.s8
             width: nav.width
-            text: "Discord"
+            text: "Join our Discord"
+            description: "Join our Discord server: ask for help, share ideas and report bugs. Opens in your web browser."
             icon: discordIcon
             onActivated: shell.updates.openDiscord()
         }
@@ -134,6 +143,10 @@ ApplicationWindow {
         target: shell.apply
         function onConfirmNeeded(title, paragraphs, go, alt) { win.show(applyDialog, [title, paragraphs, go, alt]) }
         function onFailed(text) { win.show(messages, ["Could not finish", [{"text": text, "kind": "main"}], "OK", "", true]) }
+    }
+    Connections {
+        target: shell.make
+        function onFailed(title, text) { messages.link = ""; win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
     }
     Connections {
         target: shell.updates

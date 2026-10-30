@@ -169,6 +169,49 @@ class Watcher(unittest.TestCase):
             self.assertEqual(self.w.poll(), [])
 
 
+class EngineSelfCheck(unittest.TestCase):
+    """What the packaged app's --selftest proves about the engine inside the bundle (the Tk window's selftest did the same)."""
+    def setUp(self):
+        import steamcase as sc
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_a_healthy_engine_has_no_problems(self):
+        from qtui import selfcheck
+        self.assertEqual(selfcheck.engine_problems(), [])
+
+    def test_each_broken_part_is_named(self):
+        from unittest import mock
+        import steamcase as sc
+        from qtui import selfcheck
+        cases = (("build_cover", mock.patch.object(sc, "build_cover", side_effect=ValueError("no frame")), "no frame"),
+                 ("certificates", mock.patch.object(sc, "_ssl_context", return_value=mock.Mock(cert_store_stats=lambda: {"x509_ca": 0})), "no trusted certificates"),
+                 ("recognise", mock.patch.object(sc, "is_steamcase_cover", return_value=False), "not recognised as ours"),
+                 ("colour", mock.patch.object(sc, "cover_colour", return_value=(5, 5, 5)), "does not record its colour"),
+                 ("recolour", mock.patch.object(sc, "preview_cover", return_value=sc.preview_cover(0)), "case colour cannot be changed"))
+        for name, patch, words in cases:
+            with self.subTest(name), patch:
+                problems = selfcheck.engine_problems()
+                self.assertTrue(any(words in p for p in problems), (words, problems))
+
+    def test_a_packaged_linux_app_that_still_hands_its_libraries_to_children_fails(self):
+        from unittest import mock
+        from qtui import selfcheck
+        with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "platform", "linux"), mock.patch.object(sys, "_MEIPASS", "/tmp/_MEIx", create=True):
+            with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/tmp/_MEIx:/lib", "LD_LIBRARY_PATH_ORIG": "/tmp/_MEIx:/lib"}):
+                self.assertTrue(any("inherit the bundled libraries" in p for p in selfcheck.engine_problems()))
+            with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/tmp/_MEIx:/lib", "LD_LIBRARY_PATH_ORIG": "/usr/lib"}):
+                self.assertFalse(any("inherit the bundled libraries" in p for p in selfcheck.engine_problems()))
+
+    def test_the_qt_selftest_reports_engine_problems(self):
+        from unittest import mock
+        if QGuiApplication is None:
+            self.skipTest("PySide6 missing")
+        from qtui import __main__ as entry
+        with mock.patch("qtui.selfcheck.engine_problems", return_value=["the cover colour is wrong"]):
+            self.assertEqual(entry.selftest(None, None, os.path.join(os.path.dirname(QML_DIR), "..", "assets"), os.path.join(tempfile.mkdtemp(), "e.log")), 1)
+
+
 class SystemHelpers(unittest.TestCase):
 
     def test_a_packaged_linux_app_gives_its_children_the_systems_libraries_again(self):
@@ -379,6 +422,9 @@ class StepStates(unittest.TestCase):
         self.assertEqual(sp.STEPS, ("home", "game_list", "look", "hundred", "make", "add"))
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
+        self.assertEqual(sp.hint("hundred", "active"), "(optional)")
+        self.assertEqual(sp.hint("look", "locked"), "finish step 1 first")
+        self.assertEqual(sp.hint("look", "done"), "")
 
     def test_nothing_done_only_the_game_list_is_active(self):
         self.assertEqual(self.states(), {"home": "open", "game_list": "active", "look": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
@@ -3045,20 +3091,36 @@ class ShellWindow(QtCase):
         self.assertEqual([self.item("nav_" + k).property("label") for k in ("home", "game_list", "look", "hundred", "make", "add")],
                          ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
         self.assertEqual(self.item("footer_updates").property("text"), "Check for updates")
-        self.assertEqual(self.item("footer_discord").property("text"), "Discord")
+        self.assertEqual(self.item("footer_discord").property("text"), "Join our Discord")
 
-    def test_the_optional_step_says_so_under_its_name(self):
+    def test_closing_the_window_while_steam_art_is_being_changed_is_refused_with_the_old_words(self):
+        from PySide6.QtTest import QTest
+        self.shell.apply._busy = True
+        self.assertFalse(self.root.close())                                                             # refused
+        self.assertTrue(self.root.isVisible())
+        QTest.qWait(60)
+        self.assertEqual(self.item("main_dlg_title").property("text"), "Please wait")
+        self.assertEqual(self.item("main_dlg_p0").property("text"), "Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window.")
+        self.shell.apply._busy = False
+
+    def test_the_window_closes_when_nothing_is_being_changed(self):
+        self.assertTrue(self.root.close())
+
+    def test_the_optional_step_says_so_and_a_locked_step_says_why_under_its_name(self):
         from PySide6.QtGui import QAccessible
-        for key in ("home", "game_list", "look", "make", "add"):
-            self.assertEqual(self.item("nav_" + key).property("hint"), "", key)
-        self.assertEqual(self.item("nav_hundred").property("hint"), "(optional)")
+        want = {"home": "", "game_list": "", "look": "finish step 1 first", "hundred": "(optional) \u00b7 finish step 2 first", "make": "finish step 3 first", "add": "make the covers first"}
+        for key, hint in want.items():
+            self.assertEqual(self.item("nav_" + key).property("hint"), hint, key)
         hint, row = self.item("nav_hundred_hint"), self.item("nav_hundred")
-        self.assertEqual(hint.property("text"), "(optional)")
+        self.assertEqual(hint.property("text"), want["hundred"])
         self.assertLessEqual(self.item("nav_hundred_label").height() + hint.height(), row.height())       # both lines fit the row
+        self.assertLessEqual(hint.width(), row.width() - 40)                                              # and the words fit beside the margins
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional), locked")
-        self.assertEqual(self.shell.steps[3]["hint"], "(optional)")
+        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional) \u00b7 finish step 2 first, locked")
+        self.shell.setFact("ready", True)                                                               # unlocked: only what is always true remains
+        self.shell.setFact("look_done", True)
+        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", "finish step 3 first"))
 
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
@@ -3890,7 +3952,7 @@ class AddScreen(AddWindow):
         self.start_window()
         self.wait_for(lambda: self.ap.steamOpen)
         self.assertTrue(self.ap.watching)
-        self.assertEqual(self.text("add_note"), "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first.")
+        self.assertEqual(self.text("add_note"), "Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first.")
         from PySide6.QtGui import QColor
         self.assertEqual(QColor(self.item("add_note").property("color")).name(), "#f0b429")
         self.shell.go(4)
@@ -4165,6 +4227,22 @@ class HomeScreen(AddWindow):
         main = self.item("home_main")
         self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
 
+    def test_the_account_can_be_chosen_here_for_restore_and_reset(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.assertTrue(self.item("home_accounts").property("visible"))
+        self.click("home_accounts_chip_222")
+        self.assertEqual((self.ap.accountId, self.text("home_account")), ("222", "Steam account: Bob"))
+        self.undo_ready()
+        self.ask_and_go = None
+        self.click("home_restore")
+        self.settle()
+        self.assertEqual(self.text("apply_dlg_p0"), "Your artwork from before the last Apply will be put back on the Steam account \u201c" + "Bob" + "\u201d.")
+
+    def test_one_account_is_not_offered_as_a_choice_on_home(self):
+        self.open_home()
+        self.assertFalse(self.item("home_accounts").property("visible"))
+
     def test_discord_in_the_navigation_opens_the_invite(self):
         from unittest import mock
         import steamcase as sc
@@ -4305,7 +4383,7 @@ class HomeScreen(AddWindow):
         self.open_home()
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        for name, text in (("footer_discord", "Discord"), ("footer_updates", "Check for updates")):
+        for name, text in (("footer_discord", "Join our Discord"), ("footer_updates", "Check for updates")):
             it = self.item(name)
             self.assertTrue(it.property("activeFocusOnTab"), name)
             iface = QAccessible.queryAccessibleInterface(it)
@@ -4588,6 +4666,38 @@ class MakeState(QtCase, FakeStore):
         with unittest.mock.patch.object(self.sc, "make_covers", side_effect=RuntimeError("disk")):
             self.run_it()
         self.assertEqual((self.make.status, self.make.statusKind, self.make.running), ("Unexpected problem: disk", "error", False))
+
+    def test_errors_of_making_come_with_a_box_as_in_the_old_window(self):
+        failures = []
+        self.make.failed.connect(lambda title, text: failures.append((title, text)))
+        self.games = {}
+        self.run_it()
+        self.assertEqual(failures[-1], ("Could not make covers", "No games found. Install a game first, or load your userdata.json."))
+        def broken(steam, account, originals=None, problems=None):
+            raise self.sc.SteamcaseError("Cannot read your art folder.")
+        self.shell.setSwitch("use_custom_art", True)
+        with unittest.mock.patch.object(self.sc, "find_custom_art", broken):
+            self.games = {1: None}
+            self.run_it()
+        self.assertEqual(failures[-1], ("Cannot read your own art", "Cannot read your art folder."))
+
+    def test_a_folder_that_cannot_be_opened_is_shown_in_a_box_too(self):
+        from unittest import mock
+        failures = []
+        self.make.failed.connect(lambda title, text: failures.append((title, text)))
+        with mock.patch("qtui.make.QDesktopServices.openUrl", return_value=False):
+            self.make.openFolder()
+        self.assertEqual(failures, [("Covers folder", "Could not open the folder. It is here:\n\n%s" % os.path.abspath(self.covers))])
+
+    def test_a_new_run_locks_step_5_until_it_has_covers_again(self):
+        for fact in ("look_done", "hundred_done"):
+            self.shell.setFact(fact, True)
+        self.run_it()
+        self.assertEqual(self.shell.steps[5]["state"], "active")
+        self.games = {}
+        self.run_it()                                                   # fails: nothing to add
+        self.assertEqual(self.shell.steps[5]["state"], "locked")
+        self.assertEqual(self.shell.steps[4]["state"], "active")
 
     def test_a_failed_run_offers_no_covers_it_did_not_make(self):
         self.run_it()
@@ -4873,7 +4983,7 @@ class ApplyState(QtCase, FakeStore):
         self.ap.watching = True
         self.wait_for(lambda: self.ap.steamOpen)
         self.assertEqual(self.ap.noteKind, "warn")
-        self.assertEqual(self.ap.note, "Steam is open. Applying closes it: any running game stops and downloads pause. Save your game first.")
+        self.assertEqual(self.ap.note, "Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first.")
         title, paragraphs, go, alt = self.go()
         self.assertEqual(paragraphs[-1], {"text": "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.", "kind": "warn"})
         self.assertEqual(go, "Close Steam and add them")
@@ -5000,6 +5110,9 @@ class ApplyState(QtCase, FakeStore):
         self.accounts = [("111", "Alice")]
         self.assertIsNone(self.ap.accountChoice())
         self.assertEqual(self.ap.accountLabel, "Steam account: Alice")
+
+    def test_the_ready_text_says_when_there_are_none(self):
+        self.assertEqual(self.ap.readyText, "No covers yet. Make them first.")
 
     def test_the_ready_text_counts_covers_correctly(self):
         self.make._files = ["a.png"]

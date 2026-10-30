@@ -39,6 +39,8 @@ Item {
         Text {
             objectName: root.objectName + "_hint"
             visible: root.hint !== ""
+            width: root.width - Theme.s16 - Theme.s4 - Theme.s24          // the words stop before the "done" mark; a long one is cut
+            elide: Text.ElideRight
             text: root.hint
             font.pixelSize: Theme.smallSize
             color: Theme.faint

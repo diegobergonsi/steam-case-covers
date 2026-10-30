@@ -39,7 +39,7 @@ class Shell(QObject):
 
     def _build(self):
         states = steps.step_states(**self._facts)
-        return [{"key": k, "label": steps.LABELS[k], "hint": steps.HINTS.get(k, ""), "state": states[k]} for k in steps.STEPS]
+        return [{"key": k, "label": steps.LABELS[k], "hint": steps.hint(k, states[k]), "state": states[k]} for k in steps.STEPS]
 
     def _save(self):
         settings.save_settings(self._values, self._path)

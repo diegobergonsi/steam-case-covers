@@ -99,6 +99,16 @@ ScreenFrame {
             font.pixelSize: Theme.bodySize
             text: screen.apply.accountLabel
         }
+        ChoiceChips {                                 // only with two or more Steam accounts; Restore and Reset change the account chosen here
+            objectName: "home_accounts"
+            groupName: "Steam account"
+            width: parent.width
+            visible: screen.apply.canChoose
+            enabled: !screen.apply.busy && !shell.make.running
+            model: screen.apply.accounts
+            current: screen.apply.accountId !== "" ? screen.apply.accountId : screen.apply.accounts.length ? screen.apply.accounts[0].key : ""
+            onChosen: (key) => screen.apply.chooseAccount(key)
+        }
         ButtonRow {
             QuietButton { objectName: "home_restore"; text: "Restore previous artwork"; enabled: screen.apply.canRestore; onClicked: screen.apply.restore() }
             QuietButton { objectName: "home_reset"; text: "Reset to Steam's default art"; enabled: screen.apply.canReset; onClicked: screen.apply.reset() }

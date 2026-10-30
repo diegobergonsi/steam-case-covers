@@ -10,7 +10,7 @@ ScreenFrame {
     readonly property var make: shell.make
     readonly property var look: shell.look
     title: "Make your covers"
-    subtitle: "Check your choices, then make one cover for each game."
+    subtitle: "Downloads each game's artwork from Steam and builds the covers on your computer."
 
     Item {
         id: layout
