@@ -255,6 +255,119 @@ class StepStates(unittest.TestCase):
 
 
 @need_qt
+class LibraryState(unittest.TestCase):
+    """The game list of step 1: the saved file noticed by itself, validated, and the 'installed games only' switch."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        import time
+        from qtui.shell import Shell
+        self.Shell = Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.settings = os.path.join(self.tmp, "settings.json")
+        self.started = time.time() - 1000
+        self.shell = self.new_shell()
+        self.lib = self.shell.library
+
+    def new_shell(self):
+        return self.Shell(self.settings, downloads=self.downloads, started=self.started)
+
+    def save(self, name, data):
+        p = os.path.join(self.downloads, name)
+        with open(p, "w") as f:
+            f.write(data if isinstance(data, str) else json.dumps(data))
+        return p
+
+    def poll(self, times=2):
+        for _ in range(times):
+            self.lib.poll()
+
+    def states(self):
+        return {s["key"]: s["state"] for s in self.shell.steps}
+
+    def test_it_starts_waiting(self):
+        self.assertEqual((self.lib.path, self.lib.ready, self.lib.status, self.lib.statusKind), ("", False, "Waiting for userdata.json\u2026", "wait"))
+
+    def test_a_saved_list_is_noticed_by_itself_and_unlocks_look(self):
+        self.save("userdata.json", {"rgOwnedApps": [10, 20]})
+        self.poll()
+        self.assertTrue(self.lib.ready)
+        self.assertEqual(os.path.basename(self.lib.path), "userdata.json")
+        self.assertEqual((self.lib.status, self.lib.statusKind), ("Got it: userdata.json (2 items in your library).", "ok"))
+        self.assertEqual(self.states()["look"], "active")
+
+    def test_a_list_saved_while_logged_out_is_explained_once(self):
+        self.save("userdata.json", {"rgOwnedApps": [], "rgOwnedPackages": [1]})
+        seen = []
+        self.lib.statusChanged.connect(lambda: seen.append(self.lib.status))
+        self.poll(4)
+        self.assertFalse(self.lib.ready)
+        self.assertEqual(self.lib.statusKind, "error")
+        self.assertTrue(self.lib.status.startswith("userdata.json: That file has no games in it."), self.lib.status)
+        self.assertEqual(len(seen), 1)                                       # one message for that version of the file
+        self.assertEqual(self.states()["look"], "locked")
+
+    def test_a_file_that_is_not_a_game_list_is_refused_and_the_good_one_is_kept(self):
+        good = self.save("good.json", {"rgOwnedApps": [10]})
+        self.assertTrue(self.lib.useFile(good))
+        bad = [os.path.join(self.tmp, "missing.json"), self.tmp, self.save("empty.json", ""), self.save("garbage.json", "<html>nope</html>")]
+        for path in bad:
+            with self.subTest(os.path.basename(path)):
+                self.assertFalse(self.lib.useFile(path))
+                self.assertEqual(self.lib.path, good)
+                self.assertTrue(self.lib.ready)
+                self.assertEqual(self.lib.statusKind, "error")
+                self.assertTrue(self.lib.status.startswith("That file doesn't look right: "), self.lib.status)
+
+    def test_loading_a_file_switches_installed_only_off(self):
+        self.lib.installedOnly = True
+        self.assertTrue(self.lib.useFile(self.save("userdata.json", {"rgOwnedApps": [10]})))
+        self.assertFalse(self.lib.installedOnly)
+
+    def test_installed_only_is_ready_without_a_file_and_is_remembered(self):
+        self.lib.installedOnly = True
+        self.assertTrue(self.lib.ready)
+        self.assertEqual((self.lib.status, self.lib.statusKind), ("Using installed games only.", "ok"))
+        self.assertEqual(self.states()["look"], "active")
+        again = self.new_shell().library
+        self.assertTrue(again.installedOnly and again.ready)
+        self.assertEqual(again.status, "Using installed games only.")
+
+    def test_switching_everything_off_locks_the_next_step_and_moves_back(self):
+        self.lib.installedOnly = True
+        self.shell.go(2)
+        self.assertEqual(self.shell.current, 2)
+        self.lib.installedOnly = False
+        self.assertFalse(self.lib.ready)
+        self.assertEqual(self.shell.current, 1)
+        self.assertEqual(self.lib.status, "Waiting for userdata.json\u2026")
+
+    def test_switching_installed_only_off_keeps_a_loaded_file(self):
+        self.lib.useFile(self.save("userdata.json", {"rgOwnedApps": [10]}))
+        self.lib.installedOnly = True
+        self.lib.installedOnly = False
+        self.assertTrue(self.lib.ready)
+        self.assertTrue(self.lib.status.startswith("Got it: userdata.json"))
+
+    def test_the_watcher_stops_once_a_list_is_loaded(self):
+        first = self.save("userdata.json", {"rgOwnedApps": [10]})
+        self.poll()
+        self.save("userdata (1).json", {"rgOwnedApps": [10, 20, 30]})
+        self.poll(3)
+        self.assertEqual(self.lib.path, first)
+
+    def test_a_folder_that_does_not_exist_is_fine(self):
+        shell = self.Shell(self.settings, downloads=os.path.join(self.tmp, "nope"), started=self.started)
+        shell.library.poll()
+        self.assertFalse(shell.library.ready)
+
+
+@need_qt
 class ShellObject(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -266,7 +379,8 @@ class ShellObject(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.path = os.path.join(self.tmp, "settings.json")
-        self.shell = Shell(self.path)
+        self.dl = os.path.join(self.tmp, "Downloads")
+        self.shell = Shell(self.path, downloads=self.dl)
 
     def states(self):
         return {s["key"]: s["state"] for s in self.shell.steps}
@@ -307,11 +421,11 @@ class ShellObject(unittest.TestCase):
     def test_reduce_effects_is_saved_and_read_back(self):
         self.assertFalse(self.shell.reduceEffects)
         self.shell.reduceEffects = True
-        self.assertTrue(self.Shell(self.path).reduceEffects)
+        self.assertTrue(self.Shell(self.path, downloads=self.dl).reduceEffects)
 
     def test_switches_are_saved_and_unknown_ones_refused(self):
         self.shell.setSwitch("skip_auto_art", True)
-        self.assertTrue(self.Shell(self.path).switchValue("skip_auto_art"))
+        self.assertTrue(self.Shell(self.path, downloads=self.dl).switchValue("skip_auto_art"))
         self.shell.setSwitch("account", True)
         self.assertFalse(self.shell.switchValue("account"))
         with open(self.path) as f:
@@ -350,7 +464,7 @@ class ShellObject(unittest.TestCase):
     def test_a_corrupt_settings_file_gives_defaults(self):
         with open(self.path, "w") as f:
             f.write("{{{")
-        shell = self.Shell(self.path)
+        shell = self.Shell(self.path, downloads=self.dl)
         self.assertFalse(shell.reduceEffects)
         self.assertTrue(shell.switchValue("restart_steam"))
 
@@ -529,7 +643,7 @@ class ShellWindow(unittest.TestCase):
         from qtui.app import create_engine
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"))
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"))
         self.engine = create_engine(self.shell)
         self.addCleanup(self.close, self.engine)
         self.root = self.engine.rootObjects()[0]
