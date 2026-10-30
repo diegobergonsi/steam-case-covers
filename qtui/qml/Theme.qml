@@ -71,6 +71,9 @@ QtObject {
     readonly property int slideOffset: 30
     readonly property int dialogWidth: 440
     readonly property int progressHeight: 8
+    readonly property int thumbWidth: 60
+    readonly property int thumbHeight: 90
+    readonly property int thumbPixels: 120               // the picture is read at twice its size, for sharp edges on screens with more pixels
 
     // elevation and states (docs/ui-guide.md)
     readonly property real cardShadowBlur: 0.8

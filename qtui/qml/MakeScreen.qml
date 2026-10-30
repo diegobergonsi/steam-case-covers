@@ -47,6 +47,27 @@ ScreenFrame {
                 heading: "Progress"
                 ProgressBar { objectName: "make_progress"; label: "Making the covers"; value: screen.make.progress }
                 StatusLine { objectName: "make_status"; text: screen.make.status; kind: screen.make.statusKind }
+                Flow {                                    // what was built: the first covers of the run
+                    objectName: "make_thumbs"
+                    width: parent.width
+                    visible: screen.make.thumbs.length > 0
+                    spacing: Theme.s8
+                    Repeater {
+                        model: screen.make.thumbs
+                        delegate: Image {
+                            objectName: "make_thumb_" + index
+                            width: Theme.thumbWidth
+                            height: Theme.thumbHeight
+                            source: modelData
+                            sourceSize.width: Theme.thumbPixels
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            cache: false                          // a cover made again under the same name must show the new picture
+                            Accessible.role: Accessible.Graphic
+                            Accessible.name: "Cover " + (index + 1)
+                        }
+                    }
+                }
                 ButtonRow {
                     QuietButton { objectName: "make_folder"; text: "Open covers folder"; enabled: screen.make.done; onClicked: screen.make.openFolder() }
                 }

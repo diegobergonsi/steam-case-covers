@@ -12,6 +12,7 @@ import steamcase as sc
 from qtui import reasons
 
 STATUS_IDLE = "Not started."
+MAX_THUMBS = 5                              # covers shown under the status
 MAX_NAME = 60                               # a long game name is cut in the progress line
 
 
@@ -140,6 +141,11 @@ class Make(QObject):
     @Property(str, notify=statusChanged)
     def statusKind(self):
         return self._kind
+
+    @Property("QVariantList", notify=doneChanged)
+    def thumbs(self):
+        """The first covers of the last run, as file URLs, to show what was built."""
+        return [QUrl.fromLocalFile(f).toString() for f in self._files[:MAX_THUMBS]]
 
     def files(self):
         """The covers of the last good run, for Apply."""

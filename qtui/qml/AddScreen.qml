@@ -47,6 +47,7 @@ ScreenFrame {
         }
         SwitchRow {
             objectName: "add_restart"
+            enabled: screen.apply.canApply
             label: "Start Steam again when finished"
             checked: screen.apply.restart
             onToggled: (value) => screen.apply.restart = value

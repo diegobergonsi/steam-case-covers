@@ -765,6 +765,23 @@ class LibraryActions(QtCase):
             time.sleep(0.02)
         self.app.processEvents()
 
+    def test_a_bad_file_chosen_with_browse_also_gets_a_box_but_a_noticed_one_does_not(self):
+        failures = []
+        self.lib.failed.connect(lambda title, text: failures.append((title, text)))
+        bad = os.path.join(self.tmp, "userdata.json")
+        with open(bad, "w") as f:
+            f.write("not json")
+        self.lib._on_picked(bad)                                        # picked by the user
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0][0], "That file doesn't look right")
+        self.assertIn("userdata.json", failures[0][1] + self.lib.status)
+        self.assertTrue(self.lib.status.startswith("That file doesn't look right"))
+        self.lib.useFileUrl(__import__("PySide6.QtCore", fromlist=["QUrl"]).QUrl.fromLocalFile(bad).toString())
+        self.assertEqual(len(failures), 2)                              # the dialog's answer too
+        self.lib.useFile(bad)                                           # the same call from the watcher: only the status line
+        self.assertEqual(len(failures), 2)
+
+
     def test_copy_link_puts_the_exact_link_on_the_clipboard(self):
         self.lib.copyLink()
         self.assertEqual(QGuiApplication.clipboard().text(), self.url)
@@ -3918,6 +3935,50 @@ class MakeScreen(QtCase, FakeStore):
         self.settle()
         self.assertTrue(self.item("make_main").property("activeFocus"))
 
+    def test_the_thumbnails_of_the_covers_just_made_show_under_the_status(self):
+        self.assertFalse(self.item("make_thumbs").property("visible"))
+        self.click("make_main")
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertTrue(self.item("make_thumbs").property("visible"))
+        for i in range(2):
+            thumb = self.item("make_thumb_%d" % i)
+            self.assertEqual(thumb.property("progress"), 1.0)                # the picture is loaded
+            self.assertEqual((thumb.width(), thumb.height()), (60, 90))
+        self.assertIsNone(__import__("qtui.app", fromlist=["find_item"]).find_item(self.root, "make_thumb_2"))
+
+    def test_the_earlier_steps_cannot_be_changed_while_the_covers_are_made(self):
+        import threading
+        from unittest import mock
+        import steamcase as sc
+        gate, reached = threading.Event(), threading.Event()
+        real = sc.make_covers
+
+        def slow(games, out, **kw):
+            inner = kw["progress"]
+
+            def progress(*a):
+                inner(*a)
+                reached.set()
+                gate.wait(10)
+            kw["progress"] = progress
+            return real(games, out, **kw)
+        with mock.patch.object(sc, "make_covers", slow):
+            self.click("make_main")
+            self.wait_for(reached.is_set)
+            for step, name in ((1, "gamelist_installed"), (2, "look_next"), (3, "hundred_open")):
+                self.shell.go(step)
+                self.settle()
+                self.assertFalse(self.item(name).property("enabled"), name)
+            self.shell.go(4)
+            self.settle()
+            self.assertTrue(self.item("make_main").property("enabled"))        # Cancel still works
+            gate.set()
+            self.wait_for(lambda: not self.make.running)
+        self.shell.go(2)
+        self.settle()
+        self.assertTrue(self.item("look_next").property("enabled"))
+
     def test_the_preview_follows_the_look(self):
         before = self.item("make_preview").property("source")
         self.shell.look.setTone(90, 100, 100)
@@ -4054,6 +4115,14 @@ class AddScreen(AddWindow):
         self.click("apply_dlg_cancel")
         self.settle()
         self.assertTrue(self.item("add_main").property("activeFocus"))
+
+    def test_the_restart_switch_greys_out_when_there_is_nothing_to_add(self):
+        self.start_window()
+        self.assertTrue(self.item("add_restart").property("enabled"))
+        self.shell.make._files = []
+        self.shell.make.doneChanged.emit()
+        self.app.processEvents()
+        self.assertFalse(self.item("add_restart").property("enabled"))
 
     def test_the_restart_switch_is_the_remembered_one(self):
         self.start_window()
@@ -4261,6 +4330,13 @@ class HomeScreen(AddWindow):
         self.shell.go(1)
         self.app.processEvents()
         self.assertFalse(self.ap.watching)
+
+    def test_the_restart_switch_on_home_follows_whether_there_is_anything_to_undo(self):
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertFalse(self.item("home_restart").property("enabled"))
+        self.undo_ready()
+        self.assertTrue(self.item("home_restart").property("enabled"))
 
     def test_the_steam_note_and_the_restart_switch_are_here_too(self):
         self.running = True
@@ -4488,6 +4564,11 @@ class MakeAddFlow(AddWindow):
         self.click("add_main")
         self.assertEqual(self.shell.current, 0)
         self.assertEqual(os.path.basename(sorted(os.listdir(self.covers))[0]), "Game_1_1.png")
+
+
+def QtCore_toLocal(url):
+    from PySide6.QtCore import QUrl
+    return QUrl(url).toLocalFile()
 
 
 @need_qt
@@ -4757,6 +4838,18 @@ class MakeState(QtCase, FakeStore):
         self.run_it()                                                   # fails: nothing to add
         self.assertEqual(self.shell.steps[5]["state"], "locked")
         self.assertEqual(self.shell.steps[4]["state"], "active")
+
+    def test_the_first_covers_of_a_run_are_offered_as_thumbnails(self):
+        self.assertEqual(self.make.thumbs, [])
+        self.games = {i: None for i in range(1, 8)}
+        self.run_it()
+        urls = self.make.thumbs
+        self.assertEqual(len(urls), 5)
+        self.assertTrue(all(u.startswith("file:") and u.endswith(".png") for u in urls))
+        self.assertEqual([os.path.basename(QtCore_toLocal(u)) for u in urls], [os.path.basename(f) for f in self.make.files()[:5]])
+        self.games = {}
+        self.run_it()                                                   # a failed run offers none
+        self.assertEqual(self.make.thumbs, [])
 
     def test_a_failed_run_offers_no_covers_it_did_not_make(self):
         self.run_it()

@@ -115,6 +115,7 @@ ScreenFrame {
         }
         SwitchRow {
             objectName: "home_restart"
+            enabled: screen.apply.canRestore || screen.apply.canReset
             label: "Start Steam again when finished"
             checked: screen.apply.restart
             onToggled: (value) => screen.apply.restart = value

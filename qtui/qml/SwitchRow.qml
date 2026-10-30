@@ -14,7 +14,8 @@ Item {
     width: parent ? parent.width : 0
     implicitHeight: Math.max(Theme.fieldRowHeight, caption.contentHeight + 2 * Theme.s4)
     height: implicitHeight
-    activeFocusOnTab: true
+    activeFocusOnTab: enabled
+    opacity: enabled ? 1 : Theme.disabledOpacity
     Accessible.role: Accessible.CheckBox
     Accessible.name: label
     Accessible.checked: checked

@@ -22,6 +22,7 @@ class Library(QObject):
     installedOnlyChanged = Signal()
     readyChanged = Signal()
     statusChanged = Signal()
+    failed = Signal(str, str)               # a title and the words of an error, for a box: a file the user chose is not a game list
     needDialog = Signal(str)                # the desktop has no file chooser of its own: show Qt's, starting in this folder
     _picked = Signal(object)                # the answer of the file chooser, which runs on another thread
 
@@ -33,6 +34,7 @@ class Library(QObject):
         self._path = ""
         self._count = 0
         self._choosing = False              # a file chooser is open
+        self._why = ""                      # why the last file was refused
         self._picked.connect(self._on_picked)
         self._reported = {}                 # path -> signature of the version whose error is already on screen
         self._installed = shell.switchValue("installed_only")
@@ -124,6 +126,7 @@ class Library(QObject):
     def useFile(self, path):
         """Check a file the user chose and use it. A bad file changes nothing but the status."""
         count, why = self._check(path)
+        self._why = why
         if why:
             text = "That file doesn't look right: %s" % why
             if self._path:                                      # say what is still in use: the old pop-up left that text on screen
@@ -138,7 +141,14 @@ class Library(QObject):
     @Slot(str, result=bool)
     def useFileUrl(self, url):
         """The answer of Qt's file dialog (a file: URL)."""
-        return self.useFile(QDir.toNativeSeparators(QUrl(url).toLocalFile()))      # Qt answers C:/Users/x on Windows, the rest of the app uses C:\\Users\\x
+        return self._chosen(QDir.toNativeSeparators(QUrl(url).toLocalFile()))      # Qt answers C:/Users/x on Windows, the rest of the app uses C:\\Users\\x
+
+    def _chosen(self, path):
+        """A file the user picked (Browse, or Qt's dialog): a bad one gets a box as well as the status line. The watcher uses useFile and stays quiet."""
+        ok = self.useFile(path)
+        if not ok:
+            self.failed.emit("That file doesn't look right", self._why)
+        return ok
 
     @Slot()
     def poll(self):
@@ -188,4 +198,4 @@ class Library(QObject):
         if path is None:
             self.needDialog.emit(self._downloads)
         elif path:
-            self.useFile(path)
+            self._chosen(path)
