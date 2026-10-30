@@ -413,6 +413,57 @@ class GameListScreen(unittest.TestCase):
 
 
 @need_qt
+class GameListFlow(unittest.TestCase):
+    """The whole of step 1 as a person lives it: Home, the page is saved slowly, the app notices, Look opens."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def test_from_home_to_look(self):
+        import time
+        from qtui.app import close_engine, create_engine, find_item
+        from qtui.shell import Shell
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        downloads = os.path.join(tmp, "Downloads")
+        os.makedirs(downloads)
+        shell = Shell(os.path.join(tmp, "settings.json"), downloads=downloads, started=time.time() - 1000)
+        shell.reduceEffects = True
+        engine = create_engine(shell)
+        self.addCleanup(close_engine, engine)
+        root = engine.rootObjects()[0]
+        lib = shell.library
+        self.assertEqual(shell.current, 0)
+        shell.next()                                                   # Home's Start
+        self.app.processEvents()
+        self.assertEqual(find_item(root, "screen_title").property("text"), "Get your game list")
+        status = lambda: find_item(root, "gamelist_status").property("text")
+        self.assertEqual(status(), "Waiting for userdata.json\u2026")
+
+        path = os.path.join(downloads, "userdata.json")
+        chunks = ['{"rgOwnedApps": ', "[1, 2, ", "3, 4]}"]
+        for chunk in chunks:                                            # the browser is still writing: the file changes between polls
+            with open(path, "a") as f:
+                f.write(chunk)
+            lib.poll()
+            self.assertEqual(status(), "Waiting for userdata.json\u2026")   # not read yet, and not an error
+        lib.poll()                                                      # steady: finished
+        self.app.processEvents()
+        self.assertEqual(status(), "Got it: userdata.json (4 items in your library).")
+        self.assertTrue(find_item(root, "gamelist_next").property("enabled"))
+
+        with open(os.path.join(downloads, "userdata (1).json"), "w") as f:
+            json.dump({"rgOwnedApps": [], "rgOwnedPackages": [1]}, f)   # a logged-out copy saved later must not replace it
+        lib.poll(); lib.poll(); lib.poll()
+        self.assertEqual(status(), "Got it: userdata.json (4 items in your library).")
+
+        shell.next()
+        self.app.processEvents()
+        self.assertEqual(shell.current, 2)
+        self.assertEqual(find_item(root, "screen_title").property("text"), "Choose the look")
+
+
+@need_qt
 class LibraryActions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1032,6 +1083,14 @@ class Entry(unittest.TestCase):
         self.run_selftest("--qml-dir", os.path.join(bad, "qml"), "--log", log)
         with open(log) as f:
             self.assertIn("Main.qml", f.read())
+
+    def test_the_selftest_also_opens_the_game_list_screen(self):
+        """Step 1 imports parts (the file dialog) that only a packaged build can lack, so the self-test must load it."""
+        import re
+        with open(os.path.join(self.ROOT, "qtui", "__main__.py")) as f:
+            text = f.read()
+        self.assertRegex(text, r"shell\.go\(1\)")
+        self.assertIn("gamelist_next", text)
 
     def test_a_missing_bundled_picture_fails_the_selftest(self):
         empty = tempfile.mkdtemp()

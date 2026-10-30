@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 
+from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QGuiApplication
 
 import steamcase as sc
@@ -26,10 +27,15 @@ def selftest(shell, qml_dir, assets_dir, log):
     except RuntimeError as e:
         report_error(str(e), log)
         return 1
-    missing = [k for k in steps.STEPS if find_item(engine.rootObjects()[0], "nav_" + k) is None]
+    root = engine.rootObjects()[0]
+    missing = [k for k in steps.STEPS if find_item(root, "nav_" + k) is None]
+    shell.go(1)                                     # step 1 imports parts (the file dialog) that only a packaged build can lack
+    QCoreApplication.processEvents()
+    if find_item(root, "gamelist_next") is None:
+        missing.append("the Game list screen")
     close_engine(engine)
     if missing:
-        report_error("missing navigation entries: %s" % ", ".join(missing), log)
+        report_error("missing from the window: %s" % ", ".join(missing), log)
         return 1
     print("selftest ok")
     return 0
