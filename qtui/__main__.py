@@ -10,7 +10,7 @@ from PySide6.QtGui import QGuiApplication
 
 import steamcase as sc
 from qtui import steps
-from qtui.app import create_engine, find_item, report_error
+from qtui.app import close_engine, create_engine, find_item, report_error
 from qtui.assets import missing_assets
 from qtui.shell import Shell
 
@@ -27,6 +27,7 @@ def selftest(shell, qml_dir, assets_dir, log):
         report_error(str(e), log)
         return 1
     missing = [k for k in steps.STEPS if find_item(engine.rootObjects()[0], "nav_" + k) is None]
+    close_engine(engine)
     if missing:
         report_error("missing navigation entries: %s" % ", ".join(missing), log)
         return 1
@@ -53,7 +54,7 @@ def main(argv=None):
         report_error(str(e), args.log)
         return 1
     code = app.exec()
-    del engine
+    close_engine(engine)
     return code
 
 

@@ -4,7 +4,7 @@
 import os
 import sys
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
@@ -71,3 +71,13 @@ def report_error(text, path=None):
             f.write(text[:MAX_LOG])
     except Exception:
         pass
+
+
+def close_engine(engine):
+    """Take the window down on purpose, while the shell it binds to is still alive. Left to Python's garbage collector, the shell can be freed
+    first (the order differs between systems) and every binding then complains that `shell` is gone."""
+    for root in engine.rootObjects():
+        root.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)         # processEvents alone does not run deleteLater
+    engine.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)

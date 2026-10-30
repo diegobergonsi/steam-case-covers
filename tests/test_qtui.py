@@ -399,13 +399,8 @@ class ShellWindow(unittest.TestCase):
         self.root = self.engine.rootObjects()[0]
 
     def close(self, engine):
-        """Delete the window before its engine: the other way round, every binding complains that `shell` is gone."""
-        from PySide6.QtCore import QCoreApplication, QEvent
-        for root in engine.rootObjects():
-            root.deleteLater()
-        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)       # deleteLater needs this, processEvents alone does not run it
-        engine.deleteLater()
-        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        from qtui.app import close_engine
+        close_engine(engine)
 
     def item(self, name):
         """The QML item with this objectName, found in the visual tree (delegates of a Repeater are not QObject children of the window)."""
@@ -524,6 +519,27 @@ class Entry(unittest.TestCase):
         subprocess.run([sys.executable, "-m", "qtui", "--selftest"], cwd=self.ROOT, env=env, capture_output=True, text=True, timeout=120)
         written = [n for _, _, names in os.walk(home) for n in names if not n.endswith(".qmlc")]          # Qt's own compiled-QML cache is fine
         self.assertEqual(written, [])
+
+    def test_the_window_closes_cleanly_whatever_python_destroys_first(self):
+        """Python frees objects in an order that differs between systems. Once the window is closed on purpose, the shell may die at any time."""
+        import subprocess
+        code = (
+            "import sys, os, tempfile\n"
+            "sys.path.insert(0, %r)\n"
+            "from PySide6.QtGui import QGuiApplication\n"
+            "app = QGuiApplication([])\n"
+            "from qtui.shell import Shell\n"
+            "from qtui.app import create_engine, close_engine\n"
+            "shell = Shell(os.path.join(tempfile.mkdtemp(), 's.json'))\n"
+            "engine = create_engine(shell)\n"
+            "close_engine(engine)\n"
+            "del shell\n"
+            "del engine\n"
+            "print('closed')\n" % self.ROOT)
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+        r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "closed"), r.stderr)
+        self.assertNotIn("TypeError", r.stderr, r.stderr)
 
     def test_a_startup_failure_is_written_to_a_log_file(self):
         """The packaged app has no console, so a message on stderr is lost."""
