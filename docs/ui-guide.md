@@ -6,7 +6,7 @@ The rules every screen of the window follows, so a new feature has a place befor
 
 A left navigation and one screen on the right. The navigation lists Home, then five steps: 1 Game list, 2 Look, 3 Extras, 4 Make, 5 Add to Steam. Discord and Check for updates sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
 
-## Ten rules
+## Eleven rules
 
 1. **One job per screen.** Its title says it in four words or fewer ("Choose the look").
 2. **One primary button per screen**, always bottom right. Everything else is quiet.
@@ -18,6 +18,7 @@ A left navigation and one screen on the right. The navigation lists Home, then f
 8. **Say what is happening.** Long work shows progress with a count. An error says the cause, then the fix.
 9. **Keyboard, mouse and touch all work**, and on the Steam Deck's 800 px height the primary button never scrolls out of view.
 10. **Motion explains, never decorates.** A "reduce effects" setting (and the OS setting) turns it all off.
+11. **Whoever changes the look sees the look.** Every screen whose options change the cover (Look, 100% games, Make) shows the preview beside them. Buttons that reach the same goal (open the page, browse, copy the link) sit in one row.
 
 ## Colour
 
