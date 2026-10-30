@@ -25,6 +25,9 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        patch = mock.patch.object(sc, "originals_dir", return_value=os.path.join(self.tmp, "app-originals"))     # never the real app folder
+        patch.start()
+        self.addCleanup(patch.stop)
         self.steam = os.path.join(self.tmp, "steam")
         self.cfg = os.path.join(self.steam, "userdata", "111", "config")
         self.grid = os.path.join(self.cfg, "grid")
@@ -1740,6 +1743,11 @@ class ReplaceReason(StoreMocks):
         self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {1: mine}))
         self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None))     # not asked about: covers keep their art
 
+    def test_covers_of_games_outside_the_run_are_not_mentioned(self):
+        self.made(custom_art={1: self.mine()})
+        self.assertIsNotNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {}, {1, 2}))
+        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {}, {2, 3}))
+
     def test_a_colour_change_with_custom_art_says_both(self):
         self.made()
         got = self.gui.App._replace_reason(self.fake, (90, 100, 100), None, None, None, {1: self.mine()})
@@ -3061,15 +3069,92 @@ class CustomArt(Base):
         self.applied(100, grid2)
         self.assertEqual(sc.find_custom_art(self.steam, "222", originals=self.originals), {})
 
-    def test_bad_files_are_ignored(self):
+    def test_a_file_that_is_not_an_image_is_ignored(self):
         with open(os.path.join(self.grid, "103p.jpg"), "w") as f:
             f.write("not an image")
-        real = self.art("real.jpg", folder=self.tmp)
-        os.symlink(real, os.path.join(self.grid, "104p.jpg"))
+        self.art("107p.jpg")
+        self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {107: self.kept(107)})
+
+    def test_a_link_is_ignored(self):
+        os.symlink(self.art("real.jpg", folder=self.tmp), os.path.join(self.grid, "104p.jpg"))
+        self.art("107p.jpg")
+        self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {107: self.kept(107)})
+
+    def test_a_file_over_the_size_limit_is_ignored(self):
         self.art("105p.jpg")
         with mock.patch.object(sc, "MAX_DOWNLOAD", 50):
-            found = sc.find_custom_art(self.steam, originals=self.originals)
-        self.assertEqual(found, {})
+            self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
+
+    def test_a_picture_over_the_pixel_limit_is_ignored(self):
+        self.art("105p.jpg")
+        with mock.patch.object(sc, "MAX_PIXELS", 100 * 150 - 1):
+            self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
+        self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {105: self.kept(105)})
+
+    def test_names_with_leading_zeros_are_not_art(self):
+        self.art("0100p.jpg")                           # Steam looks for 100p.jpg, not this
+        self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
+
+    def test_an_unreadable_grid_folder_gives_nothing(self):
+        real = os.listdir
+
+        def deny(path="."):
+            if os.path.abspath(path) == os.path.abspath(self.grid):
+                raise PermissionError(13, "denied")
+            return real(path)
+        with mock.patch.object(os, "listdir", deny):
+            self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
+
+    def test_a_copy_that_fails_is_reported_and_the_file_is_used_where_it_is(self):
+        src = self.art("100p.jpg")
+        problems = []
+        with mock.patch.object(sc, "_safe_copy", side_effect=OSError(28, "No space left on device")):
+            found = sc.find_custom_art(self.steam, originals=self.originals, problems=problems)
+        self.assertEqual(found, {100: src})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("100", problems[0])
+
+    def restore_point(self):
+        """A backup to restore: Apply put one cover (game 2) in the grid."""
+        return sc.apply_covers(self.steam, self.covers, "111", files=[self.cover(2)])["backup"]
+
+    def test_restore_brings_back_art_the_grid_no_longer_holds(self):
+        src = self.art("100p.jpg")
+        sc.find_custom_art(self.steam, originals=self.originals)
+        backup = self.restore_point()
+        os.remove(src)                                  # the backup that held it is gone, and so is the file in Steam's folder
+        sc.restore_backup(self.steam, backup, originals=self.originals)
+        self.assertEqual(self.read(self.grid, "100p.jpg"), self.read(self.kept(100)))
+        self.assertTrue(os.path.exists(self.kept(100)))                 # the copy stays
+
+    def test_restore_leaves_art_the_grid_already_has(self):
+        self.art("100p.jpg", (10, 10, 10))
+        sc.find_custom_art(self.steam, originals=self.originals)
+        backup = self.restore_point()
+        newer = self.art("100p.jpg", (250, 250, 250))
+        sc.restore_backup(self.steam, backup, originals=self.originals)
+        self.assertEqual(self.read(newer), self.read(self.grid, "100p.jpg"))
+        self.assertNotEqual(self.read(self.kept(100)), self.read(self.grid, "100p.jpg"))
+        self.assertEqual(sorted(n for n in os.listdir(self.grid) if n.startswith("100")), ["100p.jpg"])
+
+    def test_restore_does_not_bring_back_a_cover_we_hold_for_that_game(self):
+        src = self.art("100p.jpg")
+        sc.find_custom_art(self.steam, originals=self.originals)
+        os.remove(src)
+        self.applied(100)
+        backup = self.restore_point()
+        sc.restore_backup(self.steam, backup, originals=self.originals)
+        self.assertFalse(os.path.exists(os.path.join(self.grid, "100p.jpg")))
+
+    def test_restore_does_not_bring_back_another_accounts_art(self):
+        grid2 = os.path.join(self.steam, "userdata", "222", "config", "grid")
+        os.makedirs(grid2)
+        self.art("100p.jpg", folder=grid2)
+        sc.find_custom_art(self.steam, "222", originals=self.originals)
+        os.remove(os.path.join(grid2, "100p.jpg"))
+        backup = self.restore_point()
+        sc.restore_backup(self.steam, backup, "111", originals=self.originals)
+        self.assertFalse(os.path.exists(os.path.join(self.grid, "100p.jpg")))
 
 
 class MakeFromCustomArt(StoreMocks):
@@ -3163,6 +3248,23 @@ class MakeFromCustomArt(StoreMocks):
         self.assertTrue(sc.covers_with_other_art(self.covers, {}))
         self.assertTrue(sc.covers_with_other_art(self.covers, {1: self.art(colour=(1, 2, 3))}))
 
+    def test_art_that_vanished_fails_that_game_only(self):
+        res = sc.make_covers({1: None, 2: None}, self.covers, custom_art={1: os.path.join(self.tmp, "gone.jpg")})
+        self.assertEqual(([a for a, _ in res["failed"]], res["ok"]), ([1], 1))
+        self.assertTrue(os.path.exists(self.cover(2)))
+
+    def test_covers_with_other_art_counts_only_the_games_asked_about(self):
+        mine = self.art()
+        sc.make_covers({1: None, 2: None}, self.covers, custom_art={1: mine, 2: mine})
+        self.assertTrue(sc.covers_with_other_art(self.covers, {}))
+        self.assertTrue(sc.covers_with_other_art(self.covers, {}, games={1}))
+        self.assertFalse(sc.covers_with_other_art(self.covers, {}, games={3}))                   # games the run will not touch do not count
+        self.assertFalse(sc.covers_with_other_art(self.covers, {1: mine, 2: mine}, games={1, 2}))
+
+    def test_covers_with_art_lists_the_games_built_from_art(self):
+        sc.make_covers({1: None, 2: None}, self.covers, custom_art={1: self.art()})
+        self.assertEqual(sc.covers_with_art(self.covers), {1})
+
     def test_wide_custom_art_is_cropped_to_the_window(self):
         sc.make_covers({1: None}, self.covers, custom_art={1: self.art(size=(1000, 500))})
         self.assertEqual(sc.Image.open(self.cover(1)).size, sc.SIZE)
@@ -3201,6 +3303,38 @@ class CustomArtCli(StoreMocks):
         out = os.path.join(self.tmp, "out")
         self.make(out)
         self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_leaving_the_flag_out_keeps_covers_made_from_your_art(self):
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--use-custom-art")
+        text = self.make(out, "--hue", "90")                                      # a colour change rebuilds it, still from your art
+        self.assertIsNotNone(sc.cover_art(self.cover(out, 1)))
+        self.assertIn("1 from your own art", text)
+
+    def test_no_custom_art_goes_back_to_steams_portrait(self):
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--use-custom-art")
+        self.make(out, "--no-custom-art")
+        self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_leaving_the_flag_out_does_not_add_art_to_other_covers(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out)
+        self.mine(1)
+        self.make(out)
+        self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_the_flag_and_its_opposite_cannot_be_combined(self):
+        with self.assertRaises(SystemExit):
+            self.make(os.path.join(self.tmp, "out"), "--use-custom-art", "--no-custom-art")
+
+    def test_a_copy_that_fails_is_printed(self):
+        self.mine(1)
+        with mock.patch.object(sc, "_safe_copy", side_effect=OSError(28, "No space left on device")):
+            text = self.make(os.path.join(self.tmp, "out"), "--use-custom-art")
+        self.assertIn("could not keep a copy", text.lower())
 
     def test_the_summary_counts_custom_covers(self):
         self.mine(1)

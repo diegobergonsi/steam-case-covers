@@ -1102,7 +1102,14 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         urls, auto = portrait_candidates(appid, it)
-        wanted_art = art_note(custom_art[appid]) if appid in custom_art else None
+        try:
+            wanted_art = art_note(custom_art[appid]) if appid in custom_art else None
+        except OSError as e:                                              # the file went away since it was found
+            res["failed"].append((appid, name))
+            if log:
+                log("FAIL %s %s: %s" % (appid, name, e))
+            report(n, appid, name, "failed")
+            continue
         if auto and skip_auto_art and wanted_art is None:                 # checked first: also drops covers built by an earlier run without this option
             res["skipped"] += 1
             report(n, appid, name, "skipped")
@@ -1179,22 +1186,33 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
     return False
 
 
-def covers_with_other_art(covers_dir, custom_art):
+def covers_with_other_art(covers_dir, custom_art, games=None):
     """True if make_covers with this `custom_art` ({appid: path}) would rebuild a cover already in the folder because of its art alone: a cover made
-    from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared."""
+    from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared.
+    `games`: only covers of these appids count (the run leaves the others alone); default: all."""
     try:
         names = os.listdir(covers_dir)
     except OSError:
         return False
     for n in names:
         appid = appid_of(n)
-        if n.lower().endswith(".png") and appid is not None:
+        if n.lower().endswith(".png") and appid is not None and (games is None or int(appid) in games):
             path = os.path.join(covers_dir, n)
             if cover_colour(path) is None:
                 continue
             if cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
                 return True
     return False
+
+
+def covers_with_art(covers_dir):
+    """{appid} of the covers in the folder that were built from the user's own art."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return set()
+    return {int(appid_of(n)) for n in names
+            if n.lower().endswith(".png") and appid_of(n) is not None and cover_art(os.path.join(covers_dir, n))}
 
 
 def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
@@ -1596,6 +1614,28 @@ def _undo(grid, backup_dir, m):
     return n
 
 
+def _bring_back_art(grid, originals):
+    """Copy the user's own art kept in `originals` back into the grid folder for every app that has no portrait there at all. Caller holds the lock. Returns files copied.
+    The copy stays in `originals`."""
+    try:
+        kept = sorted(os.listdir(originals))
+        held = {int(m.group(1)) for m in map(_ART_NAME.match, os.listdir(grid)) if m}
+    except OSError:
+        return 0
+    n = 0
+    for name in kept:
+        m = _ORIGINAL_NAME.match(name)
+        src = os.path.join(originals, name)
+        if not m or int(m.group(1)) in held or not _usable_art(src):
+            continue
+        try:
+            _safe_copy(src, os.path.join(grid, "%sp.%s" % (m.group(1), m.group(2))))
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
 _COVER_NAME = re.compile(r"^[0-9]{1,10}p\.png$")
 _JPG_NAME = re.compile(r"^[0-9]{1,10}p\.(jpg|jpeg|webp)$")      # art set from Steam's menu or by SteamGridDB; Steam shows these before our .png
 OTHER_EXT = ("jpg", "jpeg", "webp")
@@ -1605,10 +1645,12 @@ def _is_plain_file(path):
     return os.path.isfile(path) and not os.path.islink(path)
 
 
-def restore_backup(steam, backup_dir, user=None, keep=False):
+def restore_backup(steam, backup_dir, user=None, keep=False, originals=None):
     """Undo one apply: put replaced files back and remove the ones that were added. Returns files touched.
     The backup is deleted afterwards (so the next restore goes one step further back) unless keep=True.
-    Only real steamcase backups inside this account's config folder are accepted, and only files named <appid>p.png (or <appid>p.jpg, put back from the backup) are touched."""
+    Only real steamcase backups inside this account's config folder are accepted, and only files named <appid>p.png (or <appid>p.jpg, put back from the backup) are touched.
+    Art of your own that the app kept a copy of (find_custom_art) and that Steam's folder holds no portrait for any more (its backup is gone) is copied back too;
+    `originals` is the folder of those copies (default: originals_dir())."""
     grid = grid_dir(steam, user)
     cfg = os.path.realpath(os.path.dirname(grid))
     real = os.path.realpath(backup_dir)
@@ -1628,6 +1670,7 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
         raise SteamcaseError("The backup's manifest lists unexpected files; refusing to use it.")
     with _Lock(cfg):
         n = _undo(grid, real, m)
+        n += _bring_back_art(grid, os.path.join(originals or originals_dir(), pick_account(steam, user)))
         if not keep:
             shutil.rmtree(real, ignore_errors=True)
     return n
@@ -1635,8 +1678,8 @@ def restore_backup(steam, backup_dir, user=None, keep=False):
 
 # ---------- command line ----------
 ART_EXT_ORDER = ("jpg", "jpeg", "webp", "png")          # which file Steam shows first when an app has several; ours follows it
-_ART_NAME = re.compile(r"^([0-9]{1,10})p\.(jpg|jpeg|webp|png)$")
-_ORIGINAL_NAME = re.compile(r"^([0-9]{1,10})\.(jpg|jpeg|webp|png)$")
+_ART_NAME = re.compile(r"^([1-9][0-9]{0,9})p\.(jpg|jpeg|webp|png)$")          # no leading zeros: Steam looks for 100p.jpg, never 0100p.jpg
+_ORIGINAL_NAME = re.compile(r"^([1-9][0-9]{0,9})\.(jpg|jpeg|webp|png)$")
 
 
 def originals_dir():
@@ -1660,17 +1703,21 @@ def _usable_art(path):
         return False
 
 
-def find_custom_art(steam, user=None, originals=None):
+def find_custom_art(steam, user=None, originals=None, problems=None):
     """{appid: path} of the user's own portraits (set by hand in Steam or from SteamGridDB), for `make_covers(custom_art=...)`.
     A plain image in the grid folder that is not one of our covers wins (`.jpg`, `.jpeg`, `.webp`, then `.png`, like Steam) and is copied into
     `originals` (default: `originals_dir()`, one folder per Steam account inside it); an app the grid folder holds only our cover for keeps the copy
     made earlier, and only while the grid still holds our cover: once it does not (Reset, or the art was cleared in Steam) the game goes back to
     Steam's portrait. A link, a file that is too big or does not decode is ignored. The app never deletes an original.
-    One account's art never reaches another account's covers."""
+    One account's art never reaches another account's covers.
+    `problems`: a list that gets one sentence for each file whose copy could not be kept (that file is then used where it is, but Apply will move it away)."""
     originals = os.path.join(originals or originals_dir(), pick_account(steam, user))
     grid = grid_dir(steam, user)
     found = {}
-    names = sorted(os.listdir(grid)) if os.path.isdir(grid) else []
+    try:
+        names = sorted(os.listdir(grid))
+    except OSError:
+        names = []
     options = {}
     for n in names:
         m = _ART_NAME.match(n)
@@ -1691,10 +1738,16 @@ def find_custom_art(steam, user=None, originals=None):
                     if other != ext and _is_plain_file(stale):
                         os.remove(stale)
                 found[appid] = keep
-            except OSError:
+            except OSError as e:
                 found[appid] = path                            # cannot keep a copy: use the file where it is
+                if problems is not None:
+                    problems.append("Could not keep a copy of your art for game %d (%s)." % (appid, e.strerror or e))
             break
-    for n in sorted(os.listdir(originals)) if os.path.isdir(originals) else []:
+    try:
+        stored = sorted(os.listdir(originals))
+    except OSError:
+        stored = []
+    for n in stored:
         m = _ORIGINAL_NAME.match(n)
         path = os.path.join(originals, n)
         if m and int(m.group(1)) not in found and _usable_art(path):
@@ -1773,7 +1826,14 @@ def cmd_make(args):
     completed, treatment = _completion_args(args, theme)    # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
     hue, sat, val = _chosen_colour(args)
-    custom_art = {a: p for a, p in find_custom_art(steam, args.user).items() if a in games} if args.use_custom_art else None
+    out = os.path.abspath(args.out)
+    problems = []
+    custom_art = None
+    if args.use_custom_art or (args.use_custom_art is None and covers_with_art(out)):
+        custom_art = find_custom_art(steam, args.user, problems=problems)
+        if args.use_custom_art is None:                     # not asked for: only the games whose covers already come from your art keep it
+            have = covers_with_art(out)
+            custom_art = {a: p for a, p in custom_art.items() if a in have}
 
     def progress(done, total, appid, name, status):
         if status == "ok":
@@ -1791,6 +1851,8 @@ def cmd_make(args):
         print("  no art:", appid, name)
     for appid, name in res["failed"]:
         print("  failed (connection problem? run again to retry):", appid, name)
+    for text in problems:
+        print("  " + text[0].lower() + text[1:])
 
 
 def cmd_apply(args):
@@ -1921,9 +1983,12 @@ def main():
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) or rosette (the rosette alone). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
-        p.add_argument("--use-custom-art", action="store_true",
-                       help="put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it; a copy is kept in this app's own folder, "
-                            "your files are not changed. Without it every cover uses Steam's own portrait (covers made from your art are rebuilt)")
+        art = p.add_mutually_exclusive_group()
+        art.add_argument("--use-custom-art", dest="use_custom_art", action="store_const", const=True, default=None,
+                         help="put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it; a copy is kept in this app's own folder, "
+                              "your files are not changed. Without this option or --no-custom-art, covers already made from your art keep it")
+        art.add_argument("--no-custom-art", dest="use_custom_art", action="store_const", const=False,
+                         help="use Steam's own portrait for every cover (covers made from your art are rebuilt)")
         if name == "make":
             p.add_argument("--user", help="Steam account folder id inside userdata/ whose custom art --use-custom-art reads (auto: most recent login)")
         p.set_defaults(fn=fn)

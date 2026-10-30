@@ -110,6 +110,7 @@ class App(tk.Tk):
         self.installed_only = tk.BooleanVar(value=False)
         self.skip_auto = tk.BooleanVar(value=False)
         self.use_custom_art = tk.BooleanVar(value=False)
+        self.art_problems = []                              # art whose copy could not be kept (find_custom_art), for the end of the run
         self.hue = tk.IntVar(value=0)     # case colour: degrees turned from the original blue
         self.sat = tk.IntVar(value=100)   # its colourfulness and brightness, 0..100 (100: as the original blue)
         self.val = tk.IntVar(value=100)
@@ -695,11 +696,12 @@ class App(tk.Tk):
         if self._thumbs:
             self.preview.pack(fill="x", pady=(px(12), 0))
 
-    def _replace_reason(self, tone, completed, treatment, theme=None, custom_art=sc.KEEP):
+    def _replace_reason(self, tone, completed, treatment, theme=None, custom_art=sc.KEEP, games=None):
         """Why Make covers would rebuild covers already in the folder, as (title, sentence) for the prompt; None when nothing is rebuilt.
-        `custom_art` is what make_covers gets ({} when the option is off); sc.KEEP leaves the art of existing covers out of it."""
+        `custom_art` is what make_covers gets ({} when the option is off); sc.KEEP leaves the art of existing covers out of it.
+        `games`: the appids the run will make covers for (None: all); covers of other games are not mentioned."""
         look = App._replace_reason_look(self, tone, completed, treatment, theme)
-        if custom_art == sc.KEEP or not sc.covers_with_other_art(self.covers_dir, custom_art):
+        if custom_art == sc.KEEP or not sc.covers_with_other_art(self.covers_dir, custom_art, games):
             return look
         if custom_art:
             title, extra = "Use your own art?", "The covers you already made for games with your own art are made again with that art inside."
@@ -782,16 +784,18 @@ class App(tk.Tk):
         try:
             steam = sc.steam_dir()
             games, _ = sc.load_library(steam, lib)
-            art = {a: p for a, p in sc.find_custom_art(steam, account).items() if a in games}
-            self.events.put(("art", tone, completed, treatment, theme, art))
+            problems = []
+            art = {a: p for a, p in sc.find_custom_art(steam, account, problems=problems).items() if a in games}
+            self.events.put(("art", tone, completed, treatment, theme, art, set(games), problems))
         except sc.SteamcaseError as e:
             self.events.put(("art_error", str(e)))
         except Exception as e:                      # never leave the UI stuck in "running"
             self.events.put(("art_error", "Unexpected problem: %s" % e))
 
-    def _begin_make(self, tone, completed, treatment, theme, custom_art):
-        """The rest of start_make once the art is known: ask before replacing covers, then make them."""
-        why = self._replace_reason(tone, completed, treatment, theme, custom_art)
+    def _begin_make(self, tone, completed, treatment, theme, custom_art, games=None, problems=()):
+        """The rest of start_make once the art is known: ask before replacing covers, then make them.
+        `games`: the library's appids; `problems`: sentences about art that could not be copied, shown when the covers are ready."""
+        why = self._replace_reason(tone, completed, treatment, theme, custom_art, games)
         if why:
             if not messagebox.askokcancel(why[0],
                                           [(why[1], "main"),
@@ -802,6 +806,7 @@ class App(tk.Tk):
                     self.step2_status.configure(text=self._status_before[0], fg=self._status_before[1])
                 return
         lib = None if self.installed_only.get() else self.library_path
+        self.art_problems = list(problems)
         self.running = True
         self.cancel_flag.clear()
         self.cover_files = []
@@ -945,6 +950,10 @@ class App(tk.Tk):
             text += " Skipped %d items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists)." % skipped
         if bad:
             text += " %d could not be downloaded (connection problem?): click “Make covers” again to retry only those." % bad
+        if self.art_problems:
+            k = len(self.art_problems)
+            text += " Could not keep a copy of your own art for %d %s: Apply moves %s into the backup, and Restore brings %s back." % (
+                k, "game" if k == 1 else "games", "that file" if k == 1 else "those files", "it" if k == 1 else "them")
         self.step2_status.configure(text=text, fg=ACCENT if n and not bad else MUTED if not n else FG)
         self._set_state(self.step1, True)
         self.refresh_step1()
