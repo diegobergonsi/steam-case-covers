@@ -46,6 +46,18 @@ class Base(unittest.TestCase):
         with open(os.path.join(*parts), "rb") as f:
             return f.read()
 
+    def resave(self, path, **notes):
+        """The same pixels with other notes (None drops a note)."""
+        with sc.Image.open(path) as im:
+            im.load()
+            info = sc.PngInfo()
+            for k, v in {**im.info, **notes}.items():
+                if v is not None and isinstance(v, str):
+                    info.add_text(k, v)
+            out = path + ".resaved.png"
+            im.save(out, format="PNG", pnginfo=info)
+        return out
+
 
 class ApplyRestore(Base):
     def test_apply_then_restore_returns_original(self):
@@ -3408,18 +3420,6 @@ class PlatformCases(Base):
         sc.build_cover(self.noise(seed), out, sc.load_platform_frame(platform, family), platform=platform, treatment=treatment)
         return out
 
-    def resave(self, path, **notes):
-        """The same pixels with other notes (None drops a note)."""
-        with sc.Image.open(path) as im:
-            im.load()
-            info = sc.PngInfo()
-            for k, v in {**im.info, **notes}.items():
-                if v is not None and isinstance(v, str):
-                    info.add_text(k, v)
-            out = path + ".resaved.png"
-            im.save(out, format="PNG", pnginfo=info)
-        return out
-
     def test_each_console_cover_is_recognised(self):
         for p in sc.PLATFORMS:
             for family in (False, True):
@@ -3514,6 +3514,93 @@ class PlatformCases(Base):
         with mock.patch.object(sc, "steam_running", return_value=False), contextlib.redirect_stdout(io.StringIO()):
             sc.cmd_apply(args)
         self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png"])
+
+
+class ConsoleMake(StoreMocks):
+    """make_covers(platforms=...): the manual flow puts chosen games in console cases; the natural flow leaves those covers alone."""
+
+    def cv(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_a_dict_makes_only_the_listed_games_in_their_cases(self):
+        res = sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: "ps5", 2: "xbox360"})
+        self.assertEqual((sc.cover_platform(self.cv(1)), sc.cover_platform(self.cv(2))), ("ps5", "xbox360"))
+        self.assertFalse(os.path.exists(self.cv(3)))
+        self.assertEqual((res["ok"], res["platforms"], sorted(res["files"])), (2, 2, sorted([self.cv(1), self.cv(2)])))
+
+    def test_only_narrows_the_dict_further(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps4"}, only=[2])
+        self.assertEqual(os.listdir(self.covers), ["Game_2_2.png"])
+
+    def test_the_steam_case_choice_rebuilds_a_console_cover(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        res = sc.make_covers({1: None}, self.covers, platforms={1: None})
+        self.assertIsNone(sc.cover_platform(self.cv(1)))
+        self.assertEqual(sc.cover_colour(self.cv(1)), (0, 100, 100))
+        self.assertEqual((res["ok"], res["platforms"]), (1, 0))
+
+    def test_a_console_choice_rebuilds_a_steam_cover(self):
+        sc.make_covers({1: None}, self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps4"})
+        self.assertEqual(sc.cover_platform(self.cv(1)), "ps4")
+
+    def test_another_console_rebuilds_and_the_same_one_is_kept(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        before = os.stat(self.cv(1)).st_mtime_ns
+        seen = []
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, progress=lambda d, t, a, n, st: seen.append(st))
+        self.assertEqual((seen, os.stat(self.cv(1)).st_mtime_ns), (["exists"], before))
+        sc.make_covers({1: None}, self.covers, platforms={1: "switch"})
+        self.assertEqual(sc.cover_platform(self.cv(1)), "switch")
+
+    def test_the_natural_run_keeps_console_covers_even_with_force(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        before = self.read(self.cv(1))
+        for force in (False, True):
+            with self.subTest(force=force):
+                res = sc.make_covers({1: None, 2: None}, self.covers, hue=134, force=force)
+                self.assertEqual(self.read(self.cv(1)), before)
+                self.assertEqual((res["ok"], res["platforms"]), (2, 1))
+                self.assertIn(self.cv(1), res["files"])
+        self.assertEqual(sc.cover_colour(self.cv(2)), (134, 100, 100))
+
+    def test_the_natural_run_does_not_want_to_replace_them(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 134))
+
+    def test_a_garbled_platform_note_is_rebuilt_by_the_natural_run(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
+        sc.make_covers({1: None}, self.covers)
+        self.assertIsNone(sc.cover_platform(self.cv(1)))
+
+    def test_unknown_platform_is_refused_before_any_lookup(self):
+        with mock.patch.object(sc, "store_items", side_effect=AssertionError("looked up")), self.assertRaises(ValueError):
+            sc.make_covers({1: None}, self.covers, platforms={1: "ps9"})
+
+    def test_gold_and_themes_are_refused_with_a_console_case(self):
+        for kw in ({"treatment": "gold-case"}, {"treatment": "gold-border-rosette"}, {"theme": "halloween"}):
+            with self.subTest(kw=kw), self.assertRaises(ValueError):
+                sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, **kw)
+        sc.make_covers({1: None}, self.covers, platforms={1: None}, theme="halloween", treatment="rosette", completed={1})     # Steam case only: allowed
+        self.assertEqual(sc.cover_theme(self.cv(1)), "halloween")
+
+    def test_marks_go_on_the_completed_games_only(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, completed={2}, treatment="ribbon")
+        self.assertEqual((sc.cover_treatment(self.cv(1)), sc.cover_treatment(self.cv(2))), (None, "ribbon"))
+
+    def test_the_family_corner_goes_on_family_games_only(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, family={2})
+        def green(path):
+            with sc.Image.open(path) as im:
+                return sum(1 for px in im.convert("RGB").crop((0, 0, 207, 207)).getdata() if all(abs(a - b) <= 8 for a, b in zip(px, sc.FAMILY_COLOR)))
+        self.assertEqual(green(self.cv(1)), 0)
+        self.assertGreater(green(self.cv(2)), 1000)
+
+    def test_a_listed_game_missing_from_the_library_is_ignored(self):
+        res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5", 99: "ps4"})
+        self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
 
 
 if __name__ == "__main__":

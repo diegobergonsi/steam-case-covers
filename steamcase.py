@@ -1079,7 +1079,7 @@ def _wanted_look(appid, path, colour, completed, treatment, theme=None):
 
 
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None, theme=None, custom_art=None):
+                completed=None, treatment=None, theme=None, custom_art=None, platforms=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -1092,7 +1092,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     marks: a `treatment` whose marks are "full" raises ValueError.
     custom_art: {appid: path} of the user's own portraits (see find_custom_art): those games get that picture in the case and nothing is downloaded
     for them (even a blurry auto-art, whatever `skip_auto_art` says); None: every cover is made from Steam's portrait, and a cover built from
-    custom art before is rebuilt.
+    custom art before is rebuilt. Games in a console case never use custom art.
+    platforms: None (the natural flow): a game whose cover is already in a console case keeps it untouched, whatever `force` says, and is counted in "platforms".
+    A dict {appid: one of PLATFORMS, or None for the Steam case}: only these games are made, each in its case (a console case has no colour, tone or theme,
+    and only the "ribbon" and "rosette" `treatment` go with it: ValueError otherwise, before any lookup). A cover that already has the wanted case,
+    marks and art is kept, any other is rebuilt. Apps in the dict that are not in `games` are ignored.
     Without a page each existing cover keeps the treatment it was made with. A "gold-case" cover is made in gold whatever the colour asked.
     A cover that exists in another colour, with another treatment or in another theme is rebuilt, one that already looks right is kept
     (the hue means nothing at 0 sat or 0 val). Apps in `completed` that are not in `games` are ignored.
@@ -1100,7 +1104,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
     "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set),
-    "completed": how many of "files" carry a treatment, kept ones included}.
+    "completed": how many of "files" carry a treatment, kept ones included, "platforms": how many of "files" are in a console case}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
@@ -1110,6 +1114,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         raise ValueError("unknown theme: %r" % (theme,))
     if theme is not None and treatment is not None and split_treatment(treatment)[1] != "rosette":
         raise ValueError("the %s theme only goes with the rosette-only marks, not %r" % (theme, treatment))      # the ribbon would hide the decorations
+    wanted_platforms = set((platforms or {}).values()) - {None}
+    if wanted_platforms - set(PLATFORMS):
+        raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS), key=str)[0],))
+    if wanted_platforms:
+        _check_platform(sorted(wanted_platforms)[0], treatment, theme)
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -1123,13 +1132,23 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             frames[key] = load_frame(colour[0], is_family, sat=colour[1], val=colour[2])
         return frames[key]
 
+    def console_frame_for(platform, is_family):
+        key = (platform, is_family)
+        if key not in frames:
+            frames[key] = load_platform_frame(platform, is_family)
+        return frames[key]
+
     frame_for((hue, sat, val), False)           # a missing frame.png fails here, before any download
+    for p in sorted(wanted_platforms):
+        console_frame_for(p, False)             # so does a missing console case
     if treatment is not None or completed is None:
         _completion_overlay()                   # so does a missing overlay: otherwise every 100% cover would count as a failed download
     if theme is not None:
         _halloween_overlay()                    # and a missing theme overlay: otherwise every cover would
 
     ids = sorted(games)
+    if platforms is not None:
+        ids = [i for i in ids if i in platforms]
     if only:
         ids = [i for i in ids if i in set(only)]
     if log:
@@ -1139,7 +1158,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
         raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
-    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0}
+    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0}
     todo = []                                   # only items that can become a cover count towards the progress
     for appid in ids:
         it = info.get(appid) or {}
@@ -1170,9 +1189,17 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "skipped")
             continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
+        want_p = platforms.get(appid) if platforms is not None else None
+        if platforms is None and os.path.exists(dest) and cover_platform(dest):      # the natural flow leaves a cover in a console case alone
+            res["ok"] += 1
+            res["platforms"] += 1
+            res["completed"] += bool(cover_treatment(dest))
+            res["files"].append(dest)
+            report(n, appid, name, "exists")
+            continue
         urls, auto = portrait_candidates(appid, it)
         try:
-            wanted_art = art_note(custom_art[appid]) if appid in custom_art else None
+            wanted_art = art_note(custom_art[appid]) if appid in custom_art and not want_p else None
         except OSError as e:                                              # the file went away since it was found
             res["failed"].append((appid, name))
             if log:
@@ -1184,8 +1211,13 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "skipped")
             continue
         target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment, theme)
-        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art:
+        if want_p:
+            kept = cover_platform(dest) == want_p and cover_treatment(dest) == target and cover_art(dest) == wanted_art
+        else:
+            kept = same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art and cover_platform(dest) is None
+        if os.path.exists(dest) and not force and kept:
             res["ok"] += 1
+            res["platforms"] += bool(want_p)
             res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "exists")
@@ -1213,8 +1245,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(custom_art[appid] if got and wanted_art else tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target, theme=theme, from_art=wanted_art)
+            build_cover(custom_art[appid] if got and wanted_art else tmp, dest, console_frame_for(want_p, is_family) if want_p else frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2],
+                        treatment=target, theme=theme, from_art=wanted_art, platform=want_p)
             res["ok"] += 1
+            res["platforms"] += bool(want_p)
             res["family"] += is_family
             res["completed"] += target is not None
             res["files"].append(dest)
