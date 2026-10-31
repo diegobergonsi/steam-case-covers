@@ -3644,6 +3644,36 @@ class SelfCheckConsoleCases(Base):
         self.assertEqual(selfcheck.engine_problems(), [])
 
 
+class ConsoleCaseCredits(unittest.TestCase):
+    """The marks on the console cases belong to their owners, and the files we took them from have licences: docs/THIRD_PARTY.md says both."""
+
+    def text(self):
+        with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_it_names_the_marks_their_owners_and_that_there_is_no_affiliation(self):
+        text = self.text()
+        for needle in ("PlayStation", "Sony Interactive Entertainment", "Xbox", "Microsoft", "Nintendo", "assets/cases"):
+            self.assertIn(needle, text)
+        self.assertRegex(text, r"(?i)not affiliated with[^.]*Sony[^.]*Nintendo|not affiliated with[^.]*Nintendo[^.]*Sony")
+
+    def test_it_names_the_source_and_licence_of_every_logo_file(self):
+        text = self.text()
+        src = os.path.join(sc.HERE, "tools", "src", "cases")
+        for name in sorted(n for n in os.listdir(src) if n.endswith(".svg")):
+            self.assertIn(name, text)
+        self.assertIn("Simple Icons", text)
+        self.assertIn("CC0", text)
+        self.assertIn("not the official wordmark", text)
+
+    def test_every_logo_file_is_listed_in_the_sources_note(self):
+        src = os.path.join(sc.HERE, "tools", "src", "cases")
+        with open(os.path.join(src, "SOURCES.txt"), encoding="utf-8") as f:
+            note = f.read()
+        for name in (n for n in os.listdir(src) if n.endswith(".svg")):
+            self.assertIn(name, note)
+
+
 class ListGames(Base):
     """list_games tells the caller when the store could not be asked, so a window can say "offline" instead of showing a short list."""
 

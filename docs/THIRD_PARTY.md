@@ -1,14 +1,19 @@
 # Third-party material and trademarks
 
-This project is **not affiliated with, endorsed by, or sponsored by Valve Corporation, Microsoft, or any game publisher.**
+This project is **not affiliated with, endorsed by, or sponsored by Valve Corporation, Microsoft, Sony Interactive Entertainment, Nintendo, or any game publisher.**
 
 ## Trademarks
 - **Steam** and the Steam logo are trademarks and/or registered trademarks of Valve Corporation.
 - **Windows** and the Windows logo are trademarks of the Microsoft group of companies.
+- **PlayStation**, the PlayStation logo, **PS3**, **PS4** and **PS5** are trademarks or registered trademarks of Sony Interactive Entertainment Inc.
+- **Xbox**, the Xbox logo, **Xbox 360**, **Xbox One** and **Xbox Series X|S** are trademarks of the Microsoft group of companies.
+- **Nintendo**, **Nintendo Switch** and **Nintendo Switch 2** and their logos are trademarks of Nintendo.
 - **Linux** is a trademark of Linus Torvalds. The penguin is "Tux".
 - **Discord** and its logo are trademarks of Discord Inc. The mark appears only as the button in the window's header that links to this project's Discord server; it does not mean that Discord endorses this project.
 
 These marks appear in `assets/frame.png` only to mimic a physical box and show platform support. They remain the property of their owners. If you are a rights holder and want something changed, open an issue.
+
+The console cases in `assets/cases/` (PlayStation 3, 4 and 5, Xbox 360, Xbox One, Xbox Series X|S, Nintendo Switch and Switch 2; drawn by `tools/build_cases.py`) carry those companies' marks only to mimic the physical cases of their games, as `assets/frame.png` does with Steam's. They remain the property of their owners, and this project is not affiliated with them. The PlayStation marks and the Nintendo Switch mark are the files from Simple Icons. Simple Icons has no mark for the Xbox 360, Xbox One and Xbox Series X|S models or for the Switch 2: there the console's mark (the Xbox sphere, the Switch logo) is drawn with the model typeset in Nunito Sans, which is not the official wordmark. If you are a rights holder and want something changed, open an issue and it will be.
 
 `assets/family_corner.png` is a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
 
@@ -23,6 +28,8 @@ These marks appear in `assets/frame.png` only to mimic a physical box and show p
 |---|---|---|
 | `tools/src/steam_logo.svg` | SVG Repo ("steam" icon) | **License not verified.** The logo itself is Valve's trademark. If a rights holder objects, it will be replaced. |
 | `tools/src/discord.svg` (rendered to `assets/discord.png`) | Simple Icons 13.0.0 ("Discord" icon) | CC0 1.0 (public domain dedication). The logo itself is Discord's trademark; see Trademarks above. |
+| `tools/src/cases/playstation.svg`, `playstation3.svg`, `playstation4.svg`, `playstation5.svg`, `nintendoswitch.svg` (rendered into `assets/cases/*.png`) | Simple Icons 13.0.0 ("PlayStation", "PlayStation 3", "PlayStation 4", "PlayStation 5", "Nintendo Switch" icons) | CC0 1.0 (public domain dedication). The marks themselves are trademarks of Sony Interactive Entertainment and Nintendo; see Trademarks above. |
+| `tools/src/cases/xbox.svg` (rendered into `assets/cases/*.png`) | Simple Icons 12.0.0 ("Xbox" icon; later versions removed it) | CC0 1.0 (public domain dedication). The mark itself is a trademark of the Microsoft group of companies; see Trademarks above. |
 | `tools/src/tux.svg` | KDE Breeze icon theme (`preferences-system-linux`), from the Arch Linux `breeze-icons` package | LGPL-3.0-or-later (package metadata also lists LGPL-2.1-only). Text: `tools/src/LICENSE-LGPL-3.0.txt` |
 | `tools/src/fonts/NunitoSans.ttf` | Nunito Sans, Google Fonts | SIL Open Font License 1.1 (`tools/src/fonts/OFL.txt`) |
 
