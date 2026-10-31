@@ -3687,8 +3687,8 @@ class UpdatesState(QtCase):
         title, paragraphs, ok, cancel, link = self.check({"newer": True, "current": "1.2.0", "latest": "1.3.0", "url": "https://github.com/x/releases"})
         self.assertEqual((title, ok, cancel, link), ("Update available", "Open GitHub page", "Not now", "https://github.com/x/releases"))
         self.assertEqual(paragraphs[0]["text"], "A newer version is available: 1.3.0 (you have 1.2.0).")
-        self.assertIn("opens this project's release page on GitHub in your web browser:\nhttps://github.com/x/releases", paragraphs[1]["text"])
-        self.assertEqual(paragraphs[2]["text"], "Nothing is downloaded or installed unless you choose to do it yourself on that page.")
+        self.assertEqual(paragraphs[1], {"text": "Nothing is downloaded or installed unless you choose to do it yourself on that page.", "kind": "muted"})
+        self.assertEqual(len(paragraphs), 2)                                  # no paragraph explaining the button or printing the link
 
     def test_an_unknown_current_version_cannot_be_compared(self):
         paragraphs = self.check({"newer": None, "current": None, "latest": "1.3.0", "url": "https://github.com/x"})[1]

@@ -60,7 +60,6 @@ class Updates(QObject):
                 head = "The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare." % r["latest"]
             self.message.emit("Update available", [
                 {"text": head, "kind": "main"},
-                {"text": "\u201cOpen GitHub page\u201d opens this project's release page on GitHub in your web browser:\n%s" % r["url"], "kind": "muted"},
                 {"text": "Nothing is downloaded or installed unless you choose to do it yourself on that page.", "kind": "muted"}],
                 "Open GitHub page", "Not now", r["url"])
 
