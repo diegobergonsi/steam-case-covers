@@ -3219,6 +3219,14 @@ class NoTkLeft(unittest.TestCase):
         for hexcode in theme.values():                                        # every colour of the window is in the design document
             self.assertIn(hexcode, design.lower() if hexcode.islower() else design, hexcode)
 
+    def test_every_picture_the_readme_shows_exists_and_the_old_window_screenshot_is_gone(self):
+        import re
+        readme = self.read("README.md")
+        for path in set(re.findall(r'src="(assets/[^"]+)"', readme)):
+            self.assertTrue(os.path.isfile(os.path.join(self.ROOT, path)), path)
+        self.assertFalse(os.path.exists(os.path.join(self.ROOT, "assets", "screenshot.png")))
+        self.assertNotIn("screenshot.png", readme)
+
     def test_the_engine_does_not_point_at_a_file_that_is_gone(self):
         for name in ("steamcase.py", "completion.py"):
             self.assertNotIn("gui.py", self.read(name), name)

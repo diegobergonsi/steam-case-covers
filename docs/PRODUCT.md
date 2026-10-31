@@ -37,7 +37,7 @@ Desktop app (a Qt Quick window, package `qtui/`, with Home and five steps; the r
 
 ## Evidence on Hand
 
-Real assets in `assets/`: `preview.png`, `screenshot.png`, `library-100.png`, `library-mixed.png`, icon set. Releases v1.0.0 and v1.1.0 on GitHub. A colleague confirmed an earlier Windows build works (second-hand). No user testimonials or download statistics exist; do not invent any.
+Real assets in `assets/`: `preview.png`, `screenshot-home.png`, `screenshot-look.png`, `screenshot-100.png`, `library-100.png`, `library-mixed.png`, icon set. Releases v1.0.0 and v1.1.0 on GitHub. A colleague confirmed an earlier Windows build works (second-hand). No user testimonials or download statistics exist; do not invent any.
 
 ## Product Principles
 

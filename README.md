@@ -27,9 +27,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot.png"><img src="assets/screenshot.png" width="640" alt="The steam-case-covers window on the Look step: the list of steps on the left, a preview of the case and the colour choices"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="280" alt="Home: a welcome, the list of steps on the left and the Undo section"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look.png"><img src="assets/screenshot-look.png" width="280" alt="The Look step: a preview of the case and the colour choices"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100.png"><img src="assets/screenshot-100.png" width="280" alt="The 100% games step: a gold case with a rosette and ribbon, and the choices to mark those games"></a>
   <br>
-  <em>The whole app: five short steps, no terminal. The preview follows every choice.</em>
+  <em>The whole app: Home, then five short steps, no terminal. The preview follows every choice.</em>
 </p>
 
 <p align="center">
