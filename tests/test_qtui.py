@@ -2998,11 +2998,27 @@ class BundledAssets(unittest.TestCase):
             listed = re.search(r"ASSETS = \[(.*?)\]", f.read(), re.S).group(1)
         self.assertEqual(sorted(REQUIRED_ASSETS), sorted(re.findall(r'"([\w.]+)"', listed)))
 
-    def test_missing_assets_are_named(self):
-        from qtui.assets import REQUIRED_ASSETS, missing_assets
+    def test_the_console_case_files_match_the_recipe_and_the_folder(self):
+        import re
+        from qtui.assets import REQUIRED_CASES
+        root = os.path.join(os.path.dirname(QML_DIR), "..")
+        with open(os.path.join(root, "steamcase-qt.spec")) as f:
+            text = f.read()
+        self.assertEqual(sorted(REQUIRED_CASES), sorted(re.findall(r'"([\w.]+)"', re.search(r"CASE_FILES = \[(.*?)\]", text, re.S).group(1))))
+        self.assertIn('("assets/cases/" + n, "assets/cases")', text)
+        self.assertEqual(sorted(REQUIRED_CASES), sorted(os.listdir(os.path.join(root, "assets", "cases"))))
+
+    def test_missing_case_files_are_named_with_their_folder(self):
+        from qtui.assets import REQUIRED_ASSETS, REQUIRED_CASES, missing_assets
         empty = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, empty, True)
-        self.assertEqual(missing_assets(empty), sorted(REQUIRED_ASSETS))
+        self.assertEqual(missing_assets(empty), sorted(list(REQUIRED_ASSETS) + ["cases/" + n for n in REQUIRED_CASES]))
+
+    def test_missing_assets_are_named(self):
+        from qtui.assets import REQUIRED_ASSETS, REQUIRED_CASES, missing_assets
+        empty = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, empty, True)
+        self.assertEqual(sorted(n for n in missing_assets(empty) if "/" not in n), sorted(REQUIRED_ASSETS))
         open(os.path.join(empty, "discord.png"), "w").close()
         self.assertNotIn("discord.png", missing_assets(empty))
         self.assertEqual(missing_assets(os.path.join(os.path.dirname(QML_DIR), "..", "assets")), [])

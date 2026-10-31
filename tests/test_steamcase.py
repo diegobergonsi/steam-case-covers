@@ -3628,6 +3628,22 @@ class ConsoleMake(StoreMocks):
         self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
 
 
+class SelfCheckConsoleCases(Base):
+    """The packaged app's self-test also builds and recognises a console cover."""
+
+    def test_a_missing_case_is_reported(self):
+        from qtui import selfcheck
+        sc._case_windows.cache_clear()
+        self.addCleanup(sc._case_windows.cache_clear)
+        with mock.patch.object(sc, "CASES_DIR", os.path.join(self.tmp, "no-cases")):
+            problems = selfcheck.engine_problems()
+        self.assertTrue(any("console case" in p for p in problems), problems)
+
+    def test_a_good_bundle_has_no_problems(self):
+        from qtui import selfcheck
+        self.assertEqual(selfcheck.engine_problems(), [])
+
+
 class ListGames(Base):
     """list_games tells the caller when the store could not be asked, so a window can say "offline" instead of showing a short list."""
 
