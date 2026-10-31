@@ -1534,13 +1534,35 @@ def _treated_reference(key, family):
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
 
 
+def _same_masked(im, want, mask, least):
+    """True if `im` matches `want` within 2 levels on every pixel of `mask` (255 where the art does not reach), and the mask covers at least the
+    fraction `least` of the canvas: a smaller one leaves too little to tell our covers from others."""
+    if mask.histogram()[255] < least * SIZE[0] * SIZE[1]:
+        return False
+    return _same_pixels(im, (want, Image.merge("RGBA", (mask,) * 4)))
+
+
 def _same_treated(im, key, family):
     """True if `im` matches the treated cover for `key` within 2 levels on every pixel the art does not reach (see _treated_reference).
     A mask that covers less than 15% of the canvas leaves too little to tell our covers from others: then never ours."""
-    want, mask = _treated_reference(key, family)
-    if mask.histogram()[255] < 0.15 * SIZE[0] * SIZE[1]:
-        return False
-    return _same_pixels(im, (want, Image.merge("RGBA", (mask,) * 4)))
+    return _same_masked(im, *_treated_reference(key, family), 0.15)
+
+
+@functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry
+def _platform_reference(key, family):
+    """(expected, mask) for a console cover: key is (platform, treatment), the treatment None or "ribbon" or "rosette". Made like _treated_reference
+    (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0."""
+    platform, treatment = key
+    frame, window = load_platform_frame(platform, family), platform_window(platform)
+    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame, window), treatment) for c in (0, 255))
+    widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
+    return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
+
+
+def _same_platform(im, key, family):
+    """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. A console case is mostly art window, so
+    the mask may be small: it must still cover 5% of the canvas (the Steam case's 15% is for a case with more frame)."""
+    return _same_masked(im, *_platform_reference(key, family), 0.05)
 
 
 def is_steamcase_cover(path):
@@ -1548,6 +1570,8 @@ def is_steamcase_cover(path):
     A cover with a treatment note (a 100% game) or a theme note must name exactly one of TREATMENTS and one of THEMES (a theme never with full marks),
     have colour notes we write, and match the cover regenerated in that colour, tone, treatment and theme on every pixel the game's art does not reach
     (frame, rosette, ribbon, border, the theme's decorations).
+    A console cover (a platform note) must name one of PLATFORMS, carry no colour, tone, theme or art note, have no treatment or "ribbon" or "rosette", and match that
+    case on every pixel the art does not reach.
     Otherwise, a cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one
     without (made before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to
     a tone, treatment or theme note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
@@ -1560,7 +1584,12 @@ def is_steamcase_cover(path):
             if im.size != SIZE:
                 return False
             toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
+            platform, strange = im.info.get(PLATFORM_CHUNK), any(k in im.info for k in (HUE_CHUNK, TONE_CHUNK, THEME_CHUNK, ART_CHUNK))
             im = im.convert("RGBA")
+        if platform is not None:                                    # a console cover: its case and marks decide, never a colour, tone, theme or art note
+            if platform not in PLATFORMS or strange or done not in (None, "ribbon", "rosette"):
+                return False
+            return any(_same_platform(im, (platform, done), family) for family in (False, True))
         if done is not None or theme is not None:
             if (done is not None and done not in TREATMENTS) or (theme is not None and theme not in THEMES) or colour is None:
                 return False

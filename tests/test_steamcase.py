@@ -3393,6 +3393,77 @@ class PlatformCases(Base):
         with self.assertRaises(ValueError):
             sc.preview_cover(platform="ps5", treatment="gold-case")
 
+    # ---- recognising a console cover (Reset, Restore) ----
+    def noise(self, seed=1):
+        import random
+        rnd = random.Random(seed)
+        path = os.path.join(self.tmp, "noise%d.png" % seed)
+        im = sc.Image.new("RGB", (120, 180))
+        im.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256)) for _ in range(120 * 180)])
+        im.save(path, format="PNG")
+        return path
+
+    def console_cover(self, platform, name, family=False, treatment=None, seed=1):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.noise(seed), out, sc.load_platform_frame(platform, family), platform=platform, treatment=treatment)
+        return out
+
+    def resave(self, path, **notes):
+        """The same pixels with other notes (None drops a note)."""
+        with sc.Image.open(path) as im:
+            im.load()
+            info = sc.PngInfo()
+            for k, v in {**im.info, **notes}.items():
+                if v is not None and isinstance(v, str):
+                    info.add_text(k, v)
+            out = path + ".resaved.png"
+            im.save(out, format="PNG", pnginfo=info)
+        return out
+
+    def test_each_console_cover_is_recognised(self):
+        for p in sc.PLATFORMS:
+            for family in (False, True):
+                for treatment in (None, "ribbon", "rosette"):
+                    with self.subTest(platform=p, family=family, treatment=treatment):
+                        self.assertTrue(sc.is_steamcase_cover(self.console_cover(p, "c.png", family, treatment)))
+
+    def test_forged_note_with_other_pixels_is_not_ours(self):
+        fake = os.path.join(self.tmp, "fake.png")
+        info = sc.PngInfo()
+        info.add_text(sc.PLATFORM_CHUNK, "ps5")
+        sc.Image.effect_noise(sc.SIZE, 80).convert("RGBA").save(fake, format="PNG", pnginfo=info)
+        self.assertFalse(sc.is_steamcase_cover(fake))
+
+    def test_wrong_or_garbled_platform_note_is_not_ours(self):
+        ps5 = self.console_cover("ps5", "ps5.png")
+        for note in ("ps4", "ps9", "PS5", "", "ps5 "):
+            with self.subTest(note=note):
+                self.assertFalse(sc.is_steamcase_cover(self.resave(ps5, **{sc.PLATFORM_CHUNK: note})))
+
+    def test_console_cover_with_colour_or_theme_notes_is_not_ours(self):
+        ps5 = self.console_cover("ps5", "ps5.png")
+        for notes in ({sc.HUE_CHUNK: "0"}, {sc.TONE_CHUNK: "100 100"}, {sc.THEME_CHUNK: "halloween"}, {sc.DONE_CHUNK: "gold-case"}):
+            with self.subTest(notes=notes):
+                self.assertFalse(sc.is_steamcase_cover(self.resave(ps5, **notes)))
+
+    def test_a_console_cover_is_not_recognised_as_another_case(self):
+        ps5 = self.console_cover("ps5", "ps5.png")
+        self.assertFalse(sc.is_steamcase_cover(self.resave(ps5, **{sc.PLATFORM_CHUNK: "xbox360"})))
+
+    def test_steam_covers_are_still_recognised(self):
+        out = os.path.join(self.tmp, "steam.png")
+        sc.build_cover(self.noise(), out, sc.load_frame(), 0)
+        self.assertTrue(sc.is_steamcase_cover(out))
+        self.assertFalse(sc.is_steamcase_cover(self.resave(out, **{sc.PLATFORM_CHUNK: "ps5"})))        # a Steam cover with a console note is not either
+
+    def test_reset_finds_console_covers(self):
+        for appid, p in ((1, "ps5"), (2, "switch")):
+            os.replace(self.console_cover(p, "tmp%d.png" % appid), os.path.join(self.grid, "%dp.png" % appid))
+        sc.build_cover(self.noise(), os.path.join(self.grid, "3p.png"), sc.load_frame(), 0)
+        with open(os.path.join(self.grid, "4p.png"), "wb") as f:
+            f.write(b"not ours")
+        self.assertEqual(sc.find_our_covers(self.steam), ["1p.png", "2p.png", "3p.png"])
+
 
 if __name__ == "__main__":
     unittest.main()
