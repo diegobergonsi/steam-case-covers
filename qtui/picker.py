@@ -129,15 +129,20 @@ class Picker(QObject):
         return (library.path, bool(library.installedOnly))
 
     def _library_changed(self):
-        """The game list changed: what was ticked belongs to the old one."""
-        if self._key is not None and self._key != self._library_key():
-            self._all, self._rows, self._key, self._note, self._error = [], [], None, "", ""
-            self._model.set_rows([])
-            if self._selected:
-                self._selected = set()
-                self.selectionChanged.emit()
-            self.rowsChanged.emit()
-            self.statusChanged.emit()
+        """The game list changed: what was ticked belongs to the old one, and an answer still on its way is for the old one too."""
+        if self._key is None and not self._loading and not self._all and not self._selected:
+            return
+        self._req += 1                                  # the worker's answer is now stale and will be dropped
+        was_loading, self._loading = self._loading, False
+        self._all, self._rows, self._key, self._note, self._error = [], [], None, "", ""
+        self._model.set_rows([])
+        if was_loading:
+            self.loadingChanged.emit()
+        if self._selected:
+            self._selected = set()
+            self.selectionChanged.emit()
+        self.rowsChanged.emit()
+        self.statusChanged.emit()
 
     def _refresh(self):
         words = self._query.casefold().split()
@@ -187,7 +192,9 @@ class Picker(QObject):
         self.loadingChanged.emit()
         if error:
             self._all, self._error, self._key = [], error, None
+            self._selected = set()
             self._refresh()
+            self.selectionChanged.emit()
             self.failed.emit("Cannot list your games", error)
             return
         self._key = key

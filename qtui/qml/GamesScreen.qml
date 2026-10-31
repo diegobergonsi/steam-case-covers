@@ -9,7 +9,7 @@ ScreenFrame {
     id: screen
     readonly property var picker: shell.picker
     title: "Pick your games"
-    subtitle: "Tick the games that get a console case. The others keep the Steam case."
+    subtitle: "Tick the games that get a case. Games you do not tick are left alone."
     Component.onCompleted: picker.ensureLoaded()
 
     Section {
@@ -63,12 +63,30 @@ ScreenFrame {
             model: screen.picker.model
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
+            activeFocusOnTab: true                        // one stop for the whole list: the arrows move between games, Space ticks (a list only builds the rows it shows)
+            keyNavigationEnabled: true
+            highlightMoveDuration: Theme.dur(90)
+            highlight: Rectangle {
+                radius: Theme.radiusField
+                color: "transparent"
+                border.width: list.activeFocus ? Theme.focusRing : 0
+                border.color: Theme.text
+            }
+            Accessible.role: Accessible.List
+            Accessible.name: "Your games"
+            onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0       // a tab into the list lands on the first game
+            Keys.onPressed: (event) => {
+                if ((event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && list.currentItem) {
+                    if (!event.isAutoRepeat) screen.picker.toggle(list.currentItem.rowAppid)
+                    event.accepted = true
+                }
+            }
             delegate: Item {
                 id: row
                 objectName: "games_row_" + model.appid
+                readonly property int rowAppid: model.appid
                 width: list.width
                 height: Theme.touchSize
-                activeFocusOnTab: true
                 Accessible.role: Accessible.CheckBox
                 Accessible.name: model.name
                 Accessible.checkable: true
@@ -79,8 +97,6 @@ ScreenFrame {
                     anchors.fill: parent
                     radius: Theme.radiusField
                     color: hover.containsMouse ? Theme.raised : "transparent"
-                    border.width: row.activeFocus ? Theme.focusRing : 0
-                    border.color: Theme.text
                 }
                 Rectangle {                                   // the tick box
                     id: box
@@ -115,13 +131,7 @@ ScreenFrame {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: { row.forceActiveFocus(); screen.picker.toggle(model.appid) }
-                }
-                Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        if (!event.isAutoRepeat) screen.picker.toggle(model.appid)
-                        event.accepted = true
-                    }
+                    onClicked: { list.currentIndex = index; list.forceActiveFocus(); screen.picker.toggle(model.appid) }
                 }
             }
         }

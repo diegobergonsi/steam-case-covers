@@ -139,7 +139,7 @@ Changed your mind? On **Home** (the first entry in the left list):
 
 ### Optional: pick games by hand and put them in console cases
 
-Some games belong in another box: The Last of Us is a PlayStation game, Forza is an Xbox game. On **Home**, **Pick games by hand** opens a second way through the window (the step by step way stays as it is). After your game list, you tick the games you want (search by name, or scroll), then pick a case for them: **PlayStation 5, 4 or 3, Xbox Series X|S, Xbox One or Xbox 360, Nintendo Switch or Switch 2**, or the Steam case. You can tick more games and give them another case, or go on. Games you never tick keep the Steam case, and **Make** and **Add to Steam** work as before, only for the games you ticked.
+Some games belong in another box: The Last of Us is a PlayStation game, Forza is an Xbox game. On **Home**, **Pick games by hand** opens a second way through the window (the step by step way stays as it is). After your game list, you tick the games you want (search by name, or scroll), then pick a case for them: **PlayStation 5, 4 or 3, Xbox Series X|S, Xbox One or Xbox 360, Nintendo Switch or Switch 2**, or the Steam case. You can tick more games and give them another case, or go on. Games you do not tick are left alone (their covers do not change), and **Make** and **Add to Steam** work as before, only for the games you ticked.
 
 * The console cases are fixed: no colour, brightness or theme. They are drawn to fill the same tall tile as the Steam case.
 * Games shared through Steam Family Sharing get the green corner only if you switch on **Mark family games** (it needs your game list file).

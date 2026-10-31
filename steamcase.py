@@ -890,7 +890,7 @@ def existing_cover_theme(covers_dir):
     except OSError:
         return None
     for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None:
+        if n.lower().endswith(".png") and appid_of(n) is not None and cover_platform(os.path.join(covers_dir, n)) is None:       # a console cover has no theme to report
             theme = cover_theme(os.path.join(covers_dir, n))
             if theme is not False:
                 return theme
@@ -1007,6 +1007,11 @@ def cover_platform(path):
     except Exception:
         return False
     return note if note is None or note in PLATFORMS else False
+
+
+def _console_marks(treatment):
+    """The marks a console cover keeps from a treatment (none, "ribbon" or "rosette"): a console case has no gold, so an earlier gold look keeps only its marks."""
+    return compose_treatment("ribbon", split_treatment(treatment)[1]) if treatment else None
 
 
 def art_note(path):
@@ -1212,6 +1217,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment, theme)
         if want_p:
+            target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
             kept = cover_platform(dest) == want_p and cover_treatment(dest) == target and cover_art(dest) == wanted_art
         else:
             kept = same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art and cover_platform(dest) is None
@@ -1278,8 +1284,11 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
         appid = appid_of(n)
         if n.lower().endswith(".png") and appid is not None:
             path = os.path.join(covers_dir, n)
+            console = cover_platform(path)
+            if console is False:                                     # a damaged console note: the natural flow rebuilds the cover, so it must ask
+                return True
             c = cover_colour(path)
-            if c is None or cover_platform(path) is not None:        # a console cover is in no colour; the natural flow leaves it alone
+            if c is None or console is not None:                     # a console cover is in no colour; the natural flow leaves it alone
                 continue
             target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment, theme)     # appid_of gives text; `completed` holds numbers
             if not same_colour(c, colour) or cover_treatment(path) != target or (theme != KEEP and cover_theme(path) != theme):
@@ -1308,9 +1317,10 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
         if have != want:
             count += 1
         elif want:
-            count += cover_treatment(path) != target
+            count += cover_treatment(path) != _console_marks(target)
         else:
-            count += not same_colour(cover_colour(path), colour) or cover_treatment(path) != target or cover_theme(path) is not None
+            count += (not same_colour(cover_colour(path), colour) or cover_treatment(path) != target or cover_theme(path) is not None
+                      or cover_art(path) is not None)             # Make passes no art of the user's here, so a cover built from it is rebuilt
     return count
 
 
@@ -1621,9 +1631,9 @@ def _platform_reference(key, family):
 
 
 def _same_platform(im, key, family):
-    """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. A console case is mostly art window, so
-    the mask may be small: it must still cover 5% of the canvas (the Steam case's 15% is for a case with more frame)."""
-    return _same_masked(im, *_platform_reference(key, family), 0.05)
+    """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. The mask of every case is 15 to 22% of the
+    canvas; it must cover at least 10% (a test checks every case), or too little is left to tell our covers from others."""
+    return _same_masked(im, *_platform_reference(key, family), 0.10)
 
 
 def is_steamcase_cover(path):

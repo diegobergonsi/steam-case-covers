@@ -3623,6 +3623,51 @@ class ConsoleMake(StoreMocks):
         os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
         self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 1)
 
+    def test_a_gold_or_full_marks_cover_goes_into_a_console_case_keeping_its_marks(self):
+        """Review finding 1: an old gold-case look made the console build fail (a console case has no gold)."""
+        for old, want in (("gold-case", "ribbon"), ("gold-border", "ribbon"), ("gold-border-rosette", "rosette"), ("ribbon", "ribbon"), ("rosette", "rosette")):
+            with self.subTest(old=old):
+                shutil.rmtree(self.covers)
+                sc.make_covers({1: None}, self.covers, completed={1}, treatment=old)
+                self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 1)
+                res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+                self.assertEqual((res["ok"], res["failed"]), (1, []))
+                self.assertEqual((sc.cover_platform(self.cv(1)), sc.cover_treatment(self.cv(1))), ("ps5", want))
+                self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 0)       # and a second run keeps it
+
+    def test_existing_theme_skips_console_covers(self):
+        """Review finding 2."""
+        sc.make_covers({10: None}, self.covers, platforms={10: "ps5"})
+        sc.make_covers({11: None}, self.covers, theme="halloween")
+        self.assertEqual(sc.existing_cover_theme(self.covers), "halloween")
+
+    def test_a_steam_case_choice_replaces_a_cover_made_from_own_art(self):
+        """Review finding 5: Make passes no own art in the manual flow, so such a cover is rebuilt and the user must be asked."""
+        art = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), (10, 160, 30)).save(art, format="JPEG")
+        sc.make_covers({1: None}, self.covers, custom_art={1: art})
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}), 1)
+        sc.make_covers({1: None}, self.covers, platforms={1: None})
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}), 0)
+
+    def test_a_cover_with_a_garbled_console_note_is_a_reason_to_ask_before_the_natural_run_rebuilds_it(self):
+        """Review finding 6: the natural run rebuilds it, so covers_in_other_look must say so (it skipped it silently)."""
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))
+        os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0))
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))
+
+    def test_every_console_mask_covers_a_good_part_of_the_cover(self):
+        """Review finding 9: the recognition threshold is a floor, not the real size: say what the real ones are."""
+        for p in sc.PLATFORMS:
+            for treatment in (None, "ribbon", "rosette"):
+                for family in (False, True):
+                    with self.subTest(platform=p, treatment=treatment, family=family):
+                        mask = sc._platform_reference((p, treatment), family)[1]
+                        self.assertGreaterEqual(mask.histogram()[255] / (sc.SIZE[0] * sc.SIZE[1]), 0.10)
+
     def test_a_listed_game_missing_from_the_library_is_ignored(self):
         res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5", 99: "ps4"})
         self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))

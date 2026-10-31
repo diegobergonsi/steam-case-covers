@@ -3813,6 +3813,16 @@ class ReplaceReasons(FakeStore):
         self.remake()
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
 
+class ReplaceReasonsAndConsoleCovers(FakeStore):
+    """Review finding 7: a console cover is never rebuilt by the natural flow, so it must not colour the question about the others."""
+    def test_console_covers_do_not_count_as_covers_that_change(self):
+        import steamcase as sc
+        from qtui import reasons
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, completed={1}, treatment="ribbon")
+        sc.make_covers({2: None}, self.covers)
+        got = reasons.replace_reason(self.covers, (0, 100, 100), {2}, "ribbon")
+        self.assertEqual(got[0], "Highlight your 100% games?")
+
 
 @need_qt
 class UpdatesState(QtCase):
@@ -5975,6 +5985,37 @@ class PickerTests(PickerBase):
         self.assertEqual(len(resets), 1)                                       # another set of rows: a reset is right
         self.assertEqual((model.rowCount(), model.data(model.index(0, 0), model.Name)), (1, "forza Horizon 5"))
 
+    def test_a_game_list_that_changes_during_a_load_drops_the_old_answer(self):
+        """Review finding 3: the old list must never be shown (and ticked) for the new game list."""
+        import threading
+        from unittest import mock
+        gate = threading.Event()
+        real = self.sc.list_games
+
+        def slow(games, log=None, errors=None):
+            gate.wait(5)
+            return real(games, log, errors)
+        with mock.patch.object(self.sc, "list_games", slow):
+            self.picker.load()
+            self.assertTrue(self.picker.loading)
+            self.shell.library.installedOnly = False                          # the user chose another game list meanwhile
+            gate.set()
+            self.wait_for(lambda: not self.picker.loading)
+            self.app.processEvents()
+        self.assertEqual((self.picker.rows, self.picker.selectedCount), ([], 0))
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertEqual(len(self.picker.rows), 3)
+
+    def test_a_failed_load_forgets_what_was_ticked(self):
+        """Review finding 8."""
+        from unittest import mock
+        self.load()
+        self.picker.toggle(1)
+        with mock.patch.object(self.sc, "list_games", side_effect=self.sc.SteamcaseError("no")):
+            self.load()
+        self.assertEqual((self.picker.selectedCount, self.picker.selection()), (0, []))
+
     def test_700_games_filter_quickly(self):
         import time
         self.NAMES = {i: "Game %03d" % i for i in range(700)}
@@ -6315,6 +6356,31 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         self.assertEqual(self.shell.cases.previewKey, "ps5")
         self.assertIn("platform/ps5", self.item("make_preview").property("source").toString() if hasattr(self.item("make_preview").property("source"), "toString") else str(self.item("make_preview").property("source")))
+
+    def test_the_games_list_works_from_the_keyboard(self):
+        """Review finding 4: one stop for the whole list, arrows move, Space ticks."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        lst = self.item("games_list")
+        self.assertTrue(lst.property("activeFocusOnTab"))
+        lst.forceActiveFocus()
+        self.app.processEvents()
+        QTest.keyClick(self.root, Qt.Key_Space)
+        QTest.keyClick(self.root, Qt.Key_Down)
+        QTest.keyClick(self.root, Qt.Key_Space)
+        self.app.processEvents()
+        self.assertEqual(self.picker.selection(), [2, 3])                      # the first two rows by name: forza Horizon 5, God of War
+        QTest.keyClick(self.root, Qt.Key_Space)
+        self.assertEqual(self.picker.selection(), [2])
+
+    def test_the_games_subtitle_does_not_promise_a_case_for_the_others(self):
+        """Review finding 10: games you do not tick are left alone, not remade in the Steam case."""
+        with open(os.path.join(QML_DIR, "GamesScreen.qml")) as f:
+            text = f.read()
+        self.assertIn("left alone", text)
+        self.assertNotIn("keep the Steam case", text)
 
     def test_the_navigation_fits_seven_steps_at_the_smallest_window(self):
         from PySide6.QtCore import QPointF
