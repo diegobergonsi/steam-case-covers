@@ -1629,6 +1629,19 @@ class Components(QtCase):
              'function openPlain() { dlg.ask("Plain", [{"text": "a", "kind": "main"}], "Yes") }\n'
              'function openInfo() { dlg.ask("Info", [{"text": "b", "kind": "main"}], "OK", "", true) }')
 
+    def still(self, name, frames=3, seconds=3):
+        """Wait until an item has stopped moving for a few frames: the card grows to its words and the buttons settle after the first frame, later on a slow machine."""
+        from PySide6.QtCore import QPointF
+        from PySide6.QtTest import QTest
+        import time
+        end, last, same = time.time() + seconds, None, 0
+        while time.time() < end and same < frames:
+            QTest.qWait(30)
+            it = self.item(name)
+            now = (it.mapToScene(QPointF(0, 0)).x(), it.mapToScene(QPointF(0, 0)).y(), it.width(), it.height())
+            same = same + 1 if now == last else 0
+            last = now
+
     def open_fn(self, fn, w=620, h=420):
         from PySide6.QtCore import QMetaObject
         from PySide6.QtTest import QTest
@@ -1636,6 +1649,8 @@ class Components(QtCase):
         self.root.requestActivate()
         QMetaObject.invokeMethod(self.root, fn)
         QTest.qWait(60)
+        for name in ("dlg_cancel", "dlg_confirm"):
+            self.still(name)
 
     def test_a_third_button_sits_between_cancel_and_confirm_and_answers_for_itself(self):
         self.open_fn("openIt")
@@ -1645,6 +1660,7 @@ class Components(QtCase):
         self.assertFalse(self.item("dlg_alternate").property("filled"))
         self.assertTrue(self.item("dlg_cancel").property("activeFocus"))
         from PySide6.QtCore import QPointF
+        self.still("dlg_alternate")
         b = self.item("dlg_alternate")
         p = b.mapToScene(QPointF(b.width() / 2, b.height() / 2))
         self.mouse("click", p.x(), p.y())
