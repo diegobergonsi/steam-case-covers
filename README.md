@@ -27,9 +27,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot.png"><img src="assets/screenshot.png" width="460" alt="The steam-case-covers window with its three steps"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="280" alt="Home: a welcome, the list of steps on the left and the Undo section"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look.png"><img src="assets/screenshot-look.png" width="280" alt="The Look step: a preview of the case and the colour choices"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100.png"><img src="assets/screenshot-100.png" width="280" alt="The 100% games step: a gold case with a rosette and ribbon, and the choices to mark those games"></a>
   <br>
-  <em>The whole app: three steps, no terminal.</em>
+  <em>The whole app: Home, then five short steps, no terminal. The preview follows every choice.</em>
 </p>
 
 <p align="center">
@@ -102,16 +104,16 @@ chmod +x SteamCaseCovers-linux
 <details id="from-source">
 <summary><b>From source (any system)</b></summary>
 
-If you'd rather not trust a download, run it from the code. It needs Python 3 and Pillow 10.3 or newer (the release builds and the automated tests use Python 3.12; older versions down to 3.8 are expected to work but are not tested).
+If you'd rather not trust a download, run it from the code. It needs Python 3.10 or newer, Pillow 10.3 or newer and PySide6 (Qt). The release builds and the automated tests use Python 3.12.
 
 ```bash
 git clone https://github.com/diegobergonsi/steam-case-covers
 cd steam-case-covers
-python -m pip install -r requirements.txt
-python gui.py
+python -m pip install -r requirements-qt.txt
+python -m qtui
 ```
 
-On macOS and Linux, use `python3` instead of `python`. Run the tests with `python -m unittest discover -s tests`. A random-click robot that tries to break the window needs a display: `python tests/fuzz_gui.py` (on a server: `xvfb-run -a python tests/fuzz_gui.py`).
+On macOS and Linux, use `python3` instead of `python`. Run the tests with `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests` (on Windows PowerShell: `$env:QT_QPA_PLATFORM="offscreen"` first). `python -m qtui --selftest` builds the window without showing it.
 
 </details>
 
@@ -121,21 +123,23 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 
 ## 🔧 How it works
 
-1. **Get your game list.** Click **Download your game list**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
-2. **Make the covers.** Optionally pick the look of the cases first: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. Under the swatches, **Case theme** can turn the cases into a **Halloween** one: a cobweb with a spider, a pumpkin and a spider hanging from the top, on top of whatever colour you picked. The Halloween case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. If you set your own art for some games (in Steam's menu, or from SteamGridDB), turn on **Use my own custom art where I have it** and your art goes inside the case instead of Steam's; games without art of your own keep Steam's. The app keeps a copy of your art in its own folder and never changes your files. Then click **Make covers** and wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour or theme, the app asks before it replaces them.
-3. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; click **Change account** to pick another.
+1. **Get your game list.** Click **Open the page in my browser**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
+2. **Choose the look.** Pick the look of the cases: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. **Theme** can turn the cases into a **Halloween** one: a cobweb with a spider, a pumpkin and a spider hanging from the top, on top of whatever colour you picked. The Halloween case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. If you set your own art for some games (in Steam's menu, or from SteamGridDB), turn on **Use my own custom art where I have it** and your art goes inside the case instead of Steam's; games without art of your own keep Steam's. The app keeps a copy of your art in its own folder and never changes your files.
+3. **Highlight your 100% games (optional).** Load your Steam games page and the games where you unlocked every achievement get a mark. Details below. You can skip this step.
+4. **Make the covers.** Check your choices (each one leads back to its step) and click **Make covers**, then wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour or theme, the app asks before it replaces them.
+5. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; pick another with the account buttons. Your current artwork is backed up first.
 
 > [!WARNING]
-> Step 3 **closes Steam for you** (any running game stops and downloads pause), adds the covers, and starts Steam again. Save your game first. The app asks before it does anything.
+> Step 5 **closes Steam for you** (any running game stops and downloads pause), adds the covers, and starts Steam again. Save your game first. The app asks before it does anything.
 
-Changed your mind?
+Changed your mind? On **Home** (the first entry in the left list):
 
 * **Restore previous artwork** undoes the last Apply. Press it again to go one step further back.
 * **Reset to Steam's default art** removes the covers this app made. It works even if you have no backup. If it also finds custom art that this app did not make (from SteamGridDB, or set by hand in Steam), it asks whether to remove that too: **Remove only ours** keeps it, **Remove all** brings back Steam's own art everywhere. Restore undoes either.
 
 ### Optional: highlight your 100% games
 
-Step 2 has an optional block, **Highlight my 100% games**. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom (you can keep only the rosette). It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
+Step 3, **Highlight your 100% games**, is optional. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom (you can keep only the rosette). It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
 
 <p align="center">
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-100.png"><img src="assets/library-100.png" width="560" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon"></a>
@@ -146,7 +150,7 @@ Step 2 has an optional block, **Highlight my 100% games**. Games where you unloc
 1. Click **Open my games page** (or **Copy link**). Your browser opens your Steam games page, sorted by achievements. Log in if it asks and wait until your games have loaded.
 2. Save it (Ctrl+S, or Cmd+S on a Mac) as **"Webpage, Complete"** in Chrome or Firefox, named `games.html`. Your browser also saves a folder next to it. The app notices the file in your Downloads folder by itself, or you can click **Browse…** and pick it.
 3. Choose what those games get: **Rosette and ribbon** (the rosette at the top right and the "100% Complete" ribbon at the bottom; the default) or **Rosette only** (just the rosette, no ribbon over the art).
-4. Choose how those games look: **Gold case** (the whole case turns gold), **Gold border** (a gold border around the outside of the case, which becomes about 5% smaller), **Normal case** (your case stays as it is; this is the default once a page is loaded) or **No special case** (no highlight at all, so step 3 does not apply). The choices can be picked once a page is loaded. Then click **Make covers**.
+4. Choose how those games look: **Gold case** (the whole case turns gold), **Gold border** (a gold border around the outside of the case, which becomes about 5% smaller), **Normal case** (your case stays as it is; this is the default once a page is loaded) or **No special case** (no highlight at all, so the marks do not apply). The choices can be picked once a page is loaded. Then click **Make covers**.
 
 > [!NOTE]
 > The saved page contains a temporary login token for your Steam account. The app only reads which games are at 100%: it never uses, stores or logs the token. You can delete `games.html` and its folder once the covers are made. The app never deletes your files itself.
@@ -253,7 +257,7 @@ Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--satu
 <details>
 <summary><b>It says my game list has no games in it</b></summary>
 
-You weren't logged in to Steam in your browser when you saved the page. Steam doesn't show an error in that case; it gives an empty list. Click **Download your game list** again: it opens Steam's login page first, so log in there, then save the page you land on. If that page shows no games even though you just logged in, refresh it (F5, or Cmd+R on a Mac) before saving.
+You weren't logged in to Steam in your browser when you saved the page. Steam doesn't show an error in that case; it gives an empty list. Click **Open the page in my browser** again: it opens Steam's login page first, so log in there, then save the page you land on. If that page shows no games even though you just logged in, refresh it (F5, or Cmd+R on a Mac) before saving.
 
 </details>
 
@@ -288,7 +292,7 @@ Games shared with you through Steam Family Sharing are not on your own game list
 <details>
 <summary><b>What happens if I change the colour after I made covers?</b></summary>
 
-When you click **Make covers**, the app asks before it replaces the covers you already made in another colour, shade or case theme. If you say yes, it rebuilds them all in the new look, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 3, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read, and the same can happen with a very light case.
+When you click **Make covers**, the app asks before it replaces the covers you already made in another colour, shade or case theme. If you say yes, it rebuilds them all in the new look, which downloads the artwork again. Steam keeps showing your current art until you add the new covers in step 5, and **Restore previous artwork** can undo that. There is one set of covers at a time. Only the original blue is checked for readable text: bright yellow or lime banners make the white text harder to read, and the same can happen with a very light case.
 
 </details>
 
@@ -302,7 +306,7 @@ Steam builds that page in your browser after it loads. "Webpage, HTML only" save
 <details>
 <summary><b>Can I remove the highlights later?</b></summary>
 
-Yes. Load a page again (or any page), choose **No special case** and click **Make covers**: the app asks first, then rebuilds the highlighted covers as normal ones. On the command line, use `--completed-style none`. Add the covers to Steam again in step 3 to see the change there.
+Yes. Load a page again (or any page), choose **No special case** and click **Make covers**: the app asks first, then rebuilds the highlighted covers as normal ones. On the command line, use `--completed-style none`. Add the covers to Steam again in step 5 to see the change there.
 
 </details>
 
@@ -342,7 +346,7 @@ No. The window works fully with the keyboard (Tab, Space, Enter), but the toolki
   <a href="https://discord.gg/JQMjAPWHCT"><img src="https://img.shields.io/badge/JOIN%20THE%20DISCORD-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord"></a>
 </p>
 
-Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**; the Discord icon at the top of the app opens the invite too. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** button shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
+Feedback and bug reports are mainly handled on the project's **[Discord](https://discord.gg/JQMjAPWHCT)**; **Join our Discord** at the bottom of the left list opens the invite too. Tell us your system (Windows, macOS, Linux or Steam Deck), the version you use (the **Check for updates** link shows it) and what you saw; a screenshot helps a lot. You can also [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) on GitHub if you prefer.
 
 Security problems are the exception: please [report them privately](docs/SECURITY.md), not in public.
 
