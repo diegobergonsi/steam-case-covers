@@ -15,18 +15,21 @@ from qtui.picker import Picker
 from qtui.updates import Updates
 
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
+MANUAL_FACTS = ("picked", "assigned")           # only the manual flow reads these
 
 
 class Shell(QObject):
     stepsChanged = Signal()
     currentChanged = Signal()
     reduceEffectsChanged = Signal()
+    flowChanged = Signal()
 
     def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
         super().__init__(parent)
         self._path = settings_path
         self._values = settings.load_settings(settings_path)
-        self._facts = {k: False for k in FACTS}
+        self._facts = {k: False for k in FACTS + MANUAL_FACTS}
+        self._flow = "natural"                  # or "manual": ticking games and giving them a console case
         self._current = 0
         self._steps = self._build()
         self._had_covers = bool(sc.find_covers(covers_dir or sc.default_covers_dir()))       # covers made in an earlier session
@@ -40,10 +43,48 @@ class Shell(QObject):
         self._apply = Apply(self, self._make, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
         self._updates = Updates(self)
+        self._picker.selectionChanged.connect(lambda: self.setFact("picked", self._picker.selectedCount > 0))
+        self._cases.assignmentsChanged.connect(lambda: self.setFact("assigned", self._cases.assignedCount > 0))
 
     def _build(self):
-        states = steps.step_states(**self._facts)
-        return [{"key": k, "label": steps.LABELS[k], "hint": steps.hint(k, states[k]), "state": states[k]} for k in steps.STEPS]
+        manual = self._flow == "manual"
+        if manual:
+            states = steps.manual_step_states(**{k: self._facts[k] for k in ("ready", "picked", "assigned", "hundred_done", "covers_made", "applied")})
+        else:
+            states = steps.step_states(**{k: self._facts[k] for k in FACTS})
+        names = steps.labels(self._flow)
+        return [{"key": k, "label": names[k], "hint": steps.hint(k, states[k]), "state": states[k]} for k in (steps.STEPS_MANUAL if manual else steps.STEPS)]
+
+    @Property(str, notify=flowChanged)
+    def flow(self):
+        return self._flow
+
+    def _switch(self, flow):
+        """Change the way through the window. Not while covers are made or added to Steam, and nothing happens if it is the flow already."""
+        if flow == self._flow or self._make.running or self._apply.busy:
+            return
+        self._flow = flow
+        self._steps = self._build()
+        self.flowChanged.emit()
+        self.stepsChanged.emit()
+        self._current = self.resume
+        self.currentChanged.emit()
+
+    @Slot()
+    def startManual(self):
+        self._switch("manual")
+
+    @Slot()
+    def startNatural(self):
+        self._switch("natural")
+
+    @Slot(str)
+    def goKey(self, key):
+        """Show a step by its name; a locked or unknown one is ignored."""
+        for i, step in enumerate(self._steps):
+            if step["key"] == key:
+                self.go(i)
+                return
 
     def _save(self):
         settings.save_settings(self._values, self._path)

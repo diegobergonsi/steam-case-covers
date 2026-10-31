@@ -53,9 +53,9 @@ class Cases(QObject):
         for appid in games:
             self._assigned[appid] = None if self._key == "steam" else self._key
         self._key = ""
+        self.assignmentsChanged.emit()              # first: the games count as given a case before the ticks go, or the Case step would look locked for a moment
         self._shell.picker.untick(games)
         self.selectedKeyChanged.emit()
-        self.assignmentsChanged.emit()
 
     def assigned(self):
         """{appid: platform or None (the Steam case)} for make_covers."""

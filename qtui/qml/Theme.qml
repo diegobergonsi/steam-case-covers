@@ -41,7 +41,7 @@ QtObject {
     readonly property int windowWidth: 900
     readonly property int windowHeight: 560
     readonly property int windowMinWidth: 640
-    readonly property int windowMinHeight: 420
+    readonly property int windowMinHeight: 460               // seven steps in the navigation and the two links under them
     readonly property int navWidth: 230
     readonly property int navTop: 72
     readonly property int navRowHeight: 40

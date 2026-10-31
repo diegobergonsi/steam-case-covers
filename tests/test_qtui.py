@@ -6071,5 +6071,225 @@ class CasesTests(PickerBase):
         self.assertEqual(blank.pixelColor(60, 90).alpha(), 0)                  # not one of ours: a transparent picture, no crash
 
 
+class ManualSteps(unittest.TestCase):
+    """Which steps of the manual flow are open, done, active or locked."""
+    def states(self, **facts):
+        return sp.manual_step_states(**dict(dict(ready=False, picked=False, assigned=False, hundred_done=False, covers_made=False, applied=False), **facts))
+
+    def test_the_steps_and_their_labels(self):
+        self.assertEqual(sp.STEPS_MANUAL, ("home", "game_list", "pick", "case", "hundred", "make", "add"))
+        self.assertEqual([sp.labels("manual")[k] for k in sp.STEPS_MANUAL],
+                         ["Home", "1  Game list", "2  Games", "3  Case", "4  100% games", "5  Make", "6  Add to Steam"])
+        self.assertEqual(sp.labels("natural"), sp.LABELS)
+
+    def test_a_fresh_start_opens_only_the_game_list(self):
+        self.assertEqual(self.states(), {"home": "open", "game_list": "active", "pick": "locked", "case": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
+
+    def test_each_step_unlocks_the_next(self):
+        self.assertEqual(self.states(ready=True)["pick"], "active")
+        got = self.states(ready=True, picked=True)
+        self.assertEqual((got["pick"], got["case"], got["hundred"]), ("done", "active", "locked"))
+        got = self.states(ready=True, picked=True, assigned=True)
+        self.assertEqual((got["case"], got["hundred"], got["make"]), ("done", "active", "locked"))
+        got = self.states(ready=True, picked=True, assigned=True, hundred_done=True)
+        self.assertEqual((got["hundred"], got["make"]), ("done", "active"))
+
+    def test_games_already_given_a_case_count_as_picked(self):
+        """After a case is given, the ticks are cleared: the Games step must not fall back to not done."""
+        got = self.states(ready=True, assigned=True)
+        self.assertEqual((got["pick"], got["case"]), ("done", "done"))
+
+    def test_a_later_fact_never_unlocks_a_step_behind_an_undone_one(self):
+        got = self.states(covers_made=True, applied=True)
+        self.assertEqual([got[k] for k in sp.STEPS_MANUAL[2:]], ["locked"] * 5)
+
+
+@need_qt
+class FlowTests(PickerBase):
+    """The shell with its two flows."""
+    def keys(self):
+        return [s["key"] for s in self.shell.steps]
+
+    def test_the_natural_flow_is_the_default(self):
+        self.assertEqual((self.shell.flow, self.keys()), ("natural", list(sp.STEPS)))
+
+    def test_start_manual_changes_the_steps_and_start_natural_brings_them_back(self):
+        self.shell.startManual()
+        self.assertEqual((self.shell.flow, self.keys()), ("manual", list(sp.STEPS_MANUAL)))
+        self.assertEqual([s["label"] for s in self.shell.steps], [sp.labels("manual")[k] for k in sp.STEPS_MANUAL])
+        self.shell.startNatural()
+        self.assertEqual((self.shell.flow, self.keys()), ("natural", list(sp.STEPS)))
+
+    def test_the_manual_flow_opens_at_the_first_step_not_done(self):
+        self.shell.startManual()                                              # installed-only is on: the game list is ready
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")
+
+    def test_the_game_list_serves_both_flows(self):
+        self.assertEqual(self.shell.steps[1]["state"], "done")
+        self.shell.startManual()
+        self.assertEqual(self.shell.steps[1]["state"], "done")
+
+    def test_ticking_and_assigning_move_the_steps_along(self):
+        self.shell.startManual()
+        self.load()
+        self.picker.toggle(1)
+        state = lambda key: next(s["state"] for s in self.shell.steps if s["key"] == key)
+        self.assertEqual((state("pick"), state("case")), ("done", "active"))
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.assertEqual((state("pick"), state("case"), state("hundred")), ("done", "done", "active"))
+
+    def test_go_key_opens_a_step_by_name_and_ignores_locked_or_unknown_ones(self):
+        self.shell.startManual()
+        self.shell.goKey("case")
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")            # case is locked until games are ticked
+        self.shell.goKey("nonsense")
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")
+        self.load()
+        self.picker.toggle(1)
+        self.shell.goKey("case")
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "case")
+
+    def test_giving_a_case_does_not_move_you_off_the_case_step(self):
+        self.shell.startManual()
+        self.load()
+        self.picker.toggle(1)
+        self.shell.goKey("case")
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "case")
+
+    def test_the_flow_cannot_change_while_covers_are_made(self):
+        self.shell._make._running = True
+        self.shell.startManual()
+        self.assertEqual(self.shell.flow, "natural")
+        self.shell._make._running = False
+        self.shell.startManual()
+        self.assertEqual(self.shell.flow, "manual")
+        self.shell._apply._busy = True
+        self.shell.startNatural()
+        self.assertEqual(self.shell.flow, "manual")
+        self.shell._apply._busy = False
+
+
+@need_qt
+class ManualWindow(PickerBase):
+    """The manual flow in the real window: Home, the Games step and the Case step."""
+    def setUp(self):
+        super().setUp()
+        from qtui.app import close_engine, create_engine
+        self.shell.reduceEffects = True
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.app.processEvents()
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+    def has(self, name):
+        from qtui.app import find_item
+        return find_item(self.root, name) is not None
+
+    def click(self, name):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        it = self.item(name)
+        scroller = self.item("screen_scroller") if self.has("screen_scroller") else None
+        if scroller is not None and it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y() >= 0 and not name.startswith(("games_next", "case_next", "home_main")):
+            y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+            scroller.setProperty("contentY", max(0, y - 40))
+            self.app.processEvents()
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint())
+        self.app.processEvents()
+
+    def step(self):
+        return self.shell.steps[self.shell.current]["key"]
+
+    def test_home_offers_the_manual_flow(self):
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertTrue(self.has("home_manual"))
+        self.click("home_manual")
+        self.assertEqual((self.shell.flow, len(self.shell.steps), self.step()), ("manual", 7, "pick"))
+        self.assertTrue(self.has("games_search"))
+
+    def test_home_offers_the_way_back(self):
+        self.shell.startManual()
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertFalse(self.item("home_manual").property("visible"))
+        self.click("home_natural")
+        self.assertEqual((self.shell.flow, len(self.shell.steps)), ("natural", 6))
+
+    def test_the_games_screen_lists_and_ticks_games(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.assertEqual(self.item("games_count").property("text"), "0 games selected")
+        self.assertFalse(self.item("games_next").property("enabled"))
+        self.click("games_row_1")
+        self.assertEqual(self.picker.selection(), [1])
+        self.assertEqual(self.item("games_count").property("text"), "1 game selected")
+        self.assertTrue(self.item("games_next").property("enabled"))
+        self.click("games_clear")
+        self.assertEqual(self.picker.selectedCount, 0)
+
+    def test_the_games_screen_search_filters_and_says_when_nothing_matches(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.item("games_search").setProperty("text", "hades")
+        self.app.processEvents()
+        self.assertEqual(self.names(), ["Hades"])
+        self.item("games_search").setProperty("text", "zzz")
+        self.app.processEvents()
+        self.assertIn("No games match", self.item("games_status").property("text"))
+
+    def test_the_case_screen_gives_the_ticked_games_a_case(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertEqual(self.step(), "case")
+        self.assertFalse(self.item("case_assign").property("enabled"))
+        self.assertFalse(self.item("case_next").property("enabled"))
+        self.click("case_ps5")
+        self.assertEqual(self.shell.cases.selectedKey, "ps5")
+        self.assertTrue(self.item("case_assign").property("enabled"))
+        self.click("case_assign")
+        self.assertEqual(self.shell.cases.assigned(), {1: "ps5"})
+        self.assertEqual(self.item("case_summary_0").property("text"), "PlayStation 5: 1 game")
+        self.assertTrue(self.item("case_next").property("enabled"))
+        self.click("case_more")
+        self.assertEqual(self.step(), "pick")
+
+    def test_the_family_switch_is_greyed_without_a_game_list_file(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertFalse(self.item("case_family").property("enabled"))
+        self.assertTrue(self.item("case_family_note").property("visible"))
+
+    def test_the_navigation_fits_seven_steps_at_the_smallest_window(self):
+        from PySide6.QtCore import QPointF
+        self.shell.startManual()
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+        last = self.item("nav_add")
+        bottom = last.mapToScene(QPointF(0, last.height())).y()
+        self.assertLessEqual(bottom, self.item("footer_discord").mapToScene(QPointF(0, 0)).y())
+
+    def test_frozen_while_covers_are_made(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.shell._make._set_state(running=True)
+        self.app.processEvents()
+        self.assertFalse(self.item("games_search").property("enabled"))
+        self.shell._make._set_state(running=False)
+
+
 if __name__ == "__main__":
     unittest.main()
