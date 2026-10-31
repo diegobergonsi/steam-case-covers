@@ -5796,5 +5796,175 @@ class ApplyState(QtCase, FakeStore):
         gone._work(1, {"restart": False, "account": None, "files": ["x.png"]})
 
 
+@need_qt
+class PickerTests(QtCase, FakeStore):
+    """The Games step of the manual flow: the library's games by name, a search, tick boxes."""
+    NAMES = {1: "Hades", 2: "forza Horizon 5", 3: "God of War"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        import steamcase as sc
+        from qtui.shell import Shell
+        self.sc = sc
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": self.NAMES[i]} for i in ids if i in self.NAMES}
+        self.library = {i: None for i in self.NAMES}
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: (dict(self.library), set()))):
+            patcher = mock.patch.object(sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        os.makedirs(os.path.join(self.tmp, "Downloads"))
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+        self.shell.library.installedOnly = True
+        self.picker = self.shell.picker
+
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def load(self):
+        self.picker.load()
+        self.wait_for(lambda: not self.picker.loading)
+
+    def names(self):
+        return [r["name"] for r in self.picker.rows]
+
+    def test_load_lists_games_sorted_by_name(self):
+        self.load()
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
+        self.assertEqual((self.picker.selectedCount, self.picker.statusKind), (0, "ok"))
+        self.assertTrue(all(r["selected"] is False for r in self.picker.rows))
+
+    def test_search_filters_case_insensitive_and_keeps_the_selection(self):
+        self.load()
+        self.picker.toggle(1)
+        self.picker.query = "FORZA"
+        self.assertEqual(self.names(), ["forza Horizon 5"])
+        self.assertEqual(self.picker.selectedCount, 1)                      # Hades is still ticked, though not shown
+        self.picker.query = ""
+        self.assertEqual([r["selected"] for r in self.picker.rows], [False, False, True])
+        self.assertEqual(self.picker.selection(), [1])
+
+    def test_a_tick_toggles(self):
+        self.load()
+        self.picker.toggle(2)
+        self.picker.toggle(3)
+        self.picker.toggle(2)
+        self.assertEqual(self.picker.selection(), [3])
+
+    def test_select_all_shown_only_ticks_the_filtered_games(self):
+        self.load()
+        self.picker.query = "o"
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War"])
+        self.picker.selectAllShown()
+        self.assertEqual(self.picker.selection(), [2, 3])
+        self.picker.query = ""
+        self.assertEqual(self.picker.selectedCount, 2)
+
+    def test_clear_all_unticks_everything_even_what_is_hidden(self):
+        self.load()
+        self.picker.toggle(1)
+        self.picker.query = "forza"
+        self.picker.selectAllShown()
+        self.picker.clearAll()
+        self.assertEqual((self.picker.selection(), self.picker.selectedCount), ([], 0))
+
+    def test_no_match_says_so(self):
+        self.load()
+        self.picker.query = "zzz"
+        self.assertEqual(self.picker.rows, [])
+        self.assertIn("No games match", self.picker.status)
+
+    def test_an_empty_library_says_what_to_do(self):
+        self.library = {}
+        self.load()
+        self.assertEqual(self.picker.rows, [])
+        self.assertIn("No games found", self.picker.status)
+        self.assertEqual(self.picker.statusKind, "error")
+
+    def test_a_failed_lookup_shows_the_message_and_ticks_nothing(self):
+        from unittest import mock
+        failures = []
+        self.picker.failed.connect(lambda title, text: failures.append((title, text)))
+        with mock.patch.object(self.sc, "list_games", side_effect=self.sc.SteamcaseError("No Steam folder found.")):
+            self.load()
+        self.assertEqual((self.picker.rows, self.picker.selectedCount, self.picker.loading), ([], 0, False))
+        self.assertEqual((self.picker.status, self.picker.statusKind), ("No Steam folder found.", "error"))
+        self.assertEqual(failures, [("Cannot list your games", "No Steam folder found.")])
+
+    def test_offline_with_no_names_is_an_error_but_a_partial_list_is_shown(self):
+        from unittest import mock
+
+        def offline(games, log=None, errors=None):
+            errors.append(OSError("offline"))
+            return []
+
+        def partial(games, log=None, errors=None):
+            errors.append(OSError("offline"))
+            return [(1, "Hades")]
+        with mock.patch.object(self.sc, "list_games", offline):
+            self.load()
+        self.assertEqual((self.picker.rows, self.picker.statusKind), ([], "error"))
+        self.assertIn("Could not reach Steam", self.picker.status)
+        with mock.patch.object(self.sc, "list_games", partial):
+            self.load()
+        self.assertEqual((self.names(), self.picker.statusKind), (["Hades"], "wait"))
+        self.assertIn("could not be loaded", self.picker.status)
+
+    def test_a_changed_library_forgets_the_selection_and_loads_again(self):
+        self.load()
+        self.picker.toggle(1)
+        self.shell.library.installedOnly = False
+        self.assertEqual(self.picker.selectedCount, 0)
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertEqual(len(self.picker.rows), 3)
+
+    def test_ensure_loaded_does_not_load_twice(self):
+        calls = []
+        real = self.sc.list_games
+        self.sc.list_games = lambda games, log=None, errors=None: calls.append(1) or real(games, log, errors)
+        self.addCleanup(setattr, self.sc, "list_games", real)
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertEqual(len(calls), 1)
+
+    def test_ticking_changes_one_row_and_never_resets_the_list(self):
+        """A reset would send the list back to the top each time a game is ticked."""
+        self.load()
+        model = self.picker.model
+        resets, changes = [], []
+        model.modelReset.connect(lambda: resets.append(1))
+        model.dataChanged.connect(lambda top, bottom, roles: changes.append((top.row(), bottom.row())))
+        self.picker.toggle(3)
+        self.assertEqual((resets, changes), ([], [(1, 1)]))                  # God of War is the second row
+        self.assertEqual([model.data(model.index(i, 0), model.Selected) for i in range(model.rowCount())], [False, True, False])
+        self.picker.query = "forza"
+        self.assertEqual(len(resets), 1)                                       # another set of rows: a reset is right
+        self.assertEqual((model.rowCount(), model.data(model.index(0, 0), model.Name)), (1, "forza Horizon 5"))
+
+    def test_700_games_filter_quickly(self):
+        import time
+        self.NAMES = {i: "Game %03d" % i for i in range(700)}
+        self.library = {i: None for i in self.NAMES}
+        self.load()
+        self.assertEqual(len(self.picker.rows), 700)
+        start = time.time()
+        for q in ("9", "Game 1", "zz", "", "Game 07", "7", "", "Game", "0", "", "1", "", "2", "", "3", "", "4", "", "5", ""):
+            self.picker.query = q
+            self.picker.rows
+        self.assertLess(time.time() - start, 1.5)
+
+
 if __name__ == "__main__":
     unittest.main()

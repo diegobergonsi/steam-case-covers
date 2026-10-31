@@ -3603,5 +3603,27 @@ class ConsoleMake(StoreMocks):
         self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
 
 
+class ListGames(Base):
+    """list_games tells the caller when the store could not be asked, so a window can say "offline" instead of showing a short list."""
+
+    def test_errors_of_the_store_lookup_are_handed_back(self):
+        errs = []
+        with mock.patch.object(sc, "http_get", side_effect=OSError("offline")):
+            rows = sc.list_games({1: "Installed", 2: None}, errors=errs)
+        self.assertEqual(rows, [(1, "Installed")])                       # the unnamed game cannot be listed without the store
+        self.assertEqual([str(e) for e in errs], ["offline"])
+
+    def test_no_errors_when_the_store_answers(self):
+        errs = []
+        body = json.dumps({"response": {"store_items": [{"type": 0, "name": "Two"}]}}).encode()
+        with mock.patch.object(sc, "http_get", return_value=body):
+            rows = sc.list_games({2: None}, errors=errs)
+        self.assertEqual((rows, errs), ([(2, "Two")], []))
+
+    def test_errors_are_optional(self):
+        with mock.patch.object(sc, "http_get", side_effect=OSError("offline")):
+            self.assertEqual(sc.list_games({1: "Installed"}), [(1, "Installed")])
+
+
 if __name__ == "__main__":
     unittest.main()

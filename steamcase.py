@@ -681,9 +681,9 @@ def portrait_candidates(appid, item):
     return urls, auto
 
 
-def list_games(games, log=None):
-    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers)."""
-    info = store_items(sorted(games), log)
+def list_games(games, log=None, errors=None):
+    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers). `errors`: a list that gets the exception of every store lookup that failed."""
+    info = store_items(sorted(games), log, errors=errors)
     out = []
     for appid in sorted(games):
         it = info.get(appid, {})

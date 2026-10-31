@@ -10,6 +10,7 @@ from qtui.hundred import Hundred
 from qtui.library import Library
 from qtui.look import Look
 from qtui.make import Make
+from qtui.picker import Picker
 from qtui.updates import Updates
 
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
@@ -31,6 +32,7 @@ class Shell(QObject):
         self._library = Library(self, downloads or system.downloads_dir(), self)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
+        self._picker = Picker(self, self)
         covers = covers_dir or sc.default_covers_dir()
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
@@ -65,6 +67,10 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def hundred(self):
         return self._hundred
+
+    @Property(QObject, constant=True)
+    def picker(self):
+        return self._picker
 
     @Property(QObject, constant=True)
     def make(self):
