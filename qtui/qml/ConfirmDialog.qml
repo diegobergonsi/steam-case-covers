@@ -38,6 +38,20 @@ FocusScope {
         var first = single ? confirm : cancel
         first.forceActiveFocus()
     }
+    readonly property real maxCard: Math.min(Theme.dialogWidth, dialog.width - Theme.s32 - Theme.s32)       // the widest the card may be
+    readonly property real pad: Theme.s24 + Theme.s24                                                        // its padding, left and right
+    readonly property real maxText: maxCard - pad
+    function wanted() {
+        // the width of the longest line, measured on copies of the words laid out at the widest the card may be: the card then ends where the words end,
+        // and the right side has no empty strip (the ends of wrapped lines are ragged, a card as wide as the widest possible line left one)
+        var w = Math.min(titleProbe.contentWidth, maxText)
+        for (var i = 0; i < probes.count; i++) w = Math.max(w, probes.itemAt(i).contentWidth)
+        var row = confirm.implicitWidth
+        var single = confirm.implicitWidth
+        if (!dialog.single) { row += cancel.implicitWidth + Theme.s8; single = Math.max(single, cancel.implicitWidth) }
+        if (alternate.visible) { row += alternate.implicitWidth + Theme.s8; single = Math.max(single, alternate.implicitWidth) }
+        return Math.max(w, Math.min(row, maxText), Math.min(single, maxText))
+    }
     function step(delta) {                              // the focus moves between the visible buttons and never leaves the dialog
         var list = []
         if (cancel.visible) list.push(cancel)
@@ -67,6 +81,15 @@ FocusScope {
         }
     }
 
+    Item {                                              // invisible copies of the words, only to measure them (see wanted)
+        visible: false
+        Text { id: titleProbe; width: dialog.maxText; text: dialog.title; wrapMode: Text.WordWrap; font.pixelSize: Theme.sectionSize; font.bold: true }
+        Repeater {
+            id: probes
+            model: dialog.paragraphs
+            delegate: Text { width: dialog.maxText; text: modelData.text; wrapMode: Text.WordWrap; font.pixelSize: Theme.bodySize }
+        }
+    }
     Rectangle {                                         // the dimmed window behind; it takes every click, so nothing behind can be reached
         anchors.fill: parent
         color: Theme.shadow
@@ -79,7 +102,7 @@ FocusScope {
     Card {
         id: card
         objectName: dialog.prefix + "_card"
-        width: Math.min(Theme.dialogWidth, dialog.width - 2 * Theme.s32)
+        width: Math.min(dialog.maxCard, Math.ceil(dialog.wanted()) + dialog.pad + Theme.hairline)         // as wide as its longest line, no wider
         height: content.implicitHeight + 2 * Theme.s24
         x: (dialog.width - width) / 2
         y: Math.max(Theme.s16, (dialog.height - height) / 2)
@@ -102,7 +125,7 @@ FocusScope {
             Flickable {                                 // a lot of words scroll; the buttons stay in view
                 id: body
                 width: content.width
-                height: Math.min(words.implicitHeight, Math.max(Theme.touchSize, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12))
+                height: Math.min(words.implicitHeight, Math.max(Theme.touchSize, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12 - Theme.s12 - Theme.s12))
                 contentWidth: width
                 contentHeight: words.implicitHeight
                 clip: true
@@ -124,6 +147,7 @@ FocusScope {
                     }
                 }
             }
+            Item { width: Theme.hairline; height: Theme.s12 }       // the buttons stand apart from the last words (24 px in all)
             ButtonRow {
                 id: buttons
                 width: content.width

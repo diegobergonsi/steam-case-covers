@@ -294,7 +294,25 @@ class Tones(unittest.TestCase):
         self.assertEqual(tones.tone_name(0, 0, 14), "Black")
         self.assertEqual(tones.tone_name(200, 0, 34), "Graphite")          # a grey has no hue
         self.assertEqual(tones.tone_name(0, 0, 78), "Silver")
-        self.assertEqual(tones.tone_name(90, 80, 70), "Custom \u00b7 90\u00b0 80% 70%")
+        self.assertEqual(tones.tone_name(134, 100, 100), "Red")              # the ready-made colours keep their names
+        self.assertEqual([tones.tone_name(h, 100, 100) for h in (42, 84, 176, 276)], ["Violet", "Magenta", "Orange", "Green"])
+
+    def test_every_other_colour_is_a_word_never_numbers(self):
+        for tone, name in (((90, 80, 70), "Magenta"), ((90, 80, 30), "Dark magenta"), ((90, 30, 80), "Pale magenta"), ((200, 100, 100), "Yellow"),
+                           ((0, 100, 40), "Dark blue"), ((0, 100, 50), "Blue"), ((300, 100, 100), "Teal"), ((230, 100, 100), "Lime"), ((120, 100, 100), "Pink"), ((330, 100, 100), "Cyan"),
+                           ((0, 0, 50), "Grey"), ((0, 0, 20), "Dark grey"), ((0, 0, 90), "Light grey"), ((77, 0, 5), "Black"), ((200, 4, 50), "Grey")):
+            with self.subTest(tone=tone):
+                self.assertEqual(tones.tone_name(*tone), name)
+        import re
+        for hue in range(0, 360, 7):                                         # a name for every colour the sliders can make, with no digits in it
+            for sat in (10, 40, 70, 100):
+                for val in (10, 40, 70, 100):
+                    self.assertFalse(re.search(r"\d", tones.tone_name(hue, sat, val)), (hue, sat, val))
+
+    def test_names_follow_the_real_colour_of_the_case_not_the_slider_degrees(self):
+        # the hue slider turns the case from the original blue (about 210 degrees on a colour wheel): 134 degrees of turn is red, 276 is green
+        self.assertEqual(tones.tone_name(134, 40, 100), "Pale red")
+        self.assertEqual(tones.tone_name(276, 40, 100), "Pale green")
 
     def test_the_hint_only_for_grey_and_black(self):
         self.assertEqual(tones.tone_hint(10, 0, 50), "Colour has no effect on grey or black.")
@@ -1558,6 +1576,39 @@ class Components(QtCase):
         self.assertGreaterEqual(self.item("dlg_confirm").height(), 36)
         self.assertLessEqual(card.y() + card.height(), 420)
 
+    def test_the_card_fits_its_words_so_the_right_side_has_no_extra_margin(self):
+        from PySide6.QtCore import QMetaObject, QPointF
+        from PySide6.QtTest import QTest
+        self.load(self.DIALOG.replace('"Your current artwork is backed up first."', '"Your current artwork is backed up first, and you can undo this from the Home screen whenever you like, so nothing is lost."'), 700, 420)
+        self.root.requestActivate()
+        QMetaObject.invokeMethod(self.root, "openIt")
+        QTest.qWait(60)
+        card = self.item("dlg_card")
+        self.assertLessEqual(card.width(), 440)
+        widest = max(self.item("dlg_p%d" % i).property("contentWidth") for i in range(3))
+        self.assertLessEqual(card.width() - 48 - widest, 12)                    # the longest line reaches (nearly) to the padding on the right
+        self.assertGreaterEqual(widest, card.width() - 48 - 12)
+
+    def test_a_short_question_gets_a_small_card_not_an_empty_wide_one(self):
+        from PySide6.QtCore import QMetaObject
+        from PySide6.QtTest import QTest
+        self.load(self.THREE, 700, 420)
+        self.root.requestActivate()
+        QMetaObject.invokeMethod(self.root, "openPlain")
+        QTest.qWait(60)
+        card = self.item("dlg_card")
+        self.assertLess(card.width(), 300)
+        confirm, cancel = self.item("dlg_confirm"), self.item("dlg_cancel")
+        self.assertLessEqual(confirm.x() + confirm.width(), card.width() - 48 + 0.5)       # the buttons still fit
+
+    def test_there_is_room_between_the_last_words_and_the_buttons(self):
+        from PySide6.QtCore import QPointF
+        self.open_dialog()
+        last = self.item("dlg_p2")
+        bottom = last.mapToScene(QPointF(0, last.height())).y()
+        top = self.item("dlg_cancel").mapToScene(QPointF(0, 0)).y()
+        self.assertGreaterEqual(top - bottom, 24)
+
     def test_a_dialog_with_a_lot_to_say_scrolls_and_keeps_its_buttons_in_view(self):
         from PySide6.QtCore import QMetaObject
         self.load('ConfirmDialog { id: dlg; objectName: "dlg" }\nfunction openIt() { var long = []; for (var i = 0; i < 12; i++) long.push({"text": "A long sentence that says what will happen to your covers, number " + i + ".", "kind": "main"}); dlg.ask("Many words", long, "Go") }', 360, 260)
@@ -2050,7 +2101,7 @@ class LookState(QtCase):
         self.look.toneChanged.connect(lambda: seen.append((self.look.hue, self.look.sat, self.look.val)))
         self.look.setTone(90, 80, 70)
         self.assertEqual(seen, [(90, 80, 70)])
-        self.assertEqual(self.look.toneName, "Custom \u00b7 90\u00b0 80% 70%")
+        self.assertEqual(self.look.toneName, "Magenta")
         self.assertEqual(self.look.colourNote, "Only the original colour is checked for readable text.")
         self.look.setTone(90, 80, 70)                                     # no change: no signal
         self.assertEqual(len(seen), 1)

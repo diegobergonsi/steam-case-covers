@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""The case colour as the Look screen needs it: names, hints, swatches and the colours of the sliders' tracks. No Qt in here."""
+"""The case colour as the Look screen needs it: names (in words), hints, swatches and the colours of the sliders' tracks. No Qt in here."""
 import math
 
 import steamcase as sc
@@ -22,15 +22,31 @@ def clamp_tone(hue, sat, val):
     return int(round(h)) % 360, min(max(int(round(s)), 0), 100), min(max(int(round(v)), 0), 100)
 
 
+ORIGINAL_ANGLE = 210                                  # the original blue, in degrees on a colour wheel: the hue slider turns the case from there
+BANDS = ((15, "red"), (40, "orange"), (65, "yellow"), (90, "lime"), (150, "green"), (175, "teal"), (200, "cyan"), (245, "blue"), (285, "violet"),
+         (320, "magenta"), (340, "pink"), (360, "red"))   # the colour family up to each angle on the wheel
+DARK, PALE, GREY_AT = 45, 45, 8                       # brightness up to DARK is "dark", colourfulness up to PALE is "pale", up to GREY_AT is no colour at all
+
+
 def tone_name(hue, sat, val):
-    """"Original", the name of a ready-made grey, or "Custom · 90° 80% 70%": as the Tk window wrote it."""
+    """A name for the case colour, in words: "Original", the ready-made names ("Red", "Silver"...), or the colour family with "Dark" or "Pale" ("Dark magenta").
+    Never numbers: the sliders show those."""
     hue, sat, val = clamp_tone(hue, sat, val)
     key = sc.tone_key(hue, sat, val)
-    name = "Original" if key == sc.tone_key(0) else "Custom · %d° %d%% %d%%" % (hue, sat, val)
+    if key == sc.tone_key(0):
+        return "Original"
     for grey, s, v in sc.NEUTRAL_SWATCHES:
         if key == sc.tone_key(0, s, v):
-            name = grey
-    return name
+            return grey
+    for h in sc.HUE_SWATCHES:
+        if key == sc.tone_key(h):
+            return HUE_NAMES[h]
+    if sat <= GREY_AT or val <= 10:                    # no colour to speak of: a grey
+        return "Black" if val <= 10 else "Dark grey" if val < 30 else "Grey" if val < 60 else "Light grey"
+    angle = (ORIGINAL_ANGLE + hue) % 360
+    family = next(name for top, name in BANDS if angle < top)
+    prefix = "Dark " if val <= DARK else "Pale " if sat <= PALE else ""
+    return prefix + family if prefix else family.capitalize()
 
 
 def tone_hint(hue, sat, val):
