@@ -5797,8 +5797,8 @@ class ApplyState(QtCase, FakeStore):
 
 
 @need_qt
-class PickerTests(QtCase, FakeStore):
-    """The Games step of the manual flow: the library's games by name, a search, tick boxes."""
+class PickerBase(QtCase, FakeStore):
+    """A shell over a three-game library with a fake store, for the Games and Case steps of the manual flow."""
     NAMES = {1: "Hades", 2: "forza Horizon 5", 3: "God of War"}
 
     @classmethod
@@ -5836,6 +5836,11 @@ class PickerTests(QtCase, FakeStore):
 
     def names(self):
         return [r["name"] for r in self.picker.rows]
+
+
+@need_qt
+class PickerTests(PickerBase):
+    """The Games step of the manual flow: the library's games by name, a search, tick boxes."""
 
     def test_load_lists_games_sorted_by_name(self):
         self.load()
@@ -5964,6 +5969,106 @@ class PickerTests(QtCase, FakeStore):
             self.picker.query = q
             self.picker.rows
         self.assertLess(time.time() - start, 1.5)
+
+
+@need_qt
+class CasesTests(PickerBase):
+    """The Case step: which console case the ticked games go in, kept per game until Make."""
+
+    def setUp(self):
+        super().setUp()
+        self.cases = self.shell.cases
+        self.load()
+
+    def test_choices_order_and_labels(self):
+        got = [(c["key"], c["label"]) for c in self.cases.choices]
+        self.assertEqual(got, [("steam", "Steam"), ("ps5", "PlayStation 5"), ("ps4", "PlayStation 4"), ("ps3", "PlayStation 3"),
+                               ("xboxseries", "Xbox Series X|S"), ("xboxone", "Xbox One"), ("xbox360", "Xbox 360"),
+                               ("switch2", "Nintendo Switch 2"), ("switch", "Nintendo Switch")])
+        self.assertEqual(self.cases.selectedKey, "")
+
+    def test_pick_then_assign_moves_the_selection_to_the_assignments(self):
+        self.picker.toggle(1)
+        self.picker.toggle(3)
+        self.assertFalse(self.cases.canAssign)
+        self.cases.pick("ps5")
+        self.assertTrue(self.cases.canAssign)
+        self.cases.assign()
+        self.assertEqual((self.cases.assigned(), self.cases.assignedCount), ({1: "ps5", 3: "ps5"}, 2))
+        self.assertEqual((self.picker.selectedCount, self.cases.selectedKey, self.cases.canAssign), (0, "", False))
+
+    def test_assign_needs_a_case_and_some_games(self):
+        self.picker.toggle(1)
+        self.cases.assign()
+        self.assertEqual(self.cases.assignedCount, 0)                          # no case picked
+        self.cases.pick("ps5")
+        self.picker.clearAll()
+        self.cases.assign()
+        self.assertEqual(self.cases.assignedCount, 0)                          # no game ticked
+
+    def test_an_unknown_case_is_ignored(self):
+        self.cases.pick("ps9")
+        self.assertEqual(self.cases.selectedKey, "")
+
+    def test_assigning_again_overwrites_the_games_case(self):
+        self.picker.toggle(1)
+        self.cases.pick("ps5")
+        self.cases.assign()
+        self.picker.toggle(1)
+        self.cases.pick("xbox360")
+        self.cases.assign()
+        self.assertEqual((self.cases.assigned(), self.cases.assignedCount), ({1: "xbox360"}, 1))
+
+    def test_the_steam_case_is_none(self):
+        self.picker.toggle(2)
+        self.cases.pick("steam")
+        self.cases.assign()
+        self.assertEqual(self.cases.assigned(), {2: None})
+
+    def test_the_summary_counts_games_per_case_in_order(self):
+        for appid, key in ((1, "xbox360"), (2, "ps5"), (3, "ps5")):
+            self.picker.toggle(appid)
+            self.cases.pick(key)
+            self.cases.assign()
+        self.assertEqual(self.cases.summary, [{"label": "PlayStation 5", "count": 2}, {"label": "Xbox 360", "count": 1}])
+
+    def test_the_family_switch_is_off_by_default_and_needs_a_game_list(self):
+        self.assertFalse(self.cases.family)
+        self.assertFalse(self.cases.familyAvailable)                          # installed-only: nothing is known about family games
+        self.shell.library.installedOnly = False
+        self.assertFalse(self.cases.familyAvailable)                          # no game list file either
+        self.shell.library._path = "/some/userdata.json"
+        self.assertTrue(self.cases.familyAvailable)
+        self.cases.family = True
+        self.assertTrue(self.cases.family)
+
+    def test_a_changed_game_list_forgets_the_assignments(self):
+        self.picker.toggle(1)
+        self.cases.pick("ps4")
+        self.cases.assign()
+        self.shell.library.installedOnly = False
+        self.assertEqual(self.cases.assignedCount, 0)
+
+    def test_reset_forgets_everything(self):
+        self.picker.toggle(1)
+        self.cases.pick("ps4")
+        self.cases.assign()
+        self.cases.family = True
+        self.cases.reset()
+        self.assertEqual((self.cases.assignedCount, self.cases.selectedKey, self.cases.family), (0, "", False))
+
+    def test_the_preview_provider_draws_each_case(self):
+        from PySide6.QtCore import QSize
+        from qtui.preview import PreviewProvider
+        provider = PreviewProvider()
+        for c in self.cases.choices:
+            with self.subTest(case=c["key"]):
+                image = provider.requestImage("platform/%s/1" % c["key"], QSize(), QSize(120, 180))
+                self.assertEqual((image.width(), image.height()), (120, 180))
+                self.assertGreater(image.pixelColor(60, 90).alpha(), 0)
+        self.assertNotEqual(provider.requestImage("platform/ps5/1", QSize(), QSize(120, 180)), provider.requestImage("platform/ps4/1", QSize(), QSize(120, 180)))
+        blank = provider.requestImage("platform/ps9/1", QSize(), QSize(120, 180))
+        self.assertEqual(blank.pixelColor(60, 90).alpha(), 0)                  # not one of ours: a transparent picture, no crash
 
 
 if __name__ == "__main__":

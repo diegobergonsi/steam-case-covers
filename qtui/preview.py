@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""The sample cover QML shows on the Look screen, drawn by the engine and handed over as an image (image://preview/<hue>/<sat>/<val>/<theme>/<treatment>/<serial>)."""
+"""The sample cover QML shows on the Look screen, drawn by the engine and handed over as an image (image://preview/<hue>/<sat>/<val>/<theme>/<treatment>/<serial>),
+and the sample of each console case on the Case screen (image://preview/platform/<key>/<serial>)."""
 import threading
 from collections import OrderedDict
 
@@ -22,8 +23,11 @@ def _placeholder(size):
 
 
 def _parse(ident):
-    """(hue, sat, val, theme or None, treatment or None) from a request id, or None when it is not one of ours."""
+    """(hue, sat, val, theme or None, treatment or None) from a request id, or None when it is not one of ours.
+    A console case is asked for as platform/<key>/<serial> (key: "steam" or one of PLATFORMS) and answered as ("platform", key or None)."""
     parts = ident.split("/")
+    if parts[0] == "platform":
+        return ("platform", None if parts[1] == "steam" else parts[1]) if len(parts) == 3 and (parts[1] == "steam" or parts[1] in sc.PLATFORMS) else None
     if len(parts) != 6:
         return None
     try:
@@ -60,8 +64,11 @@ class PreviewProvider(QQuickImageProvider):
                 self._cache.move_to_end(key)
                 return self._cache[key]
             try:
-                hue, sat, val, theme, treatment = request
-                pil = sc.preview_cover(hue, sat=sat, val=val, treatment=treatment, theme=theme).convert("RGBA")
+                if request[0] == "platform":
+                    pil = sc.preview_cover(platform=request[1]).convert("RGBA")
+                else:
+                    hue, sat, val, theme, treatment = request
+                    pil = sc.preview_cover(hue, sat=sat, val=val, treatment=treatment, theme=theme).convert("RGBA")
                 pil = pil.resize((want.width(), want.height()), sc.Image.LANCZOS)
                 image = QImage(pil.tobytes(), pil.width, pil.height, pil.width * 4, QImage.Format_RGBA8888).copy()      # copy: the bytes object goes away
             except Exception:

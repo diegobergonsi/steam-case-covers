@@ -6,6 +6,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import steamcase as sc
 from qtui import settings, steps, system
 from qtui.apply import Apply
+from qtui.cases import Cases
 from qtui.hundred import Hundred
 from qtui.library import Library
 from qtui.look import Look
@@ -33,6 +34,7 @@ class Shell(QObject):
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
         self._picker = Picker(self, self)
+        self._cases = Cases(self, self)
         covers = covers_dir or sc.default_covers_dir()
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
@@ -71,6 +73,10 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def picker(self):
         return self._picker
+
+    @Property(QObject, constant=True)
+    def cases(self):
+        return self._cases
 
     @Property(QObject, constant=True)
     def make(self):
