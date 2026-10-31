@@ -27,9 +27,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot.png"><img src="assets/screenshot.png" width="460" alt="The steam-case-covers window with its three steps"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot.png"><img src="assets/screenshot.png" width="640" alt="The steam-case-covers window on the Look step: the list of steps on the left, a preview of the case and the colour choices"></a>
   <br>
-  <em>The whole app: three steps, no terminal.</em>
+  <em>The whole app: five short steps, no terminal. The preview follows every choice.</em>
 </p>
 
 <p align="center">
