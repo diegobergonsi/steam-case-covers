@@ -6456,5 +6456,97 @@ class ManualMake(PickerBase):
         self.assertEqual([c["key"] for c in self.shell.hundred.styles], ["gold-case", "gold-border", "ribbon", "none"])
 
 
+@need_qt
+class ManualFlowEndToEnd(PickerBase):
+    """The manual flow from ticking games to Restore, over a fake Steam folder and the engine's own Apply, Restore and Reset."""
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        self.grid = os.path.join(self.tmp, "userdata", "111", "config", "grid")
+        os.makedirs(self.grid)
+        os.makedirs(os.path.join(self.tmp, "config"))
+        for name, value in (("steam_running", lambda: False), ("start_steam", lambda steam: None), ("close_steam", lambda steam, timeout=60: True)):
+            patcher = mock.patch.object(self.sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.shell.startManual()
+        self.load()
+        self.ap, self.make = self.shell.apply, self.shell.make
+
+    def give(self, key, *appids):
+        for appid in appids:
+            self.picker.toggle(appid)
+        self.shell.cases.pick(key)
+        self.shell.cases.assign()
+
+    def make_covers(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running, 10)
+        self.assertTrue(self.make.done, self.make.status)
+
+    def do(self, start):
+        start()
+        self.assertTrue(self.ap._asking, self.ap.status)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.ap.statusKind, "ok", self.ap.status)
+
+    def grid_files(self):
+        return sorted(n for n in os.listdir(self.grid) if n.endswith("p.png"))
+
+    def test_pick_case_make_apply_restore(self):
+        self.give("ps5", 1, 3)
+        self.make_covers()
+        self.assertEqual(len(self.make.files()), 2)
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.do(self.ap.apply)
+        self.assertEqual(self.grid_files(), ["1p.png", "3p.png"])                       # game 2 was never ticked: nothing for it
+        for n in self.grid_files():
+            self.assertEqual(self.sc.cover_platform(os.path.join(self.grid, n)), "ps5")
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore)
+        self.do(self.ap.restore)
+        self.assertEqual(self.grid_files(), [])
+
+    def test_reset_removes_console_covers_and_only_ours(self):
+        self.give("ps4", 1)
+        self.make_covers()
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.do(self.ap.apply)
+        with open(os.path.join(self.grid, "2p.png"), "wb") as f:
+            f.write(b"someone else's art")
+        self.assertEqual(self.sc.find_our_covers(self.tmp), ["1p.png"])
+        self.sc.reset_to_default(self.tmp, None, ["1p.png"], False)
+        self.assertEqual(self.grid_files(), ["2p.png"])
+
+    def test_several_rounds_before_make_give_each_game_its_own_case(self):
+        self.give("ps5", 1)
+        self.give("xbox360", 2)
+        self.give("steam", 3)
+        self.make_covers()
+        got = {os.path.basename(f).rsplit("_", 1)[1]: self.sc.cover_platform(f) for f in self.make.files()}
+        self.assertEqual(got, {"1.png": "ps5", "2.png": "xbox360", "3.png": None})
+        self.assertFalse(self.sc.mixed_cover_colours(self.covers) or self.sc.mixed_cover_themes(self.covers))
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.do(self.ap.apply)
+        self.assertEqual(self.sc.find_our_covers(self.tmp), ["1p.png", "2p.png", "3p.png"])
+
+    def test_the_natural_flow_afterwards_leaves_console_covers_alone(self):
+        self.give("ps5", 1)
+        self.make_covers()
+        before = open(self.make.files()[0], "rb").read()
+        self.shell.startNatural()
+        self.make.start()
+        self.wait_for(lambda: not self.make.running, 10)
+        self.assertFalse(self.make.asking, self.make.questionText)
+        self.assertEqual(open(os.path.join(self.covers, "Hades_1.png"), "rb").read(), before)
+        self.assertEqual(self.sc.cover_platform(os.path.join(self.covers, "Hades_1.png")), "ps5")
+        self.assertTrue(os.path.exists(os.path.join(self.covers, "God_of_War_3.png")))        # and the other games got the Steam case
+
+
 if __name__ == "__main__":
     unittest.main()
