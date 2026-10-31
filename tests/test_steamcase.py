@@ -3269,5 +3269,52 @@ class CustomArtCli(StoreMocks):
         self.assertNotIn("from your own art", text)
 
 
+class PlatformCases(Base):
+    """The console cases: a frame and an art window per platform (assets/cases)."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_every_platform_has_a_frame_and_window(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                frame = sc.load_platform_frame(p)
+                self.assertEqual((frame.size, frame.mode), (sc.SIZE, "RGBA"))
+                x0, y0, x1, y1 = sc.platform_window(p)
+                self.assertTrue(0 <= x0 < x1 <= sc.SIZE[0] and 0 <= y0 < y1 <= sc.SIZE[1])
+                self.assertTrue(x1 - x0 >= 400 and y1 - y0 >= 400)
+                self.assertEqual(frame.getchannel("A").crop((x0, y0, x1, y1)).getextrema(), (0, 0))      # the art shows through
+
+    def test_labels_cover_every_platform(self):
+        self.assertEqual(set(sc.PLATFORM_LABELS), set(sc.PLATFORMS))
+        self.assertEqual(len(sc.PLATFORMS), 8)
+
+    def test_unknown_platform_is_refused(self):
+        for call in (sc.platform_window, sc.load_platform_frame):
+            with self.assertRaises(ValueError):
+                call("ps9")
+
+    def test_family_corner_stays_inside_the_case(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                plain, family = sc.load_platform_frame(p), sc.load_platform_frame(p, True)
+                self.assertNotEqual(plain.tobytes(), family.tobytes())
+                silhouette = plain.getchannel("A").copy()
+                x0, y0, x1, y1 = sc.platform_window(p)
+                silhouette.paste(255, (x0, y0, x1, y1))                  # the window is part of the case: the art shows there
+                outside = sc.Image.eval(silhouette, lambda a: 255 if a == 0 else 0)
+                self.assertEqual(sc.ImageChops.multiply(outside, family.getchannel("A")).getbbox(), None)
+
+    def test_compose_default_window_is_unchanged(self):
+        art = sc.Image.new("RGBA", (300, 450), (200, 60, 60, 255))
+        frame = sc.load_frame()
+        self.assertEqual(sc._compose(art, frame).tobytes(), sc._compose(art, frame, sc.WINDOW).tobytes())
+        x0, y0, _, _ = sc.WINDOW
+        r, g, b = sc._compose(art, frame).getpixel((x0 + 40, y0 + 40))[:3]
+        self.assertTrue(r > g + 80 and r > b + 80)                    # the art shows (the frame's gloss tints it a little)
+
+
 if __name__ == "__main__":
     unittest.main()

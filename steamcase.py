@@ -47,7 +47,12 @@ DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatmen
 THEMES = ("halloween",)                     # case themes: decorations drawn on the case, whatever its colour; the classic case has none
 ART_CHUNK = "steamcase-art"                 # PNG note naming the source file of a cover built from the user's own art; covers from Steam's portrait carry none
 THEME_CHUNK = "steamcase-theme"             # PNG note naming a cover's theme; classic covers carry none
-KEEP = "keep"                               # in place of a theme: each existing cover keeps the theme it has
+PLATFORMS = ("ps3", "ps4", "ps5", "xbox360", "xboxone", "xboxseries", "switch", "switch2")      # the console cases (assets/cases); the Steam case is the one without a platform
+PLATFORM_LABELS = {"ps3": "PlayStation 3", "ps4": "PlayStation 4", "ps5": "PlayStation 5", "xbox360": "Xbox 360", "xboxone": "Xbox One",
+                   "xboxseries": "Xbox Series X|S", "switch": "Nintendo Switch", "switch2": "Nintendo Switch 2"}
+PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
+CASES_DIR = os.path.join(HERE, "assets", "cases")    # one <platform>.png per case (transparent art window) and cases.json (the window of each)
+KEEP = "keep"                             # in place of a theme: each existing cover keeps the theme it has
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 NEUTRAL_SWATCHES = (("Black", 0, 14), ("Graphite", 0, 34), ("Silver", 0, 78))    # ready-made greys: (name, colourfulness, brightness), hue does not matter
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
@@ -733,6 +738,33 @@ def load_frame(hue=0, family=False, *, sat=100, val=100):
     return frame
 
 
+@functools.lru_cache(maxsize=1)
+def _case_windows():
+    with open(os.path.join(CASES_DIR, "cases.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def platform_window(platform):
+    """The art window (x0, y0, x1, y1) inside the frame of a console case. ValueError for a platform that is not one of PLATFORMS."""
+    if platform not in PLATFORMS:
+        raise ValueError("unknown platform: %r" % (platform,))
+    return tuple(_case_windows()[platform]["window"])
+
+
+def load_platform_frame(platform, family=False):
+    """The frame of a console case (600 x 900, transparent where the art shows). With family=True the green corner of the Steam Family library is laid
+    over it, kept inside the case's outline (the art window counts as inside). ValueError for a platform that is not one of PLATFORMS."""
+    x0, y0, x1, y1 = platform_window(platform)
+    frame = Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
+    if family:
+        corner = Image.open(FAMILY_CORNER).convert("RGBA")
+        outline = frame.getchannel("A").copy()
+        outline.paste(255, (x0, y0, x1, y1))
+        corner.putalpha(ImageChops.multiply(corner.getchannel("A"), outline))
+        frame = Image.alpha_composite(frame, corner)
+    return frame
+
+
 def case_color(hue, sat=100, val=100):
     """'#rrggbb' of the case's middle colour (the original is #1636c8) turned by `hue` degrees and toned by `sat` and `val`: for painting swatches and the colour sliders."""
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -748,9 +780,10 @@ HUE_CHUNK = "steamcase-hue"
 TONE_CHUNK = "steamcase-tone"                 # "<sat> <val>"; covers without it are in full tone
 
 
-def _compose(art, frame):
-    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this."""
-    x0, y0, x1, y1 = WINDOW
+def _compose(art, frame, window=WINDOW):
+    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this.
+    `window` is the frame's art window; the Steam case's unless the frame is a console case's (platform_window)."""
+    x0, y0, x1, y1 = window
     ww, wh = x1 - x0, y1 - y0
     s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
     art = art.resize((max(ww, round(art.width * s)), max(wh, round(art.height * s))), Image.LANCZOS)
