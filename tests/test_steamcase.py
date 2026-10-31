@@ -3315,6 +3315,84 @@ class PlatformCases(Base):
         r, g, b = sc._compose(art, frame).getpixel((x0 + 40, y0 + 40))[:3]
         self.assertTrue(r > g + 80 and r > b + 80)                    # the art shows (the frame's gloss tints it a little)
 
+    # ---- building a console cover ----
+    def portrait(self, colour=(30, 220, 30)):
+        path = os.path.join(self.tmp, "portrait.jpg")
+        sc.Image.new("RGB", (300, 450), colour).save(path, format="JPEG", quality=100)
+        return path
+
+    def build(self, platform, name="c.png", family=False, **kw):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.portrait(), out, sc.load_platform_frame(platform, family), platform=platform, **kw)
+        return out
+
+    def test_build_writes_only_the_platform_note(self):
+        out = self.build("ps5")
+        self.assertEqual(sc.cover_platform(out), "ps5")
+        with sc.Image.open(out) as im:
+            self.assertEqual(im.size, sc.SIZE)
+            for chunk in (sc.HUE_CHUNK, sc.TONE_CHUNK, sc.THEME_CHUNK, sc.DONE_CHUNK, sc.ART_CHUNK):
+                self.assertNotIn(chunk, im.info)
+
+    def test_art_stays_inside_the_window(self):
+        for p in ("ps4", "switch"):
+            with self.subTest(platform=p):
+                out = self.build(p)
+                x0, y0, x1, y1 = sc.platform_window(p)
+                with sc.Image.open(out) as im:
+                    im = im.convert("RGBA")
+                    green = lambda px: px[1] > 150 and px[0] < 90 and px[2] < 90
+                    self.assertTrue(green(im.getpixel((x0 + 30, y0 + 30))))
+                    self.assertTrue(green(im.getpixel((x1 - 30, y1 - 30))))
+                    self.assertFalse(green(im.getpixel((x0 - 8, y0 + 100))))           # the case's border, outside the window
+
+    def test_platform_with_a_theme_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.build("ps5", theme="halloween")
+
+    def test_platform_with_a_gold_treatment_is_refused(self):
+        for t in ("gold-case", "gold-border", "gold-case-rosette", "gold-border-rosette"):
+            with self.subTest(treatment=t), self.assertRaises(ValueError):
+                self.build("ps5", treatment=t)
+
+    def test_unknown_platform_is_refused_when_building(self):
+        with self.assertRaises(ValueError):
+            sc.build_cover(self.portrait(), os.path.join(self.tmp, "x.png"), sc.load_frame(), platform="ps9")
+
+    def test_marks_are_allowed_and_noted(self):
+        for t in ("ribbon", "rosette"):
+            with self.subTest(treatment=t):
+                out = self.build("xboxone", treatment=t)
+                self.assertEqual((sc.cover_platform(out), sc.cover_treatment(out)), ("xboxone", t))
+
+    def test_cover_platform_reads_only_notes_we_write(self):
+        def png(name, note=None):
+            path = os.path.join(self.tmp, name)
+            info = sc.PngInfo()
+            if note is not None:
+                info.add_text(sc.PLATFORM_CHUNK, note)
+            sc.Image.new("RGBA", sc.SIZE).save(path, format="PNG", pnginfo=info)
+            return path
+        self.assertEqual(sc.cover_platform(png("a.png", "ps4")), "ps4")
+        self.assertIsNone(sc.cover_platform(png("b.png")))
+        self.assertIs(sc.cover_platform(png("c.png", "ps9")), False)
+        self.assertIs(sc.cover_platform(png("d.png", "PS4")), False)
+        junk = os.path.join(self.tmp, "e.png")
+        sc.Image.new("RGB", (10, 10)).save(junk, format="JPEG")
+        self.assertIs(sc.cover_platform(junk), False)
+        self.assertIs(sc.cover_platform(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_preview_in_a_console_case(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                self.assertEqual(sc.preview_cover(platform=p).size, sc.SIZE)
+        self.assertNotEqual(sc.preview_cover(platform="ps5").tobytes(), sc.preview_cover().tobytes())
+        self.assertNotEqual(sc.preview_cover(platform="ps5", family=True).tobytes(), sc.preview_cover(platform="ps5").tobytes())
+        with self.assertRaises(ValueError):
+            sc.preview_cover(platform="ps5", theme="halloween")
+        with self.assertRaises(ValueError):
+            sc.preview_cover(platform="ps5", treatment="gold-case")
+
 
 if __name__ == "__main__":
     unittest.main()

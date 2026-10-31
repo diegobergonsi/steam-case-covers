@@ -794,10 +794,25 @@ def _compose(art, frame, window=WINDOW):
     return Image.alpha_composite(canvas, frame)
 
 
-def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, theme=None):
+def _check_platform(platform, treatment, theme):
+    """ValueError unless `platform` is one of PLATFORMS and goes with this `treatment` (none, "ribbon" or "rosette": no gold) and `theme` (none)."""
+    if platform not in PLATFORMS:
+        raise ValueError("unknown platform: %r" % (platform,))
+    if theme is not None:
+        raise ValueError("a console case has no theme: %r" % (theme,))
+    if treatment not in (None, "ribbon", "rosette"):
+        raise ValueError("a console case only goes with the marks (ribbon, rosette), not %r" % (treatment,))
+
+
+def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, theme=None, platform=None):
     """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists).
     With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked; with a `theme` (one of THEMES) the case also
-    carries that theme's decorations."""
+    carries that theme's decorations. With a `platform` (one of PLATFORMS) it is that console's case: no colour, tone or theme, and only the "ribbon" or
+    "rosette" marks."""
+    if platform is not None:
+        _check_platform(platform, treatment, theme)
+        with Image.open(DEFAULT_ART) as im:
+            return finish_treatment(_compose(im.convert("RGBA"), load_platform_frame(platform, family), platform_window(platform)), treatment)
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
         return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment)
@@ -980,6 +995,19 @@ def cover_treatment(path):
     return done if done is None or done in TREATMENTS else False
 
 
+def cover_platform(path):
+    """The console case (one of PLATFORMS) a cover was made in, read from its PNG header without decoding the picture; None for a cover without the note
+    (the Steam case). False if this is not a readable PNG or the note is not exactly one we write."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return False
+        with Image.open(path, formats=["PNG"]) as im:
+            note = im.info.get(PLATFORM_CHUNK)
+    except Exception:
+        return False
+    return note if note is None or note in PLATFORMS else False
+
+
 def art_note(path):
     """The note a cover built from the user's own art `path` carries: "custom " and the start of the file's SHA-256, so a changed file rebuilds it."""
     h = hashlib.sha256()
@@ -1002,22 +1030,29 @@ def cover_art(path):
     return note if note is None or re.fullmatch(r"custom [0-9a-f]{16}", note) else False
 
 
-def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None, from_art=None):
+def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None, from_art=None, platform=None):
     """Write the cover of one portrait into `out_path`, with its colour notes, its `theme` and theme note (None: the classic case) and, for a 100% game,
-    its `treatment` and treatment note, and `from_art` (an art_note) when the portrait is the user's own. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
+    its `treatment` and treatment note, and `from_art` (an art_note) when the portrait is the user's own. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold).
+    With a `platform` (one of PLATFORMS) `frame` is that console's (load_platform_frame): the cover gets the platform note and no colour, tone or theme note, and
+    only no treatment or the "ribbon" and "rosette" marks go with it (ValueError otherwise, as for a theme)."""
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     if theme is not None and theme not in THEMES:
         raise ValueError("unknown theme: %r" % (theme,))
+    if platform is not None:
+        _check_platform(platform, treatment, theme)
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
-    cover = finish_treatment(apply_theme(_compose(art, frame), theme), treatment)
+    cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment)
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
-    note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
-    note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
+    if platform is not None:
+        note.add_text(PLATFORM_CHUNK, platform)                # a console cover has no colour, tone or theme: the case is fixed
+    else:
+        note.add_text(HUE_CHUNK, str(hue % 360))               # lets make_covers tell what colour an existing cover is without decoding it
+        note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
     if treatment is not None:
         note.add_text(DONE_CHUNK, treatment)                   # plain covers carry no note, as before treatments existed
     if theme is not None:
