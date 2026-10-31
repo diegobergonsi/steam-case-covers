@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-20T18:59:53.253831+00:00",
+  "generatedAt": "2026-10-31T00:00:00+00:00",
   "title": "Design System: Steam Case Covers",
   "extensions": {
     "colorMeta": {
@@ -46,21 +46,6 @@
           "#7697c0",
           "#9eb5d2",
           "#c6d4e5",
-          "#eef2f7"
-        ]
-      },
-      "hairline": {
-        "role": "neutral",
-        "displayName": "Hairline",
-        "canonical": "#2c4259",
-        "tonalRamp": [
-          "#192633",
-          "#2d435a",
-          "#406081",
-          "#537da8",
-          "#799abd",
-          "#a0b7d0",
-          "#c7d5e3",
           "#eef2f7"
         ]
       },
@@ -139,36 +124,6 @@
           "#e7f5fd"
         ]
       },
-      "sky-blue-hover": {
-        "role": "primary",
-        "displayName": "Sky Blue Lifted",
-        "canonical": "#8fd3ff",
-        "tonalRamp": [
-          "#002e4c",
-          "#005287",
-          "#0075c1",
-          "#0099fb",
-          "#37b0ff",
-          "#71c7ff",
-          "#abdeff",
-          "#e5f5ff"
-        ]
-      },
-      "sky-blue-pressed": {
-        "role": "primary",
-        "displayName": "Sky Blue Deep",
-        "canonical": "#45a5dc",
-        "tonalRamp": [
-          "#0c2d40",
-          "#155071",
-          "#1f72a2",
-          "#2895d4",
-          "#56addf",
-          "#87c5e9",
-          "#b8ddf2",
-          "#eaf5fb"
-        ]
-      },
       "ink-on-blue": {
         "role": "neutral",
         "displayName": "Ink on Blue",
@@ -229,170 +184,72 @@
           "#ffe7e5"
         ]
       },
-      "focus-ring": {
+      "shadow": {
         "role": "neutral",
-        "displayName": "Focus White",
-        "canonical": "#ffffff",
+        "displayName": "Shadow",
+        "canonical": "#000000",
         "tonalRamp": [
-          "#262626",
-          "#434343",
-          "#616161",
-          "#7e7e7e",
-          "#9b9b9b",
-          "#b8b8b8",
-          "#d5d5d5",
-          "#f2f2f2"
-        ]
-      },
-      "raised-hover": {
-        "role": "neutral",
-        "displayName": "Raised Hover",
-        "canonical": "#2b405a",
-        "tonalRamp": [
-          "#192534",
-          "#2c415b",
-          "#3e5d83",
-          "#5179aa",
-          "#7797be",
-          "#9fb5d1",
-          "#c6d4e4",
-          "#eef2f7"
-        ]
-      },
-      "disabled-fill": {
-        "role": "neutral",
-        "displayName": "Disabled Fill",
-        "canonical": "#26384b",
-        "tonalRamp": [
-          "#1a2633",
-          "#2d4359",
-          "#416080",
-          "#557da7",
-          "#7a9abc",
-          "#a1b7cf",
-          "#c7d5e3",
-          "#eef2f6"
-        ]
-      },
-      "disabled-edge": {
-        "role": "neutral",
-        "displayName": "Disabled Edge",
-        "canonical": "#223244",
-        "tonalRamp": [
-          "#1a2533",
-          "#2d425a",
-          "#405f81",
-          "#547ba8",
-          "#7999bc",
-          "#a0b7d0",
-          "#c7d4e3",
-          "#eef2f7"
-        ]
-      },
-      "disabled-track-on": {
-        "role": "neutral",
-        "displayName": "Disabled Track On",
-        "canonical": "#2a5a78",
-        "tonalRamp": [
-          "#142b39",
-          "#234b64",
-          "#326b8f",
-          "#418cba",
-          "#6ba6cb",
-          "#96c0da",
-          "#c1dae9",
-          "#ecf4f8"
-        ]
-      },
-      "disabled-knob": {
-        "role": "neutral",
-        "displayName": "Disabled Knob",
-        "canonical": "#8a9bab",
-        "tonalRamp": [
-          "#20262d",
-          "#38444e",
-          "#516170",
-          "#697e92",
-          "#8a9bab",
-          "#acb8c4",
-          "#ced5dc",
-          "#f0f2f4"
-        ]
-      },
-      "progress-track": {
-        "role": "neutral",
-        "displayName": "Progress Track",
-        "canonical": "#0c1219",
-        "tonalRamp": [
-          "#192534",
-          "#2c425b",
-          "#3f5e82",
-          "#527aaa",
-          "#7898be",
-          "#9fb6d1",
-          "#c6d4e4",
-          "#eef2f7"
-        ]
-      },
-      "progress-edge": {
-        "role": "neutral",
-        "displayName": "Progress Edge",
-        "canonical": "#1f2e3f",
-        "tonalRamp": [
-          "#192533",
-          "#2c425a",
-          "#405e81",
-          "#537ba8",
-          "#7999bd",
-          "#a0b6d0",
-          "#c7d4e3",
-          "#eef2f7"
-        ]
-      },
-      "tooltip-ground": {
-        "role": "neutral",
-        "displayName": "Tooltip Ground",
-        "canonical": "#0b1017",
-        "tonalRamp": [
-          "#192434",
-          "#2c3f5b",
-          "#3e5b83",
-          "#5176aa",
-          "#7795be",
-          "#9fb4d1",
-          "#c6d3e4",
-          "#eef2f7"
+          "#000000",
+          "#191919",
+          "#333333",
+          "#4c4c4c",
+          "#666666",
+          "#808080",
+          "#b3b3b3",
+          "#e6e6e6"
         ]
       }
     },
     "typographyMeta": {
       "title": {
         "displayName": "Title",
-        "purpose": "App name in the header."
+        "purpose": "One per screen, four words or fewer."
       },
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "Dialog titles."
-      },
-      "card-title": {
-        "displayName": "Card title",
-        "purpose": "Step names."
+      "section": {
+        "displayName": "Section",
+        "purpose": "Headings of cards and questions."
       },
       "body": {
         "displayName": "Body",
         "purpose": "Instructions and status lines."
       },
-      "label": {
-        "displayName": "Label",
-        "purpose": "Button text and warnings."
+      "small": {
+        "displayName": "Small",
+        "purpose": "Hints and notes."
       }
     },
-    "shadows": [],
-    "motion": [],
+    "shadows": [
+      {
+        "name": "card",
+        "value": "0 4px 12px rgba(0,0,0,.45)"
+      },
+      {
+        "name": "raised",
+        "value": "0 12px 32px rgba(0,0,0,.45)"
+      }
+    ],
+    "motion": [
+      {
+        "name": "press",
+        "value": "90-120ms"
+      },
+      {
+        "name": "navigation",
+        "value": "200ms ease-out"
+      },
+      {
+        "name": "screen change",
+        "value": "260ms ease-out"
+      }
+    ],
     "breakpoints": [
       {
+        "name": "minimum window",
+        "value": "640px wide, 420px high"
+      },
+      {
         "name": "deck-height",
-        "value": "800px (window scrolls when content does not fit)"
+        "value": "800px (the screen scrolls, the footer does not)"
       }
     ]
   },
@@ -401,60 +258,52 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one action that matters in the current step.",
+      "description": "The one filled button of a screen.",
       "html": "<button class=\"ds-btn ds-primary\">Make covers</button>",
-      "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-primary{background:#66c0f4;color:#0b141d}.ds-primary:hover{background:#8fd3ff}.ds-primary:active{background:#45a5dc}.ds-primary:focus-visible{outline:2px solid #fff;outline-offset:2px}"
-    },
-    {
-      "name": "Outlined Button",
-      "kind": "button",
-      "refersTo": "button-quiet",
-      "description": "Secondary action with a visible edge.",
-      "html": "<button class=\"ds-btn ds-quiet\">Open covers folder</button>",
-      "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-quiet{background:#22344a;color:#e6edf3;box-shadow:inset 0 0 0 1px #5d7a96}.ds-quiet:hover{background:#2b405a}.ds-quiet:active{background:#2c4259}.ds-quiet:focus-visible{outline:2px solid #fff;outline-offset:2px}"
+      "css": ".ds-btn{font:700 14px system-ui,sans-serif;height:36px;padding:0 16px;border-radius:9999px;cursor:pointer}.ds-primary{background:#66c0f4;color:#0b141d;border:0}.ds-primary:hover{filter:brightness(1.15)}.ds-primary:focus-visible{outline:2px solid #e6edf3;outline-offset:3px}"
     },
     {
       "name": "Quiet Button",
       "kind": "button",
-      "refersTo": "",
-      "description": "Text-only action for rare or secondary tasks; fills on hover.",
-      "html": "<button class=\"ds-btn ds-qt\">Browse\u2026</button>",
-      "css": ".ds-btn{font:700 15px system-ui,sans-serif;height:46px;padding:0 24px;border-radius:9999px;border:0;cursor:pointer;transition:background .15s}.ds-qt{background:transparent;color:#93a7bb}.ds-qt:hover{background:#22344a;color:#e6edf3}.ds-qt:active{background:#2c4259}.ds-qt:focus-visible{outline:2px solid #fff;outline-offset:2px}"
+      "refersTo": "button-quiet",
+      "description": "Everything that is not the main action.",
+      "html": "<button class=\"ds-btn ds-quiet\">Browse…</button>",
+      "css": ".ds-btn{font:700 14px system-ui,sans-serif;height:36px;padding:0 16px;border-radius:9999px;cursor:pointer}.ds-quiet{background:transparent;color:#e6edf3;border:1px solid #5d7a96}.ds-quiet:hover{background:#22344a}.ds-quiet:focus-visible{outline:2px solid #e6edf3;outline-offset:3px}"
     },
     {
-      "name": "Switch",
-      "kind": "custom",
-      "refersTo": "",
-      "description": "Pill toggle with label to the right.",
-      "html": "<label class=\"ds-sw\"><span class=\"ds-track\"><span class=\"ds-knob\"></span></span>Skip blurry covers</label>",
-      "css": ".ds-sw{display:flex;align-items:center;gap:10px;color:#e6edf3;font:15px system-ui,sans-serif}.ds-track{width:44px;height:24px;border-radius:9999px;background:#5d7a96;position:relative}.ds-knob{position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}"
+      "name": "Choice Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "One choice out of a few; the chosen one is sky blue.",
+      "html": "<span class=\"ds-chip\">Normal case</span>",
+      "css": ".ds-chip{display:inline-block;font:700 14px system-ui,sans-serif;height:36px;line-height:36px;padding:0 16px;border-radius:9999px;background:#22344a;color:#e6edf3}"
     },
     {
       "name": "Card",
       "kind": "card",
       "refersTo": "card",
-      "description": "A step container with badge, title and instruction.",
-      "html": "<div class=\"ds-card\"><div class=\"ds-head\"><span class=\"ds-badge\">3</span><b>Add them to Steam</b></div><p>Your current artwork is backed up first, so you can undo it.</p></div>",
-      "css": ".ds-card{background:#182433;border:1px solid #2c4259;border-radius:18px;padding:18px 22px;color:#e6edf3;font:15px system-ui,sans-serif}.ds-head{display:flex;align-items:center;gap:12px;font-size:19px}.ds-badge{width:32px;height:32px;border-radius:50%;background:#66c0f4;color:#0b141d;display:grid;place-items:center;font-weight:700}.ds-card p{color:#93a7bb;margin:12px 0 0}"
+      "description": "A section of a screen: a heading and at most three controls.",
+      "html": "<div class=\"ds-card\"><b>Your game list</b></div>",
+      "css": ".ds-card{font:700 16px system-ui,sans-serif;background:#182433;color:#e6edf3;border-radius:14px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,.45)}"
     },
     {
       "name": "Progress Bar",
-      "kind": "custom",
-      "refersTo": "",
-      "description": "Pill track with sky-blue fill.",
-      "html": "<div class=\"ds-bar\"><div class=\"ds-fill\"></div></div>",
-      "css": ".ds-bar{height:12px;border-radius:9999px;background:#0c1219;border:1px solid #1f2e3f;overflow:hidden}.ds-fill{width:62%;height:100%;background:#66c0f4}"
+      "kind": "progress",
+      "refersTo": "card",
+      "description": "How far a long job is; the count goes in the status line beside it.",
+      "html": "<div class=\"ds-track\"><div class=\"ds-fill\"></div></div>",
+      "css": ".ds-track{height:8px;border-radius:9999px;background:#22344a;width:240px}.ds-fill{height:8px;width:60%;border-radius:9999px;background:#66c0f4}"
     }
   ],
   "narrative": {
     "northStar": "The Quiet Shelf",
-    "overview": "The window is a dark cabinet that holds three labelled stations and gets out of the way. The covers are the only things allowed to be colorful; the interface around them is deep blue-black, one step lighter for cards, with a single sky-blue voice for the action that matters now.",
+    "overview": "The window is a dark cabinet with a list of steps on the left and one screen on the right. The covers are the only things allowed to be colourful; the interface around them is deep blue-black, one step lighter for cards, with a single sky-blue voice for the action that matters now.",
     "keyCharacteristics": [
-      "Dark tonal layering, no shadows.",
+      "Dark tonal layering with soft shadows under cards.",
       "One accent (sky blue); green, amber and coral appear only as status.",
-      "Fully rounded controls, softly rounded cards.",
-      "Text-forward: every card opens with a sentence of instruction.",
-      "Accessible by construction: visible control edges, white keyboard focus ring, scroll fallback on small screens."
+      "Fully rounded buttons and chips, softly rounded cards.",
+      "A preview of the cover beside every choice that changes it.",
+      "Accessible by construction: visible control edges, a focus ring, names for screen readers, nothing wider than its card."
     ],
     "rules": [
       {
@@ -468,29 +317,29 @@
         "section": "colors"
       },
       {
-        "name": "The Scale With The System Rule",
-        "body": "Layout measures are derived from the real font line height and screen DPI (px()), never fixed pixels.",
-        "section": "typography"
+        "name": "The Colour Is Never Alone Rule",
+        "body": "A finished step also shows a tick, a locked one a padlock; a disabled control is shown at 60%.",
+        "section": "colors"
       },
       {
-        "name": "The Flat-By-Default Rule",
-        "body": "No drop shadows, glows, or gradients in the window.",
-        "section": "elevation"
+        "name": "The Wider Font Rule",
+        "body": "Labels wrap, buttons never exceed their card, long text is cut with an ellipsis.",
+        "section": "typography"
       }
     ],
     "dos": [
-      "Do keep one sky-blue primary action visible per card and use outlined or quiet buttons for everything else.",
-      "Do put a plain-English sentence above the controls in every card, in Text Muted.",
-      "Do route every measure through px() and the real font line height.",
-      "Do keep outlines and switch tracks of enabled controls at 3:1 against the card (Control Edge) and show a white ring on keyboard focus. Quiet text buttons are the one deliberate exception.",
-      "Do keep status colors for status only: green done, amber caution, coral error."
+      "Do keep one sky-blue primary action per screen and everything else quiet.",
+      "Do say what will happen before it happens, and what was done after.",
+      "Do take every size, colour and duration from Theme.qml.",
+      "Do keep outlines of enabled controls at 3:1 against the card and show a ring on keyboard focus.",
+      "Do keep status colours for status only."
     ],
     "donts": [
-      "Don't add shadows, gradients, glows or decorative illustration to the window.",
-      "Don't put the Steam logo in the app icon or window chrome; it belongs only inside the covers.",
-      "Don't introduce a second accent color or a custom typeface.",
+      "Don't put the Steam logo in the app icon or window chrome.",
+      "Don't introduce a second accent colour or a custom typeface.",
       "Don't use jargon or hide recovery: backups and undo stay stated up front.",
-      "Don't fix pixel sizes or let the layout depend on a large screen; the Deck's 800px height must still work."
+      "Don't put text inside a shadow effect or place anything on a half pixel.",
+      "Don't let the layout depend on a large screen."
     ]
   }
 }

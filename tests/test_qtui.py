@@ -3207,6 +3207,22 @@ class NoTkLeft(unittest.TestCase):
         self.assertIn("Qt", product)
         self.assertNotIn("Tk window", self.read("qtui", "README.md"))
 
+    def test_the_design_documents_describe_the_qt_window(self):
+        import json
+        design, sidecar = self.read("docs", "DESIGN.md"), self.read(".impeccable", "design.json")
+        json.loads(sidecar)                                                   # still valid
+        for text in (design, sidecar):
+            for gone in ("Tk", "tkinter", "Canvas", "px()", "three labelled", "no shadows", "No drop shadows"):
+                self.assertNotIn(gone, text, gone)
+        self.assertIn("docs/ui-guide.md", design)
+        theme = Tokens.theme(self)
+        for hexcode in theme.values():                                        # every colour of the window is in the design document
+            self.assertIn(hexcode, design.lower() if hexcode.islower() else design, hexcode)
+
+    def test_the_engine_does_not_point_at_a_file_that_is_gone(self):
+        for name in ("steamcase.py", "completion.py"):
+            self.assertNotIn("gui.py", self.read(name), name)
+
     def test_the_qt_texts_do_not_depend_on_a_function_that_no_longer_exists(self):
         self.assertNotIn("gui.App", self.read("qtui", "reasons.py"))
         self.assertNotIn("a test keeps the two equal", self.read("qtui", "reasons.py"))

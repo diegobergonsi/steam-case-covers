@@ -12,7 +12,7 @@
 Needs Python 3.8+ and Pillow (pip install pillow). No Steam API key, no account login.
 Covers are built on your machine from the artwork Steam itself serves for your games.
 
-The functions below are the engine. The CLI at the bottom and gui.py both use them.
+The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
 import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
@@ -139,7 +139,7 @@ def explain_error(exc):
 
 
 def check_network():
-    """One tiny real request to Steam's store API. Returns (ok, message). Used by 'gui.py --check-network'."""
+    """One tiny real request to Steam's store API. Returns (ok, message). Used by 'python -m qtui --check-network'."""
     try:
         q = json.dumps({"ids": [{"appid": 220}], "context": {"language": "english", "country_code": "US"}, "data_request": {}})
         json.loads(http_get(STORE_API + urllib.parse.urlencode({"input_json": q}), tries=1))
