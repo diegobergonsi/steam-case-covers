@@ -3161,6 +3161,57 @@ class ReleaseWorkflow(unittest.TestCase):
             self.assertRegex(u, r"@[0-9a-f]{40}$", u)
 
 
+class NoTkLeft(unittest.TestCase):
+    """The Tk window is gone from the repository (it stays in git's history): no file, no job, no import and no sentence still points at it."""
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def read(self, *parts):
+        with open(os.path.join(self.ROOT, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_the_files_of_the_tk_window_are_gone(self):
+        for name in ("gui.py", "widgets.py", "steamcase.spec", os.path.join("tests", "fuzz_gui.py")):
+            self.assertFalse(os.path.exists(os.path.join(self.ROOT, name)), name)
+
+    def test_no_python_file_imports_tkinter(self):
+        import re
+        for folder in ("", "qtui", "tests", "tools"):
+            base = os.path.join(self.ROOT, folder)
+            for name in sorted(os.listdir(base)):
+                if name.endswith(".py") and name != os.path.basename(__file__):
+                    self.assertIsNone(re.search(r"^\s*(import tkinter|from tkinter)", self.read(folder, name), re.M), os.path.join(folder, name))
+
+    def test_no_workflow_builds_tests_or_scans_the_tk_window(self):
+        for name in sorted(os.listdir(os.path.join(self.ROOT, ".github", "workflows"))):
+            text = self.read(".github", "workflows", name)
+            for gone in ("gui.py", "widgets.py", "fuzz_gui", "steamcase.spec"):
+                self.assertNotIn(gone, text, "%s still mentions %s" % (name, gone))
+        self.assertNotIn("fuzz:", self.read(".github", "workflows", "checks.yml"))
+
+    def test_the_windows_console_check_watches_the_qt_window(self):
+        probe, checks = self.read("tests", "win_console_probe.py"), self.read(".github", "workflows", "checks.yml")
+        self.assertIn('"-m", "qtui"', probe)
+        job = checks[checks.index("windows-console"):checks.index("security:")]
+        self.assertIn("requirements-qt.txt", job)
+        self.assertIn("win_console_probe.py --control", job)
+
+    def test_the_docs_describe_the_qt_window(self):
+        self.assertNotIn("gui.py", self.read("README.md"))
+        third = self.read("docs", "THIRD_PARTY.md")
+        self.assertNotIn("Tcl/Tk", third)
+        for must in ("PySide6", "Qt", "LGPL"):
+            self.assertIn(must, third)
+        product = self.read("docs", "PRODUCT.md")
+        self.assertNotIn("tkinter", product)
+        self.assertNotIn("widgets.py", product)
+        self.assertIn("Qt", product)
+        self.assertNotIn("Tk window", self.read("qtui", "README.md"))
+
+    def test_the_qt_texts_do_not_depend_on_a_function_that_no_longer_exists(self):
+        self.assertNotIn("gui.App", self.read("qtui", "reasons.py"))
+        self.assertNotIn("a test keeps the two equal", self.read("qtui", "reasons.py"))
+
+
 class ChecksWorkflow(unittest.TestCase):
     def test_the_qt_tests_run_in_the_normal_checks(self):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", ".github", "workflows", "checks.yml")) as f:
@@ -3721,28 +3772,6 @@ class ReplaceReasons(FakeStore):
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
         self.remake()
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
-
-    def test_it_says_the_same_as_the_old_window(self):
-        """The Tk window's own function is the reference: every kind of change over every kind of folder gives the same words."""
-        import types
-        import steamcase as sc
-        try:
-            import gui
-        except ImportError:
-            self.skipTest("tkinter missing")
-        from qtui import reasons
-        fake = types.SimpleNamespace(covers_dir=self.covers)
-        folders = [dict(), dict(completed={1}, treatment="ribbon"), dict(completed={1}, treatment="gold-case-rosette"), dict(theme="halloween"),
-                   dict(hue=90), dict(completed={1, 2}, treatment="rosette", theme="halloween")]
-        asks = [((0, 100, 100), None, None, None), ((90, 100, 100), None, None, "halloween"), ((0, 100, 100), set(), None, None),
-                ((0, 100, 100), {1}, "gold-border", None), ((40, 80, 90), {1, 2}, "rosette", "halloween"), ((0, 100, 100), {2}, "ribbon", None)]
-        for folder in folders:
-            self.remake(**folder)
-            for tone, completed, treatment, theme in asks:
-                for art, games in ((sc.KEEP, None), ({}, None), ({1: self.mine()}, {1, 2}), ({}, {3})):
-                    want = gui.App._replace_reason(fake, tone, completed, treatment, theme, art, games)
-                    got = reasons.replace_reason(self.covers, tone, completed, treatment, theme, art, games)
-                    self.assertEqual(got, want, (folder, tone, completed, treatment, theme, art, games))
 
 
 @need_qt

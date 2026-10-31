@@ -1621,93 +1621,13 @@ class PreviewCover(Base):
             self.assertIsNone(sc.ImageChops.difference(real, preview).getbbox(), (hue, family))
 
 
-class HueMath(unittest.TestCase):
-    """The arithmetic behind the colour slider (the widget itself needs a display; see gui.py --selftest and the fuzzer)."""
-
-    def setUp(self):
-        try:
-            import widgets
-        except ImportError:
-            self.skipTest("tkinter missing")
-        self.w = widgets
-
-    def test_hue_from_x_maps_and_clamps(self):
-        f = self.w.hue_from_x
-        self.assertEqual(f(10, 410, 10), 0)
-        self.assertEqual(f(400, 410, 10), 359)
-        self.assertEqual(f(-50, 410, 10), 0)
-        self.assertEqual(f(9999, 410, 10), 359)
-        self.assertIn(f(205, 410, 10), (179, 180))                       # the middle of the track
-        self.assertEqual(f(5, 0, 0), 0)                                   # a track with no width: no division by zero
-        self.assertEqual(f(5, 20, 10), 0)                                 # margins eat the whole width
-
-    def test_value_from_x_maps_and_clamps_to_a_range(self):
-        f = self.w.value_from_x
-        self.assertEqual(f(10, 410, 10, 100), 0)
-        self.assertEqual(f(400, 410, 10, 100), 100)
-        self.assertEqual(f(-50, 410, 10, 100), 0)
-        self.assertEqual(f(9999, 410, 10, 100), 100)
-        self.assertEqual(f(205, 410, 10, 100), 50)
-        self.assertEqual(f(5, 0, 0, 100), 0)                              # a track with no width
-        self.assertEqual(self.w.hue_from_x(400, 410, 10), 359)            # the hue slider keeps its numbers
-        self.assertEqual(self.w.hue_from_x(10, 410, 10), 0)
-
-    def test_step_value_stops_at_both_ends(self):
-        f = self.w.step_value
-        self.assertEqual(f(0, "Left", 100), 0)
-        self.assertEqual(f(100, "Right", 100), 100)
-        self.assertEqual(f(95, "Prior", 100), 100)
-        self.assertEqual(f(5, "Next", 100), 0)
-        self.assertEqual(f(40, "Home", 100), 0)
-        self.assertEqual(f(40, "End", 100), 100)
-        self.assertEqual(f(40, "Right", 100), 41)
-        self.assertEqual(f(40, "x", 100), 40)
-        self.assertEqual(f(0, "Left", 359, wrap=True), 359)
-        self.assertEqual(f(359, "Right", 359, wrap=True), 0)
-
-    def test_drag_mode_tells_a_slide_from_a_swipe(self):
-        f = self.w.drag_mode
-        self.assertIsNone(f(0, 0, 6))                      # a tap or a tiny wobble: undecided
-        self.assertIsNone(f(5, -5, 6))
-        self.assertEqual(f(20, 4, 6), "horizontal")        # sliding the thumb
-        self.assertEqual(f(-20, -19, 6), "horizontal")     # a diagonal that is mostly sideways still slides
-        self.assertEqual(f(3, 25, 6), "vertical")          # a swipe to scroll the page
-        self.assertEqual(f(-7, -30, 6), "vertical")
-        self.assertEqual(f(10, 10, 6), "horizontal")       # a perfect diagonal goes to the slider (a tie never scrolls by accident)
-
-    def test_step_hue_keys(self):
-        f = self.w.step_hue
-        self.assertEqual(f(0, "Left"), 359)
-        self.assertEqual(f(359, "Right"), 0)
-        self.assertEqual(f(10, "Prior"), 40)
-        self.assertEqual(f(10, "Next"), 340)
-        self.assertEqual(f(200, "Home"), 0)
-        self.assertEqual(f(10, "End"), 359)
-        self.assertEqual(f(77, "x"), 77)
-
-    def test_step_choice_moves_and_stops_at_the_ends(self):
-        f = self.w.step_choice
-        self.assertEqual(f(0, "Left", 4), 0)
-        self.assertEqual(f(3, "Right", 4), 3)
-        self.assertEqual(f(1, "Right", 4), 2)
-        self.assertEqual(f(2, "Home", 4), 0)
-        self.assertEqual(f(1, "End", 4), 3)
-        self.assertEqual(f(1, "x", 4), 1)
-        self.assertEqual(f(0, "Down", 4), 1)
-        self.assertEqual(f(2, "Up", 4), 1)
-
-
 class ReplaceReason(StoreMocks):
-    """The sentence of the Replace prompt (gui.App._replace_reason) for every kind of change, over covers made by the app's own functions."""
+    """The sentence of the Replace question (qtui.reasons.replace_reason) for every kind of change, over covers made by the app's own functions."""
 
     def setUp(self):
         super().setUp()
-        try:
-            import types, gui
-        except ImportError:
-            self.skipTest("tkinter missing")
-        self.gui = gui
-        self.fake = types.SimpleNamespace(covers_dir=self.covers)
+        from qtui import reasons
+        self.reasons = reasons
         self.games = {1: None, 2: None}
 
     def made(self, hue=0, completed=None, treatment=None, theme=None, custom_art=None):
@@ -1719,7 +1639,7 @@ class ReplaceReason(StoreMocks):
         return path
 
     def reason(self, tone, completed, treatment, theme=None):
-        got = self.gui.App._replace_reason(self.fake, tone, completed, treatment, theme)
+        got = self.reasons.replace_reason(self.covers, tone, completed, treatment, theme)
         self.assertIsNotNone(got)
         title, sentence = got
         self.assertTrue(title.strip() and sentence.strip() and "%" not in title.replace("100%", "") and "%" not in sentence.replace("100%", ""), got)
@@ -1727,48 +1647,48 @@ class ReplaceReason(StoreMocks):
 
     def test_turning_custom_art_on_asks_before_replacing_existing_covers(self):
         self.made()
-        got = self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {1: self.mine()})
+        got = self.reasons.replace_reason(self.covers, (0, 100, 100), None, None, None, {1: self.mine()})
         self.assertIsNotNone(got)
         self.assertIn("your own art", got[1])
 
     def test_turning_custom_art_off_asks_too(self):
         self.made(custom_art={1: self.mine()})
-        got = self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {})
+        got = self.reasons.replace_reason(self.covers, (0, 100, 100), None, None, None, {})
         self.assertIsNotNone(got)
         self.assertIn("Steam's own art", got[1])
 
     def test_no_custom_art_question_when_nothing_changes(self):
         mine = self.mine()
         self.made(custom_art={1: mine})
-        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {1: mine}))
-        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None))     # not asked about: covers keep their art
+        self.assertIsNone(self.reasons.replace_reason(self.covers, (0, 100, 100), None, None, None, {1: mine}))
+        self.assertIsNone(self.reasons.replace_reason(self.covers, (0, 100, 100), None, None, None))     # not asked about: covers keep their art
 
     def test_covers_of_games_outside_the_run_are_not_mentioned(self):
         self.made(custom_art={1: self.mine()})
-        self.assertIsNotNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {}, {1, 2}))
-        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), None, None, None, {}, {2, 3}))
+        self.assertIsNotNone(self.reasons.replace_reason(self.covers, (0, 100, 100), None, None, None, {}, {1, 2}))
+        self.assertIsNone(self.reasons.replace_reason(self.covers, (0, 100, 100), None, None, None, {}, {2, 3}))
 
     def test_a_colour_change_with_custom_art_says_both(self):
         self.made()
-        got = self.gui.App._replace_reason(self.fake, (90, 100, 100), None, None, None, {1: self.mine()})
+        got = self.reasons.replace_reason(self.covers, (90, 100, 100), None, None, None, {1: self.mine()})
         self.assertIn("colour", got[1])
         self.assertIn("your own art", got[1])
 
     def test_a_colour_change_does_not_claim_an_art_change(self):
         self.made()                                                         # never made from custom art
-        got = self.gui.App._replace_reason(self.fake, (90, 100, 100), None, None, None, {})
+        got = self.reasons.replace_reason(self.covers, (90, 100, 100), None, None, None, {})
         self.assertIn("colour", got[1])
         self.assertNotIn("art", got[1])
         mine = self.mine()
         shutil.rmtree(self.covers)
         os.makedirs(self.covers)
         self.made(custom_art={1: mine})
-        got = self.gui.App._replace_reason(self.fake, (90, 100, 100), None, None, None, {1: mine})
+        got = self.reasons.replace_reason(self.covers, (90, 100, 100), None, None, None, {1: mine})
         self.assertNotIn("art", got[1])                                     # same art: only the colour changes
 
     def test_nothing_to_rebuild_gives_no_prompt(self):
         self.made(completed={1}, treatment="ribbon")
-        self.assertIsNone(self.gui.App._replace_reason(self.fake, (0, 100, 100), {1}, "ribbon"))
+        self.assertIsNone(self.reasons.replace_reason(self.covers, (0, 100, 100), {1}, "ribbon"))
 
     def test_no_page_only_a_colour_change(self):
         self.made()
@@ -2713,7 +2633,7 @@ class MakeTreated(StoreMocks):
 
 
 class DiscordButton(unittest.TestCase):
-    """The Discord icon in the window's header: one link, one bundled image, credited."""
+    """The Discord icon in the window's navigation: one link, one bundled image, credited."""
     PNG = os.path.join(sc.HERE, "assets", "discord.png")
 
     def test_the_invite_link_is_the_one_the_readme_uses(self):
@@ -2733,21 +2653,20 @@ class DiscordButton(unittest.TestCase):
         self.assertTrue(all(p[:3] == (0x58, 0x65, 0xF2) for p in solid))                  # Discord's blurple, nothing else
         self.assertEqual(im.getpixel((0, 0))[3], 0)
 
-    def test_the_mark_is_readable_on_the_header_background(self):
+    def test_the_mark_is_readable_on_the_navigation_background(self):
         def lum(rgb):
             c = [x / 255 for x in rgb]
             c = [x / 12.92 if x <= .03928 else ((x + .055) / 1.055) ** 2.4 for x in c]
             return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
-        try:
-            import widgets
-        except ImportError:
-            self.skipTest("tkinter missing")
-        bg, mark = tuple(int(widgets.BG[i:i + 2], 16) for i in (1, 3, 5)), (0x58, 0x65, 0xF2)    # the header background, the blurple
+        with open(os.path.join(sc.HERE, "qtui", "qml", "Theme.qml"), encoding="utf-8") as f:
+            window = re.search(r'readonly property color bg: "#([0-9a-fA-F]{6})"', f.read()).group(1)
+        bg = tuple(int(int(window[i:i + 2], 16) / 1.3) for i in (0, 2, 4))                 # the navigation panel: the window colour, darkened by 1.3 (Qt.darker)
+        mark = (0x58, 0x65, 0xF2)                                                         # the blurple
         self.assertGreaterEqual((lum(mark) + .05) / (lum(bg) + .05), 3.0)                  # WCAG for graphics
 
     def test_the_packaged_app_bundles_the_image_and_credits_the_source(self):
-        with open(os.path.join(sc.HERE, "steamcase.spec"), encoding="utf-8") as f:
-            self.assertIn("assets/discord.png", f.read())
+        with open(os.path.join(sc.HERE, "steamcase-qt.spec"), encoding="utf-8") as f:
+            self.assertIn("discord.png", f.read())
         with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
             text = f.read()
         for must in ("Simple Icons", "CC0", "Discord", "trademark"):
@@ -2785,8 +2704,8 @@ class HalloweenOverlay(unittest.TestCase):
         self.assertGreater(solid, 3000)                                               # a pumpkin, not a faint sketch
 
     def test_the_packaged_app_bundles_it_and_the_licence_file_credits_it(self):
-        with open(os.path.join(sc.HERE, "steamcase.spec"), encoding="utf-8") as f:
-            self.assertIn("assets/halloween_overlay.png", f.read())
+        with open(os.path.join(sc.HERE, "steamcase-qt.spec"), encoding="utf-8") as f:
+            self.assertIn("halloween_overlay.png", f.read())
         with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
             text = f.read().lower()
         for must in ("halloween", "original artwork"):

@@ -20,12 +20,12 @@ Everything runs on the user's computer: no login, no API key, no uploads. Art co
 
 ## Operating Context
 
-Desktop app (tkinter window with three steps, custom Canvas widgets in `widgets.py`), packaged with PyInstaller for three OSes and released by GitHub Actions. Works against the user's real Steam folder (`userdata/<id>/config/grid`), supports multiple accounts via an account picker, can Reset including art from other sources. Must work on Steam Deck screens, high-DPI displays and small screens. Handheld users (Steam Deck and similar) really do use the touchscreen, so touch is a first-class input: targets of 44px or more, no hover-only behavior, and drag-to-scroll.
+Desktop app (a Qt Quick window, package `qtui/`, with Home and five steps; the rules of its screens are in `docs/ui-guide.md`), packaged with PyInstaller for three OSes and released by GitHub Actions. Works against the user's real Steam folder (`userdata/<id>/config/grid`), supports multiple accounts via an account picker, can Reset including art from other sources. Must work on Steam Deck screens, high-DPI displays and small screens. Handheld users (Steam Deck and similar) really do use the touchscreen, so touch is a first-class input: targets of 44px or more, no hover-only behavior, and drag-to-scroll.
 
 ## Capabilities and Constraints
 
 - Local only: no login, no API key, no uploads.
-- Image work uses Pillow; window stays tkinter with custom widgets.
+- Image work uses Pillow; the window is Qt Quick (PySide6) with a small set of reusable components.
 - Core visual asset: `assets/frame.png` (600x900 case frame with transparent art window).
 - Unsigned binaries (Windows SmartScreen and macOS Gatekeeper warnings are documented in the README).
 - Trademark caution: Steam and Windows belong to their owners; see THIRD_PARTY.md.

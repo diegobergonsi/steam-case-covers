@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The sentences of the question "replace the covers you made?": why Make covers would rebuild covers that are already in the folder.
-The words are those of the Tk window (gui.App._replace_reason); a test keeps the two equal."""
+The words are those the app has always used, covered by tests in tests/test_steamcase.py (ReplaceReason)."""
 import os
 
 import steamcase as sc

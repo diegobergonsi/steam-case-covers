@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""What the packaged app proves about the engine inside its bundle (`--selftest`): the same checks the Tk window made. No Qt in here."""
+"""What the packaged app proves about the engine inside its bundle (`--selftest`): checks that were made before the Qt window too. No Qt in here."""
 import os
 import sys
 import tempfile

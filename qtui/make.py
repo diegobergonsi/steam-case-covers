@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Step 4 of the window: making the covers. Reads what steps 1 to 3 chose, asks before replacing covers already made, builds the covers on a
-worker thread with progress, and tells how it went. The words are those of the Tk window."""
+worker thread with progress, and tells how it went. The words are those the app has always used."""
 import os
 import threading
 

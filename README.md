@@ -111,7 +111,7 @@ python -m pip install -r requirements-qt.txt
 python -m qtui
 ```
 
-On macOS and Linux, use `python3` instead of `python`. Run the tests with `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests` (on Windows PowerShell: `$env:QT_QPA_PLATFORM="offscreen"` first). `python -m qtui --selftest` builds the window without showing it. The previous Tk window is still in the repository (`python gui.py`, needs only `requirements.txt`) until it is removed.
+On macOS and Linux, use `python3` instead of `python`. Run the tests with `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests` (on Windows PowerShell: `$env:QT_QPA_PLATFORM="offscreen"` first). `python -m qtui --selftest` builds the window without showing it.
 
 </details>
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Step 5 of the window: adding the covers to Steam. Which account, whether Steam is running, the question before anything changes, and a worker
-that closes Steam, copies the covers (with a backup) and starts Steam again. The words are those of the Tk window.
+that closes Steam, copies the covers (with a backup) and starts Steam again. The words are those the app has always used.
 Restore and Reset live on Home and will use the same worker."""
 import os
 import sys

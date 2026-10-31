@@ -1,6 +1,6 @@
-# qtui: the new window (work in progress)
+# qtui: the window of the app
 
-A Qt Quick window that will replace the Tk window (`gui.py`). Not finished: Home and steps 1 to 5 work (game list, look, 100% games, make, add to Steam, plus Restore, Reset, update check and Discord); the final tests and the switch from the Tk window are left. The engine (`steamcase.py`) is shared and unchanged.
+The window of the app, in Qt Quick. Not finished: Home and steps 1 to 5 work (game list, look, 100% games, make, add to Steam, plus Restore, Reset, update check and Discord); the final checks on Windows and macOS are left. The engine (`steamcase.py`) is shared and unchanged.
 
     python -m pip install -r requirements-qt.txt      # Python 3.10 or newer
     python -m qtui                                    # the window

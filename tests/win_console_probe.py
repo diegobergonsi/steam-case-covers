@@ -3,7 +3,7 @@
 """Windows only: does the app ever make a console window appear?
 
 A windowed app has no console, so a console program it starts (tasklist) opens a black window that flashes and takes the focus.
-This script starts the app without a console (pythonw), then looks at every visible window on the desktop for a few seconds.
+This script starts the Qt window without a console (pythonw -m qtui), then looks at every visible window on the desktop for a few seconds.
 
     python tests/win_console_probe.py            the app must never show a console window (exit 1 if it does)
     python tests/win_console_probe.py --control  starts tasklist the careless way; the watcher MUST see it (exit 1 if it is blind)
@@ -18,7 +18,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 CONSOLE_EXES = {"tasklist.exe", "conhost.exe", "cmd.exe"}
-WATCH_SECONDS = 12            # the app asks "is Steam running?" at once and then every 3 seconds
+WATCH_SECONDS = 12            # the window asks "is Steam running?" at once (Home is the first screen) and then every 1.5 seconds
 
 
 def visible_windows():
@@ -65,7 +65,7 @@ def main():
         code = "import subprocess, time\nfor _ in range(8):\n    subprocess.run(['tasklist'], capture_output=True)\n    time.sleep(1)"
         cmd = [pythonw, "-c", code]
     else:
-        cmd = [pythonw, os.path.join(ROOT, "gui.py")]
+        cmd = [pythonw, "-m", "qtui"]
     child = subprocess.Popen(cmd, cwd=ROOT)
     seen = set()
     try:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""The two links of the navigation: "Check for updates" (asks GitHub only when clicked, installs nothing) and "Discord". The words are those of the Tk window.
+"""The two links of the navigation: "Check for updates" (asks GitHub only when clicked, installs nothing) and "Discord". The words are those the app has always used.
 Every answer is a `message` for the window's dialog: a title, paragraphs, the label of the OK button, the label of Cancel ("" = an information box) and a link to open on OK."""
 import threading
 

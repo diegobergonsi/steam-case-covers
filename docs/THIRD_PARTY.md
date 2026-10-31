@@ -36,4 +36,4 @@ The preview image at the top of the README (`assets/preview.png`) shows covers o
 Apart from those images, no game artwork is included. Covers are built on your own machine from the portrait images Steam serves for games in your own library. Generated covers contain publishers' artwork: use them for personal use and do not redistribute them.
 
 ## Release builds
-The downloadable apps bundle Python (PSF License), Pillow (HPND License) and Tcl/Tk (BSD-style license), and are built with PyInstaller (GPL-2.0 with a bootloader exception that allows distributing the built apps under other licenses).
+The downloadable apps bundle Python (PSF License), Pillow (HPND License) and Qt for Python (PySide6 and the Qt libraries, LGPL-3.0: the Qt libraries stay separate files you can replace; their licence text and source are at https://www.qt.io/ and https://code.qt.io/), and are built with PyInstaller (GPL-2.0 with a bootloader exception that allows distributing the built apps under other licenses).
