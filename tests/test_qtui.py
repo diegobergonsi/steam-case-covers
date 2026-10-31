@@ -430,8 +430,8 @@ class StepStates(unittest.TestCase):
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
         self.assertEqual(sp.hint("hundred", "active"), "(optional)")
-        self.assertEqual(sp.hint("look", "locked"), "after step 1")
-        self.assertEqual(sp.hint("hundred", "locked"), "(optional)")           # what it is matters more than why it waits: the longer words would not fit the list
+        self.assertEqual(sp.hint("look", "locked"), "")                          # a locked step is dimmed; it needs no words
+        self.assertEqual(sp.hint("hundred", "locked"), "(optional)")
         self.assertEqual(sp.hint("look", "done"), "")
 
     def test_nothing_done_only_the_game_list_is_active(self):
@@ -3225,24 +3225,23 @@ class ShellWindow(QtCase):
     def test_the_window_closes_when_nothing_is_being_changed(self):
         self.assertTrue(self.root.close())
 
-    def test_the_optional_step_says_so_and_a_locked_step_says_why_under_its_name(self):
+    def test_only_the_optional_step_has_a_small_line_under_its_name(self):
         from PySide6.QtGui import QAccessible
-        want = {"home": "", "game_list": "", "look": "after step 1", "hundred": "(optional)", "make": "after step 3", "add": "after step 4"}
+        want = {"home": "", "game_list": "", "look": "", "hundred": "(optional)", "make": "", "add": ""}
         for key, hint in want.items():
             self.assertEqual(self.item("nav_" + key).property("hint"), hint, key)
         hint, row = self.item("nav_hundred_hint"), self.item("nav_hundred")
         self.assertEqual(hint.property("text"), want["hundred"])
         self.assertLessEqual(self.item("nav_hundred_label").height() + hint.height(), row.height())       # both lines fit the row
         self.assertLessEqual(hint.width(), row.width() - 40)                                              # and the words fit beside the margins
-        for key in ("look", "hundred", "make", "add"):                                                  # none of the words is cut at this width
-            h = self.item("nav_%s_hint" % key)
-            self.assertLessEqual(h.property("implicitWidth"), h.width(), key)
+        h = self.item("nav_hundred_hint")                                                               # the words are not cut at this width
+        self.assertLessEqual(h.property("implicitWidth"), h.width())
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
         self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional), locked")
         self.shell.setFact("ready", True)                                                               # unlocked: only what is always true remains
         self.shell.setFact("look_done", True)
-        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", "after step 3"))
+        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", ""))
 
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
