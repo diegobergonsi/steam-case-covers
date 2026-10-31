@@ -82,6 +82,8 @@ QtObject {
     readonly property real cardShadowBlur: 0.8
     readonly property real cardShadowOpacity: 0.45
     readonly property int cardShadowOffset: 4
+    readonly property real raisedShadowBlur: 1.0          // the raised elevation of the guide (12 px down, 32 px blur): a question above the window
+    readonly property int raisedShadowOffset: 12
     readonly property real disabledOpacity: 0.6
     readonly property real hoverLift: 1.15
     readonly property real scrimOpacity: 0.6              // the dimmed window behind a question

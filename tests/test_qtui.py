@@ -1609,6 +1609,20 @@ class Components(QtCase):
         top = self.item("dlg_cancel").mapToScene(QPointF(0, 0)).y()
         self.assertGreaterEqual(top - bottom, 24)
 
+    def test_the_words_are_drawn_straight_onto_a_card_on_whole_pixels_so_they_stay_sharp(self):
+        from PySide6.QtCore import QPointF
+        for w, h in ((620, 420), (701, 433), (655, 411)):
+            with self.subTest(size=(w, h)):
+                self.open_dialog(w=w, h=h)
+                card, shadow = self.item("dlg_card"), self.item("dlg_shadow")
+                for it in (card, shadow):
+                    self.assertEqual((it.x(), it.y(), it.width(), it.height()), tuple(float(round(v)) for v in (it.x(), it.y(), it.width(), it.height())), it.objectName())
+                self.assertEqual((shadow.x(), shadow.y(), shadow.width(), shadow.height()), (card.x(), card.y(), card.width(), card.height()))   # the shadow follows the card
+                self.assertEqual(shadow.childItems(), [])                                   # and carries nothing: text inside an effect layer is drawn through a texture and blurs
+                for name in ("dlg_title", "dlg_p0", "dlg_p1", "dlg_p2", "dlg_cancel", "dlg_confirm"):
+                    p = self.item(name).mapToScene(QPointF(0, 0))
+                    self.assertEqual((p.x(), p.y()), (float(round(p.x())), float(round(p.y()))), name)
+
     def test_a_dialog_with_a_lot_to_say_scrolls_and_keeps_its_buttons_in_view(self):
         from PySide6.QtCore import QMetaObject
         self.load('ConfirmDialog { id: dlg; objectName: "dlg" }\nfunction openIt() { var long = []; for (var i = 0; i < 12; i++) long.push({"text": "A long sentence that says what will happen to your covers, number " + i + ".", "kind": "main"}); dlg.ask("Many words", long, "Go") }', 360, 260)

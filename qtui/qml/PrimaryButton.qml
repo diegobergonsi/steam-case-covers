@@ -10,7 +10,7 @@ Rectangle {
     property bool quiet: false                     // the outlined look, for everything that is not the screen's main action
     readonly property bool filled: !quiet          // exactly one enabled filled button per screen (rule 2 of the guide)
 
-    implicitWidth: label.implicitWidth + Theme.s32
+    implicitWidth: Math.ceil(label.implicitWidth) + Theme.s32            // whole pixels: a button on a half pixel draws its text soft
     // never wider than the content area of a screen (what a section can hold): a longer text is cut with an ellipsis. System fonts differ a lot between computers.
     property real maxWidth: Math.max(Theme.controlHeight, Window.width - Theme.chromeWidth)
     width: Math.min(implicitWidth, maxWidth)
@@ -38,8 +38,9 @@ Rectangle {
     }
     Text {
         id: label
-        anchors.centerIn: parent
-        width: Math.min(implicitWidth, root.width - Theme.s32)
+        x: Math.round((root.width - width) / 2)
+        y: Math.round((root.height - height) / 2)
+        width: Math.min(Math.ceil(implicitWidth), root.width - Theme.s32)
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
         text: root.text

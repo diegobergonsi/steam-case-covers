@@ -3,6 +3,7 @@
 // A question that must be answered before anything changes (it covers the whole window). `ask(title, paragraphs, confirmText)` opens it;
 // `paragraphs` is a list of {text, kind} with kind "main", "muted" or "warn". The safe button (Cancel) has the focus; Escape declines; Tab stays inside.
 import QtQuick
+import QtQuick.Effects
 import "."
 
 FocusScope {
@@ -99,13 +100,33 @@ FocusScope {
         anchors.fill: parent
         onWheel: (wheel) => wheel.accepted = true
     }
-    Card {
+    Rectangle {                                         // the shadow: a copy of the card's shape that carries nothing. The words must not be inside an effect layer:
+        id: shadow                                      // drawn through a texture on a half pixel they blur, so the card below is a plain rectangle on whole pixels
+        objectName: dialog.prefix + "_shadow"
+        x: card.x
+        y: card.y
+        width: card.width
+        height: card.height
+        radius: Theme.radiusCard
+        color: Theme.card
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Theme.shadow
+            shadowBlur: Theme.raisedShadowBlur
+            shadowOpacity: Theme.cardShadowOpacity
+            shadowVerticalOffset: Theme.raisedShadowOffset
+        }
+    }
+    Rectangle {
         id: card
         objectName: dialog.prefix + "_card"
         width: Math.min(dialog.maxCard, Math.ceil(dialog.wanted()) + dialog.pad + Theme.hairline)         // as wide as its longest line, no wider
-        height: content.implicitHeight + 2 * Theme.s24
-        x: (dialog.width - width) / 2
-        y: Math.max(Theme.s16, (dialog.height - height) / 2)
+        height: Math.ceil(content.implicitHeight) + 2 * Theme.s24
+        x: Math.round((dialog.width - width) / 2)
+        y: Math.round(Math.max(Theme.s16, (dialog.height - height) / 2))
+        color: Theme.card
+        radius: Theme.radiusCard
         Column {
             id: content
             x: Theme.s24
