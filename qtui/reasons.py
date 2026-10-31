@@ -10,6 +10,17 @@ STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon",
 MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
 
 
+def platform_replace_reason(covers_dir, platforms, tone, treatment, completed):
+    """(title, sentence) for the question of the manual flow, or None when no cover already made would be rebuilt. `platforms`, `tone`, `treatment` and
+    `completed` are what make_covers gets (see sc.covers_in_other_case)."""
+    n = sc.covers_in_other_case(covers_dir, platforms, tone, treatment, completed)
+    if not n:
+        return None
+    if n == 1:
+        return "Replace the covers you made?", "This replaces 1 cover you already made with a new one in the case you picked."
+    return "Replace the covers you made?", "This replaces %d covers you already made with new ones in the cases you picked." % n
+
+
 def look_label(treatment):
     """How a treatment (one of sc.TREATMENTS) is named in the question: its case, then its marks, so a change of marks alone reads as one."""
     case, marks = sc.split_treatment(treatment)

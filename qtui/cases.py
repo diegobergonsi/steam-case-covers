@@ -71,6 +71,12 @@ class Cases(QObject):
         used = [None if v is None else v for v in self._assigned.values()]
         return [{"label": LABELS[k], "count": used.count(None if k == "steam" else k)} for k in ORDER if (None if k == "steam" else k) in used]
 
+    @Property(str, notify=assignmentsChanged)
+    def previewKey(self):
+        """The case most games are in (the first one on a tie): the sample shown on the Make screen."""
+        top = max(self.summary, key=lambda s: s["count"], default=None)
+        return next((k for k in ORDER if top and LABELS[k] == top["label"]), "")
+
     def _get_family(self):
         return self._family
 

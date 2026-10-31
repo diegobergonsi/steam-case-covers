@@ -23,7 +23,7 @@ ScreenFrame {
             id: preview
             objectName: "make_preview"
             x: layout.narrow ? Math.max(0, (layout.width - width) / 2) : 0
-            source: screen.look.previewSource
+            source: shell.flow === "manual" && shell.cases.previewKey !== "" ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.previewSource
         }
         Column {
             id: sections

@@ -78,6 +78,11 @@ class Shell(QObject):
     def startNatural(self):
         self._switch("natural")
 
+    @Slot(str, result=int)
+    def stepIndex(self, key):
+        """Where a step is in the steps of this flow, or -1."""
+        return next((i for i, step in enumerate(self._steps) if step["key"] == key), -1)
+
     @Slot(str)
     def goKey(self, key):
         """Show a step by its name; a locked or unknown one is ignored."""

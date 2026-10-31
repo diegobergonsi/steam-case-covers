@@ -89,6 +89,11 @@ class Hundred(QObject):
         return [{"key": k, "label": v} for k, v in STYLES]
 
     @Property("QVariantList", constant=True)
+    def manualStyles(self):
+        """What the manual flow offers: console cases have no gold, so a 100% game is either highlighted or left plain."""
+        return [{"key": "ribbon", "label": "Highlight them"}, {"key": "none", "label": "Leave them plain"}]
+
+    @Property("QVariantList", constant=True)
     def markChoices(self):
         return [{"key": k, "label": v} for k, v in MARKS]
 

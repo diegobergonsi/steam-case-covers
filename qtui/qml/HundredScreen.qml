@@ -118,14 +118,14 @@ ScreenFrame {
                         font.pixelSize: Theme.bodySize
                         text: screen.hundred.themeNote
                     }
-                    Text { text: "Case"; color: Theme.muted; font.pixelSize: Theme.bodySize }
+                    Text { text: shell.flow === "manual" ? "Highlight" : "Case"; color: Theme.muted; font.pixelSize: Theme.bodySize }
                     ChoiceChips {
                         objectName: "hundred_style"
                         groupName: "Case"
                         width: parent.width
                         enabled: screen.hundred.styleEnabled
-                        model: screen.hundred.styles
-                        current: screen.hundred.style
+                        model: shell.flow === "manual" ? screen.hundred.manualStyles : screen.hundred.styles
+                        current: shell.flow === "manual" && screen.hundred.style !== "none" ? "ribbon" : screen.hundred.style       // console cases have no gold: any case style means "highlight"
                         onChosen: (key) => screen.hundred.style = key
                     }
                 }

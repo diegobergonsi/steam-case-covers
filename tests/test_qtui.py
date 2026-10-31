@@ -5800,6 +5800,7 @@ class ApplyState(QtCase, FakeStore):
 class PickerBase(QtCase, FakeStore):
     """A shell over a three-game library with a fake store, for the Games and Case steps of the manual flow."""
     NAMES = {1: "Hades", 2: "forza Horizon 5", 3: "God of War"}
+    family = ()                              # app ids the fake library reports as family games
 
     @classmethod
     def setUpClass(cls):
@@ -5813,7 +5814,7 @@ class PickerBase(QtCase, FakeStore):
         self.sc = sc
         sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": self.NAMES[i]} for i in ids if i in self.NAMES}
         self.library = {i: None for i in self.NAMES}
-        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: (dict(self.library), set()))):
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: (dict(self.library), set(self.family)))):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -6273,6 +6274,32 @@ class ManualWindow(PickerBase):
         self.assertFalse(self.item("case_family").property("enabled"))
         self.assertTrue(self.item("case_family_note").property("visible"))
 
+    def give_a_case(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.picker.toggle(1)
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+
+    def test_the_100_step_offers_highlight_or_plain_in_the_manual_flow(self):
+        self.give_a_case()
+        self.shell.goKey("hundred")
+        self.app.processEvents()
+        self.assertEqual([c["key"] for c in self.item("hundred_style").property("model").toVariant()] if hasattr(self.item("hundred_style").property("model"), "toVariant")
+                         else [c["key"] for c in self.item("hundred_style").property("model")], ["ribbon", "none"])
+        self.shell.hundred._style = "gold-case"                               # chosen earlier in the other flow
+        self.shell.hundred.styleChanged.emit()
+        self.app.processEvents()
+        self.assertEqual(self.item("hundred_style").property("current"), "ribbon")
+
+    def test_the_make_screen_shows_the_case_that_was_picked(self):
+        self.give_a_case()
+        self.shell.setFact("hundred_done", True)
+        self.shell.goKey("make")
+        self.app.processEvents()
+        self.assertEqual(self.shell.cases.previewKey, "ps5")
+        self.assertIn("platform/ps5", self.item("make_preview").property("source").toString() if hasattr(self.item("make_preview").property("source"), "toString") else str(self.item("make_preview").property("source")))
+
     def test_the_navigation_fits_seven_steps_at_the_smallest_window(self):
         from PySide6.QtCore import QPointF
         self.shell.startManual()
@@ -6289,6 +6316,144 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         self.assertFalse(self.item("games_search").property("enabled"))
         self.shell._make._set_state(running=False)
+
+
+@need_qt
+class ManualMake(PickerBase):
+    """Make in the manual flow: only the ticked games, each in its case, and the 100% step decides the marks."""
+    RESULT = {"ok": 2, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 2, "not_games": 0, "unlisted": 0, "skipped": 0}
+
+    def setUp(self):
+        super().setUp()
+        self.shell.startManual()
+        self.load()
+
+    def give(self, key, *appids):
+        for appid in appids:
+            self.picker.toggle(appid)
+        self.shell.cases.pick(key)
+        self.shell.cases.assign()
+
+    def run_make(self, seconds=8):
+        self.shell.make.start()
+        self.wait_for(lambda: not self.shell.make.running, seconds)
+
+    def spy(self):
+        """Replace the engine's make_covers with one that records how it was called."""
+        from unittest import mock
+        calls = []
+        patcher = mock.patch.object(self.sc, "make_covers", lambda games, out, **kw: calls.append((dict(games), kw)) or dict(self.RESULT))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return calls
+
+    def test_the_engine_gets_the_assignments_and_none_of_the_steps_that_are_not_in_this_flow(self):
+        calls = self.spy()
+        self.give("ps5", 1, 3)
+        self.run_make()
+        (games, kw), = calls
+        self.assertEqual((sorted(games), kw["platforms"], kw["theme"], kw["custom_art"], kw["skip_auto_art"]), ([1, 2, 3], {1: "ps5", 3: "ps5"}, None, {}, False))
+        self.assertEqual((kw["treatment"], kw["completed"], kw["family"]), (None, None, set()))
+
+    def test_only_the_ticked_games_get_covers_and_only_those_are_offered_to_apply(self):
+        self.give("ps5", 1, 3)
+        self.run_make()
+        files = self.shell.make.files()
+        self.assertEqual(sorted(os.path.basename(f) for f in files), ["God_of_War_3.png", "Hades_1.png"])
+        self.assertEqual({self.sc.cover_platform(f) for f in files}, {"ps5"})
+        self.assertEqual(len(os.listdir(self.covers)), 2)
+        self.assertIn("console case", self.shell.make.status)
+
+    def test_family_games_get_their_corner_only_when_the_switch_is_on(self):
+        self.family = {1}
+        calls = self.spy()
+        self.give("ps5", 1)
+        self.run_make()
+        self.shell.cases.family = True
+        self.run_make()
+        self.assertEqual([kw["family"] for _, kw in calls], [set(), {1}])
+
+    def test_the_100_step_decides_the_marks(self):
+        calls = self.spy()
+        hundred = self.shell.hundred
+        self.give("ps4", 1)
+        hundred._completed = {1}                                              # a games page was loaded
+        for style, marks, want in (("ribbon", "full", "ribbon"), ("gold-case", "full", "ribbon"), ("gold-border", "rosette", "rosette"), ("ribbon", "rosette", "rosette")):
+            hundred._style, hundred._marks = style, marks
+            self.run_make()
+            self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (want, {1}), (style, marks))
+        hundred._style = "none"
+        self.run_make()
+        self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, set()))      # "do not highlight": marks come off
+
+    def test_no_games_page_leaves_the_marks_of_the_covers_alone(self):
+        calls = self.spy()
+        self.give("ps4", 1)
+        self.run_make()
+        self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, None))
+
+    def test_the_steam_case_choice_is_made_in_the_look_colour_without_a_theme(self):
+        calls = self.spy()
+        self.shell.look.hue = 134
+        self.give("steam", 2)
+        self.run_make()
+        kw = calls[-1][1]
+        self.assertEqual((kw["platforms"], kw["hue"], kw["theme"]), ({2: None}, 134, None))
+
+    def test_a_case_that_changes_covers_already_made_asks_first(self):
+        self.give("ps5", 1)
+        self.run_make()
+        self.assertFalse(self.shell.make.asking)
+        self.give("ps4", 1)
+        asked = []
+        self.shell.make.confirmNeeded.connect(lambda title, text: asked.append((title, text)))
+        self.shell.make.start()
+        self.assertTrue(self.shell.make.asking)
+        self.assertEqual(asked, [("Replace the covers you made?", "This replaces 1 cover you already made with a new one in the case you picked.")])
+        self.shell.make.confirm()
+        self.wait_for(lambda: not self.shell.make.running)
+        self.assertEqual(self.sc.cover_platform(self.shell.make.files()[0]), "ps4")
+
+    def test_new_games_and_unchanged_cases_ask_nothing(self):
+        self.give("ps5", 1)
+        self.run_make()
+        self.give("ps5", 1, 2)
+        self.shell.make.start()
+        self.assertFalse(self.shell.make.asking)
+        self.wait_for(lambda: not self.shell.make.running)
+
+    def test_the_question_counts_in_words(self):
+        from qtui import reasons
+        self.give("ps5", 1, 2)
+        self.run_make()
+        self.give("xbox360", 1, 2)
+        self.assertEqual(reasons.platform_replace_reason(self.covers, self.shell.cases.assigned(), (0, 100, 100), None, None),
+                         ("Replace the covers you made?", "This replaces 2 covers you already made with new ones in the cases you picked."))
+        self.assertIsNone(reasons.platform_replace_reason(self.covers, {3: "ps5"}, (0, 100, 100), None, None))
+
+    def test_make_does_nothing_without_assignments(self):
+        calls = self.spy()
+        self.shell.make.start()
+        self.assertEqual((calls, self.shell.make.running), ([], False))
+
+    def test_the_summary_names_the_games_the_cases_and_the_highlight(self):
+        self.give("ps5", 1, 3)
+        self.give("xbox360", 2)
+        rows = {c["key"]: c for c in self.shell.make.choices}
+        self.assertEqual(list(rows), ["games", "cases", "hundred"])
+        self.assertEqual((rows["games"]["value"], rows["cases"]["value"], rows["hundred"]["value"]), ("3 games", "PlayStation 5, Xbox 360", "Skipped"))
+        keys = [s["key"] for s in self.shell.steps]
+        self.assertEqual((rows["games"]["step"], rows["cases"]["step"], rows["hundred"]["step"]), (keys.index("pick"), keys.index("case"), keys.index("hundred")))
+
+    def test_the_result_sentence_mentions_console_cases(self):
+        from qtui.make import result_text
+        text, kind = result_text(dict(self.RESULT), [])
+        self.assertIn("2 of them are in a console case.", text)
+        self.assertNotIn("console", result_text(dict(self.RESULT, platforms=0), [])[0])
+
+    def test_the_100_step_offers_two_choices_in_this_flow(self):
+        self.assertEqual([c["key"] for c in self.shell.hundred.manualStyles], ["ribbon", "none"])
+        self.assertEqual([c["key"] for c in self.shell.hundred.styles], ["gold-case", "gold-border", "ribbon", "none"])
 
 
 if __name__ == "__main__":

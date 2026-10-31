@@ -1289,6 +1289,31 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
     return False
 
 
+def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None):
+    """How many covers already in the folder `make_covers(platforms=platforms, ...)` would rebuild: of the games in `platforms` ({appid: platform or None for the
+    Steam case}) those with a cover in another case (another console, or the Steam case instead), with other marks (`treatment` for the apps in `completed`, as in
+    make_covers) or, for the Steam case, in another colour (`tone`: (hue, sat, val)) or theme. A garbled platform note counts as another case."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return 0
+    count = 0
+    for name in names:
+        appid = appid_of(name)
+        if not name.lower().endswith(".png") or appid is None or int(appid) not in platforms:
+            continue
+        path = os.path.join(covers_dir, name)
+        want, have = platforms[int(appid)], cover_platform(path)
+        target, colour = _wanted_look(int(appid), path, tone, completed, treatment)
+        if have != want:
+            count += 1
+        elif want:
+            count += cover_treatment(path) != target
+        else:
+            count += not same_colour(cover_colour(path), colour) or cover_treatment(path) != target or cover_theme(path) is not None
+    return count
+
+
 def covers_with_other_art(covers_dir, custom_art, games=None):
     """True if make_covers with this `custom_art` ({appid: path}) would rebuild a cover already in the folder because of its art alone: a cover made
     from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared.

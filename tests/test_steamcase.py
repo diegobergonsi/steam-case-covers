@@ -3598,6 +3598,31 @@ class ConsoleMake(StoreMocks):
         self.assertEqual(green(self.cv(1)), 0)
         self.assertGreater(green(self.cv(2)), 1000)
 
+    def test_covers_in_other_case_counts_what_a_run_would_rebuild(self):
+        sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: "ps5", 2: None, 3: "ps4"})
+        count = lambda platforms, **kw: sc.covers_in_other_case(self.covers, platforms, **kw)
+        self.assertEqual(count({1: "ps5", 2: None, 3: "ps4"}), 0)
+        self.assertEqual(count({1: "ps4", 2: None, 3: "ps4"}), 1)                 # another console
+        self.assertEqual(count({2: "xbox360"}), 1)                               # a Steam cover goes into a console case
+        self.assertEqual(count({1: None}), 1)                                    # and the other way
+        self.assertEqual(count({9: "ps5"}), 0)                                   # no cover yet for that game
+        self.assertEqual(count({2: None}, tone=(134, 100, 100)), 1)              # the Steam case in another colour
+        self.assertEqual(count({1: "ps5"}, tone=(134, 100, 100)), 0)             # a console case has no colour
+
+    def test_covers_in_other_case_sees_other_marks(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, completed={1}, treatment="ribbon")
+        count = lambda **kw: sc.covers_in_other_case(self.covers, {1: "ps5", 2: "ps5"}, **kw)
+        self.assertEqual(count(completed={1}, treatment="ribbon"), 0)
+        self.assertEqual(count(completed={1}, treatment="rosette"), 1)           # the ribbon goes
+        self.assertEqual(count(completed=set(), treatment=None), 1)              # "no highlight": game 1 loses its marks
+        self.assertEqual(count(completed={1, 2}, treatment="ribbon"), 1)         # game 2 gains them
+        self.assertEqual(count(completed=None), 0)                               # no games page: covers keep their marks
+
+    def test_a_garbled_note_counts_as_another_case(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 1)
+
     def test_a_listed_game_missing_from_the_library_is_ignored(self):
         res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5", 99: "ps4"})
         self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
