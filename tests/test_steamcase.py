@@ -3464,6 +3464,57 @@ class PlatformCases(Base):
             f.write(b"not ours")
         self.assertEqual(sc.find_our_covers(self.steam), ["1p.png", "2p.png", "3p.png"])
 
+    # ---- folder checks: console covers are neither another colour nor another theme ----
+    def folder(self, **covers):
+        """Fill self.covers: name -> ("steam", hue, sat, val, theme) or ("ps5", treatment); the file is Name_<n>.png."""
+        for n, (name, spec) in enumerate(covers.items(), 1):
+            out = os.path.join(self.covers, "%s_%d.png" % (name, n))
+            if spec[0] == "steam":
+                _, hue, sat, val, theme = spec
+                sc.build_cover(self.noise(n), out, sc.load_frame(hue, sat=sat, val=val), hue, sat=sat, val=val, theme=theme)
+            else:
+                sc.build_cover(self.noise(n), out, sc.load_platform_frame(spec[0]), platform=spec[0], treatment=spec[1])
+
+    def test_mixed_colours_and_themes_ignore_console_covers(self):
+        self.folder(A=("steam", 0, 0, 30, "halloween"), B=("ps5", None))
+        self.assertFalse(sc.mixed_cover_colours(self.covers))
+        self.assertFalse(sc.mixed_cover_themes(self.covers))
+        self.folder(C=("steam", 0, 100, 100, "halloween"))
+        self.assertTrue(sc.mixed_cover_colours(self.covers))                     # two Steam covers in two colours still count
+
+    def test_mixed_themes_still_see_two_steam_themes(self):
+        self.folder(A=("steam", 0, 100, 100, "halloween"), B=("ps5", None), C=("steam", 0, 100, 100, None))
+        self.assertTrue(sc.mixed_cover_themes(self.covers))
+
+    def test_existing_colour_skips_console_covers(self):
+        self.folder(A=("ps5", None))
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
+        self.folder(B=("steam", 42, 100, 100, None))
+        self.assertEqual(sc.existing_cover_colour(self.covers), (42, 100, 100))
+
+    def test_other_look_and_theme_ignore_console_covers(self):
+        self.folder(A=("ps5", "ribbon"))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 134, 50, 50))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, completed=set(), treatment=None, theme="halloween"))
+        self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134, 50, 50))
+        self.folder(B=("steam", 0, 100, 100, None))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 134, 50, 50))     # a Steam cover still counts
+
+    def test_full_marks_and_art_checks_ignore_console_covers(self):
+        self.folder(A=("ps5", "ribbon"))
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_other_art(self.covers, {1: self.noise()}))
+        self.assertEqual(sc.covers_with_art(self.covers), set())
+
+    def test_apply_command_accepts_a_folder_with_console_covers(self):
+        import contextlib, io
+        self.folder(A=("steam", 0, 0, 30, "halloween"), B=("ps5", None))
+        args = sc.argparse.Namespace(covers=self.covers, steam_dir=self.steam, user=None, yes=True, close_steam=False)
+        with mock.patch.object(sc, "steam_running", return_value=False), contextlib.redirect_stdout(io.StringIO()):
+            sc.cmd_apply(args)
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png"])
+
 
 if __name__ == "__main__":
     unittest.main()

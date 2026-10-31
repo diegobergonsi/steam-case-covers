@@ -903,7 +903,8 @@ def covers_in_other_theme(covers_dir, theme):
         names = os.listdir(covers_dir)
     except OSError:
         return False
-    return any(n.lower().endswith(".png") and appid_of(n) is not None and cover_theme(os.path.join(covers_dir, n)) != theme for n in names)
+    return any(n.lower().endswith(".png") and appid_of(n) is not None and cover_platform(os.path.join(covers_dir, n)) is None
+               and cover_theme(os.path.join(covers_dir, n)) != theme for n in names)
 
 
 @functools.lru_cache(maxsize=1)
@@ -1244,7 +1245,7 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
         if n.lower().endswith(".png") and appid is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is None:
+            if c is None or cover_platform(path) is not None:        # a console cover is in no colour; the natural flow leaves it alone
                 continue
             target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment, theme)     # appid_of gives text; `completed` holds numbers
             if not same_colour(c, colour) or cover_treatment(path) != target or (theme != KEEP and cover_theme(path) != theme):
@@ -1266,7 +1267,7 @@ def covers_with_other_art(covers_dir, custom_art, games=None):
         appid = appid_of(n)
         if n.lower().endswith(".png") and appid is not None and (games is None or int(appid) in games):
             path = os.path.join(covers_dir, n)
-            if cover_colour(path) is None:
+            if cover_colour(path) is None or cover_platform(path) is not None:
                 continue
             if cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
                 return True
@@ -1280,7 +1281,7 @@ def covers_with_art(covers_dir):
     except OSError:
         return set()
     return {int(appid_of(n)) for n in names
-            if n.lower().endswith(".png") and appid_of(n) is not None and cover_art(os.path.join(covers_dir, n))}
+            if n.lower().endswith(".png") and appid_of(n) is not None and cover_art(os.path.join(covers_dir, n)) and cover_platform(os.path.join(covers_dir, n)) is None}
 
 
 def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
@@ -1300,7 +1301,7 @@ def existing_cover_colour(covers_dir):
         if n.lower().endswith(".png") and appid_of(n) is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is not None and not is_gold_case(cover_treatment(path)):
+            if c is not None and cover_platform(path) is None and not is_gold_case(cover_treatment(path)):
                 return c
     return None
 
@@ -1317,7 +1318,7 @@ def mixed_cover_colours(covers_dir):
         if n.lower().endswith(".png") and appid_of(n) is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is not None and not is_gold_case(cover_treatment(path)):
+            if c is not None and cover_platform(path) is None and not is_gold_case(cover_treatment(path)):
                 seen.add(tone_key(*c))
                 if len(seen) > 1:
                     return True
@@ -1333,7 +1334,7 @@ def covers_with_full_marks(covers_dir):
     for n in names:
         if n.lower().endswith(".png") and appid_of(n) is not None:
             treatment = cover_treatment(os.path.join(covers_dir, n))
-            if treatment and split_treatment(treatment)[1] == "full":
+            if treatment and cover_platform(os.path.join(covers_dir, n)) is None and split_treatment(treatment)[1] == "full":
                 return True
     return False
 
@@ -1344,7 +1345,8 @@ def mixed_cover_themes(covers_dir):
         names = os.listdir(covers_dir)
     except OSError:
         return False
-    return len({cover_theme(os.path.join(covers_dir, n)) for n in names if n.lower().endswith(".png") and appid_of(n) is not None}) > 1
+    return len({cover_theme(os.path.join(covers_dir, n)) for n in names
+                if n.lower().endswith(".png") and appid_of(n) is not None and cover_platform(os.path.join(covers_dir, n)) is None}) > 1
 
 
 def _safe_copy(src, dst):
