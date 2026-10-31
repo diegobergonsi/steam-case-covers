@@ -58,7 +58,7 @@ ScreenFrame {
             id: list
             objectName: "games_list"
             width: parent.width
-            height: 6 * Theme.touchSize
+            height: Theme.listRows * Theme.touchSize
             clip: true
             model: screen.picker.model
             boundsBehavior: Flickable.StopAtBounds
