@@ -42,7 +42,7 @@ QtObject {
     readonly property int windowHeight: 560
     readonly property int windowMinWidth: 640
     readonly property int windowMinHeight: 420
-    readonly property int navWidth: 210
+    readonly property int navWidth: 230
     readonly property int navTop: 72
     readonly property int navRowHeight: 40
     readonly property int navHighlightInset: 3
@@ -71,6 +71,9 @@ QtObject {
     readonly property int slideOffset: 30
     readonly property int dialogWidth: 440
     readonly property int progressHeight: 8
+    readonly property int lockWidth: 12                  // the padlock of a locked step: its body, the height of the body and the rise of the shackle
+    readonly property int lockHeight: 9
+    readonly property int lockShackle: 4
     readonly property int thumbWidth: 60
     readonly property int thumbHeight: 90
     readonly property int thumbPixels: 120               // the picture is read at twice its size, for sharp edges on screens with more pixels

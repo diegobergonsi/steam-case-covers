@@ -3225,23 +3225,41 @@ class ShellWindow(QtCase):
     def test_the_window_closes_when_nothing_is_being_changed(self):
         self.assertTrue(self.root.close())
 
-    def test_only_the_optional_step_has_a_small_line_under_its_name(self):
-        from PySide6.QtGui import QAccessible
-        want = {"home": "", "game_list": "", "look": "", "hundred": "(optional)", "make": "", "add": ""}
-        for key, hint in want.items():
-            self.assertEqual(self.item("nav_" + key).property("hint"), hint, key)
-        hint, row = self.item("nav_hundred_hint"), self.item("nav_hundred")
-        self.assertEqual(hint.property("text"), want["hundred"])
-        self.assertLessEqual(self.item("nav_hundred_label").height() + hint.height(), row.height())       # both lines fit the row
-        self.assertLessEqual(hint.width(), row.width() - 40)                                              # and the words fit beside the margins
-        h = self.item("nav_hundred_hint")                                                               # the words are not cut at this width
-        self.assertLessEqual(h.property("implicitWidth"), h.width())
+    def test_optional_sits_on_the_title_line_of_its_step_small_and_grey(self):
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QAccessible, QColor
+        for key in ("home", "game_list", "look", "make", "add"):
+            self.assertEqual(self.item("nav_" + key).property("hint"), "", key)
+        row, label, hint = self.item("nav_hundred"), self.item("nav_hundred_label"), self.item("nav_hundred_hint")
+        self.assertEqual((row.property("hint"), hint.property("text")), ("(optional)", "(optional)"))
+        centre = lambda it: it.mapToScene(QPointF(0, it.height() / 2)).y()
+        self.assertAlmostEqual(centre(hint), centre(label), delta=6)                                  # the same line, not a second one
+        self.assertGreaterEqual(hint.mapToScene(QPointF(0, 0)).x(), label.mapToScene(QPointF(label.width(), 0)).x())      # after the name
+        self.assertEqual(QColor(hint.property("color")).name(), "#7d92a8")                               # greyer than the name
+        self.assertLess(hint.property("font").pixelSize(), label.property("font").pixelSize())          # and smaller
+        self.assertLessEqual(hint.mapToScene(QPointF(hint.width(), 0)).x(), row.mapToScene(QPointF(row.width(), 0)).x() - 20)   # inside the list, clear of the right mark
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
         self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional), locked")
-        self.shell.setFact("ready", True)                                                               # unlocked: only what is always true remains
-        self.shell.setFact("look_done", True)
-        self.assertEqual((self.shell.steps[2]["hint"], self.shell.steps[3]["hint"], self.shell.steps[4]["hint"]), ("", "(optional)", ""))
+
+    def test_the_steps_are_evenly_spaced_with_or_without_a_hint(self):
+        from PySide6.QtCore import QPointF
+        ys = [self.item("nav_%s_label" % k).mapToScene(QPointF(0, 0)).y() for k in ("game_list", "look", "hundred", "make", "add")]
+        gaps = [round(b - a, 1) for a, b in zip(ys, ys[1:])]
+        self.assertEqual(len(set(gaps)), 1, gaps)
+
+    def test_a_step_that_cannot_be_opened_looks_greyed_out_and_has_a_lock(self):
+        from PySide6.QtGui import QColor
+        colour = lambda key: QColor(self.item("nav_%s_label" % key).property("color")).name()
+        self.assertEqual(colour("look"), "#7d92a8")                                                     # locked: grey
+        self.assertEqual(colour("game_list"), "#e6edf3")                                                # open: the normal text colour
+        self.assertTrue(self.item("nav_look_lock").property("visible"))
+        self.assertFalse(self.item("nav_game_list_lock").property("visible"))
+        self.shell.setFact("ready", True)
+        self.assertFalse(self.item("nav_look_lock").property("visible"))
+        self.assertEqual(colour("look"), "#e6edf3")
+        self.assertTrue(self.item("nav_game_list_done").property("visible"))                            # a finished step has its tick instead
+        self.assertFalse(self.item("nav_game_list_lock").property("visible"))
 
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
