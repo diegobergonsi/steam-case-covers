@@ -91,22 +91,17 @@ ScreenFrame {
         }
         Repeater {
             model: screen.cases.groupList
-            delegate: Item {
-                width: parent.width
-                height: Theme.controlHeight
-                Row {
-                    spacing: Theme.s8
-                    PrimaryButton {
-                        objectName: "case_group_" + modelData.id
-                        text: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
-                        quiet: screen.cases.selectedGroup !== modelData.id
-                        onClicked: screen.cases.pickGroup(modelData.id)
-                    }
-                    QuietButton {
-                        objectName: "case_group_delete_" + modelData.id
-                        text: "Delete group"
-                        onClicked: screen.cases.deleteGroup(modelData.id)
-                    }
+            delegate: ButtonRow {
+                PrimaryButton {
+                    objectName: "case_group_" + modelData.id
+                    text: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                    quiet: screen.cases.selectedGroup !== modelData.id
+                    onClicked: screen.cases.pickGroup(modelData.id)
+                }
+                QuietButton {
+                    objectName: "case_group_delete_" + modelData.id
+                    text: "Delete group"
+                    onClicked: screen.cases.deleteGroup(modelData.id)
                 }
             }
         }

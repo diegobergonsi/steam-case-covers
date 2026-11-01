@@ -6556,6 +6556,23 @@ class ManualWindow(PickerBase):
         self.assertEqual(self.shell.cases.groupList, [])
         self.assertFalse(self.has("case_group_" + gid))
 
+    def test_a_group_with_a_long_name_keeps_its_delete_button_inside_the_window(self):
+        """On a computer with wide letters or a narrow window the two buttons of a group must wrap, not run off the screen."""
+        import groups
+        from PySide6.QtCore import QPointF
+        saved, gid = groups.assign([], "x" * 40, {"tone": [134, 100, 100]}, [9])
+        groups.save(self.covers, saved)
+        self.open_case_screen(1)
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.shell.cases.reloadGroups()
+        self.app.processEvents()
+        delete = self.item("case_group_delete_" + gid)
+        self.settle(delete)
+        right = delete.mapToScene(QPointF(delete.width(), 0)).x()
+        self.assertLessEqual(right, self.root.property("width"), (right, self.root.property("width")))
+        button = self.item("case_group_" + gid)
+        self.assertLessEqual(button.mapToScene(QPointF(button.width(), 0)).x(), self.root.property("width"))
+
     def test_a_refused_name_is_said_in_words(self):
         import groups
         saved, gid = groups.assign([], "Mine", {"tone": [134, 100, 100]}, [9])
