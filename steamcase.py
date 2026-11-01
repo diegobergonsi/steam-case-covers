@@ -1224,8 +1224,25 @@ def _wanted_look(appid, path, colour, completed, treatment, theme=None):
     return target, treatment_colour(target, colour)
 
 
+def _check_hand(tones, groups, repaint, treatment, theme):
+    """ValueError unless `tones` ({appid: (hue, sat, val)}), `groups` ({appid: group id}) and `repaint` (a set of appids) are what make_covers takes, and, for covers by hand
+    (any tone or group), the `treatment` is none, "ribbon" or "rosette" and there is no `theme`: those covers have no gold and no theme."""
+    def whole(a):
+        return isinstance(a, int) and not isinstance(a, bool)
+    for a, t in (tones or {}).items():
+        if not (whole(a) and isinstance(t, (tuple, list)) and len(t) == 3 and all(whole(v) for v in t) and 0 <= t[0] < 360 and 0 <= t[1] <= 100 and 0 <= t[2] <= 100):
+            raise ValueError("a colour is (hue 0-359, sat 0-100, val 0-100) for a game: %r" % ((a, t),))
+    for a, g in (groups or {}).items():
+        if not (whole(a) and isinstance(g, str) and GROUP_ID.fullmatch(g)):
+            raise ValueError("a group is an id of 1 to 12 lower-case letters and digits for a game: %r" % ((a, g),))
+    if repaint is not None and not (isinstance(repaint, (set, frozenset)) and all(whole(a) for a in repaint)):
+        raise ValueError("repaint is a set of appids: %r" % (repaint,))
+    if (tones or groups) and (theme is not None or treatment not in (None, "ribbon", "rosette")):
+        raise ValueError("covers by hand only go with the marks (ribbon, rosette) and no theme")
+
+
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None, theme=None, custom_art=None, platforms=None):
+                completed=None, treatment=None, theme=None, custom_art=None, platforms=None, tones=None, groups=None, repaint=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -1251,15 +1268,21 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
     "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set),
     "completed": how many of "files" carry a treatment, kept ones included, "platforms": how many of "files" are in a console case}.
+    tones: {appid: (hue, sat, val)}, with `platforms` a dict: the colour of a game in the Steam case (the run's own colour for a game not in it). groups: {appid: id of a
+    group, see groups.py}: the cover gets the group note, and a cover is kept only if its group is the wanted one. Covers by hand only go with no `treatment` or the "ribbon"
+    and "rosette" marks and no `theme` (ValueError otherwise, before any lookup). The natural flow (`platforms` None) leaves every cover by hand (a console case or a
+    group note) alone, force or not, except those whose appid is in `repaint`: they are made again as normal covers.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
+    _check_hand(tones, groups, repaint, treatment, theme)
     if treatment is not None and treatment not in TREATMENTS:
         raise ValueError("unknown treatment: %r" % (treatment,))        # a note nobody can read back would have the cover rebuilt on every run
     if theme is not None and theme not in THEMES:
         raise ValueError("unknown theme: %r" % (theme,))
     if theme is not None and treatment is not None and split_treatment(treatment)[1] != "rosette":
         raise ValueError("the %s theme only goes with the rosette-only marks, not %r" % (theme, treatment))      # the ribbon would hide the decorations
+    tones, groups, repaint = tones or {}, groups or {}, repaint or set()
     wanted_platforms = set((platforms or {}).values()) - {None}
     if wanted_platforms - set(PLATFORMS):
         raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS), key=str)[0],))
@@ -1336,7 +1359,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         want_p = platforms.get(appid) if platforms is not None else None
-        if platforms is None and os.path.exists(dest) and cover_platform(dest):      # the natural flow leaves a cover in a console case alone
+        want_g = groups.get(appid) if platforms is not None else None
+        if platforms is None and os.path.exists(dest) and appid not in repaint and cover_by_hand(dest):      # the natural flow leaves a cover by hand alone
             res["ok"] += 1
             res["platforms"] += 1
             res["completed"] += bool(cover_treatment(dest))
@@ -1356,12 +1380,13 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment, theme)
+        target, colour = _wanted_look(appid, dest, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
-            kept = cover_platform(dest) == want_p and cover_treatment(dest) == target and cover_art(dest) == wanted_art
+            kept = cover_platform(dest) == want_p and cover_treatment(dest) == target and cover_art(dest) == wanted_art and cover_group(dest) == want_g
         else:
-            kept = same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art and cover_platform(dest) is None
+            kept = (same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art
+                    and cover_platform(dest) is None and cover_group(dest) == want_g)
         if os.path.exists(dest) and not force and kept:
             res["ok"] += 1
             res["platforms"] += bool(want_p)
@@ -1393,7 +1418,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         try:
             is_family = appid in family
             build_cover(custom_art[appid] if got and wanted_art else tmp, dest, console_frame_for(want_p, is_family) if want_p else frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2],
-                        treatment=target, theme=theme, from_art=wanted_art, platform=want_p)
+                        treatment=target, theme=theme, from_art=wanted_art, platform=want_p, group=want_g)
             res["ok"] += 1
             res["platforms"] += bool(want_p)
             res["family"] += is_family
@@ -1439,10 +1464,12 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
     return False
 
 
-def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None):
+def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None, tones=None, groups=None):
     """How many covers already in the folder `make_covers(platforms=platforms, ...)` would rebuild: of the games in `platforms` ({appid: platform or None for the
     Steam case}) those with a cover in another case (another console, or the Steam case instead), with other marks (`treatment` for the apps in `completed`, as in
-    make_covers) or, for the Steam case, in another colour (`tone`: (hue, sat, val)) or theme. A garbled platform note counts as another case."""
+    make_covers) or, for the Steam case, in another colour (`tone`: (hue, sat, val)) or theme. A garbled platform note counts as another case.
+    `tones` ({appid: colour}) and `groups` ({appid: group id}) are those of make_covers: a cover in another colour of its own, or in another group (or in one when none
+    is wanted), is counted."""
     try:
         names = os.listdir(covers_dir)
     except OSError:
@@ -1454,8 +1481,8 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
             continue
         path = os.path.join(covers_dir, name)
         want, have = platforms[int(appid)], cover_platform(path)
-        target, colour = _wanted_look(int(appid), path, tone, completed, treatment)
-        if have != want:
+        target, colour = _wanted_look(int(appid), path, (tones or {}).get(int(appid), tone), completed, treatment)
+        if have != want or cover_group(path) != (groups or {}).get(int(appid)):
             count += 1
         elif want:
             count += cover_treatment(path) != _console_marks(target)

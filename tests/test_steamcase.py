@@ -3951,6 +3951,108 @@ class HandMadeCovers(Base):
         self.assertTrue(sc.covers_in_other_look(self.covers, 0))                                     # as for a damaged console note: the cover is rebuilt
 
 
+class GroupMake(StoreMocks):
+    """make_covers(tones=, groups=, repaint=): games of a group get their own colour, and the usual flow leaves them alone unless asked."""
+    RED, GREEN = (134, 100, 100), (84, 100, 100)
+
+    def cv(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def make(self, games, platforms, tones=None, groups=None, **kw):
+        return sc.make_covers({i: None for i in games}, self.covers, platforms=platforms, tones=tones, groups=groups, **kw)
+
+    def test_a_steam_case_game_gets_its_own_colour_and_group_note(self):
+        res = self.make([1, 2, 3], {1: None, 2: None, 3: "ps5"}, tones={1: self.RED, 2: self.GREEN}, groups={1: "red", 2: "green", 3: "ps"})
+        self.assertEqual((sc.cover_colour(self.cv(1)), sc.cover_colour(self.cv(2))), (self.RED, self.GREEN))
+        self.assertEqual([sc.cover_group(self.cv(i)) for i in (1, 2, 3)], ["red", "green", "ps"])
+        self.assertEqual((res["ok"], res["platforms"]), (3, 1))
+        for i in (1, 2, 3):
+            self.assertTrue(sc.is_steamcase_cover(self.cv(i)), i)
+
+    def test_a_game_without_a_tone_gets_the_colour_of_the_run(self):
+        self.make([1], {1: None}, tones={}, groups={1: "g"}, hue=84)
+        self.assertEqual(sc.cover_colour(self.cv(1)), (84, 100, 100))
+
+    def test_a_gold_group_is_a_gold_case_without_marks_and_marks_only_where_completed(self):
+        gold = (sc.GOLD_HUE, 100, 100)
+        self.make([1, 2], {1: None, 2: None}, tones={1: gold, 2: gold}, groups={1: "gold", 2: "gold"}, completed={2}, treatment="ribbon")
+        self.assertEqual(sc.cover_colour(self.cv(1)), gold)
+        self.assertIsNone(sc.cover_treatment(self.cv(1)))                        # not at 100%: no marks, whatever the group
+        self.assertEqual(sc.cover_treatment(self.cv(2)), "ribbon")
+        self.assertEqual(sc.cover_colour(self.cv(2)), gold)
+
+    def test_without_a_games_page_no_game_of_a_group_gets_marks(self):
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"}, completed=None, treatment="ribbon")
+        self.assertIsNone(sc.cover_treatment(self.cv(1)))
+
+    def test_a_same_cover_is_kept_and_another_colour_or_group_rebuilds(self):
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"})
+        before = os.stat(self.cv(1)).st_mtime_ns
+        seen = []
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"}, progress=lambda d, t, a, n, st: seen.append(st))
+        self.assertEqual((seen, os.stat(self.cv(1)).st_mtime_ns), (["exists"], before))
+        self.make([1], {1: None}, tones={1: self.GREEN}, groups={1: "r"})
+        self.assertEqual(sc.cover_colour(self.cv(1)), self.GREEN)
+        self.make([1], {1: None}, tones={1: self.GREEN}, groups={1: "other"})
+        self.assertEqual(sc.cover_group(self.cv(1)), "other")
+        self.make([1], {1: None}, tones={1: self.GREEN})                          # no group any more: the note goes
+        self.assertIsNone(sc.cover_group(self.cv(1)))
+
+    def test_the_usual_flow_leaves_covers_by_hand_alone_even_with_force(self):
+        self.make([1, 2], {1: None, 2: "ps5"}, tones={1: self.RED}, groups={1: "r", 2: "p"})
+        before = {i: open(self.cv(i), "rb").read() for i in (1, 2)}
+        res = sc.make_covers({1: None, 2: None, 3: None}, self.covers, force=True, hue=84)
+        self.assertEqual({i: open(self.cv(i), "rb").read() for i in (1, 2)}, before)
+        self.assertEqual((res["ok"], res["platforms"]), (3, 2))
+        self.assertEqual(sc.cover_colour(self.cv(3)), (84, 100, 100))
+
+    def test_repaint_hands_the_covers_back_to_the_usual_flow(self):
+        self.make([1, 2, 3], {1: None, 2: "ps5", 3: None}, tones={1: self.RED, 3: self.RED}, groups={1: "r", 2: "p", 3: "r"})
+        res = sc.make_covers({1: None, 2: None, 3: None}, self.covers, hue=84, repaint={1, 2})
+        self.assertEqual([sc.cover_group(self.cv(i)) for i in (1, 2, 3)], [None, None, "r"])
+        self.assertEqual((sc.cover_platform(self.cv(2)), sc.cover_colour(self.cv(1)), sc.cover_colour(self.cv(3))), (None, (84, 100, 100), self.RED))
+        self.assertEqual(res["platforms"], 1)                                      # the one left alone
+
+    def test_a_damaged_note_is_rebuilt_by_the_usual_flow(self):
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"})
+        from PIL.PngImagePlugin import PngInfo
+        meta = PngInfo()
+        with sc.Image.open(self.cv(1)) as im:
+            for k, v in im.info.items():
+                if isinstance(v, str) and k != sc.GROUP_CHUNK:
+                    meta.add_text(k, v)
+            meta.add_text(sc.GROUP_CHUNK, "BAD NOTE")
+            im.save(self.cv(1), pnginfo=meta)
+        sc.make_covers({1: None}, self.covers, hue=84)
+        self.assertEqual((sc.cover_group(self.cv(1)), sc.cover_colour(self.cv(1))), (None, (84, 100, 100)))
+
+    def test_bad_input_is_refused_before_any_lookup(self):
+        with mock.patch.object(sc, "store_items", side_effect=AssertionError("looked up")):
+            for kw in ({"tones": {1: (360, 100, 100)}}, {"tones": {1: (0, 101, 100)}}, {"tones": {1: (0, 100)}}, {"tones": {1: "red"}}, {"tones": {"a": (0, 1, 1)}},
+                       {"groups": {1: "BAD"}}, {"groups": {1: 5}}, {"groups": {"x": "a"}}, {"groups": {1: "g"}, "theme": "halloween", "treatment": "rosette"},
+                       {"groups": {1: "g"}, "treatment": "gold-case"}, {"tones": {1: (0, 100, 100)}, "treatment": "gold-border"}, {"repaint": 5}):
+                with self.subTest(**kw), self.assertRaises(ValueError):
+                    sc.make_covers({1: None}, self.covers, platforms={1: None}, **kw)
+
+    def test_the_reason_counts_a_game_with_another_colour_or_group(self):
+        self.make([1, 2], {1: None, 2: None}, tones={1: self.RED, 2: self.RED}, groups={1: "r", 2: "r"})
+        count = lambda tones, groups, **kw: sc.covers_in_other_case(self.covers, {1: None, 2: None}, tones=tones, groups=groups, **kw)
+        self.assertEqual(count({1: self.RED, 2: self.RED}, {1: "r", 2: "r"}), 0)
+        self.assertEqual(count({1: self.GREEN, 2: self.RED}, {1: "r", 2: "r"}), 1)
+        self.assertEqual(count({1: self.RED, 2: self.RED}, {1: "r", 2: "other"}), 1)
+        self.assertEqual(count({1: self.RED, 2: self.RED}, None), 2)                # no group wanted: both are rebuilt
+
+    def test_a_group_of_the_usual_flow_reason_lists_the_names(self):
+        from qtui import reasons
+        self.assertIsNone(reasons.group_repaint_reason([]))
+        title, text = reasons.group_repaint_reason([{"name": "Red Steam Cases", "games": [1, 2, 3]}, {"name": "PS5", "games": [4]}])
+        self.assertIn("Red Steam Cases", text)
+        self.assertIn("3 games", text)
+        self.assertIn("PS5", text)
+        self.assertIn("1 game", text)
+        self.assertIn("deleted", text)
+
+
 def use_cases_dir(test, mutate=None):
     """Point the engine at a copy of assets/cases (changed by `mutate(data)` on the parsed cases.json), with every cache that depends on it cleared before and after."""
     d = tempfile.mkdtemp()

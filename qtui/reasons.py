@@ -21,6 +21,17 @@ def platform_replace_reason(covers_dir, platforms, tone, treatment, completed):
     return "Replace the covers you made?", "This replaces %d covers you already made with new ones in the cases you picked." % n
 
 
+def group_repaint_reason(groups):
+    """(title, sentence) for the groups ticked to be repainted (a list of {"name", "games": [appids]}), one line each, or None when there are none."""
+    if not groups:
+        return None
+    lines = []
+    for g in groups:
+        n = len(g["games"])
+        lines.append("The group \u201c%s\u201d (%d game%s) will be repainted and deleted." % (g["name"], n, "" if n == 1 else "s"))
+    return "Repaint your groups?", " ".join(lines)
+
+
 def look_label(treatment):
     """How a treatment (one of sc.TREATMENTS) is named in the question: its case, then its marks, so a change of marks alone reads as one."""
     case, marks = sc.split_treatment(treatment)
