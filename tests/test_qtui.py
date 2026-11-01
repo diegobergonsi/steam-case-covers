@@ -7201,6 +7201,105 @@ class GroupReset(PickerBase):
         self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
 
 
+class GroupsEndToEnd(PickerBase):
+    """Groups from start to finish over a fake Steam folder and the engine's own Apply and Reset: make three groups, the usual flow leaves them, a ticked one is
+    reset, another is repainted. Only a game really at 100% gets the marks, in any group."""
+
+    def setUp(self):
+        super().setUp()
+        import groups
+        from unittest import mock
+        self.groups = groups
+        self.grid = os.path.join(self.tmp, "userdata", "111", "config", "grid")
+        os.makedirs(self.grid)
+        os.makedirs(os.path.join(self.tmp, "config"))
+        for name, value in (("steam_running", lambda: False), ("start_steam", lambda steam: None), ("close_steam", lambda steam, timeout=60: True)):
+            patcher = mock.patch.object(self.sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.make, self.ap, self.cases, self.hundred = self.shell.make, self.shell.apply, self.shell.cases, self.shell.hundred
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))
+
+    def run_make(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running or self.make.asking, 10)
+        if self.make.asking:
+            self.make.confirm()
+            self.wait_for(lambda: not self.make.running, 10)
+        self.assertTrue(self.make.done, self.make.status)
+
+    def on_steam(self):
+        return sorted(n for n in os.listdir(self.grid) if n.endswith("p.png"))
+
+    def read(self, path):
+        with open(path, "rb") as f:
+            return f.read()
+
+    def test_groups_from_start_to_finish(self):
+        sc = self.sc
+        gold = next(i for i, c in enumerate(self.cases.colourChoices) if c["label"] == "Gold")
+        red = next(i for i, c in enumerate(self.cases.colourChoices) if c["label"] == "Red")
+        self.shell.startManual()
+        self.load()
+        for appid, key, colour, name in ((1, "steam", gold, "Gold games"), (2, "steam", red, "Red games"), (3, "xbox360", None, "Old games")):
+            self.picker.toggle(appid)
+            self.cases.pick(key)
+            if colour is not None:
+                self.cases.pickColour(colour)
+            self.cases.groupName = name
+            self.cases.assign()
+        self.hundred._completed, self.hundred._style, self.hundred._marks = {1}, "ribbon", "full"       # only game 1 is really at 100%
+        self.run_make()
+        self.assertEqual([sc.cover_treatment(self.cover(i)) for i in (1, 2, 3)], ["ribbon", None, None])    # the marks only where the page says 100%
+        self.assertEqual(sc.cover_colour(self.cover(1)), (sc.GOLD_HUE, 100, 100))
+        self.assertEqual(sc.cover_colour(self.cover(2)), (134, 100, 100))
+        self.assertEqual(sc.cover_platform(self.cover(3)), "xbox360")
+        self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["Gold games", "Red games", "Old games"])
+        self.assertTrue(all(sc.is_steamcase_cover(self.cover(i)) for i in (1, 2, 3)))
+
+        # the usual flow: another colour for everything, and the groups stay as they are
+        before = {i: self.read(self.cover(i)) for i in (1, 2, 3)}
+        self.shell.startNatural()
+        self.shell.look.hue = 84
+        self.hundred._completed, self.hundred._style, self.hundred._marks = None, "ribbon", "full"
+        self.run_make()
+        self.assertEqual({i: self.read(self.cover(i)) for i in (1, 2, 3)}, before)
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.ap.apply()
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"], self.ap.status)
+
+        # Reset with nothing ticked leaves them on Steam; ticking Red resets that group and deletes it
+        by_name = {g["name"]: g["id"] for g in self.groups.load(self.covers)}
+        asked = []
+        self.ap.confirmNeeded.connect(lambda title, paragraphs, go, alt: asked.append(paragraphs))
+        self.ap.reset()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertFalse(self.ap.asking)
+        self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
+        self.ap.groupTicks.refresh()
+        self.ap.groupTicks.toggle(by_name["Red games"])
+        self.ap.reset()
+        self.wait_for(lambda: self.ap.asking or not self.ap.busy, 10)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
+        self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["Gold games", "Old games"])
+        self.assertIsNone(sc.cover_group(self.cover(2)))
+
+        # Make with the old group ticked repaints it in the new colour and deletes the group
+        self.make.groupTicks.refresh()
+        self.make.groupTicks.toggle(by_name["Old games"])
+        self.run_make()
+        self.assertEqual((sc.cover_platform(self.cover(3)), sc.cover_colour(self.cover(3))), (None, (84, 100, 100)))
+        self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["Gold games"])
+        self.assertEqual(self.read(self.cover(1)), before[1])                              # the gold group was never touched
+
+
 class ManualFlowEndToEnd(PickerBase):
     """The manual flow from ticking games to Restore, over a fake Steam folder and the engine's own Apply, Restore and Reset."""
 

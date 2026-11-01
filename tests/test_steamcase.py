@@ -4160,7 +4160,7 @@ class CasesJsonIsChecked(Base):
         real = sc.build_cover
         with mock.patch.object(sc, "build_cover", lambda *a, **kw: calls.append(kw.get("platform")) or real(*a, **kw)):
             self.assertEqual(selfcheck.engine_problems(), [])
-        self.assertEqual(sorted(p for p in calls if p), sorted(sc.PLATFORMS))
+        self.assertEqual(sorted({p for p in calls if p}), sorted(sc.PLATFORMS))                  # every case at least once (the group check builds one more)
 
 
 class SelfCheckConsoleCases(Base):
@@ -4177,6 +4177,25 @@ class SelfCheckConsoleCases(Base):
     def test_a_good_bundle_has_no_problems(self):
         from qtui import selfcheck
         self.assertEqual(selfcheck.engine_problems(), [])
+
+
+class SelfCheckGroups(Base):
+    """The packaged app's self-test also builds a cover made by hand (in a group, in a colour) and recognises it, and refuses a damaged note."""
+
+    def test_a_good_bundle_builds_and_recognises_a_group_cover(self):
+        from qtui import selfcheck
+        seen = []
+        real = sc.build_cover
+        with mock.patch.object(sc, "build_cover", lambda *a, **kw: seen.append(kw.get("group")) or real(*a, **kw)):
+            self.assertEqual(selfcheck.engine_problems(), [])
+        self.assertIn("selfcheck", [g for g in seen if g])
+
+    def test_a_group_cover_that_is_not_recognised_is_reported(self):
+        from qtui import selfcheck
+        real = sc.is_steamcase_cover
+        with mock.patch.object(sc, "is_steamcase_cover", lambda path: False if sc.cover_group(path) else real(path)):
+            problems = selfcheck.engine_problems()
+        self.assertTrue(any("group" in p for p in problems), problems)
 
 
 class ConsoleCaseCredits(unittest.TestCase):
