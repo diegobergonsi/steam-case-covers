@@ -838,9 +838,9 @@ def platform_ribbon(platform):
     return RIBBON_WIDTH, (x0 + x1) // 2, y1 - RIBBON_GAP
 
 
-def steam_marks_move():
-    """(dy, dx) of the rosette on the Steam case: the same place as on a console case, at the left of the art under the banner."""
-    return _rosette_move(WINDOW, None)
+def steam_marks():
+    """(dy, dx, ribbon) for finish_treatment on the Steam case: the rosette and the ribbon in the same places and size as on a console case."""
+    return _rosette_move(WINDOW, None) + ((RIBBON_WIDTH, (WINDOW[0] + WINDOW[2]) // 2, WINDOW[3] - RIBBON_GAP),)
 
 
 def load_platform_frame(platform, family=False):
@@ -909,7 +909,7 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, them
                                     platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform))
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
-        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks_move())
+        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks())
 
 
 def compose_treatment(case, marks):
@@ -1160,7 +1160,7 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
     cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment,
-                             *((platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)) if platform else steam_marks_move()))
+                             *((platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)) if platform else steam_marks()))
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     if platform is not None:
@@ -1711,7 +1711,7 @@ def _treated_reference(key, family, legacy=False):
     lets detailed art ring that far past where flat art reaches. Expected is halfway between the two, so real art lands within 1 of it."""
     (step, sat, val), treatment, theme = key                        # step * 360 / 256 degrees turns the hue by exactly `step` again
     frame = load_frame(step * 360 / 256, family, sat=sat, val=val, legacy_corner=legacy)
-    moved = () if legacy else steam_marks_move()                    # `legacy`: the cover as earlier versions made it, with the corner on the left and the rosette on the right
+    moved = () if legacy else steam_marks()                    # `legacy`: the cover as earlier versions made it, with the corner on the left and the rosette on the right
     black, white = (finish_treatment(apply_theme(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), theme), treatment, *moved) for c in (0, 255))
     widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))

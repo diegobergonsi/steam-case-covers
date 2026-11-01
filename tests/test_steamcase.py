@@ -1466,7 +1466,7 @@ class RecogniseTreated(Base):
             _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t, None), False)
             self.assertEqual(mask.getpixel((300, 400)), 0, t)
         _, mask = sc._treated_reference((sc.tone_key(0), "ribbon", None), False)
-        dy, dx = sc.steam_marks_move()
+        dy, dx, _ = sc.steam_marks()
         self.assertEqual(mask.getpixel((526 + dx, 66 + dy)), 255)
         _, mask = sc._treated_reference((sc.tone_key(0), "gold-border", None), False)
         self.assertEqual(mask.getpixel((5, 450)), 255)
@@ -2310,7 +2310,7 @@ class Treatments(unittest.TestCase):
 
     def test_a_ribbon_cover_changes_only_the_rosette_and_the_ribbon(self):
         done, plain = sc.preview_cover(treatment="ribbon"), sc.preview_cover()
-        dy, dx = sc.steam_marks_move()
+        dy, dx, _ = sc.steam_marks()
         self.assertEqual(done.getpixel((300, 400)), plain.getpixel((300, 400)))
         self.assertNotEqual(done.getpixel((526 + dx, 66 + dy)), plain.getpixel((526 + dx, 66 + dy)))              # the rosette, at the left under the banner
         self.assertNotEqual(done.getpixel((300, 820)), plain.getpixel((300, 820)))
@@ -2339,7 +2339,7 @@ class Treatments(unittest.TestCase):
 
     def test_gold_border_keeps_the_rosette_and_ribbon_on_the_art(self):
         im = sc.preview_cover(treatment="gold-border")
-        dy, dx = sc.steam_marks_move()
+        dy, dx, _ = sc.steam_marks()
         x, y = 526 + dx, 66 + dy                                                               # the disc's centre before the case shrinks
         self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((x - 46, y - 36, x + 34, y + 34)))))
         box = im.crop((x - 66, y - 46, x + 54, y + 74))                                        # the whole disc, to find its centre
@@ -2353,7 +2353,7 @@ class Treatments(unittest.TestCase):
 
     def test_family_corner_and_the_rosette_do_not_overlap(self):
         im = sc.preview_cover(0, True, treatment="ribbon")
-        dy, dx = sc.steam_marks_move()
+        dy, dx, _ = sc.steam_marks()
         self.assertTrue(near(im.getpixel((591, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((591, 8)))
         self.assertTrue(near(im.getpixel((526 + dx, 66 + dy))[:3], self.DISC), im.getpixel((526 + dx, 66 + dy)))
 
@@ -3774,9 +3774,11 @@ class SteamMarksMoved(Base):
         self.assertAlmostEqual(box[0], sc.WINDOW[0] + sc.MARKS_GAP, delta=1)
         self.assertAlmostEqual(box[1], sc.WINDOW[1] + sc.MARKS_GAP, delta=1)
 
-    def test_the_ribbon_is_where_it_was(self):
+    def test_the_ribbon_has_the_width_of_the_console_cases(self):
         box = self.changed(sc.preview_cover(), sc.preview_cover(treatment="ribbon")).crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox()
-        self.assertEqual((box[0], box[2]), (12, 589))
+        self.assertAlmostEqual(box[2] - box[0], sc.RIBBON_WIDTH, delta=2)
+        self.assertAlmostEqual((box[0] + box[2]) / 2, (sc.WINDOW[0] + sc.WINDOW[2]) / 2, delta=2)
+        self.assertAlmostEqual(box[3] + 450, sc.WINDOW[3] - sc.RIBBON_GAP, delta=2)
 
     def legacy(self, drop=(), **kw):
         """A cover as the version before this one made it: the corner on the left, the rosette at the top right. Its notes are those of a cover made now."""
