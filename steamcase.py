@@ -1144,6 +1144,38 @@ def cover_by_hand(path):
     return True if console or group else None
 
 
+def forget_group(covers_dir, appids):
+    """Take the group note off the covers in the folder of these games (a set of appids); the pictures and every other note stay. How many covers lost a note.
+    A Steam-case cover is a usual cover again; a console cover still is by hand, its case is its own note. Damaged files, links and other covers are left alone."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return 0
+    count = 0
+    for n in names:
+        appid = appid_of(n)
+        path = os.path.join(covers_dir, n)
+        if not n.lower().endswith(".png") or appid is None or int(appid) not in appids or not _is_plain_file(path) or not isinstance(cover_group(path), str):
+            continue
+        part = _tmp(path, "part")
+        try:
+            with Image.open(path, formats=["PNG"]) as im:
+                note = PngInfo()
+                for key, value in im.info.items():
+                    if isinstance(value, str) and key != GROUP_CHUNK:
+                        note.add_text(key, value)
+                im.load()
+                im.save(part, format="PNG", optimize=True, pnginfo=note)
+            _replace(part, path)
+            count += 1
+        except Exception:
+            pass
+        finally:
+            if os.path.exists(part):
+                os.remove(part)
+    return count
+
+
 def _console_marks(treatment):
     """The marks a console cover keeps from a treatment (none, "ribbon" or "rosette"): a console case has no gold, so an earlier gold look keeps only its marks."""
     return compose_treatment("ribbon", split_treatment(treatment)[1]) if treatment else None

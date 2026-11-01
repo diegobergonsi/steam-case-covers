@@ -22,6 +22,15 @@ def _colour_choices():
 COLOURS = _colour_choices()
 
 
+def case_label(case):
+    """How a group's case is named: a console's name, or "Steam case, red" for the Steam case in a colour (a group's "case" as groups.py keeps it)."""
+    if "platform" in case:
+        return LABELS.get(case["platform"], "")
+    tone = tuple(case["tone"])
+    found = next((c["label"] for c in COLOURS if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*tone)), "custom colour")
+    return "Steam case, " + found.lower()
+
+
 class Cases(QObject):
     selectedKeyChanged = Signal()
     assignmentsChanged = Signal()
@@ -86,10 +95,7 @@ class Cases(QObject):
             self.selectedKeyChanged.emit()
 
     def _case_label(self, key, tone):
-        if key != "steam":
-            return LABELS.get(key, "")
-        found = next((c["label"] for c in COLOURS if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*tone)), "custom colour")
-        return "Steam case, " + found.lower()
+        return case_label({"tone": list(tone)} if key == "steam" else {"platform": key})
 
     def _follow_case(self):
         """A group not named by the user is named after its case."""
@@ -130,8 +136,7 @@ class Cases(QObject):
         for g in self._groups:
             case = g["case"]
             tone = tuple(case["tone"]) if "tone" in case else None
-            label = self._case_label("steam", tone) if tone else LABELS[case["platform"]]
-            out.append({"id": g["id"], "name": g["name"], "label": label, "count": len(g["games"]),
+            out.append({"id": g["id"], "name": g["name"], "label": case_label(case), "count": len(g["games"]),
                         "color": sc.case_color(*tone) if tone else ""})
         return out
 

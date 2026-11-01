@@ -3944,6 +3944,34 @@ class HandMadeCovers(Base):
         self.assertFalse(sc.covers_with_other_art(self.covers, {}))                                   # the art of a cover by hand is not in question
         self.assertEqual(sc.covers_with_art(self.covers), set())
 
+    def test_forgetting_a_group_takes_the_note_off_and_keeps_the_picture(self):
+        steam = self.make("Steam_1_1.png", hue=134, treatment="ribbon", group="g1")
+        console = self.make("Console_2_2.png", platform="ps5", group="g1")
+        other = self.make("Other_3_3.png", hue=134, group="g2")
+        plain = self.make("Plain_4_4.png")
+        before = {p: sc.Image.open(p).convert("RGBA").tobytes() for p in (steam, console, other, plain)}
+        self.assertEqual(sc.forget_group(self.covers, {1, 2, 4, 99}), 2)                  # only covers with a note; the plain one and the missing game are not counted
+        self.assertEqual([sc.cover_group(p) for p in (steam, console, other, plain)], [None, None, "g2", None])
+        self.assertEqual({p: sc.Image.open(p).convert("RGBA").tobytes() for p in before}, before)       # the pictures are the same
+        self.assertEqual((sc.cover_colour(steam), sc.cover_treatment(steam), sc.cover_platform(console)), ((134, 100, 100), "ribbon", "ps5"))
+        self.assertTrue(sc.is_steamcase_cover(steam) and sc.is_steamcase_cover(console))
+        self.assertIsNone(sc.cover_by_hand(steam))                                        # a Steam cover is a usual cover again
+        self.assertTrue(sc.cover_by_hand(console))                                        # a console cover still is by hand: its case is its note
+        self.assertEqual(os.listdir(self.covers).count("Steam_1_1.png"), 1)
+        self.assertEqual([n for n in os.listdir(self.covers) if n.startswith(".")], [])    # no temporary file is left
+
+    def test_forgetting_leaves_damaged_and_linked_files_alone(self):
+        good = self.make("Good_1_1.png", group="g1")
+        bad = os.path.join(self.covers, "Bad_2_2.png")
+        with open(bad, "wb") as f:
+            f.write(b"not a png")
+        link = os.path.join(self.covers, "Link_3_3.png")
+        os.symlink(good, link)
+        self.assertEqual(sc.forget_group(self.covers, {1, 2, 3}), 1)
+        self.assertEqual(open(bad, "rb").read(), b"not a png")
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(sc.forget_group(os.path.join(self.tmp, "no folder"), {1}), 0)
+
     def test_a_damaged_group_note_makes_the_usual_flow_ask(self):
         self.folder()
         self.with_note(os.path.join(self.covers, "A_3_3.png"), sc.GROUP_CHUNK, "BAD")

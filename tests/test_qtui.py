@@ -6551,6 +6551,50 @@ class ManualWindow(PickerBase):
         self.assertTrue(self.item("case_error").property("visible"))
         self.assertIn("Mine", self.item("case_error").property("text"))
 
+    def saved_groups(self):
+        import groups
+        saved, red = groups.assign([], "Red games", {"tone": [134, 100, 100]}, [1])
+        saved, ps = groups.assign(saved, "PS5 games", {"platform": "ps5"}, [2])
+        groups.save(self.covers, saved)
+        return red, ps
+
+    def open_natural_make(self):
+        self.shell.startNatural()
+        for fact in ("ready", "look_done", "hundred_done"):
+            self.shell.setFact(fact, True)
+        self.shell.goKey("make")
+        self.app.processEvents()
+
+    def test_the_usual_make_screen_lists_the_groups_to_repaint(self):
+        red, ps = self.saved_groups()
+        self.open_natural_make()
+        self.assertEqual(self.step(), "make")
+        self.assertTrue(self.has("make_group_" + red) and self.has("make_group_" + ps))
+        self.assertFalse(self.item("make_group_" + red).property("checked"))
+        self.click("make_group_" + red)
+        self.assertTrue(self.item("make_group_" + red).property("checked"))
+        self.assertEqual(self.shell.make.tickedGroups, 1)
+        self.click("make_group_" + red)
+        self.assertEqual(self.shell.make.tickedGroups, 0)
+
+    def test_no_groups_no_section_in_the_usual_make_screen(self):
+        self.open_natural_make()
+        self.assertEqual(self.step(), "make")
+        self.assertFalse(self.item("make_section_groups").property("visible"))
+
+    def test_the_manual_make_screen_does_not_offer_to_repaint(self):
+        self.saved_groups()
+        self.shell.startManual()
+        self.shell.setFact("ready", True)
+        self.shell.picker.toggle(1)
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.shell.setFact("hundred_done", True)
+        self.shell.goKey("make")
+        self.app.processEvents()
+        self.assertEqual(self.step(), "make")
+        self.assertFalse(self.item("make_section_groups").property("visible"))
+
     def test_the_family_switch_is_greyed_without_a_game_list_file(self):
         self.shell.startManual()
         self.wait_for(lambda: self.picker.rows)
@@ -6671,7 +6715,7 @@ class ManualMake(PickerBase):
         files = self.shell.make.files()
         self.assertEqual(sorted(os.path.basename(f) for f in files), ["God_of_War_3.png", "Hades_1.png"])
         self.assertEqual({self.sc.cover_platform(f) for f in files}, {"ps5"})
-        self.assertEqual(len(os.listdir(self.covers)), 2)
+        self.assertEqual(sorted(n for n in os.listdir(self.covers) if n.endswith(".png")), ["God_of_War_3.png", "Hades_1.png"])         # (and the file of the groups)
         self.assertIn("console case", self.shell.make.status)
 
     def test_family_games_get_their_corner_only_when_the_switch_is_on(self):
@@ -6702,13 +6746,13 @@ class ManualMake(PickerBase):
         self.run_make()
         self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, None))
 
-    def test_the_steam_case_choice_is_made_in_the_look_colour_without_a_theme(self):
+    def test_the_steam_case_choice_has_the_colour_of_its_group_and_no_theme(self):
         calls = self.spy()
-        self.shell.look.hue = 134
+        self.shell.look.hue = 134                                              # the Look step is not part of this flow: its colour does not count
         self.give("steam", 2)
         self.run_make()
         kw = calls[-1][1]
-        self.assertEqual((kw["platforms"], kw["hue"], kw["theme"]), ({2: None}, 134, None))
+        self.assertEqual((kw["platforms"], kw["tones"], kw["theme"]), ({2: None}, {2: (0, 100, 100)}, None))
 
     def test_a_case_that_changes_covers_already_made_asks_first(self):
         self.give("ps5", 1)
@@ -6767,6 +6811,189 @@ class ManualMake(PickerBase):
 
 
 @need_qt
+class GroupsInMake(PickerBase):
+    """Make saves the groups of the manual flow, and the usual Make lists them: left alone unless ticked, then repainted and deleted."""
+    RESULT = {"ok": 2, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0, "not_games": 0, "unlisted": 0, "skipped": 0}
+
+    def setUp(self):
+        super().setUp()
+        import groups
+        self.groups = groups
+        self.make = self.shell.make
+        self.shell.startManual()
+        self.load()
+
+    def give(self, key, *appids, colour=None, name=None):
+        for appid in appids:
+            self.picker.toggle(appid)
+        self.shell.cases.pick(key)
+        if colour is not None:
+            self.shell.cases.pickColour(colour)
+        if name:
+            self.shell.cases.groupName = name
+        self.shell.cases.assign()
+
+    def run_make(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running or self.make.asking, 8)
+        if self.make.asking:
+            self.make.confirm()
+            self.wait_for(lambda: not self.make.running, 8)
+
+    def saved(self):
+        return self.groups.load(self.covers)
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))
+
+    def spy(self, result=None, error=None):
+        from unittest import mock
+        calls = []
+
+        def fake(games, out, **kw):
+            calls.append((dict(games), kw))
+            if error:
+                raise self.sc.SteamcaseError(error)
+            return dict(result or self.RESULT)
+        patcher = mock.patch.object(self.sc, "make_covers", fake)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return calls
+
+    def test_manual_make_gives_the_engine_the_colours_and_the_groups(self):
+        calls = self.spy()
+        self.give("steam", 1, 3, colour=3, name="Dropped")
+        self.give("ps5", 2)
+        self.run_make()
+        kw = calls[-1][1]
+        by_name = {g["name"]: g["id"] for g in self.shell.cases.groupList}
+        self.assertEqual(kw["tones"], {1: (134, 100, 100), 3: (134, 100, 100)})
+        self.assertEqual(kw["groups"], {1: by_name["Dropped"], 3: by_name["Dropped"], 2: by_name["PlayStation 5"]})
+
+    def test_a_good_run_saves_the_groups_and_marks_the_covers(self):
+        self.give("steam", 1, 3, colour=3, name="Dropped")
+        self.give("xbox360", 2)
+        self.run_make()
+        self.assertEqual([(g["name"], g["games"]) for g in self.saved()], [("Dropped", [1, 3]), ("Xbox 360", [2])])
+        gid = self.saved()[0]["id"]
+        self.assertEqual((self.sc.cover_group(self.cover(1)), self.sc.cover_colour(self.cover(3))), (gid, (134, 100, 100)))
+        self.assertEqual(self.sc.cover_platform(self.cover(2)), "xbox360")
+        self.assertTrue(all(self.sc.is_steamcase_cover(self.cover(i)) for i in (1, 2, 3)))
+
+    def test_a_failed_run_saves_nothing(self):
+        self.spy(error="Could not reach Steam's servers: offline.")
+        self.give("steam", 1, colour=3, name="Dropped")
+        self.run_make()
+        self.assertEqual(self.saved(), [])
+        self.assertFalse(os.path.exists(os.path.join(self.covers, "groups.json")))
+
+    def test_a_game_that_got_no_cover_is_left_out_of_the_saved_group(self):
+        self.spy(result=dict(self.RESULT, files=[os.path.join(self.covers, "Hades_1.png")]))
+        self.give("steam", 1, 3, colour=3, name="Dropped")
+        self.run_make()
+        self.assertEqual([(g["name"], g["games"]) for g in self.saved()], [("Dropped", [1])])
+
+    def test_the_games_of_a_deleted_group_get_a_usual_cover_again(self):
+        self.give("steam", 1, colour=3, name="Dropped")
+        self.run_make()
+        gid = self.saved()[0]["id"]
+        self.assertEqual(self.sc.cover_group(self.cover(1)), gid)
+        self.shell.cases.reset()
+        self.shell.cases.deleteGroup(gid)
+        self.give("ps5", 3)
+        self.run_make()
+        self.assertEqual([g["name"] for g in self.saved()], ["PlayStation 5"])
+        self.assertIsNone(self.sc.cover_group(self.cover(1)))
+        self.assertTrue(self.sc.is_steamcase_cover(self.cover(1)))
+        self.assertEqual(self.sc.cover_colour(self.cover(1)), (134, 100, 100))                # the picture is kept
+
+    def natural_with_groups(self):
+        self.give("steam", 1, colour=3, name="Red games")
+        self.give("ps5", 3)
+        self.run_make()
+        self.shell.startNatural()
+        self.shell.look.hue = 84
+        self.make.refreshGroups()
+
+    def test_the_usual_make_lists_the_groups_unticked(self):
+        self.natural_with_groups()
+        self.assertEqual([(g["name"], g["count"], g["ticked"]) for g in self.make.groupChoices], [("Red games", 1, False), ("PlayStation 5", 1, False)])
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.assertEqual([g["ticked"] for g in self.make.groupChoices], [True, False])
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.assertEqual([g["ticked"] for g in self.make.groupChoices], [False, False])
+        self.make.toggleGroup("nope")                                                        # an unknown id changes nothing
+
+    def test_no_groups_no_list(self):
+        self.shell.startNatural()
+        self.make.refreshGroups()
+        self.assertEqual(self.make.groupChoices, [])
+
+    def test_unticked_groups_are_left_alone_and_games_without_a_group_are_made(self):
+        self.natural_with_groups()
+        before = {i: open(self.cover(i), "rb").read() for i in (1, 3)}
+        self.run_make()
+        self.assertEqual({i: open(self.cover(i), "rb").read() for i in (1, 3)}, before)
+        self.assertEqual(self.sc.cover_colour(self.cover(2)), (84, 100, 100))
+        self.assertEqual([g["name"] for g in self.saved()], ["Red games", "PlayStation 5"])
+
+    def test_a_ticked_group_is_repainted_with_a_warning_and_deleted(self):
+        self.natural_with_groups()
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.start()
+        self.wait_for(lambda: self.make.asking, 8)
+        self.assertTrue(self.make.asking)
+        self.assertIn("Red games", self.make.questionText)
+        self.assertIn("1 game", self.make.questionText)
+        self.assertIn("deleted", self.make.questionText)
+        self.make.confirm()
+        self.wait_for(lambda: not self.make.running, 8)
+        self.assertEqual(self.sc.cover_colour(self.cover(1)), (84, 100, 100))
+        self.assertIsNone(self.sc.cover_group(self.cover(1)))
+        self.assertEqual([g["name"] for g in self.saved()], ["PlayStation 5"])               # the other group is untouched
+        self.assertEqual(self.sc.cover_platform(self.cover(3)), "ps5")
+        self.assertEqual([g["name"] for g in self.make.groupChoices], ["PlayStation 5"])
+        self.assertEqual(self.make.tickedGroups, 0)
+
+    def test_declining_the_question_changes_nothing(self):
+        self.natural_with_groups()
+        before = open(self.cover(1), "rb").read()
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.start()
+        self.wait_for(lambda: self.make.asking, 8)
+        self.make.decline()
+        self.assertEqual(open(self.cover(1), "rb").read(), before)
+        self.assertEqual(len(self.saved()), 2)
+
+    def test_a_ticked_group_whose_cover_could_not_be_made_stays(self):
+        self.give("steam", 1, 3, colour=3, name="Red games")
+        self.run_make()
+        self.shell.startNatural()
+        self.make.refreshGroups()
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.spy(result=dict(self.RESULT, files=[os.path.join(self.covers, "Hades_1.png")]))
+        self.run_make()
+        self.assertEqual([(g["name"], g["games"]) for g in self.saved()], [("Red games", [3])])
+
+    def test_a_ticked_group_stays_when_the_run_fails(self):
+        self.give("steam", 1, colour=3, name="Red games")
+        self.run_make()
+        self.shell.startNatural()
+        self.make.refreshGroups()
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.spy(error="offline")
+        self.run_make()
+        self.assertEqual([g["name"] for g in self.saved()], ["Red games"])
+
+    def test_the_engine_is_told_which_games_to_repaint_in_the_usual_flow_only(self):
+        self.natural_with_groups()
+        calls = self.spy()
+        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.run_make()
+        self.assertEqual(calls[-1][1]["repaint"], {1})
+        self.assertNotIn("platforms", calls[-1][1])
+
+
 class ManualFlowEndToEnd(PickerBase):
     """The manual flow from ticking games to Restore, over a fake Steam folder and the engine's own Apply, Restore and Reset."""
 

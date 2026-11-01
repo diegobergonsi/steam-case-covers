@@ -10,10 +10,10 @@ STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon",
 MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
 
 
-def platform_replace_reason(covers_dir, platforms, tone, treatment, completed):
-    """(title, sentence) for the question of the manual flow, or None when no cover already made would be rebuilt. `platforms`, `tone`, `treatment` and
-    `completed` are what make_covers gets (see sc.covers_in_other_case)."""
-    n = sc.covers_in_other_case(covers_dir, platforms, tone, treatment, completed)
+def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None):
+    """(title, sentence) for the question of the manual flow, or None when no cover already made would be rebuilt. `platforms`, `tone`, `treatment`,
+    `completed`, `tones` and `groups` are what make_covers gets (see sc.covers_in_other_case)."""
+    n = sc.covers_in_other_case(covers_dir, platforms, tone, treatment, completed, tones, groups)
     if not n:
         return None
     if n == 1:
