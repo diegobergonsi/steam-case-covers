@@ -41,7 +41,7 @@ QtObject {
     readonly property int windowWidth: 900
     readonly property int windowHeight: 560
     readonly property int windowMinWidth: 640
-    readonly property int windowMinHeight: 420
+    readonly property int windowMinHeight: 460               // seven steps in the navigation and the two links under them
     readonly property int navWidth: 230
     readonly property int navTop: 72
     readonly property int navRowHeight: 40
@@ -74,6 +74,10 @@ QtObject {
     readonly property int lockWidth: 12                  // the padlock of a locked step: its body, the height of the body and the rise of the shackle
     readonly property int lockHeight: 9
     readonly property int lockShackle: 4
+    readonly property int listRows: 6                    // how many rows of a tick list show at once (the Games step)
+    readonly property int caseWidth: 100                // a console case in the grid of the Case step, and its pixels (read at twice the size)
+    readonly property int caseHeight: 150
+    readonly property int caseColumns: 3
     readonly property int thumbWidth: 60
     readonly property int thumbHeight: 90
     readonly property int thumbPixels: 120               // the picture is read at twice its size, for sharp edges on screens with more pixels

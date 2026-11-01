@@ -2998,11 +2998,27 @@ class BundledAssets(unittest.TestCase):
             listed = re.search(r"ASSETS = \[(.*?)\]", f.read(), re.S).group(1)
         self.assertEqual(sorted(REQUIRED_ASSETS), sorted(re.findall(r'"([\w.]+)"', listed)))
 
-    def test_missing_assets_are_named(self):
-        from qtui.assets import REQUIRED_ASSETS, missing_assets
+    def test_the_console_case_files_match_the_recipe_and_the_folder(self):
+        import re
+        from qtui.assets import REQUIRED_CASES
+        root = os.path.join(os.path.dirname(QML_DIR), "..")
+        with open(os.path.join(root, "steamcase-qt.spec")) as f:
+            text = f.read()
+        self.assertEqual(sorted(REQUIRED_CASES), sorted(re.findall(r'"([\w.]+)"', re.search(r"CASE_FILES = \[(.*?)\]", text, re.S).group(1))))
+        self.assertIn('("assets/cases/" + n, "assets/cases")', text)
+        self.assertEqual(sorted(REQUIRED_CASES), sorted(os.listdir(os.path.join(root, "assets", "cases"))))
+
+    def test_missing_case_files_are_named_with_their_folder(self):
+        from qtui.assets import REQUIRED_ASSETS, REQUIRED_CASES, missing_assets
         empty = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, empty, True)
-        self.assertEqual(missing_assets(empty), sorted(REQUIRED_ASSETS))
+        self.assertEqual(missing_assets(empty), sorted(list(REQUIRED_ASSETS) + ["cases/" + n for n in REQUIRED_CASES]))
+
+    def test_missing_assets_are_named(self):
+        from qtui.assets import REQUIRED_ASSETS, REQUIRED_CASES, missing_assets
+        empty = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, empty, True)
+        self.assertEqual(sorted(n for n in missing_assets(empty) if "/" not in n), sorted(REQUIRED_ASSETS))
         open(os.path.join(empty, "discord.png"), "w").close()
         self.assertNotIn("discord.png", missing_assets(empty))
         self.assertEqual(missing_assets(os.path.join(os.path.dirname(QML_DIR), "..", "assets")), [])
@@ -3796,6 +3812,16 @@ class ReplaceReasons(FakeStore):
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
         self.remake()
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
+
+class ReplaceReasonsAndConsoleCovers(FakeStore):
+    """Review finding 7: a console cover is never rebuilt by the natural flow, so it must not colour the question about the others."""
+    def test_console_covers_do_not_count_as_covers_that_change(self):
+        import steamcase as sc
+        from qtui import reasons
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, completed={1}, treatment="ribbon")
+        sc.make_covers({2: None}, self.covers)
+        got = reasons.replace_reason(self.covers, (0, 100, 100), {2}, "ribbon")
+        self.assertEqual(got[0], "Highlight your 100% games?")
 
 
 @need_qt
@@ -5794,6 +5820,814 @@ class ApplyState(QtCase, FakeStore):
         shiboken6.delete(gone)
         gone._probe()
         gone._work(1, {"restart": False, "account": None, "files": ["x.png"]})
+
+
+@need_qt
+class PickerBase(QtCase, FakeStore):
+    """A shell over a three-game library with a fake store, for the Games and Case steps of the manual flow."""
+    NAMES = {1: "Hades", 2: "forza Horizon 5", 3: "God of War"}
+    family = ()                              # app ids the fake library reports as family games
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        import steamcase as sc
+        from qtui.shell import Shell
+        self.sc = sc
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": self.NAMES[i]} for i in ids if i in self.NAMES}
+        self.library = {i: None for i in self.NAMES}
+        for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: (dict(self.library), set(self.family)))):
+            patcher = mock.patch.object(sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        os.makedirs(os.path.join(self.tmp, "Downloads"))
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+        self.shell.library.installedOnly = True
+        self.picker = self.shell.picker
+
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
+    def load(self):
+        self.picker.load()
+        self.wait_for(lambda: not self.picker.loading)
+
+    def names(self):
+        return [r["name"] for r in self.picker.rows]
+
+
+@need_qt
+class PickerTests(PickerBase):
+    """The Games step of the manual flow: the library's games by name, a search, tick boxes."""
+
+    def test_load_lists_games_sorted_by_name(self):
+        self.load()
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
+        self.assertEqual((self.picker.selectedCount, self.picker.statusKind), (0, "ok"))
+        self.assertTrue(all(r["selected"] is False for r in self.picker.rows))
+
+    def test_search_filters_case_insensitive_and_keeps_the_selection(self):
+        self.load()
+        self.picker.toggle(1)
+        self.picker.query = "FORZA"
+        self.assertEqual(self.names(), ["forza Horizon 5"])
+        self.assertEqual(self.picker.selectedCount, 1)                      # Hades is still ticked, though not shown
+        self.picker.query = ""
+        self.assertEqual([r["selected"] for r in self.picker.rows], [False, False, True])
+        self.assertEqual(self.picker.selection(), [1])
+
+    def test_a_tick_toggles(self):
+        self.load()
+        self.picker.toggle(2)
+        self.picker.toggle(3)
+        self.picker.toggle(2)
+        self.assertEqual(self.picker.selection(), [3])
+
+    def test_select_all_shown_only_ticks_the_filtered_games(self):
+        self.load()
+        self.picker.query = "o"
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War"])
+        self.picker.selectAllShown()
+        self.assertEqual(self.picker.selection(), [2, 3])
+        self.picker.query = ""
+        self.assertEqual(self.picker.selectedCount, 2)
+
+    def test_clear_all_unticks_everything_even_what_is_hidden(self):
+        self.load()
+        self.picker.toggle(1)
+        self.picker.query = "forza"
+        self.picker.selectAllShown()
+        self.picker.clearAll()
+        self.assertEqual((self.picker.selection(), self.picker.selectedCount), ([], 0))
+
+    def test_no_match_says_so(self):
+        self.load()
+        self.picker.query = "zzz"
+        self.assertEqual(self.picker.rows, [])
+        self.assertIn("No games match", self.picker.status)
+
+    def test_an_empty_library_says_what_to_do(self):
+        self.library = {}
+        self.load()
+        self.assertEqual(self.picker.rows, [])
+        self.assertIn("No games found", self.picker.status)
+        self.assertEqual(self.picker.statusKind, "error")
+
+    def test_a_failed_lookup_shows_the_message_and_ticks_nothing(self):
+        from unittest import mock
+        failures = []
+        self.picker.failed.connect(lambda title, text: failures.append((title, text)))
+        with mock.patch.object(self.sc, "list_games", side_effect=self.sc.SteamcaseError("No Steam folder found.")):
+            self.load()
+        self.assertEqual((self.picker.rows, self.picker.selectedCount, self.picker.loading), ([], 0, False))
+        self.assertEqual((self.picker.status, self.picker.statusKind), ("No Steam folder found.", "error"))
+        self.assertEqual(failures, [("Cannot list your games", "No Steam folder found.")])
+
+    def test_offline_with_no_names_is_an_error_but_a_partial_list_is_shown(self):
+        from unittest import mock
+
+        def offline(games, log=None, errors=None):
+            errors.append(OSError("offline"))
+            return []
+
+        def partial(games, log=None, errors=None):
+            errors.append(OSError("offline"))
+            return [(1, "Hades")]
+        with mock.patch.object(self.sc, "list_games", offline):
+            self.load()
+        self.assertEqual((self.picker.rows, self.picker.statusKind), ([], "error"))
+        self.assertIn("Could not reach Steam", self.picker.status)
+        with mock.patch.object(self.sc, "list_games", partial):
+            self.load()
+        self.assertEqual((self.names(), self.picker.statusKind), (["Hades"], "wait"))
+        self.assertIn("could not be loaded", self.picker.status)
+
+    def test_a_changed_library_forgets_the_selection_and_loads_again(self):
+        self.load()
+        self.picker.toggle(1)
+        self.shell.library.installedOnly = False
+        self.assertEqual(self.picker.selectedCount, 0)
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertEqual(len(self.picker.rows), 3)
+
+    def test_ensure_loaded_does_not_load_twice(self):
+        calls = []
+        real = self.sc.list_games
+        self.sc.list_games = lambda games, log=None, errors=None: calls.append(1) or real(games, log, errors)
+        self.addCleanup(setattr, self.sc, "list_games", real)
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertEqual(len(calls), 1)
+
+    def test_ticking_changes_one_row_and_never_resets_the_list(self):
+        """A reset would send the list back to the top each time a game is ticked."""
+        self.load()
+        model = self.picker.model
+        resets, changes = [], []
+        model.modelReset.connect(lambda: resets.append(1))
+        model.dataChanged.connect(lambda top, bottom, roles: changes.append((top.row(), bottom.row())))
+        self.picker.toggle(3)
+        self.assertEqual((resets, changes), ([], [(1, 1)]))                  # God of War is the second row
+        self.assertEqual([model.data(model.index(i, 0), model.Selected) for i in range(model.rowCount())], [False, True, False])
+        self.picker.query = "forza"
+        self.assertEqual(len(resets), 1)                                       # another set of rows: a reset is right
+        self.assertEqual((model.rowCount(), model.data(model.index(0, 0), model.Name)), (1, "forza Horizon 5"))
+
+    def test_a_game_list_that_changes_during_a_load_drops_the_old_answer(self):
+        """Review finding 3: the old list must never be shown (and ticked) for the new game list."""
+        import threading
+        from unittest import mock
+        gate = threading.Event()
+        real = self.sc.list_games
+
+        def slow(games, log=None, errors=None):
+            gate.wait(5)
+            return real(games, log, errors)
+        with mock.patch.object(self.sc, "list_games", slow):
+            self.picker.load()
+            self.assertTrue(self.picker.loading)
+            self.shell.library.installedOnly = False                          # the user chose another game list meanwhile
+            gate.set()
+            self.wait_for(lambda: not self.picker.loading)
+            self.app.processEvents()
+        self.assertEqual((self.picker.rows, self.picker.selectedCount), ([], 0))
+        self.picker.ensureLoaded()
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertEqual(len(self.picker.rows), 3)
+
+    def test_a_failed_load_forgets_what_was_ticked(self):
+        """Review finding 8."""
+        from unittest import mock
+        self.load()
+        self.picker.toggle(1)
+        with mock.patch.object(self.sc, "list_games", side_effect=self.sc.SteamcaseError("no")):
+            self.load()
+        self.assertEqual((self.picker.selectedCount, self.picker.selection()), (0, []))
+
+    def test_700_games_filter_quickly(self):
+        import time
+        self.NAMES = {i: "Game %03d" % i for i in range(700)}
+        self.library = {i: None for i in self.NAMES}
+        self.load()
+        self.assertEqual(len(self.picker.rows), 700)
+        start = time.time()
+        for q in ("9", "Game 1", "zz", "", "Game 07", "7", "", "Game", "0", "", "1", "", "2", "", "3", "", "4", "", "5", ""):
+            self.picker.query = q
+            self.picker.rows
+        self.assertLess(time.time() - start, 1.5)
+
+
+@need_qt
+class CasesTests(PickerBase):
+    """The Case step: which console case the ticked games go in, kept per game until Make."""
+
+    def setUp(self):
+        super().setUp()
+        self.cases = self.shell.cases
+        self.load()
+
+    def test_choices_order_and_labels(self):
+        got = [(c["key"], c["label"]) for c in self.cases.choices]
+        self.assertEqual(got, [("steam", "Steam"), ("ps5", "PlayStation 5"), ("ps4", "PlayStation 4"), ("ps3", "PlayStation 3"),
+                               ("xboxseries", "Xbox Series X|S"), ("xboxone", "Xbox One"), ("xbox360", "Xbox 360"),
+                               ("switch2", "Nintendo Switch 2"), ("switch", "Nintendo Switch")])
+        self.assertEqual(self.cases.selectedKey, "")
+
+    def test_pick_then_assign_moves_the_selection_to_the_assignments(self):
+        self.picker.toggle(1)
+        self.picker.toggle(3)
+        self.assertFalse(self.cases.canAssign)
+        self.cases.pick("ps5")
+        self.assertTrue(self.cases.canAssign)
+        self.cases.assign()
+        self.assertEqual((self.cases.assigned(), self.cases.assignedCount), ({1: "ps5", 3: "ps5"}, 2))
+        self.assertEqual((self.picker.selectedCount, self.cases.selectedKey, self.cases.canAssign), (0, "", False))
+
+    def test_assign_needs_a_case_and_some_games(self):
+        self.picker.toggle(1)
+        self.cases.assign()
+        self.assertEqual(self.cases.assignedCount, 0)                          # no case picked
+        self.cases.pick("ps5")
+        self.picker.clearAll()
+        self.cases.assign()
+        self.assertEqual(self.cases.assignedCount, 0)                          # no game ticked
+
+    def test_an_unknown_case_is_ignored(self):
+        self.cases.pick("ps9")
+        self.assertEqual(self.cases.selectedKey, "")
+
+    def test_assigning_again_overwrites_the_games_case(self):
+        self.picker.toggle(1)
+        self.cases.pick("ps5")
+        self.cases.assign()
+        self.picker.toggle(1)
+        self.cases.pick("xbox360")
+        self.cases.assign()
+        self.assertEqual((self.cases.assigned(), self.cases.assignedCount), ({1: "xbox360"}, 1))
+
+    def test_the_steam_case_is_none(self):
+        self.picker.toggle(2)
+        self.cases.pick("steam")
+        self.cases.assign()
+        self.assertEqual(self.cases.assigned(), {2: None})
+
+    def test_the_summary_counts_games_per_case_in_order(self):
+        for appid, key in ((1, "xbox360"), (2, "ps5"), (3, "ps5")):
+            self.picker.toggle(appid)
+            self.cases.pick(key)
+            self.cases.assign()
+        self.assertEqual(self.cases.summary, [{"label": "PlayStation 5", "count": 2}, {"label": "Xbox 360", "count": 1}])
+
+    def test_the_family_switch_is_off_by_default_and_needs_a_game_list(self):
+        self.assertFalse(self.cases.family)
+        self.assertFalse(self.cases.familyAvailable)                          # installed-only: nothing is known about family games
+        self.shell.library.installedOnly = False
+        self.assertFalse(self.cases.familyAvailable)                          # no game list file either
+        self.shell.library._path = "/some/userdata.json"
+        self.assertTrue(self.cases.familyAvailable)
+        self.cases.family = True
+        self.assertTrue(self.cases.family)
+
+    def test_a_changed_game_list_forgets_the_assignments(self):
+        self.picker.toggle(1)
+        self.cases.pick("ps4")
+        self.cases.assign()
+        self.shell.library.installedOnly = False
+        self.assertEqual(self.cases.assignedCount, 0)
+
+    def test_reset_forgets_everything(self):
+        self.picker.toggle(1)
+        self.cases.pick("ps4")
+        self.cases.assign()
+        self.cases.family = True
+        self.cases.reset()
+        self.assertEqual((self.cases.assignedCount, self.cases.selectedKey, self.cases.family), (0, "", False))
+
+    def test_the_preview_provider_draws_each_case(self):
+        from PySide6.QtCore import QSize
+        from qtui.preview import PreviewProvider
+        provider = PreviewProvider()
+        for c in self.cases.choices:
+            with self.subTest(case=c["key"]):
+                image = provider.requestImage("platform/%s/1" % c["key"], QSize(), QSize(120, 180))
+                self.assertEqual((image.width(), image.height()), (120, 180))
+                self.assertGreater(image.pixelColor(60, 90).alpha(), 0)
+        self.assertNotEqual(provider.requestImage("platform/ps5/1", QSize(), QSize(120, 180)), provider.requestImage("platform/ps4/1", QSize(), QSize(120, 180)))
+        blank = provider.requestImage("platform/ps9/1", QSize(), QSize(120, 180))
+        self.assertEqual(blank.pixelColor(60, 90).alpha(), 0)                  # not one of ours: a transparent picture, no crash
+
+
+class ManualSteps(unittest.TestCase):
+    """Which steps of the manual flow are open, done, active or locked."""
+    def states(self, **facts):
+        return sp.manual_step_states(**dict(dict(ready=False, picked=False, assigned=False, hundred_done=False, covers_made=False, applied=False), **facts))
+
+    def test_the_steps_and_their_labels(self):
+        self.assertEqual(sp.STEPS_MANUAL, ("home", "game_list", "pick", "case", "hundred", "make", "add"))
+        self.assertEqual([sp.labels("manual")[k] for k in sp.STEPS_MANUAL],
+                         ["Home", "1  Game list", "2  Games", "3  Case", "4  100% games", "5  Make", "6  Add to Steam"])
+        self.assertEqual(sp.labels("natural"), sp.LABELS)
+
+    def test_a_fresh_start_opens_only_the_game_list(self):
+        self.assertEqual(self.states(), {"home": "open", "game_list": "active", "pick": "locked", "case": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
+
+    def test_each_step_unlocks_the_next(self):
+        self.assertEqual(self.states(ready=True)["pick"], "active")
+        got = self.states(ready=True, picked=True)
+        self.assertEqual((got["pick"], got["case"], got["hundred"]), ("done", "active", "locked"))
+        got = self.states(ready=True, picked=True, assigned=True)
+        self.assertEqual((got["case"], got["hundred"], got["make"]), ("done", "active", "locked"))
+        got = self.states(ready=True, picked=True, assigned=True, hundred_done=True)
+        self.assertEqual((got["hundred"], got["make"]), ("done", "active"))
+
+    def test_games_already_given_a_case_count_as_picked(self):
+        """After a case is given, the ticks are cleared: the Games step must not fall back to not done."""
+        got = self.states(ready=True, assigned=True)
+        self.assertEqual((got["pick"], got["case"]), ("done", "done"))
+
+    def test_a_later_fact_never_unlocks_a_step_behind_an_undone_one(self):
+        got = self.states(covers_made=True, applied=True)
+        self.assertEqual([got[k] for k in sp.STEPS_MANUAL[2:]], ["locked"] * 5)
+
+
+@need_qt
+class FlowTests(PickerBase):
+    """The shell with its two flows."""
+    def keys(self):
+        return [s["key"] for s in self.shell.steps]
+
+    def test_the_natural_flow_is_the_default(self):
+        self.assertEqual((self.shell.flow, self.keys()), ("natural", list(sp.STEPS)))
+
+    def test_start_manual_changes_the_steps_and_start_natural_brings_them_back(self):
+        self.shell.startManual()
+        self.assertEqual((self.shell.flow, self.keys()), ("manual", list(sp.STEPS_MANUAL)))
+        self.assertEqual([s["label"] for s in self.shell.steps], [sp.labels("manual")[k] for k in sp.STEPS_MANUAL])
+        self.shell.startNatural()
+        self.assertEqual((self.shell.flow, self.keys()), ("natural", list(sp.STEPS)))
+
+    def test_the_manual_flow_opens_at_the_first_step_not_done(self):
+        self.shell.startManual()                                              # installed-only is on: the game list is ready
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")
+
+    def test_the_game_list_serves_both_flows(self):
+        self.assertEqual(self.shell.steps[1]["state"], "done")
+        self.shell.startManual()
+        self.assertEqual(self.shell.steps[1]["state"], "done")
+
+    def test_ticking_and_assigning_move_the_steps_along(self):
+        self.shell.startManual()
+        self.load()
+        self.picker.toggle(1)
+        state = lambda key: next(s["state"] for s in self.shell.steps if s["key"] == key)
+        self.assertEqual((state("pick"), state("case")), ("done", "active"))
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.assertEqual((state("pick"), state("case"), state("hundred")), ("done", "done", "active"))
+
+    def test_go_key_opens_a_step_by_name_and_ignores_locked_or_unknown_ones(self):
+        self.shell.startManual()
+        self.shell.goKey("case")
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")            # case is locked until games are ticked
+        self.shell.goKey("nonsense")
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")
+        self.load()
+        self.picker.toggle(1)
+        self.shell.goKey("case")
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "case")
+
+    def test_giving_a_case_does_not_move_you_off_the_case_step(self):
+        self.shell.startManual()
+        self.load()
+        self.picker.toggle(1)
+        self.shell.goKey("case")
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "case")
+
+    def test_the_flow_cannot_change_while_covers_are_made(self):
+        self.shell._make._running = True
+        self.shell.startManual()
+        self.assertEqual(self.shell.flow, "natural")
+        self.shell._make._running = False
+        self.shell.startManual()
+        self.assertEqual(self.shell.flow, "manual")
+        self.shell._apply._busy = True
+        self.shell.startNatural()
+        self.assertEqual(self.shell.flow, "manual")
+        self.shell._apply._busy = False
+
+
+@need_qt
+class ManualWindow(PickerBase):
+    """The manual flow in the real window: Home, the Games step and the Case step."""
+    def setUp(self):
+        super().setUp()
+        from qtui.app import close_engine, create_engine
+        self.shell.reduceEffects = True
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.app.processEvents()
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+    def has(self, name):
+        from qtui.app import find_item
+        return find_item(self.root, name) is not None
+
+    def click(self, name):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        it = self.item(name)
+        scroller = self.item("screen_scroller") if self.has("screen_scroller") else None
+        if scroller is not None and it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y() >= 0 and not name.startswith(("games_next", "case_next", "home_main")):
+            y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+            scroller.setProperty("contentY", max(0, y - 40))
+            self.app.processEvents()
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint())
+        self.app.processEvents()
+
+    def step(self):
+        return self.shell.steps[self.shell.current]["key"]
+
+    def test_home_offers_the_manual_flow(self):
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertTrue(self.has("home_manual"))
+        self.click("home_manual")
+        self.assertEqual((self.shell.flow, len(self.shell.steps), self.step()), ("manual", 7, "pick"))
+        self.assertTrue(self.has("games_search"))
+
+    def test_home_offers_the_way_back(self):
+        self.shell.startManual()
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertFalse(self.item("home_manual").property("visible"))
+        self.click("home_natural")
+        self.assertEqual((self.shell.flow, len(self.shell.steps)), ("natural", 6))
+
+    def test_the_games_screen_lists_and_ticks_games(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.assertEqual(self.item("games_count").property("text"), "0 games selected")
+        self.assertFalse(self.item("games_next").property("enabled"))
+        self.click("games_row_1")
+        self.assertEqual(self.picker.selection(), [1])
+        self.assertEqual(self.item("games_count").property("text"), "1 game selected")
+        self.assertTrue(self.item("games_next").property("enabled"))
+        self.click("games_clear")
+        self.assertEqual(self.picker.selectedCount, 0)
+
+    def test_the_games_screen_search_filters_and_says_when_nothing_matches(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.item("games_search").setProperty("text", "hades")
+        self.app.processEvents()
+        self.assertEqual(self.names(), ["Hades"])
+        self.item("games_search").setProperty("text", "zzz")
+        self.app.processEvents()
+        self.assertIn("No games match", self.item("games_status").property("text"))
+
+    def test_the_case_screen_gives_the_ticked_games_a_case(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertEqual(self.step(), "case")
+        self.assertFalse(self.item("case_assign").property("enabled"))
+        self.assertFalse(self.item("case_next").property("enabled"))
+        self.click("case_ps5")
+        self.assertEqual(self.shell.cases.selectedKey, "ps5")
+        self.assertTrue(self.item("case_assign").property("enabled"))
+        self.click("case_assign")
+        self.assertEqual(self.shell.cases.assigned(), {1: "ps5"})
+        self.assertEqual(self.item("case_summary_0").property("text"), "PlayStation 5: 1 game")
+        self.assertTrue(self.item("case_next").property("enabled"))
+        self.click("case_more")
+        self.assertEqual(self.step(), "pick")
+
+    def test_the_family_switch_is_greyed_without_a_game_list_file(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertFalse(self.item("case_family").property("enabled"))
+        self.assertTrue(self.item("case_family_note").property("visible"))
+
+    def give_a_case(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.picker.toggle(1)
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+
+    def test_the_100_step_offers_highlight_or_plain_in_the_manual_flow(self):
+        self.give_a_case()
+        self.shell.goKey("hundred")
+        self.app.processEvents()
+        self.assertEqual([c["key"] for c in self.item("hundred_style").property("model").toVariant()] if hasattr(self.item("hundred_style").property("model"), "toVariant")
+                         else [c["key"] for c in self.item("hundred_style").property("model")], ["ribbon", "none"])
+        self.shell.hundred._style = "gold-case"                               # chosen earlier in the other flow
+        self.shell.hundred.styleChanged.emit()
+        self.app.processEvents()
+        self.assertEqual(self.item("hundred_style").property("current"), "ribbon")
+
+    def test_the_make_screen_shows_the_case_that_was_picked(self):
+        self.give_a_case()
+        self.shell.setFact("hundred_done", True)
+        self.shell.goKey("make")
+        self.app.processEvents()
+        self.assertEqual(self.shell.cases.previewKey, "ps5")
+        self.assertIn("platform/ps5", self.item("make_preview").property("source").toString() if hasattr(self.item("make_preview").property("source"), "toString") else str(self.item("make_preview").property("source")))
+
+    def test_the_games_list_works_from_the_keyboard(self):
+        """Review finding 4: one stop for the whole list, arrows move, Space ticks."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        lst = self.item("games_list")
+        self.assertTrue(lst.property("activeFocusOnTab"))
+        lst.forceActiveFocus()
+        self.app.processEvents()
+        QTest.keyClick(self.root, Qt.Key_Space)
+        QTest.keyClick(self.root, Qt.Key_Down)
+        QTest.keyClick(self.root, Qt.Key_Space)
+        self.app.processEvents()
+        self.assertEqual(self.picker.selection(), [2, 3])                      # the first two rows by name: forza Horizon 5, God of War
+        QTest.keyClick(self.root, Qt.Key_Space)
+        self.assertEqual(self.picker.selection(), [2])
+
+    def test_the_games_subtitle_does_not_promise_a_case_for_the_others(self):
+        """Review finding 10: games you do not tick are left alone, not remade in the Steam case."""
+        with open(os.path.join(QML_DIR, "GamesScreen.qml")) as f:
+            text = f.read()
+        self.assertIn("left alone", text)
+        self.assertNotIn("keep the Steam case", text)
+
+    def test_the_navigation_fits_seven_steps_at_the_smallest_window(self):
+        from PySide6.QtCore import QPointF
+        self.shell.startManual()
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+        last = self.item("nav_add")
+        bottom = last.mapToScene(QPointF(0, last.height())).y()
+        self.assertLessEqual(bottom, self.item("footer_discord").mapToScene(QPointF(0, 0)).y())
+
+    def test_frozen_while_covers_are_made(self):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.shell._make._set_state(running=True)
+        self.app.processEvents()
+        self.assertFalse(self.item("games_search").property("enabled"))
+        self.shell._make._set_state(running=False)
+
+
+@need_qt
+class ManualMake(PickerBase):
+    """Make in the manual flow: only the ticked games, each in its case, and the 100% step decides the marks."""
+    RESULT = {"ok": 2, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 2, "not_games": 0, "unlisted": 0, "skipped": 0}
+
+    def setUp(self):
+        super().setUp()
+        self.shell.startManual()
+        self.load()
+
+    def give(self, key, *appids):
+        for appid in appids:
+            self.picker.toggle(appid)
+        self.shell.cases.pick(key)
+        self.shell.cases.assign()
+
+    def run_make(self, seconds=8):
+        self.shell.make.start()
+        self.wait_for(lambda: not self.shell.make.running, seconds)
+
+    def spy(self):
+        """Replace the engine's make_covers with one that records how it was called."""
+        from unittest import mock
+        calls = []
+        patcher = mock.patch.object(self.sc, "make_covers", lambda games, out, **kw: calls.append((dict(games), kw)) or dict(self.RESULT))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return calls
+
+    def test_the_engine_gets_the_assignments_and_none_of_the_steps_that_are_not_in_this_flow(self):
+        calls = self.spy()
+        self.give("ps5", 1, 3)
+        self.run_make()
+        (games, kw), = calls
+        self.assertEqual((sorted(games), kw["platforms"], kw["theme"], kw["custom_art"], kw["skip_auto_art"]), ([1, 2, 3], {1: "ps5", 3: "ps5"}, None, {}, False))
+        self.assertEqual((kw["treatment"], kw["completed"], kw["family"]), (None, None, set()))
+
+    def test_only_the_ticked_games_get_covers_and_only_those_are_offered_to_apply(self):
+        self.give("ps5", 1, 3)
+        self.run_make()
+        files = self.shell.make.files()
+        self.assertEqual(sorted(os.path.basename(f) for f in files), ["God_of_War_3.png", "Hades_1.png"])
+        self.assertEqual({self.sc.cover_platform(f) for f in files}, {"ps5"})
+        self.assertEqual(len(os.listdir(self.covers)), 2)
+        self.assertIn("console case", self.shell.make.status)
+
+    def test_family_games_get_their_corner_only_when_the_switch_is_on(self):
+        self.family = {1}
+        calls = self.spy()
+        self.give("ps5", 1)
+        self.run_make()
+        self.shell.cases.family = True
+        self.run_make()
+        self.assertEqual([kw["family"] for _, kw in calls], [set(), {1}])
+
+    def test_the_100_step_decides_the_marks(self):
+        calls = self.spy()
+        hundred = self.shell.hundred
+        self.give("ps4", 1)
+        hundred._completed = {1}                                              # a games page was loaded
+        for style, marks, want in (("ribbon", "full", "ribbon"), ("gold-case", "full", "ribbon"), ("gold-border", "rosette", "rosette"), ("ribbon", "rosette", "rosette")):
+            hundred._style, hundred._marks = style, marks
+            self.run_make()
+            self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (want, {1}), (style, marks))
+        hundred._style = "none"
+        self.run_make()
+        self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, set()))      # "do not highlight": marks come off
+
+    def test_no_games_page_leaves_the_marks_of_the_covers_alone(self):
+        calls = self.spy()
+        self.give("ps4", 1)
+        self.run_make()
+        self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, None))
+
+    def test_the_steam_case_choice_is_made_in_the_look_colour_without_a_theme(self):
+        calls = self.spy()
+        self.shell.look.hue = 134
+        self.give("steam", 2)
+        self.run_make()
+        kw = calls[-1][1]
+        self.assertEqual((kw["platforms"], kw["hue"], kw["theme"]), ({2: None}, 134, None))
+
+    def test_a_case_that_changes_covers_already_made_asks_first(self):
+        self.give("ps5", 1)
+        self.run_make()
+        self.assertFalse(self.shell.make.asking)
+        self.give("ps4", 1)
+        asked = []
+        self.shell.make.confirmNeeded.connect(lambda title, text: asked.append((title, text)))
+        self.shell.make.start()
+        self.assertTrue(self.shell.make.asking)
+        self.assertEqual(asked, [("Replace the covers you made?", "This replaces 1 cover you already made with a new one in the case you picked.")])
+        self.shell.make.confirm()
+        self.wait_for(lambda: not self.shell.make.running)
+        self.assertEqual(self.sc.cover_platform(self.shell.make.files()[0]), "ps4")
+
+    def test_new_games_and_unchanged_cases_ask_nothing(self):
+        self.give("ps5", 1)
+        self.run_make()
+        self.give("ps5", 1, 2)
+        self.shell.make.start()
+        self.assertFalse(self.shell.make.asking)
+        self.wait_for(lambda: not self.shell.make.running)
+
+    def test_the_question_counts_in_words(self):
+        from qtui import reasons
+        self.give("ps5", 1, 2)
+        self.run_make()
+        self.give("xbox360", 1, 2)
+        self.assertEqual(reasons.platform_replace_reason(self.covers, self.shell.cases.assigned(), (0, 100, 100), None, None),
+                         ("Replace the covers you made?", "This replaces 2 covers you already made with new ones in the cases you picked."))
+        self.assertIsNone(reasons.platform_replace_reason(self.covers, {3: "ps5"}, (0, 100, 100), None, None))
+
+    def test_make_does_nothing_without_assignments(self):
+        calls = self.spy()
+        self.shell.make.start()
+        self.assertEqual((calls, self.shell.make.running), ([], False))
+
+    def test_the_summary_names_the_games_the_cases_and_the_highlight(self):
+        self.give("ps5", 1, 3)
+        self.give("xbox360", 2)
+        rows = {c["key"]: c for c in self.shell.make.choices}
+        self.assertEqual(list(rows), ["games", "cases", "hundred"])
+        self.assertEqual((rows["games"]["value"], rows["cases"]["value"], rows["hundred"]["value"]), ("3 games", "PlayStation 5, Xbox 360", "Skipped"))
+        keys = [s["key"] for s in self.shell.steps]
+        self.assertEqual((rows["games"]["step"], rows["cases"]["step"], rows["hundred"]["step"]), (keys.index("pick"), keys.index("case"), keys.index("hundred")))
+
+    def test_the_result_sentence_mentions_console_cases(self):
+        from qtui.make import result_text
+        text, kind = result_text(dict(self.RESULT), [])
+        self.assertIn("2 of them are in a console case.", text)
+        self.assertNotIn("console", result_text(dict(self.RESULT, platforms=0), [])[0])
+
+    def test_the_100_step_offers_two_choices_in_this_flow(self):
+        self.assertEqual([c["key"] for c in self.shell.hundred.manualStyles], ["ribbon", "none"])
+        self.assertEqual([c["key"] for c in self.shell.hundred.styles], ["gold-case", "gold-border", "ribbon", "none"])
+
+
+@need_qt
+class ManualFlowEndToEnd(PickerBase):
+    """The manual flow from ticking games to Restore, over a fake Steam folder and the engine's own Apply, Restore and Reset."""
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        self.grid = os.path.join(self.tmp, "userdata", "111", "config", "grid")
+        os.makedirs(self.grid)
+        os.makedirs(os.path.join(self.tmp, "config"))
+        for name, value in (("steam_running", lambda: False), ("start_steam", lambda steam: None), ("close_steam", lambda steam, timeout=60: True)):
+            patcher = mock.patch.object(self.sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.shell.startManual()
+        self.load()
+        self.ap, self.make = self.shell.apply, self.shell.make
+
+    def give(self, key, *appids):
+        for appid in appids:
+            self.picker.toggle(appid)
+        self.shell.cases.pick(key)
+        self.shell.cases.assign()
+
+    def make_covers(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running, 10)
+        self.assertTrue(self.make.done, self.make.status)
+
+    def do(self, start):
+        start()
+        self.assertTrue(self.ap._asking, self.ap.status)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.ap.statusKind, "ok", self.ap.status)
+
+    def grid_files(self):
+        return sorted(n for n in os.listdir(self.grid) if n.endswith("p.png"))
+
+    def test_pick_case_make_apply_restore(self):
+        self.give("ps5", 1, 3)
+        self.make_covers()
+        self.assertEqual(len(self.make.files()), 2)
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.do(self.ap.apply)
+        self.assertEqual(self.grid_files(), ["1p.png", "3p.png"])                       # game 2 was never ticked: nothing for it
+        for n in self.grid_files():
+            self.assertEqual(self.sc.cover_platform(os.path.join(self.grid, n)), "ps5")
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore)
+        self.do(self.ap.restore)
+        self.assertEqual(self.grid_files(), [])
+
+    def test_reset_removes_console_covers_and_only_ours(self):
+        self.give("ps4", 1)
+        self.make_covers()
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.do(self.ap.apply)
+        with open(os.path.join(self.grid, "2p.png"), "wb") as f:
+            f.write(b"someone else's art")
+        self.assertEqual(self.sc.find_our_covers(self.tmp), ["1p.png"])
+        self.sc.reset_to_default(self.tmp, None, ["1p.png"], False)
+        self.assertEqual(self.grid_files(), ["2p.png"])
+
+    def test_several_rounds_before_make_give_each_game_its_own_case(self):
+        self.give("ps5", 1)
+        self.give("xbox360", 2)
+        self.give("steam", 3)
+        self.make_covers()
+        got = {os.path.basename(f).rsplit("_", 1)[1]: self.sc.cover_platform(f) for f in self.make.files()}
+        self.assertEqual(got, {"1.png": "ps5", "2.png": "xbox360", "3.png": None})
+        self.assertFalse(self.sc.mixed_cover_colours(self.covers) or self.sc.mixed_cover_themes(self.covers))
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.do(self.ap.apply)
+        self.assertEqual(self.sc.find_our_covers(self.tmp), ["1p.png", "2p.png", "3p.png"])
+
+    def test_the_natural_flow_afterwards_leaves_console_covers_alone(self):
+        self.give("ps5", 1)
+        self.make_covers()
+        before = open(self.make.files()[0], "rb").read()
+        self.shell.startNatural()
+        self.make.start()
+        self.wait_for(lambda: not self.make.running, 10)
+        self.assertFalse(self.make.asking, self.make.questionText)
+        self.assertEqual(open(os.path.join(self.covers, "Hades_1.png"), "rb").read(), before)
+        self.assertEqual(self.sc.cover_platform(os.path.join(self.covers, "Hades_1.png")), "ps5")
+        self.assertTrue(os.path.exists(os.path.join(self.covers, "God_of_War_3.png")))        # and the other games got the Steam case
 
 
 if __name__ == "__main__":

@@ -6,40 +6,90 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import steamcase as sc
 from qtui import settings, steps, system
 from qtui.apply import Apply
+from qtui.cases import Cases
 from qtui.hundred import Hundred
 from qtui.library import Library
 from qtui.look import Look
 from qtui.make import Make
+from qtui.picker import Picker
 from qtui.updates import Updates
 
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
+MANUAL_FACTS = ("picked", "assigned")           # only the manual flow reads these
 
 
 class Shell(QObject):
     stepsChanged = Signal()
     currentChanged = Signal()
     reduceEffectsChanged = Signal()
+    flowChanged = Signal()
 
     def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
         super().__init__(parent)
         self._path = settings_path
         self._values = settings.load_settings(settings_path)
-        self._facts = {k: False for k in FACTS}
+        self._facts = {k: False for k in FACTS + MANUAL_FACTS}
+        self._flow = "natural"                  # or "manual": ticking games and giving them a console case
         self._current = 0
         self._steps = self._build()
         self._had_covers = bool(sc.find_covers(covers_dir or sc.default_covers_dir()))       # covers made in an earlier session
         self._library = Library(self, downloads or system.downloads_dir(), self)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
+        self._picker = Picker(self, self)
+        self._cases = Cases(self, self)
         covers = covers_dir or sc.default_covers_dir()
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
         self._updates = Updates(self)
+        self._picker.selectionChanged.connect(lambda: self.setFact("picked", self._picker.selectedCount > 0))
+        self._cases.assignmentsChanged.connect(lambda: self.setFact("assigned", self._cases.assignedCount > 0))
 
     def _build(self):
-        states = steps.step_states(**self._facts)
-        return [{"key": k, "label": steps.LABELS[k], "hint": steps.hint(k, states[k]), "state": states[k]} for k in steps.STEPS]
+        manual = self._flow == "manual"
+        if manual:
+            states = steps.manual_step_states(**{k: self._facts[k] for k in ("ready", "picked", "assigned", "hundred_done", "covers_made", "applied")})
+        else:
+            states = steps.step_states(**{k: self._facts[k] for k in FACTS})
+        names = steps.labels(self._flow)
+        return [{"key": k, "label": names[k], "hint": steps.hint(k, states[k]), "state": states[k]} for k in (steps.STEPS_MANUAL if manual else steps.STEPS)]
+
+    @Property(str, notify=flowChanged)
+    def flow(self):
+        return self._flow
+
+    def _switch(self, flow):
+        """Change the way through the window. Not while covers are made or added to Steam, and nothing happens if it is the flow already."""
+        if flow == self._flow or self._make.running or self._apply.busy:
+            return
+        self._flow = flow
+        self._steps = self._build()
+        self.flowChanged.emit()
+        self.stepsChanged.emit()
+        self._current = self.resume
+        self.currentChanged.emit()
+
+    @Slot()
+    def startManual(self):
+        self._switch("manual")
+
+    @Slot()
+    def startNatural(self):
+        self._switch("natural")
+
+    @Slot(str, result=int)
+    def stepIndex(self, key):
+        """Where a step is in the steps of this flow, or -1."""
+        return next((i for i, step in enumerate(self._steps) if step["key"] == key), -1)
+
+    @Slot(str)
+    def goKey(self, key):
+        """Show a step by its name; a locked or unknown one is ignored."""
+        for i, step in enumerate(self._steps):
+            if step["key"] == key:
+                self.go(i)
+                return
 
     def _save(self):
         settings.save_settings(self._values, self._path)
@@ -65,6 +115,14 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def hundred(self):
         return self._hundred
+
+    @Property(QObject, constant=True)
+    def picker(self):
+        return self._picker
+
+    @Property(QObject, constant=True)
+    def cases(self):
+        return self._cases
 
     @Property(QObject, constant=True)
     def make(self):

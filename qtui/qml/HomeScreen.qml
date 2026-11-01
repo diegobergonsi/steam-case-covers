@@ -80,6 +80,22 @@ ScreenFrame {
         }
     }
     Section {
+        objectName: "home_section_manual"
+        heading: "Pick games by hand"
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.bodySize
+            text: shell.flow === "manual" ? "You are choosing games and cases by hand. Go back to the step by step way to give every game the same case."
+                                          : "Choose games and put them in PlayStation, Xbox or Nintendo cases."
+        }
+        ButtonRow {
+            QuietButton { objectName: "home_manual"; visible: shell.flow !== "manual"; text: "Pick games by hand"; onClicked: shell.startManual() }
+            QuietButton { objectName: "home_natural"; visible: shell.flow === "manual"; text: "Back to step by step"; onClicked: shell.startNatural() }
+        }
+    }
+    Section {
         objectName: "home_section_undo"
         heading: "Undo"
         StatusLine {

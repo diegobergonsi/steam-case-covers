@@ -17,7 +17,7 @@ The functions below are the engine. The CLI at the bottom and the window (qtui/)
 import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
-    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
     from PIL.PngImagePlugin import PngInfo
 except ImportError:
     Image = ImageChops = ImageDraw = ImageFilter = PngInfo = None
@@ -47,7 +47,12 @@ DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatmen
 THEMES = ("halloween",)                     # case themes: decorations drawn on the case, whatever its colour; the classic case has none
 ART_CHUNK = "steamcase-art"                 # PNG note naming the source file of a cover built from the user's own art; covers from Steam's portrait carry none
 THEME_CHUNK = "steamcase-theme"             # PNG note naming a cover's theme; classic covers carry none
-KEEP = "keep"                               # in place of a theme: each existing cover keeps the theme it has
+PLATFORMS = ("ps3", "ps4", "ps5", "xbox360", "xboxone", "xboxseries", "switch", "switch2")      # the console cases (assets/cases); the Steam case is the one without a platform
+PLATFORM_LABELS = {"ps3": "PlayStation 3", "ps4": "PlayStation 4", "ps5": "PlayStation 5", "xbox360": "Xbox 360", "xboxone": "Xbox One",
+                   "xboxseries": "Xbox Series X|S", "switch": "Nintendo Switch", "switch2": "Nintendo Switch 2"}
+PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
+CASES_DIR = os.path.join(HERE, "assets", "cases")    # one <platform>.png per case (transparent art window) and cases.json (the window of each)
+KEEP = "keep"                             # in place of a theme: each existing cover keeps the theme it has
 HUE_SWATCHES = (0, 42, 84, 134, 176, 276)           # ready-made case colours, as degrees of hue turned from the original blue (violet, magenta, red, orange, green)
 NEUTRAL_SWATCHES = (("Black", 0, 14), ("Graphite", 0, 34), ("Silver", 0, 78))    # ready-made greys: (name, colourfulness, brightness), hue does not matter
 FAMILY_COLOR = (46, 125, 50)                # #2e7d32: the white icon on it has a contrast of 5.1:1
@@ -676,9 +681,9 @@ def portrait_candidates(appid, item):
     return urls, auto
 
 
-def list_games(games, log=None):
-    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers)."""
-    info = store_items(sorted(games), log)
+def list_games(games, log=None, errors=None):
+    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers). `errors`: a list that gets the exception of every store lookup that failed."""
+    info = store_items(sorted(games), log, errors=errors)
     out = []
     for appid in sorted(games):
         it = info.get(appid, {})
@@ -725,11 +730,131 @@ def recolor_frame(frame, hue, sat=100, val=100):
     return Image.merge("RGBA", (*Image.merge("HSV", (h, new_s, v)).convert("RGB").split(), a))
 
 
-def load_frame(hue=0, family=False, *, sat=100, val=100):
-    """The case frame in the wanted colour and tone; with family=True the green corner of the Steam Family library is laid over it (never recoloured)."""
+def family_corner(legacy=False):
+    """The green corner of the Steam Family library, 600 x 900, at the top right (the logo of a case is on the left). `legacy` is where earlier versions put it, at the top left."""
+    with Image.open(FAMILY_CORNER) as im:
+        corner = im.convert("RGBA")
+    return corner if legacy else ImageOps.mirror(corner)
+
+
+def load_frame(hue=0, family=False, *, sat=100, val=100, legacy_corner=False):
+    """The case frame in the wanted colour and tone; with family=True the green corner of the Steam Family library is laid over it (never recoloured).
+    `legacy_corner` puts it at the top left, as covers made by earlier versions have it (only to recognise those)."""
     frame = recolor_frame(Image.open(FRAME).convert("RGBA"), hue, sat, val)
     if family:
-        frame = Image.alpha_composite(frame, Image.open(FAMILY_CORNER).convert("RGBA"))
+        frame = Image.alpha_composite(frame, family_corner(legacy_corner))
+    return frame
+
+
+MARKS_GAP = 14                              # the 100% rosette is this far from the left edge of the art and from the banner (or tab) above it
+RIBBON_WIDTH = 482                          # the "100% Complete" ribbon on a console case, tails included, centred in the art
+RIBBON_GAP = 28                             # and this far above the bottom of the art
+MIN_WINDOW = 400                            # the art window of a console case is at least this wide and tall
+
+
+def _check_cases(data):
+    """SteamcaseError (one sentence naming the platform and the problem) unless `data`, the parsed cases.json, describes every case sensibly:
+    "window" four whole numbers inside the 600 x 900 picture and at least MIN_WINDOW each way; "overlay", if given, four whole numbers inside it."""
+    def fail(where, what):
+        raise SteamcaseError("cases.json: %s: %s" % (where, what))
+
+    def whole(value):
+        return isinstance(value, int) and not isinstance(value, bool)
+
+    def numbers(where, name, value, count):
+        if not (isinstance(value, list) and len(value) == count and all(whole(v) for v in value)):
+            fail(where, "%s must be %d whole numbers" % (name, count))
+        return value
+    if not isinstance(data, dict):
+        fail("the file", "must hold one entry per case")
+    for platform in PLATFORMS:
+        info = data.get(platform)
+        if not isinstance(info, dict):
+            fail(platform, "this case is missing")
+        if "window" not in info:
+            fail(platform, "window is missing")
+        x0, y0, x1, y1 = numbers(platform, "window", info["window"], 4)
+        if not (0 <= x0 < x1 <= SIZE[0] and 0 <= y0 < y1 <= SIZE[1]):
+            fail(platform, "window must lie inside the %d x %d picture, left before right and top before bottom" % SIZE)
+        if x1 - x0 < MIN_WINDOW or y1 - y0 < MIN_WINDOW:
+            fail(platform, "window must be at least %d x %d" % (MIN_WINDOW, MIN_WINDOW))
+        if "overlay" in info:
+            ox0, oy0, ox1, oy1 = numbers(platform, "overlay", info["overlay"], 4)
+            if not (0 <= ox0 < ox1 <= SIZE[0] and 0 <= oy0 < oy1 <= SIZE[1]):
+                fail(platform, "overlay must lie inside the picture, left before right and top before bottom")
+
+
+@functools.lru_cache(maxsize=1)
+def _case_windows():
+    try:
+        with open(os.path.join(CASES_DIR, "cases.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SteamcaseError("cases.json: cannot be read (%s)" % e)
+    _check_cases(data)
+    return data
+
+
+def platform_window(platform):
+    """The art window (x0, y0, x1, y1) inside the frame of a console case. ValueError for a platform that is not one of PLATFORMS."""
+    if platform not in PLATFORMS:
+        raise ValueError("unknown platform: %r" % (platform,))
+    return tuple(_case_windows()[platform]["window"])
+
+
+def platform_overlay(platform):
+    """The part (x0, y0, x1, y1) of the art window that the frame itself covers (the Switch's red tab), or None."""
+    platform_window(platform)
+    box = _case_windows()[platform].get("overlay")
+    return tuple(box) if box else None
+
+
+@functools.lru_cache(maxsize=1)
+def _rosette_box():
+    """The box (x0, y0, x1, y1) of the rosette in the completion overlay."""
+    return _rosette_overlay().getchannel("A").getbbox()
+
+
+def _rosette_move(window, overlay):
+    """(dy, dx): how far the rosette moves from where the overlay has it (top right) to the left of `window`, MARKS_GAP from its edge and from the banner or
+    `overlay` (the tab the frame covers inside the window) above it."""
+    x0, y0 = window[:2]
+    return (max(y0, overlay[3] if overlay else y0) + MARKS_GAP - _rosette_box()[1], x0 + MARKS_GAP - _rosette_box()[0])
+
+
+def platform_marks_dy(platform):
+    """How far down the 100% rosette is moved on this console case: under the banner that holds the logo, or the tab."""
+    return _rosette_move(platform_window(platform), platform_overlay(platform))[0]
+
+
+def platform_marks_dx(platform):
+    """How far left the 100% rosette is moved on this console case: to the left of the art, where the logo is not."""
+    return _rosette_move(platform_window(platform), platform_overlay(platform))[1]
+
+
+def platform_ribbon(platform):
+    """(width, centre x, bottom y) of the ribbon on this console case: RIBBON_WIDTH wide, centred in the art, RIBBON_GAP above its bottom."""
+    x0, _, x1, y1 = platform_window(platform)
+    return RIBBON_WIDTH, (x0 + x1) // 2, y1 - RIBBON_GAP
+
+
+def steam_marks():
+    """(dy, dx, ribbon) for finish_treatment on the Steam case: the rosette and the ribbon in the same places and size as on a console case."""
+    return _rosette_move(WINDOW, None) + ((RIBBON_WIDTH, (WINDOW[0] + WINDOW[2]) // 2, WINDOW[3] - RIBBON_GAP),)
+
+
+def load_platform_frame(platform, family=False):
+    """The frame of a console case (600 x 900, transparent where the art shows). With family=True the green corner of the Steam Family library is laid
+    over it at the top right, where it covers only the end of the banner and never the logo, and kept inside the case's own outline. ValueError for a platform that
+    is not one of PLATFORMS."""
+    x0, y0, x1, y1 = platform_window(platform)
+    frame = Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
+    if family:
+        outline = frame.getchannel("A").copy()
+        outline.paste(255, (x0, y0, x1, y1))                      # the case's silhouette: its frame and the art window
+        placed = family_corner()
+        placed.putalpha(ImageChops.multiply(placed.getchannel("A"), outline))
+        frame = Image.alpha_composite(frame, placed)
     return frame
 
 
@@ -748,9 +873,10 @@ HUE_CHUNK = "steamcase-hue"
 TONE_CHUNK = "steamcase-tone"                 # "<sat> <val>"; covers without it are in full tone
 
 
-def _compose(art, frame):
-    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this."""
-    x0, y0, x1, y1 = WINDOW
+def _compose(art, frame, window=WINDOW):
+    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this.
+    `window` is the frame's art window; the Steam case's unless the frame is a console case's (platform_window)."""
+    x0, y0, x1, y1 = window
     ww, wh = x1 - x0, y1 - y0
     s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
     art = art.resize((max(ww, round(art.width * s)), max(wh, round(art.height * s))), Image.LANCZOS)
@@ -761,13 +887,29 @@ def _compose(art, frame):
     return Image.alpha_composite(canvas, frame)
 
 
-def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, theme=None):
+def _check_platform(platform, treatment, theme):
+    """ValueError unless `platform` is one of PLATFORMS and goes with this `treatment` (none, "ribbon" or "rosette": no gold) and `theme` (none)."""
+    if platform not in PLATFORMS:
+        raise ValueError("unknown platform: %r" % (platform,))
+    if theme is not None:
+        raise ValueError("a console case has no theme: %r" % (theme,))
+    if treatment not in (None, "ribbon", "rosette"):
+        raise ValueError("a console case only goes with the marks (ribbon, rosette), not %r" % (treatment,))
+
+
+def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, theme=None, platform=None):
     """What a cover looks like in this case colour and tone, made from the default art that ships with the app (the window shows it before any game's art exists).
     With a `treatment` (one of TREATMENTS) it shows the cover of a game with every achievement unlocked; with a `theme` (one of THEMES) the case also
-    carries that theme's decorations."""
+    carries that theme's decorations. With a `platform` (one of PLATFORMS) it is that console's case: no colour, tone or theme, and only the "ribbon" or
+    "rosette" marks."""
+    if platform is not None:
+        _check_platform(platform, treatment, theme)
+        with Image.open(DEFAULT_ART) as im:
+            return finish_treatment(_compose(im.convert("RGBA"), load_platform_frame(platform, family), platform_window(platform)), treatment,
+                                    platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform))
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
-        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment)
+        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks())
 
 
 def compose_treatment(case, marks):
@@ -842,7 +984,7 @@ def existing_cover_theme(covers_dir):
     except OSError:
         return None
     for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None:
+        if n.lower().endswith(".png") and appid_of(n) is not None and cover_platform(os.path.join(covers_dir, n)) is None:       # a console cover has no theme to report
             theme = cover_theme(os.path.join(covers_dir, n))
             if theme is not False:
                 return theme
@@ -855,7 +997,8 @@ def covers_in_other_theme(covers_dir, theme):
         names = os.listdir(covers_dir)
     except OSError:
         return False
-    return any(n.lower().endswith(".png") and appid_of(n) is not None and cover_theme(os.path.join(covers_dir, n)) != theme for n in names)
+    return any(n.lower().endswith(".png") and appid_of(n) is not None and cover_platform(os.path.join(covers_dir, n)) is None
+               and cover_theme(os.path.join(covers_dir, n)) != theme for n in names)
 
 
 @functools.lru_cache(maxsize=1)
@@ -882,14 +1025,28 @@ def _gold_border():
     return plate
 
 
-def finish_treatment(cover, treatment):
+def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
     """`cover` (the finished 600 x 900 composition) with the marks of a 100% game: the rosette over the platform badges and, unless the
     treatment is a rosette-only one, the ribbon at the bottom, kept inside the case's own outline. For "gold-border" the whole cover is then shrunk by BORDER pixels
-    on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself."""
+    on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself.
+    `dy` and `dx` move the rosette from the top right (where the cover as made by earlier versions has it); `ribbon` is (width, centre x, bottom y) for a ribbon of
+    another width than the overlay's, set at the bottom."""
     if treatment is None:
         return cover
     case, kind = split_treatment(treatment)
     marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
+    if dy or dx or ribbon:                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
+        moved = Image.new("RGBA", marks.size, (0, 0, 0, 0))
+        moved.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (dx, dy))
+        below = marks.crop((0, ROSETTE_ROWS, marks.width, marks.height))
+        if ribbon and below.getchannel("A").getbbox():
+            width, centre, bottom = ribbon
+            tape = below.crop(below.getchannel("A").getbbox())
+            tape = tape.resize((width, round(tape.height * width / tape.width)), Image.LANCZOS)
+            moved.alpha_composite(tape, (centre - width // 2, bottom - tape.height))
+        else:
+            moved.paste(below, (0, ROSETTE_ROWS))
+        marks = moved
     marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
     done = Image.alpha_composite(cover, marks)
     if case == "gold-border":
@@ -947,6 +1104,24 @@ def cover_treatment(path):
     return done if done is None or done in TREATMENTS else False
 
 
+def cover_platform(path):
+    """The console case (one of PLATFORMS) a cover was made in, read from its PNG header without decoding the picture; None for a cover without the note
+    (the Steam case). False if this is not a readable PNG or the note is not exactly one we write."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return False
+        with Image.open(path, formats=["PNG"]) as im:
+            note = im.info.get(PLATFORM_CHUNK)
+    except Exception:
+        return False
+    return note if note is None or note in PLATFORMS else False
+
+
+def _console_marks(treatment):
+    """The marks a console cover keeps from a treatment (none, "ribbon" or "rosette"): a console case has no gold, so an earlier gold look keeps only its marks."""
+    return compose_treatment("ribbon", split_treatment(treatment)[1]) if treatment else None
+
+
 def art_note(path):
     """The note a cover built from the user's own art `path` carries: "custom " and the start of the file's SHA-256, so a changed file rebuilds it."""
     h = hashlib.sha256()
@@ -969,22 +1144,30 @@ def cover_art(path):
     return note if note is None or re.fullmatch(r"custom [0-9a-f]{16}", note) else False
 
 
-def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None, from_art=None):
+def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None, from_art=None, platform=None):
     """Write the cover of one portrait into `out_path`, with its colour notes, its `theme` and theme note (None: the classic case) and, for a 100% game,
-    its `treatment` and treatment note, and `from_art` (an art_note) when the portrait is the user's own. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold)."""
+    its `treatment` and treatment note, and `from_art` (an art_note) when the portrait is the user's own. `frame` is already in the colour the cover is made in (for "gold-case": the gold frame, with hue, sat, val saying gold).
+    With a `platform` (one of PLATFORMS) `frame` is that console's (load_platform_frame): the cover gets the platform note and no colour, tone or theme note, and
+    only no treatment or the "ribbon" and "rosette" marks go with it (ValueError otherwise, as for a theme)."""
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
     if theme is not None and theme not in THEMES:
         raise ValueError("unknown theme: %r" % (theme,))
+    if platform is not None:
+        _check_platform(platform, treatment, theme)
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
-    cover = finish_treatment(apply_theme(_compose(art, frame), theme), treatment)
+    cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment,
+                             *((platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)) if platform else steam_marks()))
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
-    note.add_text(HUE_CHUNK, str(hue % 360))                   # lets make_covers tell what colour an existing cover is without decoding it
-    note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
+    if platform is not None:
+        note.add_text(PLATFORM_CHUNK, platform)                # a console cover has no colour, tone or theme: the case is fixed
+    else:
+        note.add_text(HUE_CHUNK, str(hue % 360))               # lets make_covers tell what colour an existing cover is without decoding it
+        note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
     if treatment is not None:
         note.add_text(DONE_CHUNK, treatment)                   # plain covers carry no note, as before treatments existed
     if theme is not None:
@@ -1010,7 +1193,7 @@ def _wanted_look(appid, path, colour, completed, treatment, theme=None):
 
 
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None, theme=None, custom_art=None):
+                completed=None, treatment=None, theme=None, custom_art=None, platforms=None):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -1023,7 +1206,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     marks: a `treatment` whose marks are "full" raises ValueError.
     custom_art: {appid: path} of the user's own portraits (see find_custom_art): those games get that picture in the case and nothing is downloaded
     for them (even a blurry auto-art, whatever `skip_auto_art` says); None: every cover is made from Steam's portrait, and a cover built from
-    custom art before is rebuilt.
+    custom art before is rebuilt. Games in a console case never use custom art.
+    platforms: None (the natural flow): a game whose cover is already in a console case keeps it untouched, whatever `force` says, and is counted in "platforms".
+    A dict {appid: one of PLATFORMS, or None for the Steam case}: only these games are made, each in its case (a console case has no colour, tone or theme,
+    and only the "ribbon" and "rosette" `treatment` go with it: ValueError otherwise, before any lookup). A cover that already has the wanted case,
+    marks and art is kept, any other is rebuilt. Apps in the dict that are not in `games` are ignored.
     Without a page each existing cover keeps the treatment it was made with. A "gold-case" cover is made in gold whatever the colour asked.
     A cover that exists in another colour, with another treatment or in another theme is rebuilt, one that already looks right is kept
     (the hue means nothing at 0 sat or 0 val). Apps in `completed` that are not in `games` are ignored.
@@ -1031,7 +1218,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     Returns {"ok", "skipped", "not_games" (DLC, tools...), "unlisted" (apps Steam no longer lists), "missing": [(appid, name)] (Steam has no art),
     "failed": [(appid, name)] (download problem), "cancelled", "files": [cover paths of this run],
     "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set),
-    "completed": how many of "files" carry a treatment, kept ones included}.
+    "completed": how many of "files" carry a treatment, kept ones included, "platforms": how many of "files" are in a console case}.
     """
     if Image is None:
         raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
@@ -1041,6 +1228,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         raise ValueError("unknown theme: %r" % (theme,))
     if theme is not None and treatment is not None and split_treatment(treatment)[1] != "rosette":
         raise ValueError("the %s theme only goes with the rosette-only marks, not %r" % (theme, treatment))      # the ribbon would hide the decorations
+    wanted_platforms = set((platforms or {}).values()) - {None}
+    if wanted_platforms - set(PLATFORMS):
+        raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS), key=str)[0],))
+    if wanted_platforms:
+        _check_platform(sorted(wanted_platforms)[0], treatment, theme)
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -1054,13 +1246,23 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             frames[key] = load_frame(colour[0], is_family, sat=colour[1], val=colour[2])
         return frames[key]
 
+    def console_frame_for(platform, is_family):
+        key = (platform, is_family)
+        if key not in frames:
+            frames[key] = load_platform_frame(platform, is_family)
+        return frames[key]
+
     frame_for((hue, sat, val), False)           # a missing frame.png fails here, before any download
+    for p in sorted(wanted_platforms):
+        console_frame_for(p, False)             # so does a missing console case
     if treatment is not None or completed is None:
         _completion_overlay()                   # so does a missing overlay: otherwise every 100% cover would count as a failed download
     if theme is not None:
         _halloween_overlay()                    # and a missing theme overlay: otherwise every cover would
 
     ids = sorted(games)
+    if platforms is not None:
+        ids = [i for i in ids if i in platforms]
     if only:
         ids = [i for i in ids if i in set(only)]
     if log:
@@ -1070,7 +1272,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
         raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
-    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0}
+    res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0}
     todo = []                                   # only items that can become a cover count towards the progress
     for appid in ids:
         it = info.get(appid) or {}
@@ -1101,9 +1303,17 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "skipped")
             continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
+        want_p = platforms.get(appid) if platforms is not None else None
+        if platforms is None and os.path.exists(dest) and cover_platform(dest):      # the natural flow leaves a cover in a console case alone
+            res["ok"] += 1
+            res["platforms"] += 1
+            res["completed"] += bool(cover_treatment(dest))
+            res["files"].append(dest)
+            report(n, appid, name, "exists")
+            continue
         urls, auto = portrait_candidates(appid, it)
         try:
-            wanted_art = art_note(custom_art[appid]) if appid in custom_art else None
+            wanted_art = art_note(custom_art[appid]) if appid in custom_art and not want_p else None
         except OSError as e:                                              # the file went away since it was found
             res["failed"].append((appid, name))
             if log:
@@ -1115,8 +1325,14 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "skipped")
             continue
         target, colour = _wanted_look(appid, dest, (hue, sat, val), completed, treatment, theme)
-        if os.path.exists(dest) and not force and same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art:
+        if want_p:
+            target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
+            kept = cover_platform(dest) == want_p and cover_treatment(dest) == target and cover_art(dest) == wanted_art
+        else:
+            kept = same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art and cover_platform(dest) is None
+        if os.path.exists(dest) and not force and kept:
             res["ok"] += 1
+            res["platforms"] += bool(want_p)
             res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "exists")
@@ -1144,8 +1360,10 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         try:
             is_family = appid in family
-            build_cover(custom_art[appid] if got and wanted_art else tmp, dest, frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2], treatment=target, theme=theme, from_art=wanted_art)
+            build_cover(custom_art[appid] if got and wanted_art else tmp, dest, console_frame_for(want_p, is_family) if want_p else frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2],
+                        treatment=target, theme=theme, from_art=wanted_art, platform=want_p)
             res["ok"] += 1
+            res["platforms"] += bool(want_p)
             res["family"] += is_family
             res["completed"] += target is not None
             res["files"].append(dest)
@@ -1175,8 +1393,11 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
         appid = appid_of(n)
         if n.lower().endswith(".png") and appid is not None:
             path = os.path.join(covers_dir, n)
+            console = cover_platform(path)
+            if console is False:                                     # a damaged console note: the natural flow rebuilds the cover, so it must ask
+                return True
             c = cover_colour(path)
-            if c is None:
+            if c is None or console is not None:                     # a console cover is in no colour; the natural flow leaves it alone
                 continue
             target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment, theme)     # appid_of gives text; `completed` holds numbers
             if not same_colour(c, colour) or cover_treatment(path) != target or (theme != KEEP and cover_theme(path) != theme):
@@ -1184,6 +1405,32 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
             if custom_art != KEEP and cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
                 return True
     return False
+
+
+def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None):
+    """How many covers already in the folder `make_covers(platforms=platforms, ...)` would rebuild: of the games in `platforms` ({appid: platform or None for the
+    Steam case}) those with a cover in another case (another console, or the Steam case instead), with other marks (`treatment` for the apps in `completed`, as in
+    make_covers) or, for the Steam case, in another colour (`tone`: (hue, sat, val)) or theme. A garbled platform note counts as another case."""
+    try:
+        names = os.listdir(covers_dir)
+    except OSError:
+        return 0
+    count = 0
+    for name in names:
+        appid = appid_of(name)
+        if not name.lower().endswith(".png") or appid is None or int(appid) not in platforms:
+            continue
+        path = os.path.join(covers_dir, name)
+        want, have = platforms[int(appid)], cover_platform(path)
+        target, colour = _wanted_look(int(appid), path, tone, completed, treatment)
+        if have != want:
+            count += 1
+        elif want:
+            count += cover_treatment(path) != _console_marks(target)
+        else:
+            count += (not same_colour(cover_colour(path), colour) or cover_treatment(path) != target or cover_theme(path) is not None
+                      or cover_art(path) is not None)             # Make passes no art of the user's here, so a cover built from it is rebuilt
+    return count
 
 
 def covers_with_other_art(covers_dir, custom_art, games=None):
@@ -1198,7 +1445,7 @@ def covers_with_other_art(covers_dir, custom_art, games=None):
         appid = appid_of(n)
         if n.lower().endswith(".png") and appid is not None and (games is None or int(appid) in games):
             path = os.path.join(covers_dir, n)
-            if cover_colour(path) is None:
+            if cover_colour(path) is None or cover_platform(path) is not None:
                 continue
             if cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
                 return True
@@ -1212,7 +1459,7 @@ def covers_with_art(covers_dir):
     except OSError:
         return set()
     return {int(appid_of(n)) for n in names
-            if n.lower().endswith(".png") and appid_of(n) is not None and cover_art(os.path.join(covers_dir, n))}
+            if n.lower().endswith(".png") and appid_of(n) is not None and cover_art(os.path.join(covers_dir, n)) and cover_platform(os.path.join(covers_dir, n)) is None}
 
 
 def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
@@ -1232,7 +1479,7 @@ def existing_cover_colour(covers_dir):
         if n.lower().endswith(".png") and appid_of(n) is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is not None and not is_gold_case(cover_treatment(path)):
+            if c is not None and cover_platform(path) is None and not is_gold_case(cover_treatment(path)):
                 return c
     return None
 
@@ -1249,7 +1496,7 @@ def mixed_cover_colours(covers_dir):
         if n.lower().endswith(".png") and appid_of(n) is not None:
             path = os.path.join(covers_dir, n)
             c = cover_colour(path)
-            if c is not None and not is_gold_case(cover_treatment(path)):
+            if c is not None and cover_platform(path) is None and not is_gold_case(cover_treatment(path)):
                 seen.add(tone_key(*c))
                 if len(seen) > 1:
                     return True
@@ -1265,7 +1512,7 @@ def covers_with_full_marks(covers_dir):
     for n in names:
         if n.lower().endswith(".png") and appid_of(n) is not None:
             treatment = cover_treatment(os.path.join(covers_dir, n))
-            if treatment and split_treatment(treatment)[1] == "full":
+            if treatment and cover_platform(os.path.join(covers_dir, n)) is None and split_treatment(treatment)[1] == "full":
                 return True
     return False
 
@@ -1276,7 +1523,8 @@ def mixed_cover_themes(covers_dir):
         names = os.listdir(covers_dir)
     except OSError:
         return False
-    return len({cover_theme(os.path.join(covers_dir, n)) for n in names if n.lower().endswith(".png") and appid_of(n) is not None}) > 1
+    return len({cover_theme(os.path.join(covers_dir, n)) for n in names
+                if n.lower().endswith(".png") and appid_of(n) is not None and cover_platform(os.path.join(covers_dir, n)) is None}) > 1
 
 
 def _safe_copy(src, dst):
@@ -1408,9 +1656,10 @@ def _frame_regions():
     global _frame_ref
     if _frame_ref is None:
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
-        plain, family = load_frame(0), load_frame(0, True)          # the family frame differs from the plain one only in the corner triangle
-        edge = Image.open(FAMILY_CORNER).convert("RGBA").getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0)
-        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None), (_shape(family.crop(top)), edge)), (_shape(plain.crop(bot)), None), edge)
+        plain = load_frame(0)
+        edges = tuple(family_corner(legacy).getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0) for legacy in (False, True))
+        families = tuple((_shape(load_frame(0, True, legacy_corner=legacy).crop(top)), edge) for legacy, edge in zip((False, True), edges))   # the family frame differs from the plain one only in the corner triangle; covers of earlier versions have it at the left
+        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None),) + families, (_shape(plain.crop(bot)), None), edges)
     return _frame_ref
 
 
@@ -1433,10 +1682,11 @@ def _same_shape(a, ref):
 def _tone_strips(key):
     """_expected_strips for one tone_key: covers that look the same share one set of strips."""
     step, sat, val = key                                            # step * 360 / 256 degrees turns the hue by exactly `step` again
-    top, bot, _, _, edge = _frame_regions()
+    top, bot, _, _, edges = _frame_regions()
     blank = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-    plain, family = (Image.alpha_composite(blank, load_frame(step * 360 / 256, f, sat=sat, val=val)) for f in (False, True))   # as _compose lays it down
-    return ((plain.crop(top), None), (family.crop(top), Image.merge("RGBA", (edge,) * 4))), (plain.crop(bot), None)
+    frames = [Image.alpha_composite(blank, load_frame(step * 360 / 256, False, sat=sat, val=val))] + [      # as _compose lays it down
+        Image.alpha_composite(blank, load_frame(step * 360 / 256, True, sat=sat, val=val, legacy_corner=legacy)) for legacy in (False, True)]
+    return ((frames[0].crop(top), None),) + tuple((f.crop(top), Image.merge("RGBA", (edge,) * 4)) for f, edge in zip(frames[1:], edges)), (frames[0].crop(bot), None)
 
 
 def _expected_strips(hue, sat, val):
@@ -1454,25 +1704,50 @@ def _same_pixels(strip, ref):
 
 
 @functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry; a library uses one or two colours, each plain and family
-def _treated_reference(key, family):
+def _treated_reference(key, family, legacy=False):
     """(expected, mask) for a treated or themed cover: key is (tone_key, treatment, theme), the last two None for none. The cover is made twice, from flat black and from flat white
     art, through the same steps as build_cover; the mask is 255 where both agree within 2 on every channel (frame, rosette, ribbon,
     border, the theme's decorations: nothing the game's art reaches) and 0 elsewhere, then pulled back 3 pixels from the art: the gold border's shrink (Lanczos)
     lets detailed art ring that far past where flat art reaches. Expected is halfway between the two, so real art lands within 1 of it."""
     (step, sat, val), treatment, theme = key                        # step * 360 / 256 degrees turns the hue by exactly `step` again
-    frame = load_frame(step * 360 / 256, family, sat=sat, val=val)
-    black, white = (finish_treatment(apply_theme(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), theme), treatment) for c in (0, 255))
+    frame = load_frame(step * 360 / 256, family, sat=sat, val=val, legacy_corner=legacy)
+    moved = () if legacy else steam_marks()                    # `legacy`: the cover as earlier versions made it, with the corner on the left and the rosette on the right
+    black, white = (finish_treatment(apply_theme(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), theme), treatment, *moved) for c in (0, 255))
     widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
 
 
-def _same_treated(im, key, family):
-    """True if `im` matches the treated cover for `key` within 2 levels on every pixel the art does not reach (see _treated_reference).
-    A mask that covers less than 15% of the canvas leaves too little to tell our covers from others: then never ours."""
-    want, mask = _treated_reference(key, family)
-    if mask.histogram()[255] < 0.15 * SIZE[0] * SIZE[1]:
+def _same_masked(im, want, mask, least):
+    """True if `im` matches `want` within 2 levels on every pixel of `mask` (255 where the art does not reach), and the mask covers at least the
+    fraction `least` of the canvas: a smaller one leaves too little to tell our covers from others."""
+    if mask.histogram()[255] < least * SIZE[0] * SIZE[1]:
         return False
     return _same_pixels(im, (want, Image.merge("RGBA", (mask,) * 4)))
+
+
+def _same_treated(im, key, family, legacy=False):
+    """True if `im` matches the treated cover for `key` within 2 levels on every pixel the art does not reach (see _treated_reference).
+    A mask that covers less than 15% of the canvas leaves too little to tell our covers from others: then never ours."""
+    return _same_masked(im, *_treated_reference(key, family, legacy), 0.15)
+
+
+@functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry
+def _platform_reference(key, family):
+    """(expected, mask) for a console cover: key is (platform, treatment), the treatment None or "ribbon" or "rosette". Made like _treated_reference
+    (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0."""
+    platform, treatment = key
+    frame, window = load_platform_frame(platform, family), platform_window(platform)
+    dy, dx, ribbon = platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)
+    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame, window), treatment, dy, dx, ribbon) for c in (0, 255))
+    widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
+    return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
+
+
+def _same_platform(im, key, family):
+    """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. The PS3 and PS4 inserts are only a banner (about 8% of
+    the canvas); the mask of every case must cover at least 6% (a test checks every case: over 30,000 pixels that must match), or too little is left to tell
+    our covers from others."""
+    return _same_masked(im, *_platform_reference(key, family), 0.06)
 
 
 def is_steamcase_cover(path):
@@ -1480,6 +1755,8 @@ def is_steamcase_cover(path):
     A cover with a treatment note (a 100% game) or a theme note must name exactly one of TREATMENTS and one of THEMES (a theme never with full marks),
     have colour notes we write, and match the cover regenerated in that colour, tone, treatment and theme on every pixel the game's art does not reach
     (frame, rosette, ribbon, border, the theme's decorations).
+    A console cover (a platform note) must name one of PLATFORMS, carry no colour, tone, theme or art note, have no treatment or "ribbon" or "rosette", and match that
+    case on every pixel the art does not reach.
     Otherwise, a cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one
     without (made before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to
     a tone, treatment or theme note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
@@ -1492,7 +1769,12 @@ def is_steamcase_cover(path):
             if im.size != SIZE:
                 return False
             toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
+            platform, strange = im.info.get(PLATFORM_CHUNK), any(k in im.info for k in (HUE_CHUNK, TONE_CHUNK, THEME_CHUNK, ART_CHUNK))
             im = im.convert("RGBA")
+        if platform is not None:                                    # a console cover: its case and marks decide, never a colour, tone, theme or art note
+            if platform not in PLATFORMS or strange or done not in (None, "ribbon", "rosette"):
+                return False
+            return any(_same_platform(im, (platform, done), family) for family in (False, True))
         if done is not None or theme is not None:
             if (done is not None and done not in TREATMENTS) or (theme is not None and theme not in THEMES) or colour is None:
                 return False
@@ -1501,7 +1783,7 @@ def is_steamcase_cover(path):
             if is_gold_case(done) and tone_key(*colour) != tone_key(GOLD_HUE, 100, 100):
                 return False                                    # we always write a gold case with gold notes (gold-case and the ribbon at hue 176 look the same, so those two notes swapped cannot be told; harmless)
             key = (tone_key(*treatment_colour(done, colour)), done, theme)
-            return any(_same_treated(im, key, family) for family in (False, True))
+            return any(_same_treated(im, key, family, legacy) for family in (False, True) for legacy in (False, True))
         if toned:
             if colour is None:
                 return False

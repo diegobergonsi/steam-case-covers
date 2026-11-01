@@ -25,6 +25,9 @@ def result_text(res, problems):
     fam = res.get("family", 0)
     if fam:
         text += " %d of them %s and %s a green corner." % (fam, "is a family game" if fam == 1 else "are family games", "has" if fam == 1 else "have")
+    consoles = res.get("platforms", 0)
+    if consoles:
+        text += " %d of them %s in a console case." % (consoles, "is" if consoles == 1 else "are")
     done = res.get("completed", 0)
     if done:
         text += " %d of them %s 100%% and %s highlighted." % (done, "is" if done == 1 else "are", "is" if done == 1 else "are")
@@ -155,6 +158,13 @@ class Make(QObject):
     def choices(self):
         """What the earlier steps chose, with the step that changes each (an index of shell.steps)."""
         look, hundred, library = self._shell.look, self._shell.hundred, self._shell.library
+        if self._shell.flow == "manual":
+            cases = self._shell.cases
+            count = cases.assignedCount
+            marked = "Skipped" if not hundred.loaded else "Left plain" if hundred.style == "none" else "Highlighted"
+            return [{"key": "games", "label": "Games", "value": "%d %s" % (count, "game" if count == 1 else "games"), "step": self._shell.stepIndex("pick")},
+                    {"key": "cases", "label": "Cases", "value": ", ".join(s["label"] for s in cases.summary), "step": self._shell.stepIndex("case")},
+                    {"key": "hundred", "label": "100% games", "value": marked, "step": self._shell.stepIndex("hundred")}]
         if library.installedOnly:
             games = "Installed games"
         else:
@@ -203,6 +213,11 @@ class Make(QObject):
                 "theme": None if look.theme == "classic" else look.theme,
                 "skip": shell.switchValue("skip_auto_art"), "custom": shell.switchValue("use_custom_art"),
                 "lib": None if library.installedOnly else library.path, "account": self._account()}
+        if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme and art switches do not count
+            if not shell.cases.assignedCount:
+                return
+            snap.update(manual=True, platforms=shell.cases.assigned(), family=shell.cases.family, theme=None, skip=False, custom=False,
+                        treatment=sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None)    # console cases have no gold: only the marks count
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1
@@ -245,7 +260,10 @@ class Make(QObject):
 
     def _begin(self, snap, custom_art, games, problems):
         """The rest of start() once the art is known: ask before replacing covers, then make them."""
-        why = reasons.replace_reason(self._covers, snap["tone"], snap["completed"], snap["treatment"], snap["theme"], custom_art, games)
+        if snap.get("manual"):
+            why = reasons.platform_replace_reason(self._covers, snap["platforms"], snap["tone"], snap["treatment"], snap["completed"])
+        else:
+            why = reasons.replace_reason(self._covers, snap["tone"], snap["completed"], snap["treatment"], snap["theme"], custom_art, games)
         if why:
             self._pending = (snap, custom_art, list(problems))
             self._question = why
@@ -294,10 +312,11 @@ class Make(QObject):
             games, family = sc.load_library(steam, snap["lib"])
             if not games:
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
-            res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], family=family, hue=hue, sat=sat, val=val,
+            extra = {"platforms": snap["platforms"]} if snap.get("manual") else {}
+            res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], family=family if not extra or snap["family"] else set(), hue=hue, sat=sat, val=val,
                                  progress=lambda done, total, appid, name, status: self._tell(req, done, total, name),
                                  cancelled=self._cancel.is_set, completed=snap["completed"], treatment=snap["treatment"],
-                                 theme=snap["theme"], custom_art=custom_art)
+                                 theme=snap["theme"], custom_art=custom_art, **extra)
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:

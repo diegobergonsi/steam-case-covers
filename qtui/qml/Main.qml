@@ -105,9 +105,9 @@ ApplicationWindow {
             // the choices of the earlier steps are frozen while the covers are made, as in the old window (the run has its own copy of them)
             onLoaded: {
                 item.stepKey = Qt.binding(function() { return screen.key })
-                item.frozen = Qt.binding(function() { return shell.make.running && (screen.key === "game_list" || screen.key === "look" || screen.key === "hundred") })
+                item.frozen = Qt.binding(function() { return shell.make.running && (screen.key === "game_list" || screen.key === "look" || screen.key === "hundred" || screen.key === "pick" || screen.key === "case") })
             }
-            source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
+            source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "pick" ? "GamesScreen.qml" : screen.key === "case" ? "CasesScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
         }
     }
 

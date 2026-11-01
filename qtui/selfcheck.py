@@ -17,6 +17,9 @@ def engine_problems():
                        ("Halloween overlay", sc.HALLOWEEN_OVERLAY), ("family corner image", sc.FAMILY_CORNER), ("completion overlay", sc.COMPLETION_OVERLAY), ("default art", sc.DEFAULT_ART)):
         if not os.path.exists(path):
             problems.append("%s missing: %s" % (what, path))
+    for p in sc.PLATFORMS:
+        if not os.path.exists(os.path.join(sc.CASES_DIR, p + ".png")):
+            problems.append("console case missing: %s" % os.path.join(sc.CASES_DIR, p + ".png"))
     system.restore_child_env()
     try:
         if sc._ssl_context().cert_store_stats()["x509_ca"] <= 0:
@@ -55,4 +58,18 @@ def engine_problems():
                     problems.append("%s does not record its style" % label)
     except Exception as e:
         problems.append("a cover could not be built: %s" % e)
+    try:
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "p.png")
+            Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
+            for i, platform in enumerate(sc.PLATFORMS):                      # every case, with the family corner and the marks that move (None, ribbon, rosette in turn)
+                out = os.path.join(d, platform + ".png")
+                sc.build_cover(src, out, sc.load_platform_frame(platform, True), platform=platform, treatment=(None, "ribbon", "rosette")[i % 3])
+                if sc.cover_platform(out) != platform or not sc.is_steamcase_cover(out):
+                    problems.append("the %s console case cover is not recognised as ours" % platform)
+    except sc.SteamcaseError as e:
+        problems.append("the console cases cannot be used: %s" % e)
+    except Exception as e:
+        problems.append("a console case cover could not be built: %s" % e)
     return problems

@@ -5,10 +5,12 @@ import os, sys
 
 # keep in step with qtui/assets.py (a test compares them)
 ASSETS = ["frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "halloween_overlay.png"]
+# the console cases, in assets/cases (keep in step with qtui/assets.py, a test compares them)
+CASE_FILES = ["cases.json", "ps3.png", "ps4.png", "ps5.png", "xbox360.png", "xboxone.png", "xboxseries.png", "switch.png", "switch2.png"]
 # assets/version.txt only exists in release builds (the workflow writes the tag into it); source runs report "dev"
 if os.path.exists("assets/version.txt"):
     ASSETS.append("version.txt")
-a = Analysis(["qtui/__main__.py"], pathex=["."], datas=[("qtui/qml", "qtui/qml")] + [("assets/" + n, "assets") for n in ASSETS],
+a = Analysis(["qtui/__main__.py"], pathex=["."], datas=[("qtui/qml", "qtui/qml")] + [("assets/" + n, "assets") for n in ASSETS] + [("assets/cases/" + n, "assets/cases") for n in CASE_FILES],
              excludes=["numpy", "matplotlib", "scipy", "pandas", "tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtCharts"])
 # Drop what the window never uses: other Qt styles and dialogs, the GTK theme plugin and the system libraries only it pulls in (GTK, cairo, pango, a second ICU),
 # plugins for screens without a desktop, unused image formats. Measured: 113.8 MB -> 73.2 MB, same window. tests/test_qtui.py checks the list against what the window needs.

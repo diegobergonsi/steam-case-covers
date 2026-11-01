@@ -46,6 +46,18 @@ class Base(unittest.TestCase):
         with open(os.path.join(*parts), "rb") as f:
             return f.read()
 
+    def resave(self, path, **notes):
+        """The same pixels with other notes (None drops a note)."""
+        with sc.Image.open(path) as im:
+            im.load()
+            info = sc.PngInfo()
+            for k, v in {**im.info, **notes}.items():
+                if v is not None and isinstance(v, str):
+                    info.add_text(k, v)
+            out = path + ".resaved.png"
+            im.save(out, format="PNG", pnginfo=info)
+        return out
+
 
 class ApplyRestore(Base):
     def test_apply_then_restore_returns_original(self):
@@ -908,19 +920,19 @@ class FamilyFrame(unittest.TestCase):
 
     def test_family_frame_equals_the_plain_frame_outside_the_corner(self):
         self.assertEqual(self.family.size, sc.SIZE)
-        for box in ((220, 0, 600, 900), (0, 220, 220, 900)):
+        for box in ((0, 0, 380, 900), (380, 220, 600, 900)):                 # all but the top right corner
             self.assertEqual(self.family.crop(box).tobytes(), self.plain.crop(box).tobytes())
 
     def test_the_corner_is_green_and_follows_the_case_shape(self):
-        r, g, b, a = self.family.getpixel((8, 8))
+        r, g, b, a = self.family.getpixel((591, 8))
         self.assertEqual(a, 255)
         self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (r, g, b))
-        self.assertEqual(self.family.getpixel((0, 0))[3], 0)                  # the case's rounded corner stays transparent
-        self.assertEqual(self.family.getpixel((150, 150)), self.plain.getpixel((150, 150)))     # past the diagonal the art window is untouched (it keeps the faint gloss)
+        self.assertEqual(self.family.getpixel((599, 0))[3], 0)                # the case's rounded corner stays transparent
+        self.assertEqual(self.family.getpixel((449, 150)), self.plain.getpixel((449, 150)))     # past the diagonal the art window is untouched (it keeps the faint gloss)
 
     def test_the_icon_is_white_and_readable_on_the_triangle(self):
         self.assertGreaterEqual(contrast((255, 255, 255), sc.FAMILY_COLOR), sc.FAMILY_ICON_CONTRAST)
-        self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
+        self.assertEqual(self.family.getpixel((559, 35))[:3], (255, 255, 255))   # centre of the head of the person nearest the corner's tip
 
 
 class StoreMocks(Base):
@@ -940,7 +952,7 @@ class StoreMocks(Base):
         self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
 
     def corner(self, path):
-        return sc.Image.open(path).convert("RGBA").getpixel((8, 8))[:3]
+        return sc.Image.open(path).convert("RGBA").getpixel((591, 8))[:3]            # the corner is at the top right
 
     def is_green(self, rgb):
         return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
@@ -1048,7 +1060,7 @@ class CoverColour(unittest.TestCase):
 
     def test_the_family_corner_stays_green_at_every_hue(self):
         for hue in sc.HUE_SWATCHES:
-            r, g, b, a = sc.load_frame(hue, True).getpixel((8, 8))
+            r, g, b, a = sc.load_frame(hue, True).getpixel((591, 8))
             self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (hue, (r, g, b)))
             self.assertEqual(sc.load_frame(hue, True).getpixel((7, 450)), sc.load_frame(hue).getpixel((7, 450)))
 
@@ -1129,7 +1141,7 @@ class CoverTone(unittest.TestCase):
 
     def test_the_family_corner_stays_green_on_black_and_silver(self):
         for sat, val in ((0, 14), (0, 78)):
-            r, g, b, _ = sc.load_frame(0, True, sat=sat, val=val).getpixel((8, 8))
+            r, g, b, _ = sc.load_frame(0, True, sat=sat, val=val).getpixel((591, 8))
             self.assertClose((r, g, b), sc.FAMILY_COLOR, 8)
 
     def test_case_color_follows_the_tone(self):
@@ -1454,7 +1466,8 @@ class RecogniseTreated(Base):
             _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t, None), False)
             self.assertEqual(mask.getpixel((300, 400)), 0, t)
         _, mask = sc._treated_reference((sc.tone_key(0), "ribbon", None), False)
-        self.assertEqual(mask.getpixel((526, 66)), 255)
+        dy, dx, _ = sc.steam_marks()
+        self.assertEqual(mask.getpixel((526 + dx, 66 + dy)), 255)
         _, mask = sc._treated_reference((sc.tone_key(0), "gold-border", None), False)
         self.assertEqual(mask.getpixel((5, 450)), 255)
 
@@ -1464,7 +1477,6 @@ class RecogniseTreated(Base):
         self.assertTrue(sc.is_steamcase_cover(self.make("t.png", 134, sat=60, val=30)))
         self.assertTrue(sc.is_steamcase_cover(self.make("f.png", 84, True)))
         gold = self.make("g.png", treatment="gold-case")
-        self.assertFalse(sc.is_steamcase_cover(self.renote(gold, **self.notes_of(gold, done=None))))   # the rosette is not part of a frame
 
     def test_a_forged_oversized_or_symlinked_treated_file_is_refused(self):
         real = self.make("r.png", treatment="ribbon")
@@ -2298,8 +2310,9 @@ class Treatments(unittest.TestCase):
 
     def test_a_ribbon_cover_changes_only_the_rosette_and_the_ribbon(self):
         done, plain = sc.preview_cover(treatment="ribbon"), sc.preview_cover()
+        dy, dx, _ = sc.steam_marks()
         self.assertEqual(done.getpixel((300, 400)), plain.getpixel((300, 400)))
-        self.assertNotEqual(done.getpixel((526, 66)), plain.getpixel((526, 66)))
+        self.assertNotEqual(done.getpixel((526 + dx, 66 + dy)), plain.getpixel((526 + dx, 66 + dy)))              # the rosette, at the left under the banner
         self.assertNotEqual(done.getpixel((300, 820)), plain.getpixel((300, 820)))
         self.assertEqual(done.getpixel((0, 0))[3], 0)                                           # nothing leaves the rounded case
 
@@ -2326,20 +2339,23 @@ class Treatments(unittest.TestCase):
 
     def test_gold_border_keeps_the_rosette_and_ribbon_on_the_art(self):
         im = sc.preview_cover(treatment="gold-border")
-        self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((480, 30, 560, 100)))))
-        box = im.crop((460, 20, 580, 140))                                                     # the whole disc, to find its centre
-        disc = [(i % 120 + 460, i // 120 + 20) for i, p in enumerate(pixels(box)) if near(p[:3], self.DISC)]
-        cx, cy = sum(x for x, _ in disc) / len(disc), sum(y for _, y in disc) / len(disc)
-        want = (BORDER_AT(526, 0), BORDER_AT(66, 1))                                           # the disc shrank with the case: its centre moved
+        dy, dx, _ = sc.steam_marks()
+        x, y = 526 + dx, 66 + dy                                                               # the disc's centre before the case shrinks
+        self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((x - 46, y - 36, x + 34, y + 34)))))
+        box = im.crop((x - 66, y - 46, x + 54, y + 74))                                        # the whole disc, to find its centre
+        disc = [(i % 120 + x - 66, i // 120 + y - 46) for i, p in enumerate(pixels(box)) if near(p[:3], self.DISC)]
+        cx, cy = sum(px for px, _ in disc) / len(disc), sum(py for _, py in disc) / len(disc)
+        want = (BORDER_AT(x, 0), BORDER_AT(y, 1))                                              # the disc shrank with the case: its centre moved
         self.assertTrue(abs(cx - want[0]) <= 2 and abs(cy - want[1]) <= 2, ((cx, cy), want))
-        self.assertGreater(abs(cx - 526) + abs(cy - 66), 10)
+        self.assertGreater(abs(cx - x) + abs(cy - y), 10)
         strip = pixels(im.crop((0, 0, 14, 900)))
         self.assertFalse(any(p[3] and near(p[:3], self.BAND) for p in strip))
 
     def test_family_corner_and_the_rosette_do_not_overlap(self):
         im = sc.preview_cover(0, True, treatment="ribbon")
-        self.assertTrue(near(im.getpixel((8, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((8, 8)))
-        self.assertTrue(near(im.getpixel((526, 66))[:3], self.DISC), im.getpixel((526, 66)))
+        dy, dx, _ = sc.steam_marks()
+        self.assertTrue(near(im.getpixel((591, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((591, 8)))
+        self.assertTrue(near(im.getpixel((526 + dx, 66 + dy))[:3], self.DISC), im.getpixel((526 + dx, 66 + dy)))
 
     def test_treatment_colour(self):
         self.assertEqual(sc.treatment_colour("gold-case", (20, 40, 50)), (176, 100, 100))
@@ -2368,8 +2384,9 @@ class Treatments(unittest.TestCase):
     def test_rosette_only_has_no_bottom_ribbon(self):
         only, full, plain = sc.preview_cover(treatment="rosette"), sc.preview_cover(treatment="ribbon"), sc.preview_cover()
         self.assertEqual(list(pixels(only.crop((0, 450, 600, 900)))), list(pixels(plain.crop((0, 450, 600, 900)))))
-        self.assertNotEqual(list(pixels(only.crop((400, 0, 600, 120)))), list(pixels(plain.crop((400, 0, 600, 120)))))
-        self.assertEqual(list(pixels(only.crop((400, 0, 600, 120)))), list(pixels(full.crop((400, 0, 600, 120)))))     # the same rosette
+        left = (0, 96, 200, 300)                                                                # where the rosette is
+        self.assertNotEqual(list(pixels(only.crop(left))), list(pixels(plain.crop(left))))
+        self.assertEqual(list(pixels(only.crop(left))), list(pixels(full.crop(left))))             # the same rosette
         self.assertNotEqual(list(pixels(full.crop((0, 800, 600, 870)))), list(pixels(plain.crop((0, 800, 600, 870)))))
 
     def test_every_treatment_is_gold_or_not(self):
@@ -2581,7 +2598,7 @@ class MakeTreated(StoreMocks):
                 self.assertEqual(sc.cover_treatment(self.cover(1)), t)
         shutil.rmtree(self.covers)
         sc.make_covers({1: None}, self.covers, family={1}, completed={1}, treatment="gold-border")
-        box = sc.Image.open(self.cover(1)).convert("RGBA").crop((14, 14, 60, 60))
+        box = sc.Image.open(self.cover(1)).convert("RGBA").crop((540, 14, 586, 60))
         self.assertTrue(any(p[3] == 255 and self.is_green(p[:3]) for p in pixels(box)))
         self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-border")
 
@@ -3267,6 +3284,670 @@ class CustomArtCli(StoreMocks):
         text = self.make(out, "--use-custom-art")
         self.assertFalse(os.path.exists(self.cover(out, 9)))
         self.assertNotIn("from your own art", text)
+
+
+class PlatformCases(Base):
+    """The console cases: a frame and an art window per platform (assets/cases)."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_every_platform_has_a_frame_and_window(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                frame = sc.load_platform_frame(p)
+                self.assertEqual((frame.size, frame.mode), (sc.SIZE, "RGBA"))
+                x0, y0, x1, y1 = sc.platform_window(p)
+                self.assertTrue(0 <= x0 < x1 <= sc.SIZE[0] and 0 <= y0 < y1 <= sc.SIZE[1])
+                self.assertTrue(x1 - x0 >= 400 and y1 - y0 >= 400)
+                alpha = frame.getchannel("A").crop((x0, y0, x1, y1))
+                tab = sc.platform_overlay(p)                                                       # a part of the window the frame itself covers (the Switch's red tab)
+                if tab is None:
+                    self.assertEqual(alpha.getextrema(), (0, 0))                                   # the art shows through
+                else:
+                    covered = alpha.copy()
+                    covered.paste(0, (tab[0] - x0, tab[1] - y0, tab[2] - x0, tab[3] - y0))
+                    self.assertEqual(covered.getextrema(), (0, 0))                                 # the art shows through everywhere else
+                    inside = alpha.crop((tab[0] - x0, tab[1] - y0, tab[2] - x0, tab[3] - y0))                # the tab may be slanted: most of its box is opaque
+                    self.assertGreater(sum(inside.getdata()) / (inside.width * inside.height), 150)
+
+    def test_cases_json_says_what_the_frames_show(self):
+        """The window is the box of the see-through pixels of the frame, the overlay the box of what the frame still covers inside it (the Switch's tab)."""
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                alpha = sc.load_platform_frame(p).getchannel("A")
+                window = alpha.point(lambda a: 255 if a == 0 else 0).getbbox()
+                self.assertEqual(sc.platform_window(p), window)
+                tab = alpha.crop(window).point(lambda a: 255 if a else 0).getbbox()
+                self.assertEqual(sc.platform_overlay(p), None if tab is None else (tab[0] + window[0], tab[1] + window[1], tab[2] + window[0], tab[3] + window[1]))
+
+    def test_labels_cover_every_platform(self):
+        self.assertEqual(set(sc.PLATFORM_LABELS), set(sc.PLATFORMS))
+        self.assertEqual(len(sc.PLATFORMS), 8)
+
+    def test_unknown_platform_is_refused(self):
+        for call in (sc.platform_window, sc.load_platform_frame):
+            with self.assertRaises(ValueError):
+                call("ps9")
+
+    def test_family_corner_goes_top_right_over_the_end_of_the_banner(self):
+        """The corner sits on the right so it never covers the logo on the left; it stays inside the case's own outline."""
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                plain, family = sc.load_platform_frame(p), sc.load_platform_frame(p, True)
+                self.assertNotEqual(plain.tobytes(), family.tobytes())
+                x0, y0, x1, y1 = sc.platform_window(p)
+                diff = sc.ImageChops.difference(plain, family).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
+                box = diff.getbbox()
+                self.assertTrue(box[0] >= sc.SIZE[0] - 207 and box[2] <= sc.SIZE[0] and box[1] <= y0 and box[3] <= 207, (p, box))    # the top right corner, reaching into the banner
+                outside = sc.Image.new("L", sc.SIZE, 255)
+                outside.paste(0, (x0, y0, x1, y1))                                                                           # the window is see-through in the plain frame: the corner may fill it
+                alpha = sc.ImageChops.multiply(sc.ImageChops.subtract(family.getchannel("A"), plain.getchannel("A")), outside)
+                self.assertIsNone(alpha.getbbox())                                                                           # and adds nothing outside the case
+
+    def test_the_playstation_cases_have_a_banner_on_top_and_the_art_below_it(self):
+        """From her frames: a banner of about 100 rows holds the logo, the art starts under it."""
+        for p in ("ps3", "ps4", "ps5"):
+            with self.subTest(platform=p):
+                x0, y0, x1, y1 = sc.platform_window(p)
+                self.assertTrue(100 <= y0 <= 130, y0)
+                frame = sc.load_platform_frame(p)
+                self.assertGreater(frame.getpixel((300, y0 // 2))[3], 250)                               # the banner is opaque
+                self.assertEqual(frame.getpixel((300, y0 + 40))[3], 0)                                   # the art shows below it
+
+    def test_the_series_x_case_is_a_thin_shell_with_a_slanted_tab_and_art_to_the_top(self):
+        """From photographs: the art reaches the top edge on the right of the tab."""
+        frame = sc.load_platform_frame("xboxseries")
+        x0, y0, x1, y1 = sc.platform_window("xboxseries")
+        tab = sc.platform_overlay("xboxseries")
+        self.assertTrue(tab[0] <= x0 + 1 and tab[1] <= y0 + 1 and 200 <= tab[2] - tab[0] <= 360 and 90 <= tab[3] - tab[1] <= 130, tab)
+        self.assertEqual(frame.getpixel((x1 - 60, y0 + 20))[3], 0)                                     # art shows at the top right
+        self.assertGreater(frame.getpixel((tab[0] + 20, tab[1] + 20))[3], 200)                         # the tab holds the sphere
+
+    def test_the_100_marks_sit_left_below_the_banner_and_the_ribbon_has_her_width(self):
+        """The rosette must never hide the logo of the case: it is on the left, MARKS_GAP from the art's edge and from the banner or tab above. The ribbon is
+        RIBBON_WIDTH wide, centred in the window, RIBBON_GAP above its bottom."""
+        art = os.path.join(self.tmp, "a.png")
+        sc.Image.new("RGB", (120, 180), (30, 30, 30)).save(art)
+        for p in sc.PLATFORMS:
+            for treatment in ("ribbon", "rosette"):
+                with self.subTest(platform=p, treatment=treatment):
+                    plain, marked = os.path.join(self.tmp, "p.png"), os.path.join(self.tmp, "m.png")
+                    sc.build_cover(art, plain, sc.load_platform_frame(p), platform=p)
+                    sc.build_cover(art, marked, sc.load_platform_frame(p), platform=p, treatment=treatment)
+                    (x0, y0, x1, y1), tab = sc.platform_window(p), sc.platform_overlay(p)
+                    below = max(y0, tab[3] if tab else y0)
+                    with sc.Image.open(plain) as a, sc.Image.open(marked) as b:
+                        diff = sc.ImageChops.difference(a.convert("RGBA"), b.convert("RGBA")).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
+                        rosette = diff.crop((0, 0, sc.SIZE[0], 450)).getbbox()
+                        self.assertIsNotNone(rosette)
+                        self.assertAlmostEqual(rosette[0], x0 + sc.MARKS_GAP, delta=1)                                      # on the left
+                        self.assertAlmostEqual(rosette[1], below + sc.MARKS_GAP, delta=1)                                   # below the banner, or the tab
+                        self.assertTrue(rosette[2] <= x1 and rosette[3] <= y1, (rosette, (x0, y0, x1, y1)))               # inside the art window
+                        if treatment == "ribbon":
+                            ribbon = diff.crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox()
+                            self.assertAlmostEqual(ribbon[2] - ribbon[0], sc.RIBBON_WIDTH, delta=2)
+                            self.assertAlmostEqual((ribbon[0] + ribbon[2]) / 2, (x0 + x1) / 2, delta=2)
+                            self.assertAlmostEqual(ribbon[3] + 450, y1 - sc.RIBBON_GAP, delta=2)
+                        else:
+                            self.assertIsNone(diff.crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox())                        # the rosette alone has no ribbon
+
+    def test_compose_default_window_is_unchanged(self):
+        art = sc.Image.new("RGBA", (300, 450), (200, 60, 60, 255))
+        frame = sc.load_frame()
+        self.assertEqual(sc._compose(art, frame).tobytes(), sc._compose(art, frame, sc.WINDOW).tobytes())
+        x0, y0, _, _ = sc.WINDOW
+        r, g, b = sc._compose(art, frame).getpixel((x0 + 40, y0 + 40))[:3]
+        self.assertTrue(r > g + 80 and r > b + 80)                    # the art shows (the frame's gloss tints it a little)
+
+    # ---- building a console cover ----
+    def portrait(self, colour=(30, 220, 30)):
+        path = os.path.join(self.tmp, "portrait.jpg")
+        sc.Image.new("RGB", (300, 450), colour).save(path, format="JPEG", quality=100)
+        return path
+
+    def build(self, platform, name="c.png", family=False, **kw):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.portrait(), out, sc.load_platform_frame(platform, family), platform=platform, **kw)
+        return out
+
+    def test_build_writes_only_the_platform_note(self):
+        out = self.build("ps5")
+        self.assertEqual(sc.cover_platform(out), "ps5")
+        with sc.Image.open(out) as im:
+            self.assertEqual(im.size, sc.SIZE)
+            for chunk in (sc.HUE_CHUNK, sc.TONE_CHUNK, sc.THEME_CHUNK, sc.DONE_CHUNK, sc.ART_CHUNK):
+                self.assertNotIn(chunk, im.info)
+
+    def test_art_stays_inside_the_window(self):
+        for p in ("ps5", "switch"):
+            with self.subTest(platform=p):
+                out = self.build(p)
+                x0, y0, x1, y1 = sc.platform_window(p)
+                with sc.Image.open(out) as im:
+                    im = im.convert("RGBA")
+                    green = lambda px: px[1] > 150 and px[0] < 90 and px[2] < 90
+                    self.assertTrue(green(im.getpixel((x0 + 30, y1 - 30))))                  # (not near the top-left: the Switch's tab is there)
+                    self.assertTrue(green(im.getpixel((x1 - 30, y1 - 30))))
+                    self.assertTrue(green(im.getpixel((x1 - 30, y0 + 30))))
+                    self.assertFalse(green(im.getpixel((x0 - 8, y0 + 100))))           # the case's border, outside the window
+
+    def test_platform_with_a_theme_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.build("ps5", theme="halloween")
+
+    def test_platform_with_a_gold_treatment_is_refused(self):
+        for t in ("gold-case", "gold-border", "gold-case-rosette", "gold-border-rosette"):
+            with self.subTest(treatment=t), self.assertRaises(ValueError):
+                self.build("ps5", treatment=t)
+
+    def test_unknown_platform_is_refused_when_building(self):
+        with self.assertRaises(ValueError):
+            sc.build_cover(self.portrait(), os.path.join(self.tmp, "x.png"), sc.load_frame(), platform="ps9")
+
+    def test_marks_are_allowed_and_noted(self):
+        for t in ("ribbon", "rosette"):
+            with self.subTest(treatment=t):
+                out = self.build("xboxone", treatment=t)
+                self.assertEqual((sc.cover_platform(out), sc.cover_treatment(out)), ("xboxone", t))
+
+    def test_cover_platform_reads_only_notes_we_write(self):
+        def png(name, note=None):
+            path = os.path.join(self.tmp, name)
+            info = sc.PngInfo()
+            if note is not None:
+                info.add_text(sc.PLATFORM_CHUNK, note)
+            sc.Image.new("RGBA", sc.SIZE).save(path, format="PNG", pnginfo=info)
+            return path
+        self.assertEqual(sc.cover_platform(png("a.png", "ps4")), "ps4")
+        self.assertIsNone(sc.cover_platform(png("b.png")))
+        self.assertIs(sc.cover_platform(png("c.png", "ps9")), False)
+        self.assertIs(sc.cover_platform(png("d.png", "PS4")), False)
+        junk = os.path.join(self.tmp, "e.png")
+        sc.Image.new("RGB", (10, 10)).save(junk, format="JPEG")
+        self.assertIs(sc.cover_platform(junk), False)
+        self.assertIs(sc.cover_platform(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_preview_in_a_console_case(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                self.assertEqual(sc.preview_cover(platform=p).size, sc.SIZE)
+        self.assertNotEqual(sc.preview_cover(platform="ps5").tobytes(), sc.preview_cover().tobytes())
+        self.assertNotEqual(sc.preview_cover(platform="ps5", family=True).tobytes(), sc.preview_cover(platform="ps5").tobytes())
+        with self.assertRaises(ValueError):
+            sc.preview_cover(platform="ps5", theme="halloween")
+        with self.assertRaises(ValueError):
+            sc.preview_cover(platform="ps5", treatment="gold-case")
+
+    # ---- recognising a console cover (Reset, Restore) ----
+    def noise(self, seed=1):
+        import random
+        rnd = random.Random(seed)
+        path = os.path.join(self.tmp, "noise%d.png" % seed)
+        im = sc.Image.new("RGB", (120, 180))
+        im.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256)) for _ in range(120 * 180)])
+        im.save(path, format="PNG")
+        return path
+
+    def console_cover(self, platform, name, family=False, treatment=None, seed=1):
+        out = os.path.join(self.tmp, name)
+        sc.build_cover(self.noise(seed), out, sc.load_platform_frame(platform, family), platform=platform, treatment=treatment)
+        return out
+
+    def test_each_console_cover_is_recognised(self):
+        for p in sc.PLATFORMS:
+            for family in (False, True):
+                for treatment in (None, "ribbon", "rosette"):
+                    with self.subTest(platform=p, family=family, treatment=treatment):
+                        self.assertTrue(sc.is_steamcase_cover(self.console_cover(p, "c.png", family, treatment)))
+
+    def test_forged_note_with_other_pixels_is_not_ours(self):
+        fake = os.path.join(self.tmp, "fake.png")
+        info = sc.PngInfo()
+        info.add_text(sc.PLATFORM_CHUNK, "ps5")
+        sc.Image.effect_noise(sc.SIZE, 80).convert("RGBA").save(fake, format="PNG", pnginfo=info)
+        self.assertFalse(sc.is_steamcase_cover(fake))
+
+    def test_wrong_or_garbled_platform_note_is_not_ours(self):
+        ps5 = self.console_cover("ps5", "ps5.png")
+        for note in ("ps4", "ps9", "PS5", "", "ps5 "):
+            with self.subTest(note=note):
+                self.assertFalse(sc.is_steamcase_cover(self.resave(ps5, **{sc.PLATFORM_CHUNK: note})))
+
+    def test_console_cover_with_colour_or_theme_notes_is_not_ours(self):
+        ps5 = self.console_cover("ps5", "ps5.png")
+        for notes in ({sc.HUE_CHUNK: "0"}, {sc.TONE_CHUNK: "100 100"}, {sc.THEME_CHUNK: "halloween"}, {sc.DONE_CHUNK: "gold-case"}):
+            with self.subTest(notes=notes):
+                self.assertFalse(sc.is_steamcase_cover(self.resave(ps5, **notes)))
+
+    def test_a_console_cover_is_not_recognised_as_another_case(self):
+        ps5 = self.console_cover("ps5", "ps5.png")
+        self.assertFalse(sc.is_steamcase_cover(self.resave(ps5, **{sc.PLATFORM_CHUNK: "xbox360"})))
+
+    def test_steam_covers_are_still_recognised(self):
+        out = os.path.join(self.tmp, "steam.png")
+        sc.build_cover(self.noise(), out, sc.load_frame(), 0)
+        self.assertTrue(sc.is_steamcase_cover(out))
+        self.assertFalse(sc.is_steamcase_cover(self.resave(out, **{sc.PLATFORM_CHUNK: "ps5"})))        # a Steam cover with a console note is not either
+
+    def test_reset_finds_console_covers(self):
+        for appid, p in ((1, "ps5"), (2, "switch")):
+            os.replace(self.console_cover(p, "tmp%d.png" % appid), os.path.join(self.grid, "%dp.png" % appid))
+        sc.build_cover(self.noise(), os.path.join(self.grid, "3p.png"), sc.load_frame(), 0)
+        with open(os.path.join(self.grid, "4p.png"), "wb") as f:
+            f.write(b"not ours")
+        self.assertEqual(sc.find_our_covers(self.steam), ["1p.png", "2p.png", "3p.png"])
+
+    # ---- folder checks: console covers are neither another colour nor another theme ----
+    def folder(self, **covers):
+        """Fill self.covers: name -> ("steam", hue, sat, val, theme) or ("ps5", treatment); the file is Name_<n>.png."""
+        for n, (name, spec) in enumerate(covers.items(), 1):
+            out = os.path.join(self.covers, "%s_%d.png" % (name, n))
+            if spec[0] == "steam":
+                _, hue, sat, val, theme = spec
+                sc.build_cover(self.noise(n), out, sc.load_frame(hue, sat=sat, val=val), hue, sat=sat, val=val, theme=theme)
+            else:
+                sc.build_cover(self.noise(n), out, sc.load_platform_frame(spec[0]), platform=spec[0], treatment=spec[1])
+
+    def test_mixed_colours_and_themes_ignore_console_covers(self):
+        self.folder(A=("steam", 0, 0, 30, "halloween"), B=("ps5", None))
+        self.assertFalse(sc.mixed_cover_colours(self.covers))
+        self.assertFalse(sc.mixed_cover_themes(self.covers))
+        self.folder(C=("steam", 0, 100, 100, "halloween"))
+        self.assertTrue(sc.mixed_cover_colours(self.covers))                     # two Steam covers in two colours still count
+
+    def test_mixed_themes_still_see_two_steam_themes(self):
+        self.folder(A=("steam", 0, 100, 100, "halloween"), B=("ps5", None), C=("steam", 0, 100, 100, None))
+        self.assertTrue(sc.mixed_cover_themes(self.covers))
+
+    def test_existing_colour_skips_console_covers(self):
+        self.folder(A=("ps5", None))
+        self.assertIsNone(sc.existing_cover_colour(self.covers))
+        self.folder(B=("steam", 42, 100, 100, None))
+        self.assertEqual(sc.existing_cover_colour(self.covers), (42, 100, 100))
+
+    def test_other_look_and_theme_ignore_console_covers(self):
+        self.folder(A=("ps5", "ribbon"))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 134, 50, 50))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0, 100, 100, completed=set(), treatment=None, theme="halloween"))
+        self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 134, 50, 50))
+        self.folder(B=("steam", 0, 100, 100, None))
+        self.assertTrue(sc.covers_in_other_colour(self.covers, 134, 50, 50))     # a Steam cover still counts
+
+    def test_full_marks_and_art_checks_ignore_console_covers(self):
+        self.folder(A=("ps5", "ribbon"))
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_other_art(self.covers, {1: self.noise()}))
+        self.assertEqual(sc.covers_with_art(self.covers), set())
+
+    def test_apply_command_accepts_a_folder_with_console_covers(self):
+        import contextlib, io
+        self.folder(A=("steam", 0, 0, 30, "halloween"), B=("ps5", None))
+        args = sc.argparse.Namespace(covers=self.covers, steam_dir=self.steam, user=None, yes=True, close_steam=False)
+        with mock.patch.object(sc, "steam_running", return_value=False), contextlib.redirect_stdout(io.StringIO()):
+            sc.cmd_apply(args)
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png"])
+
+
+class ConsoleMake(StoreMocks):
+    """make_covers(platforms=...): the manual flow puts chosen games in console cases; the natural flow leaves those covers alone."""
+
+    def cv(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_a_dict_makes_only_the_listed_games_in_their_cases(self):
+        res = sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: "ps5", 2: "xbox360"})
+        self.assertEqual((sc.cover_platform(self.cv(1)), sc.cover_platform(self.cv(2))), ("ps5", "xbox360"))
+        self.assertFalse(os.path.exists(self.cv(3)))
+        self.assertEqual((res["ok"], res["platforms"], sorted(res["files"])), (2, 2, sorted([self.cv(1), self.cv(2)])))
+
+    def test_only_narrows_the_dict_further(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps4"}, only=[2])
+        self.assertEqual(os.listdir(self.covers), ["Game_2_2.png"])
+
+    def test_the_steam_case_choice_rebuilds_a_console_cover(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        res = sc.make_covers({1: None}, self.covers, platforms={1: None})
+        self.assertIsNone(sc.cover_platform(self.cv(1)))
+        self.assertEqual(sc.cover_colour(self.cv(1)), (0, 100, 100))
+        self.assertEqual((res["ok"], res["platforms"]), (1, 0))
+
+    def test_a_console_choice_rebuilds_a_steam_cover(self):
+        sc.make_covers({1: None}, self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps4"})
+        self.assertEqual(sc.cover_platform(self.cv(1)), "ps4")
+
+    def test_another_console_rebuilds_and_the_same_one_is_kept(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        before = os.stat(self.cv(1)).st_mtime_ns
+        seen = []
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, progress=lambda d, t, a, n, st: seen.append(st))
+        self.assertEqual((seen, os.stat(self.cv(1)).st_mtime_ns), (["exists"], before))
+        sc.make_covers({1: None}, self.covers, platforms={1: "switch"})
+        self.assertEqual(sc.cover_platform(self.cv(1)), "switch")
+
+    def test_the_natural_run_keeps_console_covers_even_with_force(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        before = self.read(self.cv(1))
+        for force in (False, True):
+            with self.subTest(force=force):
+                res = sc.make_covers({1: None, 2: None}, self.covers, hue=134, force=force)
+                self.assertEqual(self.read(self.cv(1)), before)
+                self.assertEqual((res["ok"], res["platforms"]), (2, 1))
+                self.assertIn(self.cv(1), res["files"])
+        self.assertEqual(sc.cover_colour(self.cv(2)), (134, 100, 100))
+
+    def test_the_natural_run_does_not_want_to_replace_them(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        sc.make_covers({1: None}, self.covers, hue=134)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 134))
+
+    def test_a_garbled_platform_note_is_rebuilt_by_the_natural_run(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
+        sc.make_covers({1: None}, self.covers)
+        self.assertIsNone(sc.cover_platform(self.cv(1)))
+
+    def test_unknown_platform_is_refused_before_any_lookup(self):
+        with mock.patch.object(sc, "store_items", side_effect=AssertionError("looked up")), self.assertRaises(ValueError):
+            sc.make_covers({1: None}, self.covers, platforms={1: "ps9"})
+
+    def test_gold_and_themes_are_refused_with_a_console_case(self):
+        for kw in ({"treatment": "gold-case"}, {"treatment": "gold-border-rosette"}, {"theme": "halloween"}):
+            with self.subTest(kw=kw), self.assertRaises(ValueError):
+                sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, **kw)
+        sc.make_covers({1: None}, self.covers, platforms={1: None}, theme="halloween", treatment="rosette", completed={1})     # Steam case only: allowed
+        self.assertEqual(sc.cover_theme(self.cv(1)), "halloween")
+
+    def test_marks_go_on_the_completed_games_only(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, completed={2}, treatment="ribbon")
+        self.assertEqual((sc.cover_treatment(self.cv(1)), sc.cover_treatment(self.cv(2))), (None, "ribbon"))
+
+    def test_the_family_corner_goes_on_family_games_only(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, family={2})
+        def green(path):
+            with sc.Image.open(path) as im:
+                return sum(1 for px in im.convert("RGB").crop((sc.SIZE[0] - 207, 0, sc.SIZE[0], 207)).getdata() if all(abs(a - b) <= 8 for a, b in zip(px, sc.FAMILY_COLOR)))
+        self.assertEqual(green(self.cv(1)), 0)
+        self.assertGreater(green(self.cv(2)), 1000)
+
+    def test_covers_in_other_case_counts_what_a_run_would_rebuild(self):
+        sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: "ps5", 2: None, 3: "ps4"})
+        count = lambda platforms, **kw: sc.covers_in_other_case(self.covers, platforms, **kw)
+        self.assertEqual(count({1: "ps5", 2: None, 3: "ps4"}), 0)
+        self.assertEqual(count({1: "ps4", 2: None, 3: "ps4"}), 1)                 # another console
+        self.assertEqual(count({2: "xbox360"}), 1)                               # a Steam cover goes into a console case
+        self.assertEqual(count({1: None}), 1)                                    # and the other way
+        self.assertEqual(count({9: "ps5"}), 0)                                   # no cover yet for that game
+        self.assertEqual(count({2: None}, tone=(134, 100, 100)), 1)              # the Steam case in another colour
+        self.assertEqual(count({1: "ps5"}, tone=(134, 100, 100)), 0)             # a console case has no colour
+
+    def test_covers_in_other_case_sees_other_marks(self):
+        sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, completed={1}, treatment="ribbon")
+        count = lambda **kw: sc.covers_in_other_case(self.covers, {1: "ps5", 2: "ps5"}, **kw)
+        self.assertEqual(count(completed={1}, treatment="ribbon"), 0)
+        self.assertEqual(count(completed={1}, treatment="rosette"), 1)           # the ribbon goes
+        self.assertEqual(count(completed=set(), treatment=None), 1)              # "no highlight": game 1 loses its marks
+        self.assertEqual(count(completed={1, 2}, treatment="ribbon"), 1)         # game 2 gains them
+        self.assertEqual(count(completed=None), 0)                               # no games page: covers keep their marks
+
+    def test_a_garbled_note_counts_as_another_case(self):
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 1)
+
+    def test_a_gold_or_full_marks_cover_goes_into_a_console_case_keeping_its_marks(self):
+        """Review finding 1: an old gold-case look made the console build fail (a console case has no gold)."""
+        for old, want in (("gold-case", "ribbon"), ("gold-border", "ribbon"), ("gold-border-rosette", "rosette"), ("ribbon", "ribbon"), ("rosette", "rosette")):
+            with self.subTest(old=old):
+                shutil.rmtree(self.covers)
+                sc.make_covers({1: None}, self.covers, completed={1}, treatment=old)
+                self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 1)
+                res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+                self.assertEqual((res["ok"], res["failed"]), (1, []))
+                self.assertEqual((sc.cover_platform(self.cv(1)), sc.cover_treatment(self.cv(1))), ("ps5", want))
+                self.assertEqual(sc.covers_in_other_case(self.covers, {1: "ps5"}), 0)       # and a second run keeps it
+
+    def test_existing_theme_skips_console_covers(self):
+        """Review finding 2."""
+        sc.make_covers({10: None}, self.covers, platforms={10: "ps5"})
+        sc.make_covers({11: None}, self.covers, theme="halloween")
+        self.assertEqual(sc.existing_cover_theme(self.covers), "halloween")
+
+    def test_a_steam_case_choice_replaces_a_cover_made_from_own_art(self):
+        """Review finding 5: Make passes no own art in the manual flow, so such a cover is rebuilt and the user must be asked."""
+        art = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), (10, 160, 30)).save(art, format="JPEG")
+        sc.make_covers({1: None}, self.covers, custom_art={1: art})
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}), 1)
+        sc.make_covers({1: None}, self.covers, platforms={1: None})
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}), 0)
+
+    def test_a_cover_with_a_garbled_console_note_is_a_reason_to_ask_before_the_natural_run_rebuilds_it(self):
+        """Review finding 6: the natural run rebuilds it, so covers_in_other_look must say so (it skipped it silently)."""
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))
+        os.replace(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps9"}), self.cv(1))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0))
+        sc.make_covers({1: None}, self.covers)
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))
+
+    def test_every_console_mask_covers_a_good_part_of_the_cover(self):
+        """Review finding 9: the recognition threshold is a floor, not the real size: say what the real ones are."""
+        for p in sc.PLATFORMS:
+            for treatment in (None, "ribbon", "rosette"):
+                for family in (False, True):
+                    with self.subTest(platform=p, treatment=treatment, family=family):
+                        mask = sc._platform_reference((p, treatment), family)[1]
+                        self.assertGreaterEqual(mask.histogram()[255] / (sc.SIZE[0] * sc.SIZE[1]), 0.06)
+
+    def test_a_listed_game_missing_from_the_library_is_ignored(self):
+        res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5", 99: "ps4"})
+        self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
+
+
+class SteamMarksMoved(Base):
+    """The Steam case too: the family corner is at the top right and the rosette at the left under the banner (covers made before keep being recognised)."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    @staticmethod
+    def changed(a, b):
+        return sc.ImageChops.difference(a.convert("RGBA"), b.convert("RGBA")).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
+
+    def test_the_family_corner_is_top_right(self):
+        box = self.changed(sc.load_frame(0), sc.load_frame(0, True)).getbbox()
+        self.assertTrue(box[0] >= sc.SIZE[0] - 207 and box[2] <= sc.SIZE[0] and box[3] <= 207, box)
+
+    def test_the_old_corner_is_still_known_at_the_top_left(self):
+        box = self.changed(sc.load_frame(0), sc.load_frame(0, True, legacy_corner=True)).getbbox()
+        self.assertTrue(box[0] >= 0 and box[2] <= 207 and box[3] <= 207, box)
+
+    def test_the_rosette_is_left_below_the_banner(self):
+        box = self.changed(sc.preview_cover(), sc.preview_cover(treatment="rosette")).crop((0, 0, sc.SIZE[0], 450)).getbbox()
+        self.assertAlmostEqual(box[0], sc.WINDOW[0] + sc.MARKS_GAP, delta=1)
+        self.assertAlmostEqual(box[1], sc.WINDOW[1] + sc.MARKS_GAP, delta=1)
+
+    def test_the_ribbon_has_the_width_of_the_console_cases(self):
+        box = self.changed(sc.preview_cover(), sc.preview_cover(treatment="ribbon")).crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox()
+        self.assertAlmostEqual(box[2] - box[0], sc.RIBBON_WIDTH, delta=2)
+        self.assertAlmostEqual((box[0] + box[2]) / 2, (sc.WINDOW[0] + sc.WINDOW[2]) / 2, delta=2)
+        self.assertAlmostEqual(box[3] + 450, sc.WINDOW[3] - sc.RIBBON_GAP, delta=2)
+
+    def legacy(self, drop=(), **kw):
+        """A cover as the version before this one made it: the corner on the left, the rosette at the top right. Its notes are those of a cover made now."""
+        now = os.path.join(self.tmp, "now.png")
+        hue, sat, val = kw.get("colour", (0, 100, 100))
+        sc.build_cover(sc.DEFAULT_ART, now, sc.load_frame(hue, kw.get("family", False), sat=sat, val=val), hue, sat=sat, val=val, treatment=kw.get("treatment"))
+        with sc.Image.open(now) as im:
+            info = dict(im.info)
+        old = sc.finish_treatment(sc._compose(sc.Image.open(sc.DEFAULT_ART).convert("RGBA"), sc.load_frame(hue, kw.get("family", False), sat=sat, val=val, legacy_corner=True)),
+                                  kw.get("treatment"))
+        out = os.path.join(self.tmp, "old.png")
+        from PIL.PngImagePlugin import PngInfo
+        meta = PngInfo()
+        for k, v in info.items():
+            if isinstance(v, str) and k not in drop:
+                meta.add_text(k, v)
+        old.save(out, pnginfo=meta)
+        return out
+
+    def test_covers_made_before_are_still_ours(self):
+        for kw in ({}, {"family": True}, {"treatment": "ribbon"}, {"treatment": "rosette", "family": True}, {"treatment": "gold-border"},
+                   {"colour": (134, 60, 80), "family": True}, {"colour": (134, 60, 80), "treatment": "gold-border-rosette"}):
+            with self.subTest(**kw):
+                self.assertTrue(sc.is_steamcase_cover(self.legacy(**kw)))
+
+    def test_an_old_cover_without_its_treatment_note_is_not_ours(self):
+        """The old rosette reached into the banner, so the frame no longer matched (the rosette of today sits over the art, which no check can see)."""
+        self.assertTrue(sc.is_steamcase_cover(self.legacy(treatment="ribbon")))
+        self.assertFalse(sc.is_steamcase_cover(self.legacy(drop=(sc.DONE_CHUNK,), treatment="ribbon")))
+
+    def test_covers_made_now_are_ours(self):
+        for kw in ({}, {"family": True}, {"treatment": "ribbon"}, {"treatment": "rosette", "family": True}):
+            with self.subTest(**kw):
+                out = os.path.join(self.tmp, "now.png")
+                sc.build_cover(sc.DEFAULT_ART, out, sc.load_frame(0, kw.get("family", False)), 0, treatment=kw.get("treatment"))
+                self.assertTrue(sc.is_steamcase_cover(out))
+
+
+def use_cases_dir(test, mutate=None):
+    """Point the engine at a copy of assets/cases (changed by `mutate(data)` on the parsed cases.json), with every cache that depends on it cleared before and after."""
+    d = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, d, True)
+    shutil.copytree(sc.CASES_DIR, d, dirs_exist_ok=True)
+    if mutate:
+        path = os.path.join(d, "cases.json")
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        mutate(data)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    clear = lambda: (sc._case_windows.cache_clear(), sc._platform_reference.cache_clear())
+    patcher = mock.patch.object(sc, "CASES_DIR", d)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    clear()
+    test.addCleanup(clear)
+    return d
+
+
+class CasesJsonIsChecked(Base):
+    """A hand-made cases.json that is a little off is refused with one clear sentence, not a raw error from deep inside."""
+    BAD = {
+        "no window": lambda d: d["ps5"].pop("window"),
+        "a window that is not four numbers": lambda d: d["ps5"].update(window=[0, 0, 600]),
+        "a window with text in it": lambda d: d["ps5"].update(window=[0, "a", 600, 900]),
+        "a window outside the picture": lambda d: d["ps5"].update(window=[0, 100, 700, 900]),
+        "a window that is upside down": lambda d: d["ps5"].update(window=[100, 100, 50, 900]),
+        "a window that is too small": lambda d: d["ps5"].update(window=[0, 0, 300, 300]),
+        "an overlay that is not four numbers": lambda d: d["switch"].update(overlay=[0, 0, 100]),
+        "an overlay outside the picture": lambda d: d["switch"].update(overlay=[0, 0, 700, 100]),
+        "a missing platform": lambda d: d.pop("xbox360"),
+    }
+
+    def test_every_malformed_file_is_refused_in_words(self):
+        for what, mutate in self.BAD.items():
+            with self.subTest(what):
+                use_cases_dir(self, mutate)
+                for call in (lambda: sc.platform_window("ps5"), lambda: sc.load_platform_frame("ps5", True), lambda: sc.platform_marks_dy("ps5")):
+                    with self.assertRaises(sc.SteamcaseError) as caught:
+                        call()
+                    self.assertIn("cases.json", str(caught.exception))
+
+    def test_the_shipped_file_and_one_with_optional_parts_left_out_are_accepted(self):
+        use_cases_dir(self)
+        self.assertEqual(sc.platform_window("ps5")[0] >= 0, True)
+        use_cases_dir(self, lambda d: d["switch"].pop("overlay"))
+        self.assertIsNone(sc.platform_overlay("switch"))
+
+    def test_the_self_test_reports_a_bad_file_instead_of_raising(self):
+        from qtui import selfcheck
+        use_cases_dir(self, lambda d: d["ps5"].update(overlay=[0, 0, 700, 100]))
+        problems = selfcheck.engine_problems()
+        self.assertTrue(any("cases.json" in p for p in problems), problems)
+
+    def test_the_self_test_builds_every_case_with_options_on(self):
+        from qtui import selfcheck
+        calls = []
+        real = sc.build_cover
+        with mock.patch.object(sc, "build_cover", lambda *a, **kw: calls.append(kw.get("platform")) or real(*a, **kw)):
+            self.assertEqual(selfcheck.engine_problems(), [])
+        self.assertEqual(sorted(p for p in calls if p), sorted(sc.PLATFORMS))
+
+
+class SelfCheckConsoleCases(Base):
+    """The packaged app's self-test also builds and recognises a console cover."""
+
+    def test_a_missing_case_is_reported(self):
+        from qtui import selfcheck
+        sc._case_windows.cache_clear()
+        self.addCleanup(sc._case_windows.cache_clear)
+        with mock.patch.object(sc, "CASES_DIR", os.path.join(self.tmp, "no-cases")):
+            problems = selfcheck.engine_problems()
+        self.assertTrue(any("console case" in p for p in problems), problems)
+
+    def test_a_good_bundle_has_no_problems(self):
+        from qtui import selfcheck
+        self.assertEqual(selfcheck.engine_problems(), [])
+
+
+class ConsoleCaseCredits(unittest.TestCase):
+    """The marks on the console cases belong to their owners, and the frames are the project's own artwork: docs/THIRD_PARTY.md says both."""
+
+    def text(self):
+        with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_it_names_the_marks_their_owners_and_that_there_is_no_affiliation(self):
+        text = self.text()
+        for needle in ("PlayStation", "Sony Interactive Entertainment", "Xbox", "Microsoft", "Nintendo", "assets/cases"):
+            self.assertIn(needle, text)
+        self.assertRegex(text, r"(?i)not affiliated with[^.]*Sony[^.]*Nintendo|not affiliated with[^.]*Nintendo[^.]*Sony")
+
+    def test_it_says_where_the_frames_come_from(self):
+        """The frames are the project's own artwork; no credit to a logo file that is no longer in the repository."""
+        text = self.text()
+        self.assertIn("own artwork", text)
+        self.assertNotIn("build_cases", text)
+        self.assertNotIn("not the official wordmark", text)
+
+    def test_it_says_the_logos_are_not_ours_and_came_from_an_icon_website(self):
+        text = self.text()
+        self.assertRegex(text, r"(?i)logos[^.]*downloaded from a (public )?website of icons")
+        self.assertRegex(text, r"(?i)not (the )?(intellectual )?property of this project|not our intellectual property")
+
+    def test_the_drawing_tool_and_its_logo_files_are_gone(self):
+        self.assertFalse(os.path.exists(os.path.join(sc.HERE, "tools", "build_cases.py")))
+        self.assertFalse(os.path.exists(os.path.join(sc.HERE, "tools", "src", "cases")))
+
+
+class ListGames(Base):
+    """list_games tells the caller when the store could not be asked, so a window can say "offline" instead of showing a short list."""
+
+    def test_errors_of_the_store_lookup_are_handed_back(self):
+        errs = []
+        with mock.patch.object(sc, "http_get", side_effect=OSError("offline")):
+            rows = sc.list_games({1: "Installed", 2: None}, errors=errs)
+        self.assertEqual(rows, [(1, "Installed")])                       # the unnamed game cannot be listed without the store
+        self.assertEqual([str(e) for e in errs], ["offline"])
+
+    def test_no_errors_when_the_store_answers(self):
+        errs = []
+        body = json.dumps({"response": {"store_items": [{"type": 0, "name": "Two"}]}}).encode()
+        with mock.patch.object(sc, "http_get", return_value=body):
+            rows = sc.list_games({2: None}, errors=errs)
+        self.assertEqual((rows, errs), ([(2, "Two")], []))
+
+    def test_errors_are_optional(self):
+        with mock.patch.object(sc, "http_get", side_effect=OSError("offline")):
+            self.assertEqual(sc.list_games({1: "Installed"}), [(1, "Installed")])
 
 
 if __name__ == "__main__":

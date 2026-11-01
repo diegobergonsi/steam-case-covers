@@ -1,14 +1,19 @@
 # Third-party material and trademarks
 
-This project is **not affiliated with, endorsed by, or sponsored by Valve Corporation, Microsoft, or any game publisher.**
+This project is **not affiliated with, endorsed by, or sponsored by Valve Corporation, Microsoft, Sony Interactive Entertainment, Nintendo, or any game publisher.**
 
 ## Trademarks
 - **Steam** and the Steam logo are trademarks and/or registered trademarks of Valve Corporation.
 - **Windows** and the Windows logo are trademarks of the Microsoft group of companies.
+- **PlayStation**, the PlayStation logo, **PS3**, **PS4** and **PS5** are trademarks or registered trademarks of Sony Interactive Entertainment Inc.
+- **Xbox**, the Xbox logo, **Xbox 360**, **Xbox One** and **Xbox Series X|S** are trademarks of the Microsoft group of companies.
+- **Nintendo**, **Nintendo Switch** and **Nintendo Switch 2** and their logos are trademarks of Nintendo.
 - **Linux** is a trademark of Linus Torvalds. The penguin is "Tux".
 - **Discord** and its logo are trademarks of Discord Inc. The mark appears only as the button in the window's header that links to this project's Discord server; it does not mean that Discord endorses this project.
 
 These marks appear in `assets/frame.png` only to mimic a physical box and show platform support. They remain the property of their owners. If you are a rights holder and want something changed, open an issue.
+
+The console cases in `assets/cases/` (PlayStation 3, 4 and 5, Xbox 360, Xbox One, Xbox Series X|S, Nintendo Switch and Switch 2) are the project's own artwork. They carry those companies' marks only to mimic the physical cases of their games, as `assets/frame.png` does with Steam's. The logos inside the frames were downloaded from a website of icons. They are not our intellectual property: they are the trademarks of Sony Interactive Entertainment, Microsoft and Nintendo, the website does not own them either, and no licence to them is claimed here. They remain the property of their owners, and this project is not affiliated with Sony Interactive Entertainment, Microsoft or Nintendo. If you are a rights holder and want something changed, open an issue and it will be.
 
 `assets/family_corner.png` is a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
 

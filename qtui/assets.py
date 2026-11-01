@@ -5,7 +5,10 @@ import os
 
 REQUIRED_ASSETS = ("frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "halloween_overlay.png")
 
+REQUIRED_CASES = ("cases.json", "ps3.png", "ps4.png", "ps5.png", "xbox360.png", "xboxone.png", "xboxseries.png", "switch.png", "switch2.png")      # in assets/cases
+
 
 def missing_assets(assets_dir):
-    """Names from REQUIRED_ASSETS that are not in `assets_dir`, sorted."""
-    return sorted(n for n in REQUIRED_ASSETS if not os.path.isfile(os.path.join(assets_dir, n)))
+    """Names from REQUIRED_ASSETS, and "cases/<name>" for those of REQUIRED_CASES, that are not in `assets_dir`, sorted."""
+    wanted = list(REQUIRED_ASSETS) + ["cases/" + n for n in REQUIRED_CASES]
+    return sorted(n for n in wanted if not os.path.isfile(os.path.join(assets_dir, n)))
