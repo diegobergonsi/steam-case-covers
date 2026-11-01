@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 // The Case step of the manual flow: the real case of each console, one is picked for the games ticked in the Games step.
 import QtQuick
+import QtQuick.Controls
 import "."
 
 ScreenFrame {
@@ -77,6 +78,91 @@ ScreenFrame {
         }
     }
     Section {
+        objectName: "case_section_group"
+        heading: "Group"
+        Text {
+            objectName: "case_group_intro"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.bodySize
+            text: screen.cases.groupList.length > 0
+                  ? "Your games go in a group, which the app remembers. Add them to one you made, or pick a case above for a new group."
+                  : "Your games go in a group, which the app remembers. Name it below once you pick a case."
+        }
+        Repeater {
+            model: screen.cases.groupList
+            delegate: Item {
+                width: parent.width
+                height: Theme.controlHeight
+                Row {
+                    spacing: Theme.s8
+                    PrimaryButton {
+                        objectName: "case_group_" + modelData.id
+                        text: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                        quiet: screen.cases.selectedGroup !== modelData.id
+                        onClicked: screen.cases.pickGroup(modelData.id)
+                    }
+                    QuietButton {
+                        objectName: "case_group_delete_" + modelData.id
+                        text: "Delete group"
+                        onClicked: screen.cases.deleteGroup(modelData.id)
+                    }
+                }
+            }
+        }
+        Flow {
+            objectName: "case_colours"
+            width: parent.width
+            spacing: Theme.s8
+            visible: screen.cases.selectedKey === "steam" && screen.cases.selectedGroup === ""
+            Repeater {
+                id: colourRepeater
+                model: screen.cases.colourChoices.length
+                delegate: Swatch {
+                    objectName: "case_colour_" + index
+                    readonly property var info: screen.cases.colourChoices[index]
+                    color: info.color
+                    name: info.label
+                    selected: screen.cases.colourIndex === index
+                    tabStop: selected || (screen.cases.colourIndex < 0 && index === 0)
+                    onPicked: screen.cases.pickColour(index)
+                    onStep: (delta) => {
+                        var to = Math.max(0, Math.min(screen.cases.colourChoices.length - 1, index + delta))
+                        colourRepeater.itemAt(to).forceActiveFocus()
+                        screen.cases.pickColour(to)
+                    }
+                }
+            }
+        }
+        TextField {
+            objectName: "case_group_name"
+            width: parent.width
+            height: Theme.controlHeight
+            visible: screen.cases.selectedKey !== "" && screen.cases.selectedGroup === ""
+            placeholderText: "Name this group"
+            placeholderTextColor: Theme.faint
+            color: Theme.text
+            font.pixelSize: Theme.bodySize
+            selectByMouse: true
+            maximumLength: 40
+            text: screen.cases.groupName
+            Accessible.name: "Name of this group"
+            background: Rectangle {
+                radius: Theme.radiusField
+                color: Theme.bg
+                border.width: parent.activeFocus ? Theme.focusRing : Theme.hairline
+                border.color: parent.activeFocus ? Theme.accent : Theme.edge
+            }
+            onTextEdited: screen.cases.groupName = text
+        }
+        StatusLine {
+            objectName: "case_error"
+            visible: screen.cases.error !== ""
+            text: screen.cases.error
+        }
+    }
+    Section {
         objectName: "case_section_games"
         heading: "Your games"
         Text {
@@ -92,7 +178,9 @@ ScreenFrame {
         ButtonRow {
             PrimaryButton {
                 objectName: "case_assign"
-                text: "Use this case for " + screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " game" : " games")
+                text: screen.cases.selectedGroup !== ""
+                      ? "Add " + screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " game" : " games") + " to " + screen.cases.groupName
+                      : "Use this case for " + screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " game" : " games")
                 enabled: screen.cases.canAssign
                 quiet: !enabled
                 onClicked: screen.cases.assign()

@@ -6030,6 +6030,160 @@ class PickerTests(PickerBase):
 
 
 @need_qt
+class CaseGroups(PickerBase):
+    """The Case step makes, names and reuses groups: a console case, or the Steam case in a colour (or gold)."""
+
+    def setUp(self):
+        super().setUp()
+        import groups
+        self.groups = groups
+        self.cases = self.shell.cases
+        self.load()
+
+    def choose(self, key, colour=None, name=None):
+        self.cases.pick(key)
+        if colour is not None:
+            self.cases.pickColour(colour)
+        if name is not None:
+            self.cases.groupName = name
+
+    def label_index(self, label):
+        return [c["label"] for c in self.cases.colourChoices].index(label)
+
+    def test_the_colours_are_the_nine_swatches_and_one_is_gold(self):
+        got = self.cases.colourChoices
+        self.assertEqual([c["label"] for c in got], ["Blue", "Violet", "Magenta", "Red", "Gold", "Green", "Black", "Graphite", "Silver"])
+        gold = got[self.label_index("Gold")]
+        self.assertEqual((gold["hue"], gold["sat"], gold["val"]), (self.sc.GOLD_HUE, 100, 100))                # the colour of the gold case
+        self.assertTrue(all(c["color"].startswith("#") for c in got))
+        self.assertEqual(self.cases.colourIndex, 0)
+
+    def test_a_new_group_is_named_from_its_case(self):
+        self.cases.pick("ps5")
+        self.assertEqual(self.cases.groupName, "PlayStation 5")
+        self.cases.pick("steam")
+        self.assertEqual(self.cases.groupName, "Steam case, blue")
+        self.cases.pickColour(self.label_index("Red"))
+        self.assertEqual(self.cases.groupName, "Steam case, red")
+        self.cases.pickColour(self.label_index("Gold"))
+        self.assertEqual(self.cases.groupName, "Steam case, gold")
+
+    def test_a_name_you_typed_stays_when_the_case_changes(self):
+        self.cases.pick("steam")
+        self.cases.groupName = "Dropped games"
+        self.cases.pickColour(self.label_index("Red"))
+        self.cases.pick("ps4")
+        self.assertEqual(self.cases.groupName, "Dropped games")
+
+    def test_assign_makes_the_group_and_gives_its_games_the_colour(self):
+        self.picker.toggle(1)
+        self.picker.toggle(3)
+        self.choose("steam", self.label_index("Red"), "Dropped games")
+        self.cases.assign()
+        self.assertEqual(self.cases.assigned(), {1: None, 3: None})
+        self.assertEqual(self.cases.tones(), {1: (134, 100, 100), 3: (134, 100, 100)})
+        gid = self.cases.groupList[0]["id"]
+        self.assertEqual(self.cases.groupIds(), {1: gid, 3: gid})
+        self.assertEqual([(g["name"], g["count"]) for g in self.cases.groupList], [("Dropped games", 2)])
+        self.assertEqual((self.cases.groupName, self.cases.error, self.cases.selectedGroup), ("", "", ""))         # a fresh start for the next group
+
+    def test_a_console_group_has_no_colour(self):
+        self.picker.toggle(2)
+        self.choose("xbox360")
+        self.cases.assign()
+        self.assertEqual((self.cases.assigned(), self.cases.tones()), ({2: "xbox360"}, {}))
+        self.assertEqual(self.cases.groupList[0]["name"], "Xbox 360")
+
+    def test_the_summary_still_counts_the_cases(self):
+        self.picker.toggle(1)
+        self.picker.toggle(2)
+        self.choose("steam", self.label_index("Green"))
+        self.cases.assign()
+        self.assertEqual([(s["label"], s["count"]) for s in self.cases.summary], [("Steam", 2)])
+
+    def saved(self, *specs):
+        groups = []
+        for name, case, games in specs:
+            groups, _ = self.groups.assign(groups, name, case, games)
+        self.groups.save(self.covers, groups)
+        self.cases.reloadGroups()
+        return groups
+
+    def test_saved_groups_are_listed_and_picking_one_keeps_its_case(self):
+        saved = self.saved(("Red Steam Cases", {"tone": [134, 100, 100]}, [9]), ("PS5", {"platform": "ps5"}, [10]))
+        self.assertEqual([(g["name"], g["count"]) for g in self.cases.groupList], [("Red Steam Cases", 1), ("PS5", 1)])
+        self.picker.toggle(1)
+        self.cases.pickGroup(saved[0]["id"])
+        self.assertEqual((self.cases.selectedKey, self.cases.groupName, self.cases.colourIndex), ("steam", "Red Steam Cases", self.label_index("Red")))
+        self.assertTrue(self.cases.canAssign)
+        self.cases.assign()
+        self.assertEqual((self.cases.tones(), self.cases.groupIds()), ({1: (134, 100, 100)}, {1: saved[0]["id"]}))
+        self.assertEqual([(g["name"], g["count"]) for g in self.cases.groupList], [("Red Steam Cases", 2), ("PS5", 1)])
+
+    def test_picking_a_case_after_a_group_starts_a_new_group(self):
+        saved = self.saved(("PS5", {"platform": "ps5"}, [10]))
+        self.cases.pickGroup(saved[0]["id"])
+        self.cases.pick("ps4")
+        self.assertEqual((self.cases.selectedGroup, self.cases.groupName), ("", "PlayStation 4"))
+
+    def test_the_name_of_a_group_with_another_case_is_refused_in_words(self):
+        self.saved(("Mine", {"tone": [134, 100, 100]}, [9]))
+        self.picker.toggle(1)
+        self.choose("ps5", name="Mine")
+        self.cases.assign()
+        self.assertIn("Mine", self.cases.error)
+        self.assertEqual(self.cases.assignedCount, 0)
+        self.assertEqual(self.picker.selectedCount, 1)                                   # nothing was taken from the ticks
+
+    def test_a_bad_name_is_refused_in_words(self):
+        self.picker.toggle(1)
+        self.choose("ps5", name="   ")
+        self.cases.assign()
+        self.assertNotEqual(self.cases.error, "")
+        self.assertEqual(self.cases.assignedCount, 0)
+        self.cases.groupName = "ok"
+        self.assertEqual(self.cases.error, "")                                           # typing clears the message
+
+    def test_a_game_moves_to_its_new_group_and_an_empty_group_goes(self):
+        saved = self.saved(("Old", {"tone": [134, 100, 100]}, [1]))
+        self.picker.toggle(1)
+        self.choose("ps5")
+        self.cases.assign()
+        self.assertEqual([(g["name"], g["count"]) for g in self.cases.groupList], [("PlayStation 5", 1)])
+
+    def test_deleting_a_group_takes_it_out_and_unassigns_its_games_of_this_run(self):
+        saved = self.saved(("Red", {"tone": [134, 100, 100]}, [9]))
+        self.picker.toggle(1)
+        self.cases.pickGroup(saved[0]["id"])
+        self.cases.assign()
+        self.cases.deleteGroup(saved[0]["id"])
+        self.assertEqual((self.cases.groupList, self.cases.assigned()), ([], {}))
+        self.assertEqual(self.cases.released(), {1, 9})                                   # every game of the group, as none is in another group
+        self.cases.deleteGroup("nope")                                                   # an unknown id changes nothing
+
+    def test_a_damaged_file_gives_no_groups(self):
+        os.makedirs(self.covers, exist_ok=True)
+        with open(os.path.join(self.covers, "groups.json"), "w") as f:
+            f.write("{nonsense")
+        self.cases.reloadGroups()
+        self.assertEqual(self.cases.groupList, [])
+
+    def test_reset_starts_over_and_reloads_the_saved_groups(self):
+        self.saved(("Red", {"tone": [134, 100, 100]}, [9]))
+        self.picker.toggle(1)
+        self.choose("ps5")
+        self.cases.assign()
+        self.cases.reset()
+        self.assertEqual((self.cases.assignedCount, [g["name"] for g in self.cases.groupList]), (0, ["Red"]))
+
+    def test_the_groups_to_save_hold_this_runs_changes(self):
+        self.picker.toggle(1)
+        self.choose("steam", self.label_index("Gold"), "Gold games")
+        self.cases.assign()
+        data = self.cases.groupsToSave()
+        self.assertEqual([(g["name"], g["games"], g["case"]) for g in data], [("Gold games", [1], {"tone": [self.sc.GOLD_HUE, 100, 100]})])
+
+
 class CasesTests(PickerBase):
     """The Case step: which console case the ticked games go in, kept per game until Make."""
 
@@ -6322,6 +6476,80 @@ class ManualWindow(PickerBase):
         self.assertTrue(self.item("case_next").property("enabled"))
         self.click("case_more")
         self.assertEqual(self.step(), "pick")
+
+    def type_into(self, name, text):
+        """Type into a text field as a person does: focus it, select what is there, type."""
+        from PySide6.QtCore import QMetaObject, Qt
+        from PySide6.QtTest import QTest
+        field = self.item(name)
+        field.forceActiveFocus()
+        self.app.processEvents()
+        QMetaObject.invokeMethod(field, "selectAll")
+        for ch in text:
+            QTest.keyClick(self.root, ch)
+        self.app.processEvents()
+
+    def open_case_screen(self, *games):
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        for g in games:
+            self.picker.toggle(g)
+        self.shell.goKey("case")
+        self.app.processEvents()
+
+    def test_the_colour_row_is_there_for_the_steam_case_only(self):
+        self.open_case_screen(1)
+        self.assertFalse(self.item("case_colours").property("visible"))
+        self.click("case_ps5")
+        self.assertFalse(self.item("case_colours").property("visible"))
+        self.click("case_steam")
+        self.assertTrue(self.item("case_colours").property("visible"))
+        self.assertTrue(all(self.has("case_colour_%d" % i) for i in range(9)))
+        self.click("case_colour_3")
+        self.assertEqual(self.shell.cases.colourIndex, 3)
+        self.assertEqual(self.shell.cases.groupName, "Steam case, red")
+
+    def test_the_group_gets_a_name_you_can_change(self):
+        self.open_case_screen(1)
+        self.assertFalse(self.item("case_group_name").property("visible"))                 # nothing to name before a case is picked
+        self.click("case_xbox360")
+        self.assertTrue(self.item("case_group_name").property("visible"))
+        self.assertEqual(self.item("case_group_name").property("text"), "Xbox 360")
+        self.type_into("case_group_name", "Old favourites")
+        self.assertEqual(self.shell.cases.groupName, "Old favourites")
+        self.click("case_assign")
+        self.assertEqual([g["name"] for g in self.shell.cases.groupList], ["Old favourites"])
+
+    def test_saved_groups_are_chips_you_can_pick_and_delete(self):
+        import groups
+        saved, gid = groups.assign([], "Red Steam Cases", {"tone": [134, 100, 100]}, [9])
+        groups.save(self.covers, saved)
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.app.processEvents()
+        self.assertTrue(self.has("case_group_" + gid))
+        self.click("case_group_" + gid)
+        self.assertEqual((self.shell.cases.selectedGroup, self.shell.cases.selectedKey), (gid, "steam"))
+        self.assertFalse(self.item("case_group_name").property("visible"))                 # a saved group keeps its name and case
+        self.assertFalse(self.item("case_colours").property("visible"))
+        self.assertIn("Red Steam Cases", self.item("case_assign").property("text"))
+        self.click("case_assign")
+        self.assertEqual(self.shell.cases.tones(), {1: (134, 100, 100)})
+        self.click("case_group_delete_" + gid)
+        self.assertEqual(self.shell.cases.groupList, [])
+        self.assertFalse(self.has("case_group_" + gid))
+
+    def test_a_refused_name_is_said_in_words(self):
+        import groups
+        saved, gid = groups.assign([], "Mine", {"tone": [134, 100, 100]}, [9])
+        groups.save(self.covers, saved)
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.click("case_ps5")
+        self.type_into("case_group_name", "Mine")
+        self.click("case_assign")
+        self.assertTrue(self.item("case_error").property("visible"))
+        self.assertIn("Mine", self.item("case_error").property("text"))
 
     def test_the_family_switch_is_greyed_without_a_game_list_file(self):
         self.shell.startManual()
