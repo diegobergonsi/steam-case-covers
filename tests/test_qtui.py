@@ -6406,17 +6406,29 @@ class ManualWindow(PickerBase):
         from qtui.app import find_item
         return find_item(self.root, name) is not None
 
+    def settle(self, item, tries=40):
+        """Wait until the item stops moving (a slow machine lays the screen out late): its place is the same twice in a row."""
+        from PySide6.QtCore import QPointF
+        from PySide6.QtTest import QTest
+        last = None
+        for _ in range(tries):
+            QTest.qWait(20)
+            now = item.mapToScene(QPointF(0, 0))
+            if last is not None and now == last:
+                return
+            last = now
+
     def click(self, name):
         from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
         it = self.item(name)
-        QTest.qWait(30)                                                # the layout settles before the position is read
+        self.settle(it)                                                # the layout settles before the position is read
         scroller = self.item("screen_scroller") if self.has("screen_scroller") else None
         if scroller is not None and it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y() >= 0 and not name.startswith(("games_next", "case_next", "home_main")):
             y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
             scroller.setProperty("contentY", max(0, y - 40))
             self.app.processEvents()
-            QTest.qWait(30)                                            # the layout settles before the pointer goes there
+            self.settle(it)                                            # the layout settles before the pointer goes there
         point = it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
         QTest.mouseMove(self.root, point)                              # a hand moves the pointer there first
         self.app.processEvents()
@@ -6606,6 +6618,7 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         self.shell.go(0)
         self.app.processEvents()
+        self.wait_for(lambda: not self.shell.apply.busy)                    # the boxes are greyed while Steam is being looked at
         self.assertTrue(self.has("home_group_" + red) and self.has("home_group_" + ps))
         self.assertTrue(self.item("home_section_groups").property("visible"))
         self.assertFalse(self.item("home_group_" + red).property("checked"))
