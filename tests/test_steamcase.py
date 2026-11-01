@@ -3394,6 +3394,41 @@ class PlatformCases(Base):
                         else:
                             self.assertIsNone(diff.crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox())                        # the rosette alone has no ribbon
 
+    def circle_art(self, size):
+        """A flat art with a white disc in the middle and a white line near the top."""
+        art = sc.Image.new("RGBA", size, (20, 20, 80, 255))
+        d = sc.ImageDraw.Draw(art)
+        r = min(size) // 4
+        d.ellipse((size[0] // 2 - r, size[1] // 2 - r, size[0] // 2 + r, size[1] // 2 + r), fill=(255, 255, 255, 255))
+        d.rectangle((0, 30, size[0], 33), fill=(255, 0, 0, 255))
+        return art
+
+    def white_box(self, im, window):
+        x0, y0, x1, y1 = window
+        r, g, b = im.crop(window).convert("RGB").split()
+        return sc.ImageChops.darker(sc.ImageChops.darker(r, g), b).point(lambda v: 255 if v > 240 else 0).getbbox()
+
+    def test_a_tall_art_is_half_squeezed_and_half_cropped_to_fit_the_window(self):
+        """A 2:3 art is wider than the case's window allows: the art is squeezed by half of what it would take to fit it whole, and cropped by the other half."""
+        frame = sc.Image.new("RGBA", sc.SIZE, (0, 0, 0, 0))
+        window = (14, 96, 586, 872)
+        art = self.circle_art((600, 900))
+        got = sc._compose(art, frame, window)
+        box = self.white_box(got, window)
+        width, height = box[2] - box[0], box[3] - box[1]
+        self.assertAlmostEqual(width / height, 858 / 817, delta=0.02)                       # the disc is 5% wider than tall: squeezed by 5%, not by 10%
+        r, g, _ = got.crop(window).convert("RGB").split()
+        line = sc.ImageChops.darker(r.point(lambda v: 255 if v > 200 else 0), g.point(lambda v: 255 if v < 80 else 0)).getbbox()
+        self.assertIsNotNone(line)
+        self.assertAlmostEqual(line[1], round(30 * 817 / 900) - 20, delta=2)                # 20 rows are cropped at the top (and at the bottom)
+
+    def test_a_wide_art_is_only_cropped(self):
+        frame = sc.Image.new("RGBA", sc.SIZE, (0, 0, 0, 0))
+        window = (14, 96, 586, 872)
+        got = sc._compose(self.circle_art((900, 600)), frame, window)
+        box = self.white_box(got, window)
+        self.assertAlmostEqual((box[2] - box[0]) / (box[3] - box[1]), 1.0, delta=0.03)       # the disc stays round
+
     def test_compose_default_window_is_unchanged(self):
         art = sc.Image.new("RGBA", (300, 450), (200, 60, 60, 255))
         frame = sc.load_frame()
