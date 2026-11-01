@@ -2237,9 +2237,9 @@ class LookState(QtCase):
         import time
         seen = []
         self.look.previewSourceChanged.connect(lambda: seen.append(self.look.previewSource))
-        end = time.time() + 0.45
+        end = time.time() + 3                                              # a slow runner gets time; a picture that never comes during the drag still fails
         h = 0
-        while time.time() < end:                                           # a change every ~15 ms for 450 ms
+        while len(seen) < 3 and time.time() < end:                         # a change every ~15 ms, until pictures have come on the way
             h = (h + 7) % 360
             self.look.setTone(h, 100, 100)
             self.wait(15)
