@@ -1,5 +1,8 @@
 # Design: pick games by hand, and put them in console cases
 
+> **Later change (2026-11-01):** the final frames were hand-made, so `tools/build_cases.py` and its logo files are gone; `cases.json` is written from the frames by `tools/measure_cases.py` and has only `window` and `overlay` (no `marks_dy` or `corner`). On every case the rosette is at the left under the banner, the family corner at the top right, and the ribbon is 482 px wide. Read the sections below as the history of the design.
+
+
 Date: 2026-10-31. Status: draft for the user's approval. Nothing is built.
 
 ## Intent and why

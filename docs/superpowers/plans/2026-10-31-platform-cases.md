@@ -1,5 +1,8 @@
 # Platform Cases and Manual Game Picking Implementation Plan
 
+> **Later change (2026-11-01):** the final frames were hand-made, so `tools/build_cases.py` and its logo files are gone; `cases.json` is written from the frames by `tools/measure_cases.py` and has only `window` and `overlay` (no `marks_dy` or `corner`). On every case the rosette is at the left under the banner, the family corner at the top right, and the ribbon is 482 px wide. Read the sections below as the history of the design.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A second flow in the window where the user ticks specific games and puts them in console cases (PS3, PS4, PS5, Xbox 360, Xbox One, Xbox Series X|S, Switch, Switch 2, or the Steam case), ending in the same Make and Add to Steam as today.
