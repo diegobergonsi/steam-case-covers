@@ -874,12 +874,15 @@ TONE_CHUNK = "steamcase-tone"                 # "<sat> <val>"; covers without it
 
 
 def _compose(art, frame, window=WINDOW):
-    """A portrait scaled to cover the frame's art window (centre-cropped), with the frame on top. Real covers and the window's preview both use this.
+    """A portrait scaled to cover the frame's art window (centre-cropped; a tall one is also squeezed a little, see below), with the frame on top. Real covers and the window's preview both use this.
     `window` is the frame's art window; the Steam case's unless the frame is a console case's (platform_window)."""
     x0, y0, x1, y1 = window
     ww, wh = x1 - x0, y1 - y0
     s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
-    art = art.resize((max(ww, round(art.width * s)), max(wh, round(art.height * s))), Image.LANCZOS)
+    size = (max(ww, round(art.width * s)), max(wh, round(art.height * s)))
+    if size[1] > wh:                                              # a tall art (the usual 2:3) is taller than the window once it is as wide: squeeze it by half of the excess and crop the other half
+        size = (size[0], (size[1] + wh) // 2)
+    art = art.resize(size, Image.LANCZOS)
     cx, cy = (art.width - ww) // 2, (art.height - wh) // 2
     art = art.crop((cx, cy, cx + ww, cy + wh))
     canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
