@@ -137,11 +137,13 @@ Changed your mind? On **Home** (the first entry in the left list):
 * **Restore previous artwork** undoes the last Apply. Press it again to go one step further back.
 * **Reset to Steam's default art** removes the covers this app made. It works even if you have no backup. If it also finds custom art that this app did not make (from SteamGridDB, or set by hand in Steam), it asks whether to remove that too: **Remove only ours** keeps it, **Remove all** brings back Steam's own art everywhere. Restore undoes either.
 
-### Optional: pick games by hand and put them in console cases
+### Optional: pick games by hand, in console cases or in a colour of your own
 
-Some games belong in another box: The Last of Us is a PlayStation game, Forza is an Xbox game. On **Home**, **Pick games by hand** opens a second way through the window (the step by step way stays as it is). After your game list, you tick the games you want (search by name, or scroll), then pick a case for them: **PlayStation 5, 4 or 3, Xbox Series X|S, Xbox One or Xbox 360, Nintendo Switch or Switch 2**, or the Steam case. You can tick more games and give them another case, or go on. Games you do not tick are left alone (their covers do not change), and **Make** and **Add to Steam** work as before, only for the games you ticked.
+Some games belong in another box: The Last of Us is a PlayStation game, Forza is an Xbox game. On **Home**, **Pick games by hand** opens a second way through the window (the step by step way stays as it is). After your game list, you tick the games you want (search by name, or scroll), then pick a case for them: **PlayStation 5, 4 or 3, Xbox Series X|S, Xbox One or Xbox 360, Nintendo Switch or Switch 2**, or the Steam case, which can have its own colour here (blue, violet, magenta, red, gold, green, black, graphite or silver). You can tick more games and give them another case, or go on. Games you do not tick are left alone (their covers do not change), and **Make** and **Add to Steam** work as before, only for the games you ticked.
 
 * The console cases are fixed: no colour, brightness or theme. They are drawn to fill the same tall tile as the Steam case.
+* **Groups.** The games you give a case go in a **group** with a name you can change ("Dropped games", "Xbox 360"), and the app remembers it. Next time you can add games to a group you made, or delete it. A game is in one group only. Colours are only a look: gold is a colour like the others, and the rosette and ribbon only go on games that really are at 100% on the games page you loaded.
+* **The usual way leaves your groups alone.** When you make covers again in the step by step way, the covers of your groups are not repainted. On the **Make** step you can tick a group to repaint its covers with the look you chose; that deletes the group. **Reset to Steam's default art** (on Home) works the same way: it leaves your groups on Steam unless you tick them.
 * Games shared through Steam Family Sharing get the green corner only if you switch on **Mark family games** (it needs your game list file).
 * Your 100% games get the rosette and ribbon (or the rosette alone) if you load your games page in the **100% games** step of this way and keep **Highlight them**.
 * The natural way never changes or removes a console cover: only picking the game again here does.
@@ -184,7 +186,7 @@ Good to know:
 - Optional "skip blurry covers" for games Steam has no real portrait for
 
 **Make them yours**
-- Pick games by hand and put them in a PlayStation, Xbox or Nintendo case, instead of the Steam case
+- Pick games by hand and put them in a PlayStation, Xbox or Nintendo case, or in a colour of your own, in groups the app remembers
 - Optionally put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it
 - Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview, and, if you like, a Halloween theme (a cobweb with a spider, a pumpkin and a hanging spider) in any colour
 - Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon (or the rosette alone), and, if you like, a gold case or a gold border ([how it works](#optional-highlight-your-100-games))

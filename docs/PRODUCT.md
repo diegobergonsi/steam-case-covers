@@ -20,7 +20,7 @@ Everything runs on the user's computer: no login, no API key, no uploads. Art co
 
 ## Operating Context
 
-Desktop app (a Qt Quick window, package `qtui/`, with Home and five steps, plus a manual way for choosing games and console cases; the rules of its screens are in `docs/ui-guide.md`), packaged with PyInstaller for three OSes and released by GitHub Actions. Works against the user's real Steam folder (`userdata/<id>/config/grid`), supports multiple accounts via an account picker, can Reset including art from other sources. Must work on Steam Deck screens, high-DPI displays and small screens. Handheld users (Steam Deck and similar) really do use the touchscreen, so touch is a first-class input: targets of 44px or more, no hover-only behavior, and drag-to-scroll.
+Desktop app (a Qt Quick window, package `qtui/`, with Home and five steps, plus a manual way for choosing games and giving them a console case or a colour, kept as named groups; the rules of its screens are in `docs/ui-guide.md`), packaged with PyInstaller for three OSes and released by GitHub Actions. Works against the user's real Steam folder (`userdata/<id>/config/grid`), supports multiple accounts via an account picker, can Reset including art from other sources. Must work on Steam Deck screens, high-DPI displays and small screens. Handheld users (Steam Deck and similar) really do use the touchscreen, so touch is a first-class input: targets of 44px or more, no hover-only behavior, and drag-to-scroll.
 
 ## Capabilities and Constraints
 

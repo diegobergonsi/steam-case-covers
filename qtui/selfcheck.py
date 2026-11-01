@@ -72,4 +72,17 @@ def engine_problems():
         problems.append("the console cases cannot be used: %s" % e)
     except Exception as e:
         problems.append("a console case cover could not be built: %s" % e)
+    try:
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "p.png")
+            Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
+            for label, kwargs, frame in (("a group cover in a colour", {"hue": 134, "treatment": "ribbon"}, sc.load_frame(134)),
+                                         ("a group cover in a console case", {"platform": "ps5"}, sc.load_platform_frame("ps5"))):
+                out = os.path.join(d, label.replace(" ", "_") + ".png")
+                sc.build_cover(src, out, frame, group="selfcheck", **kwargs)
+                if sc.cover_group(out) != "selfcheck" or not sc.is_steamcase_cover(out):
+                    problems.append("%s (a group) is not recognised as ours" % label)
+    except Exception as e:
+        problems.append("a group cover could not be built: %s" % e)
     return problems

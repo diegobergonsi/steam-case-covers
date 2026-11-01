@@ -43,6 +43,28 @@ ScreenFrame {
                 }
             }
             Section {
+                objectName: "make_section_groups"
+                heading: "Your groups"
+                visible: shell.flow === "natural" && screen.make.groupTicks.choices.length > 0
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    color: Theme.muted
+                    font.pixelSize: Theme.bodySize
+                    text: "These groups of covers were made by hand, so they are left as they are. Tick a group to repaint its covers with the look above. That deletes the group."
+                }
+                Repeater {
+                    model: screen.make.groupTicks.choices
+                    delegate: SwitchRow {
+                        objectName: "make_group_" + modelData.id
+                        label: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                        checked: modelData.ticked
+                        enabled: screen.make.canMake
+                        onToggled: screen.make.groupTicks.toggle(modelData.id)
+                    }
+                }
+            }
+            Section {
                 objectName: "make_section_progress"
                 heading: "Progress"
                 ProgressBar { objectName: "make_progress"; label: "Making the covers"; value: screen.make.progress }
@@ -104,7 +126,10 @@ ScreenFrame {
         dialog.ask(make.questionTitle, [{"text": make.questionText, "kind": "main"},
                                         {"text": "Steam keeps showing your current art until you add the new covers in step 5.", "kind": "muted"}], "Replace them")
     }
-    Component.onCompleted: if (make.asking && make.questionTitle !== "") openQuestion()       // the question came while another screen was shown
+    Component.onCompleted: {
+        make.groupTicks.refresh()                       // the manual way may have changed them since this screen was last shown
+        if (make.asking && make.questionTitle !== "") openQuestion()       // the question came while another screen was shown
+    }
     Connections {
         target: screen.make
         function onConfirmNeeded(title, sentence) { screen.openQuestion() }

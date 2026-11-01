@@ -354,6 +354,23 @@ class Reset(Base):
         self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png", "3p.png", "9p.png"])
         self.assertTrue(all(sc.is_steamcase_cover(os.path.join(self.grid, "%dp.png" % i)) for i in (1, 2, 3)))
 
+    def test_reset_keeps_the_covers_it_is_told_to_keep_even_when_it_removes_other_art(self):
+        for i in (1, 2, 3):
+            self.real_cover(i)
+        sc.Image.new("RGBA", (50, 50), (1, 2, 3, 255)).save(os.path.join(self.grid, "8p.png"))       # not ours: a custom picture
+        names = sc.find_our_covers(self.steam)
+        r = sc.reset_to_default(self.steam, names=[n for n in names if n != "2p.png"], everything=True, keep=["2p.png"])
+        self.assertEqual(r["removed"], 3)                                  # 1p, 3p and the custom 8p
+        self.assertEqual(sorted(os.listdir(self.grid)), ["2p.png"])
+        sc.restore_backup(self.steam, r["backup"])
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png", "3p.png", "8p.png"])
+
+    def test_reset_without_keep_removes_everything_as_before(self):
+        for i in (1, 2):
+            self.real_cover(i)
+        sc.reset_to_default(self.steam, names=sc.find_our_covers(self.steam), everything=True)
+        self.assertEqual(os.listdir(self.grid), [])
+
     def test_reset_with_nothing_to_remove_makes_no_backup(self):
         self.users_own_art(9)
         r = sc.reset_to_default(self.steam)
@@ -3852,6 +3869,235 @@ class SteamMarksMoved(Base):
                 self.assertTrue(sc.is_steamcase_cover(out))
 
 
+class HandMadeCovers(Base):
+    """A cover made by hand (a console case or a group's Steam case) carries a group note, and every check of the usual flow ignores it."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.art = os.path.join(self.tmp, "art.png")
+        sc.Image.new("RGB", (60, 90), (30, 200, 30)).save(self.art)
+
+    def make(self, name, hue=0, **kw):
+        out = os.path.join(self.covers, name)
+        platform = kw.get("platform")
+        frame = sc.load_platform_frame(platform) if platform else sc.load_frame(hue)
+        sc.build_cover(self.art, out, frame, hue, **kw)
+        return out
+
+    def with_note(self, src, key, value):
+        """A copy of the cover with one PNG note set (value None: removed)."""
+        from PIL.PngImagePlugin import PngInfo
+        out = os.path.join(self.tmp, "n_%s.png" % key)
+        meta = PngInfo()
+        with sc.Image.open(src) as im:
+            for k, v in im.info.items():
+                if isinstance(v, str) and k != key:
+                    meta.add_text(k, v)
+            if value is not None:
+                meta.add_text(key, value)
+            im.save(out, pnginfo=meta)
+        return out
+
+    def test_a_group_note_is_written_and_read_back(self):
+        path = self.make("a.png", group="g1")
+        self.assertEqual(sc.cover_group(path), "g1")
+        self.assertIsNone(sc.cover_group(self.make("b.png")))
+
+    def test_a_damaged_group_note_reads_as_false(self):
+        path = self.make("a.png", group="g1")
+        for bad in ("", "G1", "g 1", "g1;", "x" * 13, "é"):
+            with self.subTest(bad=bad):
+                self.assertIs(sc.cover_group(self.with_note(path, sc.GROUP_CHUNK, bad)), False)
+        self.assertIs(sc.cover_group(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_a_bad_group_id_is_refused_before_anything_is_written(self):
+        for bad in ("", "G1", "g 1", "x" * 13, 5, "a/b"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.make("a.png", group=bad)
+        self.assertFalse(os.path.exists(os.path.join(self.covers, "a.png")))
+
+    def test_by_hand_means_a_console_case_or_a_group_note(self):
+        self.assertIsNone(sc.cover_by_hand(self.make("plain.png")))
+        self.assertIs(sc.cover_by_hand(self.make("group.png", group="g1")), True)
+        self.assertIs(sc.cover_by_hand(self.make("console.png", platform="ps5")), True)
+        self.assertIs(sc.cover_by_hand(self.make("both.png", platform="ps5", group="g1")), True)
+        self.assertIs(sc.cover_by_hand(self.with_note(self.make("g2.png", group="g1"), sc.GROUP_CHUNK, "BAD")), False)       # a damaged note: the cover is rebuilt
+        self.assertIs(sc.cover_by_hand(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_covers_by_hand_are_ours(self):
+        for kw in ({"group": "g1"}, {"group": "g1", "hue": 134}, {"group": "g1", "treatment": "ribbon"}, {"group": "g1", "treatment": "rosette", "hue": 134},
+                   {"group": "g1", "platform": "ps5"}, {"group": "g1", "platform": "switch", "treatment": "ribbon"}):
+            with self.subTest(**kw):
+                self.assertTrue(sc.is_steamcase_cover(self.make("c.png", **kw)))
+
+    def test_a_group_note_never_goes_with_a_theme_or_a_damaged_note(self):
+        themed = self.make("t.png", theme="halloween")
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(themed, sc.GROUP_CHUNK, "g1")))
+        grouped = self.make("g.png", group="g1")
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(grouped, sc.GROUP_CHUNK, "NOPE")))
+        console = self.make("c.png", platform="ps5", group="g1")
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(console, sc.GROUP_CHUNK, "NOPE")))
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(grouped, sc.THEME_CHUNK, "halloween")))
+
+    def folder(self):
+        """A usual library (two blue halloween covers) and, sorting before them, covers by hand: a red one with full marks and art of the user's, and a console one."""
+        self.make("Plain_1_1.png", theme="halloween")
+        self.make("Plain_2_2.png", theme="halloween")
+        self.make("A_3_3.png", hue=134, treatment="ribbon", group="g1", from_art="custom fedcba9876543210")
+        self.make("A_4_4.png", platform="ps5", group="g1")
+
+    def test_the_checks_of_the_usual_flow_ignore_covers_by_hand(self):
+        self.folder()
+        self.assertEqual(sc.existing_cover_colour(self.covers), (0, 100, 100))                       # not that of the first cover by name, which is red
+        self.assertFalse(sc.mixed_cover_colours(self.covers))
+        self.assertFalse(sc.mixed_cover_themes(self.covers))
+        self.assertEqual(sc.existing_cover_theme(self.covers), "halloween")
+        self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 0))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_other_art(self.covers, {}))                                   # the art of a cover by hand is not in question
+        self.assertEqual(sc.covers_with_art(self.covers), set())
+
+    def test_forgetting_a_group_takes_the_note_off_and_keeps_the_picture(self):
+        steam = self.make("Steam_1_1.png", hue=134, treatment="ribbon", group="g1")
+        console = self.make("Console_2_2.png", platform="ps5", group="g1")
+        other = self.make("Other_3_3.png", hue=134, group="g2")
+        plain = self.make("Plain_4_4.png")
+        before = {p: sc.Image.open(p).convert("RGBA").tobytes() for p in (steam, console, other, plain)}
+        self.assertEqual(sc.forget_group(self.covers, {1, 2, 4, 99}), 2)                  # only covers with a note; the plain one and the missing game are not counted
+        self.assertEqual([sc.cover_group(p) for p in (steam, console, other, plain)], [None, None, "g2", None])
+        self.assertEqual({p: sc.Image.open(p).convert("RGBA").tobytes() for p in before}, before)       # the pictures are the same
+        self.assertEqual((sc.cover_colour(steam), sc.cover_treatment(steam), sc.cover_platform(console)), ((134, 100, 100), "ribbon", "ps5"))
+        self.assertTrue(sc.is_steamcase_cover(steam) and sc.is_steamcase_cover(console))
+        self.assertIsNone(sc.cover_by_hand(steam))                                        # a Steam cover is a usual cover again
+        self.assertTrue(sc.cover_by_hand(console))                                        # a console cover still is by hand: its case is its note
+        self.assertEqual(os.listdir(self.covers).count("Steam_1_1.png"), 1)
+        self.assertEqual([n for n in os.listdir(self.covers) if n.startswith(".")], [])    # no temporary file is left
+
+    def test_forgetting_leaves_damaged_and_linked_files_alone(self):
+        good = self.make("Good_1_1.png", group="g1")
+        bad = os.path.join(self.covers, "Bad_2_2.png")
+        with open(bad, "wb") as f:
+            f.write(b"not a png")
+        link = os.path.join(self.covers, "Link_3_3.png")
+        os.symlink(good, link)
+        self.assertEqual(sc.forget_group(self.covers, {1, 2, 3}), 1)
+        self.assertEqual(open(bad, "rb").read(), b"not a png")
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(sc.forget_group(os.path.join(self.tmp, "no folder"), {1}), 0)
+
+    def test_a_damaged_group_note_makes_the_usual_flow_ask(self):
+        self.folder()
+        self.with_note(os.path.join(self.covers, "A_3_3.png"), sc.GROUP_CHUNK, "BAD")
+        shutil.copy(os.path.join(self.tmp, "n_%s.png" % sc.GROUP_CHUNK), os.path.join(self.covers, "A_3_3.png"))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0))                                     # as for a damaged console note: the cover is rebuilt
+
+
+class GroupMake(StoreMocks):
+    """make_covers(tones=, groups=, repaint=): games of a group get their own colour, and the usual flow leaves them alone unless asked."""
+    RED, GREEN = (134, 100, 100), (84, 100, 100)
+
+    def cv(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def make(self, games, platforms, tones=None, groups=None, **kw):
+        return sc.make_covers({i: None for i in games}, self.covers, platforms=platforms, tones=tones, groups=groups, **kw)
+
+    def test_a_steam_case_game_gets_its_own_colour_and_group_note(self):
+        res = self.make([1, 2, 3], {1: None, 2: None, 3: "ps5"}, tones={1: self.RED, 2: self.GREEN}, groups={1: "red", 2: "green", 3: "ps"})
+        self.assertEqual((sc.cover_colour(self.cv(1)), sc.cover_colour(self.cv(2))), (self.RED, self.GREEN))
+        self.assertEqual([sc.cover_group(self.cv(i)) for i in (1, 2, 3)], ["red", "green", "ps"])
+        self.assertEqual((res["ok"], res["platforms"]), (3, 1))
+        for i in (1, 2, 3):
+            self.assertTrue(sc.is_steamcase_cover(self.cv(i)), i)
+
+    def test_a_game_without_a_tone_gets_the_colour_of_the_run(self):
+        self.make([1], {1: None}, tones={}, groups={1: "g"}, hue=84)
+        self.assertEqual(sc.cover_colour(self.cv(1)), (84, 100, 100))
+
+    def test_a_gold_group_is_a_gold_case_without_marks_and_marks_only_where_completed(self):
+        gold = (sc.GOLD_HUE, 100, 100)
+        self.make([1, 2], {1: None, 2: None}, tones={1: gold, 2: gold}, groups={1: "gold", 2: "gold"}, completed={2}, treatment="ribbon")
+        self.assertEqual(sc.cover_colour(self.cv(1)), gold)
+        self.assertIsNone(sc.cover_treatment(self.cv(1)))                        # not at 100%: no marks, whatever the group
+        self.assertEqual(sc.cover_treatment(self.cv(2)), "ribbon")
+        self.assertEqual(sc.cover_colour(self.cv(2)), gold)
+
+    def test_without_a_games_page_no_game_of_a_group_gets_marks(self):
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"}, completed=None, treatment="ribbon")
+        self.assertIsNone(sc.cover_treatment(self.cv(1)))
+
+    def test_a_same_cover_is_kept_and_another_colour_or_group_rebuilds(self):
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"})
+        before = os.stat(self.cv(1)).st_mtime_ns
+        seen = []
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"}, progress=lambda d, t, a, n, st: seen.append(st))
+        self.assertEqual((seen, os.stat(self.cv(1)).st_mtime_ns), (["exists"], before))
+        self.make([1], {1: None}, tones={1: self.GREEN}, groups={1: "r"})
+        self.assertEqual(sc.cover_colour(self.cv(1)), self.GREEN)
+        self.make([1], {1: None}, tones={1: self.GREEN}, groups={1: "other"})
+        self.assertEqual(sc.cover_group(self.cv(1)), "other")
+        self.make([1], {1: None}, tones={1: self.GREEN})                          # no group any more: the note goes
+        self.assertIsNone(sc.cover_group(self.cv(1)))
+
+    def test_the_usual_flow_leaves_covers_by_hand_alone_even_with_force(self):
+        self.make([1, 2], {1: None, 2: "ps5"}, tones={1: self.RED}, groups={1: "r", 2: "p"})
+        before = {i: open(self.cv(i), "rb").read() for i in (1, 2)}
+        res = sc.make_covers({1: None, 2: None, 3: None}, self.covers, force=True, hue=84)
+        self.assertEqual({i: open(self.cv(i), "rb").read() for i in (1, 2)}, before)
+        self.assertEqual((res["ok"], res["platforms"]), (3, 2))
+        self.assertEqual(sc.cover_colour(self.cv(3)), (84, 100, 100))
+
+    def test_repaint_hands_the_covers_back_to_the_usual_flow(self):
+        self.make([1, 2, 3], {1: None, 2: "ps5", 3: None}, tones={1: self.RED, 3: self.RED}, groups={1: "r", 2: "p", 3: "r"})
+        res = sc.make_covers({1: None, 2: None, 3: None}, self.covers, hue=84, repaint={1, 2})
+        self.assertEqual([sc.cover_group(self.cv(i)) for i in (1, 2, 3)], [None, None, "r"])
+        self.assertEqual((sc.cover_platform(self.cv(2)), sc.cover_colour(self.cv(1)), sc.cover_colour(self.cv(3))), (None, (84, 100, 100), self.RED))
+        self.assertEqual(res["platforms"], 1)                                      # the one left alone
+
+    def test_a_damaged_note_is_rebuilt_by_the_usual_flow(self):
+        self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"})
+        from PIL.PngImagePlugin import PngInfo
+        meta = PngInfo()
+        with sc.Image.open(self.cv(1)) as im:
+            for k, v in im.info.items():
+                if isinstance(v, str) and k != sc.GROUP_CHUNK:
+                    meta.add_text(k, v)
+            meta.add_text(sc.GROUP_CHUNK, "BAD NOTE")
+            im.save(self.cv(1), pnginfo=meta)
+        sc.make_covers({1: None}, self.covers, hue=84)
+        self.assertEqual((sc.cover_group(self.cv(1)), sc.cover_colour(self.cv(1))), (None, (84, 100, 100)))
+
+    def test_bad_input_is_refused_before_any_lookup(self):
+        with mock.patch.object(sc, "store_items", side_effect=AssertionError("looked up")):
+            for kw in ({"tones": {1: (360, 100, 100)}}, {"tones": {1: (0, 101, 100)}}, {"tones": {1: (0, 100)}}, {"tones": {1: "red"}}, {"tones": {"a": (0, 1, 1)}},
+                       {"groups": {1: "BAD"}}, {"groups": {1: 5}}, {"groups": {"x": "a"}}, {"groups": {1: "g"}, "theme": "halloween", "treatment": "rosette"},
+                       {"groups": {1: "g"}, "treatment": "gold-case"}, {"tones": {1: (0, 100, 100)}, "treatment": "gold-border"}, {"repaint": 5}):
+                with self.subTest(**kw), self.assertRaises(ValueError):
+                    sc.make_covers({1: None}, self.covers, platforms={1: None}, **kw)
+
+    def test_the_reason_counts_a_game_with_another_colour_or_group(self):
+        self.make([1, 2], {1: None, 2: None}, tones={1: self.RED, 2: self.RED}, groups={1: "r", 2: "r"})
+        count = lambda tones, groups, **kw: sc.covers_in_other_case(self.covers, {1: None, 2: None}, tones=tones, groups=groups, **kw)
+        self.assertEqual(count({1: self.RED, 2: self.RED}, {1: "r", 2: "r"}), 0)
+        self.assertEqual(count({1: self.GREEN, 2: self.RED}, {1: "r", 2: "r"}), 1)
+        self.assertEqual(count({1: self.RED, 2: self.RED}, {1: "r", 2: "other"}), 1)
+        self.assertEqual(count({1: self.RED, 2: self.RED}, None), 2)                # no group wanted: both are rebuilt
+
+    def test_a_group_of_the_usual_flow_reason_lists_the_names(self):
+        from qtui import reasons
+        self.assertIsNone(reasons.group_repaint_reason([]))
+        title, text = reasons.group_repaint_reason([{"name": "Red Steam Cases", "games": [1, 2, 3]}, {"name": "PS5", "games": [4]}])
+        self.assertIn("Red Steam Cases", text)
+        self.assertIn("3 games", text)
+        self.assertIn("PS5", text)
+        self.assertIn("1 game", text)
+        self.assertIn("deleted", text)
+
+
 def use_cases_dir(test, mutate=None):
     """Point the engine at a copy of assets/cases (changed by `mutate(data)` on the parsed cases.json), with every cache that depends on it cleared before and after."""
     d = tempfile.mkdtemp()
@@ -3914,7 +4160,7 @@ class CasesJsonIsChecked(Base):
         real = sc.build_cover
         with mock.patch.object(sc, "build_cover", lambda *a, **kw: calls.append(kw.get("platform")) or real(*a, **kw)):
             self.assertEqual(selfcheck.engine_problems(), [])
-        self.assertEqual(sorted(p for p in calls if p), sorted(sc.PLATFORMS))
+        self.assertEqual(sorted({p for p in calls if p}), sorted(sc.PLATFORMS))                  # every case at least once (the group check builds one more)
 
 
 class SelfCheckConsoleCases(Base):
@@ -3931,6 +4177,25 @@ class SelfCheckConsoleCases(Base):
     def test_a_good_bundle_has_no_problems(self):
         from qtui import selfcheck
         self.assertEqual(selfcheck.engine_problems(), [])
+
+
+class SelfCheckGroups(Base):
+    """The packaged app's self-test also builds a cover made by hand (in a group, in a colour) and recognises it, and refuses a damaged note."""
+
+    def test_a_good_bundle_builds_and_recognises_a_group_cover(self):
+        from qtui import selfcheck
+        seen = []
+        real = sc.build_cover
+        with mock.patch.object(sc, "build_cover", lambda *a, **kw: seen.append(kw.get("group")) or real(*a, **kw)):
+            self.assertEqual(selfcheck.engine_problems(), [])
+        self.assertIn("selfcheck", [g for g in seen if g])
+
+    def test_a_group_cover_that_is_not_recognised_is_reported(self):
+        from qtui import selfcheck
+        real = sc.is_steamcase_cover
+        with mock.patch.object(sc, "is_steamcase_cover", lambda path: False if sc.cover_group(path) else real(path)):
+            problems = selfcheck.engine_problems()
+        self.assertTrue(any("group" in p for p in problems), problems)
 
 
 class ConsoleCaseCredits(unittest.TestCase):

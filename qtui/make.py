@@ -8,8 +8,10 @@ import threading
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
+import groups
 import steamcase as sc
 from qtui import reasons
+from qtui.groupticks import GroupTicks
 
 STATUS_IDLE = "Not started."
 MAX_THUMBS = 5                              # covers shown under the status
@@ -49,6 +51,7 @@ class Make(QObject):
     progressChanged = Signal()
     statusChanged = Signal()
     choicesChanged = Signal()
+    groupsChanged = Signal()                # the groups listed in the usual Make, and which are ticked
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss wherever they are
     confirmNeeded = Signal(str, str)        # the title and the sentence of the question "replace the covers you made?"
     _art_done = Signal(int, object, object, object, object)         # request, {appid: path}, the library's app ids, problems, error words (from the worker)
@@ -63,6 +66,7 @@ class Make(QObject):
         self._files = []
         self._running = self._searching = self._asking = self._making = False
         self._cancel = threading.Event()
+        self._ticks = GroupTicks(covers_dir, self)      # the saved groups, listed in the usual Make with a box each: the ones ticked are repainted
         self._req = 0
         self._snap = None
         self._pending = None                            # (snapshot, own art, problems) waiting for the answer to the question
@@ -185,6 +189,11 @@ class Make(QObject):
                 {"key": "hundred", "label": "100% games", "value": marked, "step": 3},
                 {"key": "art", "label": "Art", "value": art, "step": 2}]
 
+    @Property(QObject, constant=True)
+    def groupTicks(self):
+        """The groups of the manual way with a box each (see GroupTicks)."""
+        return self._ticks
+
     # ----- state helpers -----
     def _set_status(self, text, kind):
         if (text, kind) != (self._status, self._kind):
@@ -216,8 +225,12 @@ class Make(QObject):
         if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme and art switches do not count
             if not shell.cases.assignedCount:
                 return
-            snap.update(manual=True, platforms=shell.cases.assigned(), family=shell.cases.family, theme=None, skip=False, custom=False,
+            snap.update(manual=True, platforms=shell.cases.assigned(), tones=shell.cases.tones(), groups=shell.cases.groupIds(), save=shell.cases.groupsToSave(),
+                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, custom=False,
                         treatment=sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None)    # console cases have no gold: only the marks count
+        else:
+            self._ticks.refresh()
+            snap["repaint"] = self._ticks.ticked()
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1
@@ -261,9 +274,12 @@ class Make(QObject):
     def _begin(self, snap, custom_art, games, problems):
         """The rest of start() once the art is known: ask before replacing covers, then make them."""
         if snap.get("manual"):
-            why = reasons.platform_replace_reason(self._covers, snap["platforms"], snap["tone"], snap["treatment"], snap["completed"])
+            why = reasons.platform_replace_reason(self._covers, snap["platforms"], snap["tone"], snap["treatment"], snap["completed"], snap["tones"], snap["groups"])
         else:
             why = reasons.replace_reason(self._covers, snap["tone"], snap["completed"], snap["treatment"], snap["theme"], custom_art, games)
+            again = reasons.group_repaint_reason(snap["repaint"])
+            if again:
+                why = again if why is None else (why[0], why[1] + " " + again[1])
         if why:
             self._pending = (snap, custom_art, list(problems))
             self._question = why
@@ -312,8 +328,11 @@ class Make(QObject):
             games, family = sc.load_library(steam, snap["lib"])
             if not games:
                 raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
-            extra = {"platforms": snap["platforms"]} if snap.get("manual") else {}
-            res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], family=family if not extra or snap["family"] else set(), hue=hue, sat=sat, val=val,
+            manual = snap.get("manual")
+            extra = {"platforms": snap["platforms"], "tones": snap["tones"], "groups": snap["groups"]} if manual else {}
+            if snap.get("repaint"):
+                extra["repaint"] = {a for g in snap["repaint"] for a in g["games"]}
+            res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], family=family if not manual or snap["family"] else set(), hue=hue, sat=sat, val=val,
                                  progress=lambda done, total, appid, name, status: self._tell(req, done, total, name),
                                  cancelled=self._cancel.is_set, completed=snap["completed"], treatment=snap["treatment"],
                                  theme=snap["theme"], custom_art=custom_art, **extra)
@@ -347,6 +366,7 @@ class Make(QObject):
             self._set_status(error, "error")
             self.failed.emit("Could not make covers", error)
             return
+        self._save_groups(res)
         if res["files"]:
             self._files = list(res["files"])
             self.doneChanged.emit()
@@ -355,6 +375,25 @@ class Make(QObject):
             self._finished = self._total = max(self._total, self._finished)
             self.progressChanged.emit()
         self._set_status(*result_text(res, self._problems))
+
+    def _save_groups(self, res):
+        """After a run that made covers: the manual flow saves its groups (only the games that have a cover now) and lets go of the covers of deleted groups; the usual
+        flow deletes the groups it repainted. Nothing is deleted before the covers exist, and a failed run never gets here."""
+        snap = self._snap or {}
+        made = {int(sc.appid_of(os.path.basename(f))) for f in res["files"] if sc.appid_of(os.path.basename(f)) is not None}
+        try:
+            if snap.get("manual"):
+                saved = groups.drop_games(snap["save"], set(snap["platforms"]) - made)
+                if snap["released"]:
+                    sc.forget_group(self._covers, snap["released"])
+                groups.save(self._covers, saved)
+            elif snap.get("repaint"):
+                done = {a for g in snap["repaint"] for a in g["games"]} & made
+                groups.save(self._covers, groups.drop_games(groups.load(self._covers), done))
+        except OSError as e:
+            self.failed.emit("Could not save your groups", "The covers are made, but your groups could not be saved: %s" % e)
+        self._ticks.clear()
+        self._ticks.refresh()
 
     @Slot()
     def cancel(self):

@@ -1,0 +1,157 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
+"""The store of groups of covers made by hand (groups.py)."""
+import json, os, shutil, sys, tempfile, unittest
+from unittest import mock
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import groups as gr
+import steamcase as sc
+
+RED = {"tone": [134, 100, 100]}
+PS5 = {"platform": "ps5"}
+
+
+class Store(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.path = os.path.join(self.tmp, "groups.json")
+
+    def read(self):
+        with open(self.path, encoding="utf-8") as f:
+            return f.read()
+
+    def write(self, text):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_no_file_is_no_groups(self):
+        self.assertEqual(gr.load(self.tmp), [])
+        self.assertEqual(gr.load(os.path.join(self.tmp, "nope")), [])
+
+    def test_a_damaged_file_is_no_groups_and_is_left_where_it_is(self):
+        for text in ("", "not json", "[]", "{}", '{"groups": 5}', '{"groups": {"a": 1}}', "null", '{"groups": [5, "x", null]}', "\x00\x01"):
+            with self.subTest(text=text):
+                self.write(text)
+                self.assertEqual(gr.load(self.tmp), [])
+                self.assertTrue(os.path.exists(self.path))
+
+    def test_an_unreadable_file_is_no_groups(self):
+        with open(self.path, "wb") as f:
+            f.write(b"\xff\xfe\x00bad")
+        self.assertEqual(gr.load(self.tmp), [])
+
+    def test_a_round_trip_keeps_everything(self):
+        groups, red = gr.assign([], "Red Steam Cases", RED, [3, 1, 2])
+        groups, ps = gr.assign(groups, "PS5 games", PS5, [10])
+        gr.save(self.tmp, groups)
+        back = gr.load(self.tmp)
+        self.assertEqual(back, groups)
+        self.assertEqual([g["name"] for g in back], ["Red Steam Cases", "PS5 games"])
+        self.assertEqual(sorted(back[0]["games"]), [1, 2, 3])
+
+    def test_bad_entries_are_dropped_and_good_ones_kept(self):
+        good = {"id": "g1", "name": "Good", "case": RED, "games": [1, 2]}
+        bad = [
+            {"id": "g2", "name": "", "case": RED, "games": [3]},                                  # no name
+            {"id": "g3", "name": "x" * 41, "case": RED, "games": [3]},                            # name too long
+            {"id": "g4", "name": "Case", "case": {"platform": "ps9"}, "games": [3]},              # unknown platform
+            {"id": "g5", "name": "Tone", "case": {"tone": [400, 100, 100]}, "games": [3]},        # hue out of range
+            {"id": "g6", "name": "Tone2", "case": {"tone": [1, 2]}, "games": [3]},                # not three numbers
+            {"id": "g7", "name": "Both", "case": {"platform": "ps5", "tone": [1, 1, 1]}, "games": [3]},
+            {"id": "g8", "name": "NoGames", "case": RED, "games": []},                           # empty group
+            {"id": "g9", "name": "Text", "case": RED, "games": ["a", None]},                      # no usable games
+            {"id": "bad id!", "name": "Id", "case": RED, "games": [3]},                           # the id goes in a PNG note: letters and digits only
+            {"name": "NoId", "case": RED, "games": [3]},
+            {"id": "ga", "name": "Control\x07", "case": RED, "games": [3]},
+        ]
+        self.write(json.dumps({"groups": [good] + bad}))
+        self.assertEqual([g["name"] for g in gr.load(self.tmp)], ["Good"])
+
+    def test_games_that_are_not_numbers_are_dropped_from_a_group(self):
+        self.write(json.dumps({"groups": [{"id": "g1", "name": "A", "case": RED, "games": [1, "2", True, -4, 0, 1.5, 7, 7]}]}))
+        self.assertEqual(gr.load(self.tmp)[0]["games"], [1, 7])
+
+    def test_a_duplicate_name_or_id_or_game_keeps_the_first(self):
+        self.write(json.dumps({"groups": [
+            {"id": "g1", "name": "Same", "case": RED, "games": [1, 2]},
+            {"id": "g2", "name": "same", "case": RED, "games": [3]},                               # the same name, whatever its case
+            {"id": "g1", "name": "Other id", "case": RED, "games": [4]},                          # the same id
+            {"id": "g3", "name": "Third", "case": PS5, "games": [2, 5]},                          # game 2 is already in the first group
+        ]}))
+        got = gr.load(self.tmp)
+        self.assertEqual([(g["name"], g["games"]) for g in got], [("Same", [1, 2]), ("Third", [5])])
+
+    def test_save_is_atomic(self):
+        gr.save(self.tmp, gr.assign([], "A", RED, [1])[0])
+        before = self.read()
+        with mock.patch.object(os, "replace", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                gr.save(self.tmp, gr.assign([], "B", RED, [2])[0])
+        self.assertEqual(self.read(), before)                      # the old file is intact
+        self.assertEqual([n for n in os.listdir(self.tmp) if n != "groups.json"], [])           # and no temporary file is left
+
+    def test_save_makes_the_folder(self):
+        folder = os.path.join(self.tmp, "a", "b")
+        gr.save(folder, gr.assign([], "A", RED, [1])[0])
+        self.assertEqual(len(gr.load(folder)), 1)
+
+
+class Edit(unittest.TestCase):
+    def test_assign_makes_a_group_with_an_id_a_cover_note_can_hold(self):
+        groups, gid = gr.assign([], "  Red Steam Cases  ", RED, [5, 5, 6])
+        self.assertEqual(groups, [{"id": gid, "name": "Red Steam Cases", "case": RED, "games": [5, 6]}])
+        self.assertRegex(gid, r"^[a-z0-9]{1,12}$")
+
+    def test_the_same_name_and_case_adds_to_the_group(self):
+        groups, gid = gr.assign([], "Red", RED, [1])
+        groups, again = gr.assign(groups, "red", RED, [2, 3])
+        self.assertEqual((again, len(groups), groups[0]["games"]), (gid, 1, [1, 2, 3]))
+
+    def test_the_same_name_in_another_case_is_refused(self):
+        groups, _ = gr.assign([], "Mine", RED, [1])
+        with self.assertRaises(ValueError) as caught:
+            gr.assign(groups, "Mine", PS5, [2])
+        self.assertIn("Mine", str(caught.exception))
+
+    def test_a_game_moves_to_its_new_group_and_an_empty_group_goes(self):
+        groups, a = gr.assign([], "A", RED, [1, 2])
+        groups, b = gr.assign(groups, "B", PS5, [1, 2])
+        self.assertEqual([(g["name"], g["games"]) for g in groups], [("B", [1, 2])])           # A lost both games: it is gone
+        groups, c = gr.assign(groups, "C", RED, [2])
+        self.assertEqual([(g["name"], g["games"]) for g in groups], [("B", [1]), ("C", [2])])
+
+    def test_invalid_input_is_refused_in_words(self):
+        for name, case, games in (("", RED, [1]), ("   ", RED, [1]), ("x" * 41, RED, [1]), ("a\nb", RED, [1]), ("A", {"platform": "ps9"}, [1]),
+                                   ("A", {"tone": [360, 0, 0]}, [1]), ("A", {"tone": [0, 101, 0]}, [1]), ("A", {}, [1]), ("A", RED, []), ("A", RED, ["x"]),
+                                   ("A", RED, [0]), ("A", RED, [True]), ("A", "red", [1])):
+            with self.subTest(name=name, case=case, games=games), self.assertRaises(ValueError):
+                gr.assign([], name, case, games)
+
+    def test_every_platform_and_a_tone_edge_are_valid(self):
+        for p in sc.PLATFORMS:
+            gr.assign([], p, {"platform": p}, [1])
+        gr.assign([], "Edge", {"tone": [359, 0, 100]}, [1])
+        gr.assign([], "Gold", {"tone": [sc.GOLD_HUE, 100, 100]}, [1])
+
+    def test_assign_does_not_change_the_list_it_was_given(self):
+        groups, _ = gr.assign([], "A", RED, [1])
+        before = json.dumps(groups)
+        gr.assign(groups, "B", PS5, [1, 2])
+        self.assertEqual(json.dumps(groups), before)
+
+    def test_delete_members_and_drop_games(self):
+        groups, a = gr.assign([], "A", RED, [1, 2])
+        groups, b = gr.assign(groups, "B", PS5, [3])
+        self.assertEqual(gr.members(groups, {a}), {1, 2})
+        self.assertEqual(gr.members(groups, {a, b, "nope"}), {1, 2, 3})
+        self.assertEqual(gr.members(groups, set()), set())
+        self.assertEqual([g["name"] for g in gr.delete(groups, a)], ["B"])
+        self.assertEqual(len(gr.delete(groups, "nope")), 2)
+        dropped = gr.drop_games(groups, {2, 3, 99})
+        self.assertEqual([(g["name"], g["games"]) for g in dropped], [("A", [1])])              # B lost its only game: gone
+
+
+if __name__ == "__main__":
+    unittest.main()
