@@ -1,4 +1,0 @@
-Logos used by tools/build_cases.py for the console cases. They are the marks of their owners (see docs/THIRD_PARTY.md).
-playstation.svg, playstation3.svg, playstation4.svg, playstation5.svg, nintendoswitch.svg: Simple Icons 13.0.0 (npm "simple-icons", icons/<name>.svg), CC0 1.0.
-xbox.svg: Simple Icons 12.0.0 (icons/xbox.svg; later versions removed it), CC0 1.0.
-Simple Icons: https://simpleicons.org

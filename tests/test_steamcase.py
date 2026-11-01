@@ -920,19 +920,19 @@ class FamilyFrame(unittest.TestCase):
 
     def test_family_frame_equals_the_plain_frame_outside_the_corner(self):
         self.assertEqual(self.family.size, sc.SIZE)
-        for box in ((220, 0, 600, 900), (0, 220, 220, 900)):
+        for box in ((0, 0, 380, 900), (380, 220, 600, 900)):                 # all but the top right corner
             self.assertEqual(self.family.crop(box).tobytes(), self.plain.crop(box).tobytes())
 
     def test_the_corner_is_green_and_follows_the_case_shape(self):
-        r, g, b, a = self.family.getpixel((8, 8))
+        r, g, b, a = self.family.getpixel((591, 8))
         self.assertEqual(a, 255)
         self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (r, g, b))
-        self.assertEqual(self.family.getpixel((0, 0))[3], 0)                  # the case's rounded corner stays transparent
-        self.assertEqual(self.family.getpixel((150, 150)), self.plain.getpixel((150, 150)))     # past the diagonal the art window is untouched (it keeps the faint gloss)
+        self.assertEqual(self.family.getpixel((599, 0))[3], 0)                # the case's rounded corner stays transparent
+        self.assertEqual(self.family.getpixel((449, 150)), self.plain.getpixel((449, 150)))     # past the diagonal the art window is untouched (it keeps the faint gloss)
 
     def test_the_icon_is_white_and_readable_on_the_triangle(self):
         self.assertGreaterEqual(contrast((255, 255, 255), sc.FAMILY_COLOR), sc.FAMILY_ICON_CONTRAST)
-        self.assertEqual(self.family.getpixel((40, 35))[:3], (255, 255, 255))   # centre of the left person's head
+        self.assertEqual(self.family.getpixel((559, 35))[:3], (255, 255, 255))   # centre of the head of the person nearest the corner's tip
 
 
 class StoreMocks(Base):
@@ -952,7 +952,7 @@ class StoreMocks(Base):
         self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
 
     def corner(self, path):
-        return sc.Image.open(path).convert("RGBA").getpixel((8, 8))[:3]
+        return sc.Image.open(path).convert("RGBA").getpixel((591, 8))[:3]            # the corner is at the top right
 
     def is_green(self, rgb):
         return all(abs(x - y) <= 8 for x, y in zip(rgb, sc.FAMILY_COLOR))
@@ -1060,7 +1060,7 @@ class CoverColour(unittest.TestCase):
 
     def test_the_family_corner_stays_green_at_every_hue(self):
         for hue in sc.HUE_SWATCHES:
-            r, g, b, a = sc.load_frame(hue, True).getpixel((8, 8))
+            r, g, b, a = sc.load_frame(hue, True).getpixel((591, 8))
             self.assertTrue(all(abs(x - y) <= 8 for x, y in zip((r, g, b), sc.FAMILY_COLOR)), (hue, (r, g, b)))
             self.assertEqual(sc.load_frame(hue, True).getpixel((7, 450)), sc.load_frame(hue).getpixel((7, 450)))
 
@@ -1141,7 +1141,7 @@ class CoverTone(unittest.TestCase):
 
     def test_the_family_corner_stays_green_on_black_and_silver(self):
         for sat, val in ((0, 14), (0, 78)):
-            r, g, b, _ = sc.load_frame(0, True, sat=sat, val=val).getpixel((8, 8))
+            r, g, b, _ = sc.load_frame(0, True, sat=sat, val=val).getpixel((591, 8))
             self.assertClose((r, g, b), sc.FAMILY_COLOR, 8)
 
     def test_case_color_follows_the_tone(self):
@@ -1466,7 +1466,8 @@ class RecogniseTreated(Base):
             _, mask = sc._treated_reference((sc.tone_key(*sc.treatment_colour(t, (0, 100, 100))), t, None), False)
             self.assertEqual(mask.getpixel((300, 400)), 0, t)
         _, mask = sc._treated_reference((sc.tone_key(0), "ribbon", None), False)
-        self.assertEqual(mask.getpixel((526, 66)), 255)
+        dy, dx = sc.steam_marks_move()
+        self.assertEqual(mask.getpixel((526 + dx, 66 + dy)), 255)
         _, mask = sc._treated_reference((sc.tone_key(0), "gold-border", None), False)
         self.assertEqual(mask.getpixel((5, 450)), 255)
 
@@ -1476,7 +1477,6 @@ class RecogniseTreated(Base):
         self.assertTrue(sc.is_steamcase_cover(self.make("t.png", 134, sat=60, val=30)))
         self.assertTrue(sc.is_steamcase_cover(self.make("f.png", 84, True)))
         gold = self.make("g.png", treatment="gold-case")
-        self.assertFalse(sc.is_steamcase_cover(self.renote(gold, **self.notes_of(gold, done=None))))   # the rosette is not part of a frame
 
     def test_a_forged_oversized_or_symlinked_treated_file_is_refused(self):
         real = self.make("r.png", treatment="ribbon")
@@ -2310,8 +2310,9 @@ class Treatments(unittest.TestCase):
 
     def test_a_ribbon_cover_changes_only_the_rosette_and_the_ribbon(self):
         done, plain = sc.preview_cover(treatment="ribbon"), sc.preview_cover()
+        dy, dx = sc.steam_marks_move()
         self.assertEqual(done.getpixel((300, 400)), plain.getpixel((300, 400)))
-        self.assertNotEqual(done.getpixel((526, 66)), plain.getpixel((526, 66)))
+        self.assertNotEqual(done.getpixel((526 + dx, 66 + dy)), plain.getpixel((526 + dx, 66 + dy)))              # the rosette, at the left under the banner
         self.assertNotEqual(done.getpixel((300, 820)), plain.getpixel((300, 820)))
         self.assertEqual(done.getpixel((0, 0))[3], 0)                                           # nothing leaves the rounded case
 
@@ -2338,20 +2339,23 @@ class Treatments(unittest.TestCase):
 
     def test_gold_border_keeps_the_rosette_and_ribbon_on_the_art(self):
         im = sc.preview_cover(treatment="gold-border")
-        self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((480, 30, 560, 100)))))
-        box = im.crop((460, 20, 580, 140))                                                     # the whole disc, to find its centre
-        disc = [(i % 120 + 460, i // 120 + 20) for i, p in enumerate(pixels(box)) if near(p[:3], self.DISC)]
-        cx, cy = sum(x for x, _ in disc) / len(disc), sum(y for _, y in disc) / len(disc)
-        want = (BORDER_AT(526, 0), BORDER_AT(66, 1))                                           # the disc shrank with the case: its centre moved
+        dy, dx = sc.steam_marks_move()
+        x, y = 526 + dx, 66 + dy                                                               # the disc's centre before the case shrinks
+        self.assertTrue(any(near(p[:3], self.DISC) for p in pixels(im.crop((x - 46, y - 36, x + 34, y + 34)))))
+        box = im.crop((x - 66, y - 46, x + 54, y + 74))                                        # the whole disc, to find its centre
+        disc = [(i % 120 + x - 66, i // 120 + y - 46) for i, p in enumerate(pixels(box)) if near(p[:3], self.DISC)]
+        cx, cy = sum(px for px, _ in disc) / len(disc), sum(py for _, py in disc) / len(disc)
+        want = (BORDER_AT(x, 0), BORDER_AT(y, 1))                                              # the disc shrank with the case: its centre moved
         self.assertTrue(abs(cx - want[0]) <= 2 and abs(cy - want[1]) <= 2, ((cx, cy), want))
-        self.assertGreater(abs(cx - 526) + abs(cy - 66), 10)
+        self.assertGreater(abs(cx - x) + abs(cy - y), 10)
         strip = pixels(im.crop((0, 0, 14, 900)))
         self.assertFalse(any(p[3] and near(p[:3], self.BAND) for p in strip))
 
     def test_family_corner_and_the_rosette_do_not_overlap(self):
         im = sc.preview_cover(0, True, treatment="ribbon")
-        self.assertTrue(near(im.getpixel((8, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((8, 8)))
-        self.assertTrue(near(im.getpixel((526, 66))[:3], self.DISC), im.getpixel((526, 66)))
+        dy, dx = sc.steam_marks_move()
+        self.assertTrue(near(im.getpixel((591, 8))[:3], sc.FAMILY_COLOR, 8), im.getpixel((591, 8)))
+        self.assertTrue(near(im.getpixel((526 + dx, 66 + dy))[:3], self.DISC), im.getpixel((526 + dx, 66 + dy)))
 
     def test_treatment_colour(self):
         self.assertEqual(sc.treatment_colour("gold-case", (20, 40, 50)), (176, 100, 100))
@@ -2380,8 +2384,9 @@ class Treatments(unittest.TestCase):
     def test_rosette_only_has_no_bottom_ribbon(self):
         only, full, plain = sc.preview_cover(treatment="rosette"), sc.preview_cover(treatment="ribbon"), sc.preview_cover()
         self.assertEqual(list(pixels(only.crop((0, 450, 600, 900)))), list(pixels(plain.crop((0, 450, 600, 900)))))
-        self.assertNotEqual(list(pixels(only.crop((400, 0, 600, 120)))), list(pixels(plain.crop((400, 0, 600, 120)))))
-        self.assertEqual(list(pixels(only.crop((400, 0, 600, 120)))), list(pixels(full.crop((400, 0, 600, 120)))))     # the same rosette
+        left = (0, 96, 200, 300)                                                                # where the rosette is
+        self.assertNotEqual(list(pixels(only.crop(left))), list(pixels(plain.crop(left))))
+        self.assertEqual(list(pixels(only.crop(left))), list(pixels(full.crop(left))))             # the same rosette
         self.assertNotEqual(list(pixels(full.crop((0, 800, 600, 870)))), list(pixels(plain.crop((0, 800, 600, 870)))))
 
     def test_every_treatment_is_gold_or_not(self):
@@ -2593,7 +2598,7 @@ class MakeTreated(StoreMocks):
                 self.assertEqual(sc.cover_treatment(self.cover(1)), t)
         shutil.rmtree(self.covers)
         sc.make_covers({1: None}, self.covers, family={1}, completed={1}, treatment="gold-border")
-        box = sc.Image.open(self.cover(1)).convert("RGBA").crop((14, 14, 60, 60))
+        box = sc.Image.open(self.cover(1)).convert("RGBA").crop((540, 14, 586, 60))
         self.assertTrue(any(p[3] == 255 and self.is_green(p[:3]) for p in pixels(box)))
         self.assertEqual(sc.cover_treatment(self.cover(1)), "gold-border")
 
@@ -3308,6 +3313,16 @@ class PlatformCases(Base):
                     inside = alpha.crop((tab[0] - x0, tab[1] - y0, tab[2] - x0, tab[3] - y0))                # the tab may be slanted: most of its box is opaque
                     self.assertGreater(sum(inside.getdata()) / (inside.width * inside.height), 150)
 
+    def test_cases_json_says_what_the_frames_show(self):
+        """The window is the box of the see-through pixels of the frame, the overlay the box of what the frame still covers inside it (the Switch's tab)."""
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                alpha = sc.load_platform_frame(p).getchannel("A")
+                window = alpha.point(lambda a: 255 if a == 0 else 0).getbbox()
+                self.assertEqual(sc.platform_window(p), window)
+                tab = alpha.crop(window).point(lambda a: 255 if a else 0).getbbox()
+                self.assertEqual(sc.platform_overlay(p), None if tab is None else (tab[0] + window[0], tab[1] + window[1], tab[2] + window[0], tab[3] + window[1]))
+
     def test_labels_cover_every_platform(self):
         self.assertEqual(set(sc.PLATFORM_LABELS), set(sc.PLATFORMS))
         self.assertEqual(len(sc.PLATFORMS), 8)
@@ -3317,7 +3332,8 @@ class PlatformCases(Base):
             with self.assertRaises(ValueError):
                 call("ps9")
 
-    def test_family_corner_stays_in_the_art_and_never_covers_the_banner(self):
+    def test_family_corner_goes_top_right_over_the_end_of_the_banner(self):
+        """The corner sits on the right so it never covers the logo on the left; it stays inside the case's own outline."""
         for p in sc.PLATFORMS:
             with self.subTest(platform=p):
                 plain, family = sc.load_platform_frame(p), sc.load_platform_frame(p, True)
@@ -3325,35 +3341,34 @@ class PlatformCases(Base):
                 x0, y0, x1, y1 = sc.platform_window(p)
                 diff = sc.ImageChops.difference(plain, family).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
                 box = diff.getbbox()
-                self.assertTrue(box[0] >= x0 and box[1] >= y0 and box[2] <= x1 and box[3] <= y1, (p, box, (x0, y0, x1, y1)))     # only inside the art window
-                cx, cy = sc.platform_corner(p)
-                tab = sc.platform_overlay(p)
-                if tab is not None:
-                    self.assertTrue(cy >= tab[3] - 2, (p, cy, tab))                                # under the tab, which holds the logo
+                self.assertTrue(box[0] >= sc.SIZE[0] - 207 and box[2] <= sc.SIZE[0] and box[1] <= y0 and box[3] <= 207, (p, box))    # the top right corner, reaching into the banner
+                outside = sc.Image.new("L", sc.SIZE, 255)
+                outside.paste(0, (x0, y0, x1, y1))                                                                           # the window is see-through in the plain frame: the corner may fill it
+                alpha = sc.ImageChops.multiply(sc.ImageChops.subtract(family.getchannel("A"), plain.getchannel("A")), outside)
+                self.assertIsNone(alpha.getbbox())                                                                           # and adds nothing outside the case
 
-    def test_the_playstation_covers_run_edge_to_edge_like_the_printed_covers(self):
-        """From photographs: the PS3 and PS4 inserts have a banner and no coloured border."""
-        for p in ("ps3", "ps4"):
+    def test_the_playstation_cases_have_a_banner_on_top_and_the_art_below_it(self):
+        """From her frames: a banner of about 100 rows holds the logo, the art starts under it."""
+        for p in ("ps3", "ps4", "ps5"):
             with self.subTest(platform=p):
                 x0, y0, x1, y1 = sc.platform_window(p)
-                self.assertEqual((x0, x1, y1), (0, sc.SIZE[0], sc.SIZE[1]))
-                self.assertTrue(60 <= y0 <= 100, y0)
+                self.assertTrue(100 <= y0 <= 130, y0)
                 frame = sc.load_platform_frame(p)
-                self.assertGreater(frame.getpixel((300, 10))[3], 250)                                    # the banner is opaque
-                self.assertEqual(frame.getpixel((300, y0 + 40))[3], 0)                                   # the art runs to the edges below it
+                self.assertGreater(frame.getpixel((300, y0 // 2))[3], 250)                               # the banner is opaque
+                self.assertEqual(frame.getpixel((300, y0 + 40))[3], 0)                                   # the art shows below it
 
     def test_the_series_x_case_is_a_thin_shell_with_a_slanted_tab_and_art_to_the_top(self):
         """From photographs: the art reaches the top edge on the right of the tab."""
         frame = sc.load_platform_frame("xboxseries")
         x0, y0, x1, y1 = sc.platform_window("xboxseries")
         tab = sc.platform_overlay("xboxseries")
-        self.assertEqual(sc.platform_marks_dy("xboxseries"), y0)                                        # nothing of ours at the top right: the rosette starts at the art
         self.assertTrue(tab[0] <= x0 + 1 and tab[1] <= y0 + 1 and 200 <= tab[2] - tab[0] <= 360 and 90 <= tab[3] - tab[1] <= 130, tab)
         self.assertEqual(frame.getpixel((x1 - 60, y0 + 20))[3], 0)                                     # art shows at the top right
         self.assertGreater(frame.getpixel((tab[0] + 20, tab[1] + 20))[3], 200)                         # the tab holds the sphere
 
-    def test_the_100_marks_start_below_the_banner(self):
-        """The rosette (and the ribbon, at the bottom) must never hide the logo of the case."""
+    def test_the_100_marks_sit_left_below_the_banner_and_the_ribbon_has_her_width(self):
+        """The rosette must never hide the logo of the case: it is on the left, MARKS_GAP from the art's edge and from the banner or tab above. The ribbon is
+        RIBBON_WIDTH wide, centred in the window, RIBBON_GAP above its bottom."""
         art = os.path.join(self.tmp, "a.png")
         sc.Image.new("RGB", (120, 180), (30, 30, 30)).save(art)
         for p in sc.PLATFORMS:
@@ -3362,21 +3377,22 @@ class PlatformCases(Base):
                     plain, marked = os.path.join(self.tmp, "p.png"), os.path.join(self.tmp, "m.png")
                     sc.build_cover(art, plain, sc.load_platform_frame(p), platform=p)
                     sc.build_cover(art, marked, sc.load_platform_frame(p), platform=p, treatment=treatment)
-                    dy, (x0, y0, x1, y1) = sc.platform_marks_dy(p), sc.platform_window(p)
-                    self.assertGreaterEqual(dy, y0)                                                                          # never above the art
+                    (x0, y0, x1, y1), tab = sc.platform_window(p), sc.platform_overlay(p)
+                    below = max(y0, tab[3] if tab else y0)
                     with sc.Image.open(plain) as a, sc.Image.open(marked) as b:
                         diff = sc.ImageChops.difference(a.convert("RGBA"), b.convert("RGBA")).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
-                        top = diff.crop((0, 0, sc.SIZE[0], dy))
-                        self.assertIsNone(top.getbbox())                                                                     # the banner is untouched
                         rosette = diff.crop((0, 0, sc.SIZE[0], 450)).getbbox()
                         self.assertIsNotNone(rosette)
-                        self.assertTrue(rosette[0] >= x0 and rosette[2] <= x1 and rosette[1] >= max(y0, dy) and rosette[3] <= y1, (rosette, (x0, y0, x1, y1)))   # inside the art window
-                        tab = sc.platform_overlay(p)
-                        if tab:
-                            self.assertTrue(rosette[0] >= tab[2] or rosette[1] >= tab[3] or rosette[2] <= tab[0] or rosette[3] <= tab[1], (rosette, tab))     # not over the tab
+                        self.assertAlmostEqual(rosette[0], x0 + sc.MARKS_GAP, delta=1)                                      # on the left
+                        self.assertAlmostEqual(rosette[1], below + sc.MARKS_GAP, delta=1)                                   # below the banner, or the tab
+                        self.assertTrue(rosette[2] <= x1 and rosette[3] <= y1, (rosette, (x0, y0, x1, y1)))               # inside the art window
                         if treatment == "ribbon":
                             ribbon = diff.crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox()
-                            self.assertTrue(ribbon and ribbon[1] + 450 >= 780 and ribbon[3] + 450 <= 880, ribbon)             # the ribbon stays at the bottom, whatever dy is
+                            self.assertAlmostEqual(ribbon[2] - ribbon[0], sc.RIBBON_WIDTH, delta=2)
+                            self.assertAlmostEqual((ribbon[0] + ribbon[2]) / 2, (x0 + x1) / 2, delta=2)
+                            self.assertAlmostEqual(ribbon[3] + 450, y1 - sc.RIBBON_GAP, delta=2)
+                        else:
+                            self.assertIsNone(diff.crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox())                        # the rosette alone has no ribbon
 
     def test_compose_default_window_is_unchanged(self):
         art = sc.Image.new("RGBA", (300, 450), (200, 60, 60, 255))
@@ -3654,8 +3670,7 @@ class ConsoleMake(StoreMocks):
         sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, family={2})
         def green(path):
             with sc.Image.open(path) as im:
-                cx, cy = sc.platform_corner("ps5")
-                return sum(1 for px in im.convert("RGB").crop((cx, cy, cx + 207, cy + 207)).getdata() if all(abs(a - b) <= 8 for a, b in zip(px, sc.FAMILY_COLOR)))
+                return sum(1 for px in im.convert("RGB").crop((sc.SIZE[0] - 207, 0, sc.SIZE[0], 207)).getdata() if all(abs(a - b) <= 8 for a, b in zip(px, sc.FAMILY_COLOR)))
         self.assertEqual(green(self.cv(1)), 0)
         self.assertGreater(green(self.cv(2)), 1000)
 
@@ -3734,6 +3749,72 @@ class ConsoleMake(StoreMocks):
         self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
 
 
+class SteamMarksMoved(Base):
+    """The Steam case too: the family corner is at the top right and the rosette at the left under the banner (covers made before keep being recognised)."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    @staticmethod
+    def changed(a, b):
+        return sc.ImageChops.difference(a.convert("RGBA"), b.convert("RGBA")).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
+
+    def test_the_family_corner_is_top_right(self):
+        box = self.changed(sc.load_frame(0), sc.load_frame(0, True)).getbbox()
+        self.assertTrue(box[0] >= sc.SIZE[0] - 207 and box[2] <= sc.SIZE[0] and box[3] <= 207, box)
+
+    def test_the_old_corner_is_still_known_at_the_top_left(self):
+        box = self.changed(sc.load_frame(0), sc.load_frame(0, True, legacy_corner=True)).getbbox()
+        self.assertTrue(box[0] >= 0 and box[2] <= 207 and box[3] <= 207, box)
+
+    def test_the_rosette_is_left_below_the_banner(self):
+        box = self.changed(sc.preview_cover(), sc.preview_cover(treatment="rosette")).crop((0, 0, sc.SIZE[0], 450)).getbbox()
+        self.assertAlmostEqual(box[0], sc.WINDOW[0] + sc.MARKS_GAP, delta=1)
+        self.assertAlmostEqual(box[1], sc.WINDOW[1] + sc.MARKS_GAP, delta=1)
+
+    def test_the_ribbon_is_where_it_was(self):
+        box = self.changed(sc.preview_cover(), sc.preview_cover(treatment="ribbon")).crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox()
+        self.assertEqual((box[0], box[2]), (12, 589))
+
+    def legacy(self, drop=(), **kw):
+        """A cover as the version before this one made it: the corner on the left, the rosette at the top right. Its notes are those of a cover made now."""
+        now = os.path.join(self.tmp, "now.png")
+        hue, sat, val = kw.get("colour", (0, 100, 100))
+        sc.build_cover(sc.DEFAULT_ART, now, sc.load_frame(hue, kw.get("family", False), sat=sat, val=val), hue, sat=sat, val=val, treatment=kw.get("treatment"))
+        with sc.Image.open(now) as im:
+            info = dict(im.info)
+        old = sc.finish_treatment(sc._compose(sc.Image.open(sc.DEFAULT_ART).convert("RGBA"), sc.load_frame(hue, kw.get("family", False), sat=sat, val=val, legacy_corner=True)),
+                                  kw.get("treatment"))
+        out = os.path.join(self.tmp, "old.png")
+        from PIL.PngImagePlugin import PngInfo
+        meta = PngInfo()
+        for k, v in info.items():
+            if isinstance(v, str) and k not in drop:
+                meta.add_text(k, v)
+        old.save(out, pnginfo=meta)
+        return out
+
+    def test_covers_made_before_are_still_ours(self):
+        for kw in ({}, {"family": True}, {"treatment": "ribbon"}, {"treatment": "rosette", "family": True}, {"treatment": "gold-border"},
+                   {"colour": (134, 60, 80), "family": True}, {"colour": (134, 60, 80), "treatment": "gold-border-rosette"}):
+            with self.subTest(**kw):
+                self.assertTrue(sc.is_steamcase_cover(self.legacy(**kw)))
+
+    def test_an_old_cover_without_its_treatment_note_is_not_ours(self):
+        """The old rosette reached into the banner, so the frame no longer matched (the rosette of today sits over the art, which no check can see)."""
+        self.assertTrue(sc.is_steamcase_cover(self.legacy(treatment="ribbon")))
+        self.assertFalse(sc.is_steamcase_cover(self.legacy(drop=(sc.DONE_CHUNK,), treatment="ribbon")))
+
+    def test_covers_made_now_are_ours(self):
+        for kw in ({}, {"family": True}, {"treatment": "ribbon"}, {"treatment": "rosette", "family": True}):
+            with self.subTest(**kw):
+                out = os.path.join(self.tmp, "now.png")
+                sc.build_cover(sc.DEFAULT_ART, out, sc.load_frame(0, kw.get("family", False)), 0, treatment=kw.get("treatment"))
+                self.assertTrue(sc.is_steamcase_cover(out))
+
+
 def use_cases_dir(test, mutate=None):
     """Point the engine at a copy of assets/cases (changed by `mutate(data)` on the parsed cases.json), with every cache that depends on it cleared before and after."""
     d = tempfile.mkdtemp()
@@ -3764,11 +3845,7 @@ class CasesJsonIsChecked(Base):
         "a window outside the picture": lambda d: d["ps5"].update(window=[0, 100, 700, 900]),
         "a window that is upside down": lambda d: d["ps5"].update(window=[100, 100, 50, 900]),
         "a window that is too small": lambda d: d["ps5"].update(window=[0, 0, 300, 300]),
-        "marks_dy as text": lambda d: d["ps5"].update(marks_dy="abc"),
-        "marks_dy too big": lambda d: d["ps5"].update(marks_dy=400),
-        "marks_dy below zero": lambda d: d["ps5"].update(marks_dy=-5),
-        "a corner past the right edge": lambda d: d["ps5"].update(corner=[700, 10]),
-        "a corner with a negative number": lambda d: d["ps5"].update(corner=[-5, 10]),
+        "an overlay that is not four numbers": lambda d: d["switch"].update(overlay=[0, 0, 100]),
         "an overlay outside the picture": lambda d: d["switch"].update(overlay=[0, 0, 700, 100]),
         "a missing platform": lambda d: d.pop("xbox360"),
     }
@@ -3785,13 +3862,12 @@ class CasesJsonIsChecked(Base):
     def test_the_shipped_file_and_one_with_optional_parts_left_out_are_accepted(self):
         use_cases_dir(self)
         self.assertEqual(sc.platform_window("ps5")[0] >= 0, True)
-        use_cases_dir(self, lambda d: [d["ps5"].pop(k, None) for k in ("marks_dy", "corner", "overlay")])
-        x0, y0, _, _ = sc.platform_window("ps5")
-        self.assertEqual((sc.platform_marks_dy("ps5"), sc.platform_corner("ps5"), sc.platform_overlay("ps5")), (y0, (x0, y0), None))
+        use_cases_dir(self, lambda d: d["switch"].pop("overlay"))
+        self.assertIsNone(sc.platform_overlay("switch"))
 
     def test_the_self_test_reports_a_bad_file_instead_of_raising(self):
         from qtui import selfcheck
-        use_cases_dir(self, lambda d: d["ps5"].update(corner=[700, 10]))
+        use_cases_dir(self, lambda d: d["ps5"].update(overlay=[0, 0, 700, 100]))
         problems = selfcheck.engine_problems()
         self.assertTrue(any("cases.json" in p for p in problems), problems)
 
@@ -3821,7 +3897,7 @@ class SelfCheckConsoleCases(Base):
 
 
 class ConsoleCaseCredits(unittest.TestCase):
-    """The marks on the console cases belong to their owners, and the files we took them from have licences: docs/THIRD_PARTY.md says both."""
+    """The marks on the console cases belong to their owners, and the frames are the project's own artwork: docs/THIRD_PARTY.md says both."""
 
     def text(self):
         with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
@@ -3833,21 +3909,16 @@ class ConsoleCaseCredits(unittest.TestCase):
             self.assertIn(needle, text)
         self.assertRegex(text, r"(?i)not affiliated with[^.]*Sony[^.]*Nintendo|not affiliated with[^.]*Nintendo[^.]*Sony")
 
-    def test_it_names_the_source_and_licence_of_every_logo_file(self):
+    def test_it_says_where_the_frames_come_from(self):
+        """The frames are the project's own artwork; no credit to a logo file that is no longer in the repository."""
         text = self.text()
-        src = os.path.join(sc.HERE, "tools", "src", "cases")
-        for name in sorted(n for n in os.listdir(src) if n.endswith(".svg")):
-            self.assertIn(name, text)
-        self.assertIn("Simple Icons", text)
-        self.assertIn("CC0", text)
-        self.assertIn("not the official wordmark", text)
+        self.assertIn("own artwork", text)
+        self.assertNotIn("build_cases", text)
+        self.assertNotIn("not the official wordmark", text)
 
-    def test_every_logo_file_is_listed_in_the_sources_note(self):
-        src = os.path.join(sc.HERE, "tools", "src", "cases")
-        with open(os.path.join(src, "SOURCES.txt"), encoding="utf-8") as f:
-            note = f.read()
-        for name in (n for n in os.listdir(src) if n.endswith(".svg")):
-            self.assertIn(name, note)
+    def test_the_drawing_tool_and_its_logo_files_are_gone(self):
+        self.assertFalse(os.path.exists(os.path.join(sc.HERE, "tools", "build_cases.py")))
+        self.assertFalse(os.path.exists(os.path.join(sc.HERE, "tools", "src", "cases")))
 
 
 class ListGames(Base):

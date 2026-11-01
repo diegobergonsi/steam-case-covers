@@ -17,7 +17,7 @@ The functions below are the engine. The CLI at the bottom and the window (qtui/)
 import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
-    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
     from PIL.PngImagePlugin import PngInfo
 except ImportError:
     Image = ImageChops = ImageDraw = ImageFilter = PngInfo = None
@@ -730,21 +730,31 @@ def recolor_frame(frame, hue, sat=100, val=100):
     return Image.merge("RGBA", (*Image.merge("HSV", (h, new_s, v)).convert("RGB").split(), a))
 
 
-def load_frame(hue=0, family=False, *, sat=100, val=100):
-    """The case frame in the wanted colour and tone; with family=True the green corner of the Steam Family library is laid over it (never recoloured)."""
+def family_corner(legacy=False):
+    """The green corner of the Steam Family library, 600 x 900, at the top right (the logo of a case is on the left). `legacy` is where earlier versions put it, at the top left."""
+    with Image.open(FAMILY_CORNER) as im:
+        corner = im.convert("RGBA")
+    return corner if legacy else ImageOps.mirror(corner)
+
+
+def load_frame(hue=0, family=False, *, sat=100, val=100, legacy_corner=False):
+    """The case frame in the wanted colour and tone; with family=True the green corner of the Steam Family library is laid over it (never recoloured).
+    `legacy_corner` puts it at the top left, as covers made by earlier versions have it (only to recognise those)."""
     frame = recolor_frame(Image.open(FRAME).convert("RGBA"), hue, sat, val)
     if family:
-        frame = Image.alpha_composite(frame, Image.open(FAMILY_CORNER).convert("RGBA"))
+        frame = Image.alpha_composite(frame, family_corner(legacy_corner))
     return frame
 
 
-MARKS_DY_MAX = 290                          # the rosette is about 160 rows tall and must end above ROSETTE_ROWS, where the ribbon's half of the overlay starts
+MARKS_GAP = 14                              # the 100% rosette is this far from the left edge of the art and from the banner (or tab) above it
+RIBBON_WIDTH = 482                          # the "100% Complete" ribbon on a console case, tails included, centred in the art
+RIBBON_GAP = 28                             # and this far above the bottom of the art
 MIN_WINDOW = 400                            # the art window of a console case is at least this wide and tall
 
 
 def _check_cases(data):
     """SteamcaseError (one sentence naming the platform and the problem) unless `data`, the parsed cases.json, describes every case sensibly:
-    "window" four whole numbers inside the 600 x 900 picture and at least MIN_WINDOW each way; "marks_dy", "corner" and "overlay", if given, whole numbers inside it."""
+    "window" four whole numbers inside the 600 x 900 picture and at least MIN_WINDOW each way; "overlay", if given, four whole numbers inside it."""
     def fail(where, what):
         raise SteamcaseError("cases.json: %s: %s" % (where, what))
 
@@ -768,12 +778,6 @@ def _check_cases(data):
             fail(platform, "window must lie inside the %d x %d picture, left before right and top before bottom" % SIZE)
         if x1 - x0 < MIN_WINDOW or y1 - y0 < MIN_WINDOW:
             fail(platform, "window must be at least %d x %d" % (MIN_WINDOW, MIN_WINDOW))
-        if "marks_dy" in info and not (whole(info["marks_dy"]) and 0 <= info["marks_dy"] <= MARKS_DY_MAX):
-            fail(platform, "marks_dy must be a whole number from 0 to %d" % MARKS_DY_MAX)
-        if "corner" in info:
-            cx, cy = numbers(platform, "corner", info["corner"], 2)
-            if not (0 <= cx < SIZE[0] and 0 <= cy < SIZE[1]):
-                fail(platform, "corner must lie inside the picture")
         if "overlay" in info:
             ox0, oy0, ox1, oy1 = numbers(platform, "overlay", info["overlay"], 4)
             if not (0 <= ox0 < ox1 <= SIZE[0] and 0 <= oy0 < oy1 <= SIZE[1]):
@@ -805,43 +809,51 @@ def platform_overlay(platform):
     return tuple(box) if box else None
 
 
-def platform_marks_dy(platform):
-    """How far down the 100% rosette is moved on this console case: below the banner that holds the logo, and never above the art window (the Switch's tab is only
-    a corner: its "marks_dy" is 0, so the rosette starts at the top of the art)."""
-    y0 = platform_window(platform)[1]
-    return max(_case_windows()[platform].get("marks_dy", y0), y0)
-
-
 @functools.lru_cache(maxsize=1)
-def _rosette_right():
-    """The right edge of the rosette in the completion overlay."""
-    return _rosette_overlay().getchannel("A").getbbox()[2]
+def _rosette_box():
+    """The box (x0, y0, x1, y1) of the rosette in the completion overlay."""
+    return _rosette_overlay().getchannel("A").getbbox()
+
+
+def _rosette_move(window, overlay):
+    """(dy, dx): how far the rosette moves from where the overlay has it (top right) to the left of `window`, MARKS_GAP from its edge and from the banner or
+    `overlay` (the tab the frame covers inside the window) above it."""
+    x0, y0 = window[:2]
+    return (max(y0, overlay[3] if overlay else y0) + MARKS_GAP - _rosette_box()[1], x0 + MARKS_GAP - _rosette_box()[0])
+
+
+def platform_marks_dy(platform):
+    """How far down the 100% rosette is moved on this console case: under the banner that holds the logo, or the tab."""
+    return _rosette_move(platform_window(platform), platform_overlay(platform))[0]
 
 
 def platform_marks_dx(platform):
-    """How far left the 100% rosette is moved on this console case so it stays inside the art window (0 when it fits)."""
-    return min(0, platform_window(platform)[2] - _rosette_right())
+    """How far left the 100% rosette is moved on this console case: to the left of the art, where the logo is not."""
+    return _rosette_move(platform_window(platform), platform_overlay(platform))[1]
 
 
-def platform_corner(platform):
-    """Where the top-left of the Steam Family corner goes on this console case: the top-left of the art, under the banner or the Switch's tab."""
-    platform_window(platform)
-    corner = _case_windows()[platform].get("corner")
-    return tuple(corner) if corner else platform_window(platform)[:2]
+def platform_ribbon(platform):
+    """(width, centre x, bottom y) of the ribbon on this console case: RIBBON_WIDTH wide, centred in the art, RIBBON_GAP above its bottom."""
+    x0, _, x1, y1 = platform_window(platform)
+    return RIBBON_WIDTH, (x0 + x1) // 2, y1 - RIBBON_GAP
+
+
+def steam_marks_move():
+    """(dy, dx) of the rosette on the Steam case: the same place as on a console case, at the left of the art under the banner."""
+    return _rosette_move(WINDOW, None)
 
 
 def load_platform_frame(platform, family=False):
     """The frame of a console case (600 x 900, transparent where the art shows). With family=True the green corner of the Steam Family library is laid
-    over it at platform_corner, kept inside the art window so it never covers the banner and its logo. ValueError for a platform that is not one of PLATFORMS."""
+    over it at the top right, where it covers only the end of the banner and never the logo, and kept inside the case's own outline. ValueError for a platform that
+    is not one of PLATFORMS."""
     x0, y0, x1, y1 = platform_window(platform)
     frame = Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
     if family:
-        cx, cy = platform_corner(platform)
-        placed = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-        placed.alpha_composite(Image.open(FAMILY_CORNER).convert("RGBA").crop((0, 0, SIZE[0] - cx, SIZE[1] - cy)), (cx, cy))
-        inside = Image.new("L", SIZE, 0)
-        inside.paste(255, (x0, y0, x1, y1))
-        placed.putalpha(ImageChops.multiply(placed.getchannel("A"), inside))
+        outline = frame.getchannel("A").copy()
+        outline.paste(255, (x0, y0, x1, y1))                      # the case's silhouette: its frame and the art window
+        placed = family_corner()
+        placed.putalpha(ImageChops.multiply(placed.getchannel("A"), outline))
         frame = Image.alpha_composite(frame, placed)
     return frame
 
@@ -894,10 +906,10 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, them
         _check_platform(platform, treatment, theme)
         with Image.open(DEFAULT_ART) as im:
             return finish_treatment(_compose(im.convert("RGBA"), load_platform_frame(platform, family), platform_window(platform)), treatment,
-                                    platform_marks_dy(platform), platform_marks_dx(platform))
+                                    platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform))
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
-        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment)
+        return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks_move())
 
 
 def compose_treatment(case, marks):
@@ -1013,19 +1025,28 @@ def _gold_border():
     return plate
 
 
-def finish_treatment(cover, treatment, dy=0, dx=0):
+def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
     """`cover` (the finished 600 x 900 composition) with the marks of a 100% game: the rosette over the platform badges and, unless the
     treatment is a rosette-only one, the ribbon at the bottom, kept inside the case's own outline. For "gold-border" the whole cover is then shrunk by BORDER pixels
-    on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself."""
+    on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself.
+    `dy` and `dx` move the rosette from the top right (where the cover as made by earlier versions has it); `ribbon` is (width, centre x, bottom y) for a ribbon of
+    another width than the overlay's, set at the bottom."""
     if treatment is None:
         return cover
     case, kind = split_treatment(treatment)
     marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
-    if dy or dx:                                                        # a console case: the rosette moves below the banner and inside the window, the ribbon stays at the bottom
-        lowered = Image.new("RGBA", marks.size, (0, 0, 0, 0))
-        lowered.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (dx, dy))
-        lowered.paste(marks.crop((0, ROSETTE_ROWS, marks.width, marks.height)), (0, ROSETTE_ROWS))
-        marks = lowered
+    if dy or dx or ribbon:                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
+        moved = Image.new("RGBA", marks.size, (0, 0, 0, 0))
+        moved.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (dx, dy))
+        below = marks.crop((0, ROSETTE_ROWS, marks.width, marks.height))
+        if ribbon and below.getchannel("A").getbbox():
+            width, centre, bottom = ribbon
+            tape = below.crop(below.getchannel("A").getbbox())
+            tape = tape.resize((width, round(tape.height * width / tape.width)), Image.LANCZOS)
+            moved.alpha_composite(tape, (centre - width // 2, bottom - tape.height))
+        else:
+            moved.paste(below, (0, ROSETTE_ROWS))
+        marks = moved
     marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
     done = Image.alpha_composite(cover, marks)
     if case == "gold-border":
@@ -1139,7 +1160,7 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
     cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment,
-                             platform_marks_dy(platform) if platform else 0, platform_marks_dx(platform) if platform else 0)
+                             *((platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)) if platform else steam_marks_move()))
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     if platform is not None:
@@ -1635,9 +1656,10 @@ def _frame_regions():
     global _frame_ref
     if _frame_ref is None:
         top, bot = (0, 0, SIZE[0], WINDOW[1]), (0, WINDOW[3], SIZE[0], SIZE[1])
-        plain, family = load_frame(0), load_frame(0, True)          # the family frame differs from the plain one only in the corner triangle
-        edge = Image.open(FAMILY_CORNER).convert("RGBA").getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0)
-        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None), (_shape(family.crop(top)), edge)), (_shape(plain.crop(bot)), None), edge)
+        plain = load_frame(0)
+        edges = tuple(family_corner(legacy).getchannel("A").crop(top).point(lambda a: 255 if a in (0, 255) else 0) for legacy in (False, True))
+        families = tuple((_shape(load_frame(0, True, legacy_corner=legacy).crop(top)), edge) for legacy, edge in zip((False, True), edges))   # the family frame differs from the plain one only in the corner triangle; covers of earlier versions have it at the left
+        _frame_ref = (top, bot, ((_shape(plain.crop(top)), None),) + families, (_shape(plain.crop(bot)), None), edges)
     return _frame_ref
 
 
@@ -1660,10 +1682,11 @@ def _same_shape(a, ref):
 def _tone_strips(key):
     """_expected_strips for one tone_key: covers that look the same share one set of strips."""
     step, sat, val = key                                            # step * 360 / 256 degrees turns the hue by exactly `step` again
-    top, bot, _, _, edge = _frame_regions()
+    top, bot, _, _, edges = _frame_regions()
     blank = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-    plain, family = (Image.alpha_composite(blank, load_frame(step * 360 / 256, f, sat=sat, val=val)) for f in (False, True))   # as _compose lays it down
-    return ((plain.crop(top), None), (family.crop(top), Image.merge("RGBA", (edge,) * 4))), (plain.crop(bot), None)
+    frames = [Image.alpha_composite(blank, load_frame(step * 360 / 256, False, sat=sat, val=val))] + [      # as _compose lays it down
+        Image.alpha_composite(blank, load_frame(step * 360 / 256, True, sat=sat, val=val, legacy_corner=legacy)) for legacy in (False, True)]
+    return ((frames[0].crop(top), None),) + tuple((f.crop(top), Image.merge("RGBA", (edge,) * 4)) for f, edge in zip(frames[1:], edges)), (frames[0].crop(bot), None)
 
 
 def _expected_strips(hue, sat, val):
@@ -1681,14 +1704,15 @@ def _same_pixels(strip, ref):
 
 
 @functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry; a library uses one or two colours, each plain and family
-def _treated_reference(key, family):
+def _treated_reference(key, family, legacy=False):
     """(expected, mask) for a treated or themed cover: key is (tone_key, treatment, theme), the last two None for none. The cover is made twice, from flat black and from flat white
     art, through the same steps as build_cover; the mask is 255 where both agree within 2 on every channel (frame, rosette, ribbon,
     border, the theme's decorations: nothing the game's art reaches) and 0 elsewhere, then pulled back 3 pixels from the art: the gold border's shrink (Lanczos)
     lets detailed art ring that far past where flat art reaches. Expected is halfway between the two, so real art lands within 1 of it."""
     (step, sat, val), treatment, theme = key                        # step * 360 / 256 degrees turns the hue by exactly `step` again
-    frame = load_frame(step * 360 / 256, family, sat=sat, val=val)
-    black, white = (finish_treatment(apply_theme(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), theme), treatment) for c in (0, 255))
+    frame = load_frame(step * 360 / 256, family, sat=sat, val=val, legacy_corner=legacy)
+    moved = () if legacy else steam_marks_move()                    # `legacy`: the cover as earlier versions made it, with the corner on the left and the rosette on the right
+    black, white = (finish_treatment(apply_theme(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame), theme), treatment, *moved) for c in (0, 255))
     widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
 
@@ -1701,10 +1725,10 @@ def _same_masked(im, want, mask, least):
     return _same_pixels(im, (want, Image.merge("RGBA", (mask,) * 4)))
 
 
-def _same_treated(im, key, family):
+def _same_treated(im, key, family, legacy=False):
     """True if `im` matches the treated cover for `key` within 2 levels on every pixel the art does not reach (see _treated_reference).
     A mask that covers less than 15% of the canvas leaves too little to tell our covers from others: then never ours."""
-    return _same_masked(im, *_treated_reference(key, family), 0.15)
+    return _same_masked(im, *_treated_reference(key, family, legacy), 0.15)
 
 
 @functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry
@@ -1713,8 +1737,8 @@ def _platform_reference(key, family):
     (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0."""
     platform, treatment = key
     frame, window = load_platform_frame(platform, family), platform_window(platform)
-    dy, dx = platform_marks_dy(platform), platform_marks_dx(platform)
-    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame, window), treatment, dy, dx) for c in (0, 255))
+    dy, dx, ribbon = platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)
+    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame, window), treatment, dy, dx, ribbon) for c in (0, 255))
     widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
 
@@ -1759,7 +1783,7 @@ def is_steamcase_cover(path):
             if is_gold_case(done) and tone_key(*colour) != tone_key(GOLD_HUE, 100, 100):
                 return False                                    # we always write a gold case with gold notes (gold-case and the ribbon at hue 176 look the same, so those two notes swapped cannot be told; harmless)
             key = (tone_key(*treatment_colour(done, colour)), done, theme)
-            return any(_same_treated(im, key, family) for family in (False, True))
+            return any(_same_treated(im, key, family, legacy) for family in (False, True) for legacy in (False, True))
         if toned:
             if colour is None:
                 return False

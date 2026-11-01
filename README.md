@@ -145,11 +145,11 @@ Some games belong in another box: The Last of Us is a PlayStation game, Forza is
 * Games shared through Steam Family Sharing get the green corner only if you switch on **Mark family games** (it needs your game list file).
 * Your 100% games get the rosette and ribbon (or the rosette alone) if you load your games page in the **100% games** step of this way and keep **Highlight them**.
 * The natural way never changes or removes a console cover: only picking the game again here does.
-* The PlayStation, Xbox and Nintendo logos belong to their owners, and this project is not affiliated with them. See [THIRD_PARTY](docs/THIRD_PARTY.md). For the Xbox 360, Xbox One, Xbox Series X|S and Switch 2 cases the model name is typeset, not the official wordmark.
+* The PlayStation, Xbox and Nintendo logos belong to their owners, and this project is not affiliated with them. See [THIRD_PARTY](docs/THIRD_PARTY.md).
 
 ### Optional: highlight your 100% games
 
-Step 3, **Highlight your 100% games**, is optional. Games where you unlocked every achievement get a rosette at the top right, on top of the platform badges, and a "100% Complete" ribbon at the bottom (you can keep only the rosette). It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
+Step 3, **Highlight your 100% games**, is optional. Games where you unlocked every achievement get a rosette at the top left, just under the banner, and a "100% Complete" ribbon at the bottom (you can keep only the rosette). It works like step 1: the app cannot see your achievements by itself, so you save one more page from your own browser.
 
 <p align="center">
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-100.png"><img src="assets/library-100.png" width="560" alt="A Steam library of games completed at 100%: every cover has a gold case, a rosette over the platform badges and a blue 100% Complete ribbon"></a>
@@ -159,7 +159,7 @@ Step 3, **Highlight your 100% games**, is optional. Games where you unlocked eve
 
 1. Click **Open my games page** (or **Copy link**). Your browser opens your Steam games page, sorted by achievements. Log in if it asks and wait until your games have loaded.
 2. Save it (Ctrl+S, or Cmd+S on a Mac) as **"Webpage, Complete"** in Chrome or Firefox, named `games.html`. Your browser also saves a folder next to it. The app notices the file in your Downloads folder by itself, or you can click **Browse…** and pick it.
-3. Choose what those games get: **Rosette and ribbon** (the rosette at the top right and the "100% Complete" ribbon at the bottom; the default) or **Rosette only** (just the rosette, no ribbon over the art).
+3. Choose what those games get: **Rosette and ribbon** (the rosette at the top left and the "100% Complete" ribbon at the bottom; the default) or **Rosette only** (just the rosette, no ribbon over the art).
 4. Choose how those games look: **Gold case** (the whole case turns gold), **Gold border** (a gold border around the outside of the case, which becomes about 5% smaller), **Normal case** (your case stays as it is; this is the default once a page is loaded) or **No special case** (no highlight at all, so the marks do not apply). The choices can be picked once a page is loaded. Then click **Make covers**.
 
 > [!NOTE]
