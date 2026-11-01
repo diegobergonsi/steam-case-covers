@@ -354,6 +354,23 @@ class Reset(Base):
         self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png", "3p.png", "9p.png"])
         self.assertTrue(all(sc.is_steamcase_cover(os.path.join(self.grid, "%dp.png" % i)) for i in (1, 2, 3)))
 
+    def test_reset_keeps_the_covers_it_is_told_to_keep_even_when_it_removes_other_art(self):
+        for i in (1, 2, 3):
+            self.real_cover(i)
+        sc.Image.new("RGBA", (50, 50), (1, 2, 3, 255)).save(os.path.join(self.grid, "8p.png"))       # not ours: a custom picture
+        names = sc.find_our_covers(self.steam)
+        r = sc.reset_to_default(self.steam, names=[n for n in names if n != "2p.png"], everything=True, keep=["2p.png"])
+        self.assertEqual(r["removed"], 3)                                  # 1p, 3p and the custom 8p
+        self.assertEqual(sorted(os.listdir(self.grid)), ["2p.png"])
+        sc.restore_backup(self.steam, r["backup"])
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png", "2p.png", "3p.png", "8p.png"])
+
+    def test_reset_without_keep_removes_everything_as_before(self):
+        for i in (1, 2):
+            self.real_cover(i)
+        sc.reset_to_default(self.steam, names=sc.find_our_covers(self.steam), everything=True)
+        self.assertEqual(os.listdir(self.grid), [])
+
     def test_reset_with_nothing_to_remove_makes_no_backup(self):
         self.users_own_art(9)
         r = sc.reset_to_default(self.steam)

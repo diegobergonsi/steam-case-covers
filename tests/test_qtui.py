@@ -4248,7 +4248,7 @@ class AddWindow(QtCase, FakeStore):
                             ("restore_backup", lambda steam, backup, user=None, keep=False, originals=None: (self.log.append(("restore", backup)), self.backups.pop(0), self.restored)[2]),
                             ("find_our_covers", lambda steam, user=None, progress=None, cancelled=None: list(self.ours)),
                             ("find_other_art", lambda steam, user=None, ours=(): (list(self.extra), list(self.other))),
-                            ("reset_to_default", lambda steam, user=None, names=None, everything=False: (self.log.append(("reset", user, list(names or []), everything)),
+                            ("reset_to_default", lambda steam, user=None, names=None, everything=False, keep=(): (self.log.append(("reset", user, list(names or []), everything)),
                                                                                                       {"removed": len(names or []), "account_name": "Alice"})[1]),
                             ("grid_dir", lambda steam, user=None: self.grid)):
             patcher = mock.patch.object(sc, name, value)
@@ -5305,7 +5305,7 @@ class ApplyState(QtCase, FakeStore):
                             ("list_backups", lambda steam, user=None: list(self.backups)),
                             ("restore_backup", lambda steam, backup, user=None, keep=False, originals=None: (self.log.append(("restore", backup)), self.backups.pop(0), self.restored)[2]),
                             ("find_our_covers", self.find_ours), ("find_other_art", lambda steam, user=None, ours=(): (list(self.extra), list(self.other))),
-                            ("reset_to_default", lambda steam, user=None, names=None, everything=False: (self.log.append(("reset", user, list(names or []), everything)),
+                            ("reset_to_default", lambda steam, user=None, names=None, everything=False, keep=(): (self.log.append(("reset", user, list(names or []), everything)),
                                                                                                       {"removed": len(names or []), "account_name": "Alice"})[1]),
                             ("grid_dir", lambda steam, user=None: self.grid)):
             patcher = mock.patch.object(sc, name, value)
@@ -6410,12 +6410,17 @@ class ManualWindow(PickerBase):
         from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
         it = self.item(name)
+        QTest.qWait(30)                                                # the layout settles before the position is read
         scroller = self.item("screen_scroller") if self.has("screen_scroller") else None
         if scroller is not None and it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y() >= 0 and not name.startswith(("games_next", "case_next", "home_main")):
             y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
             scroller.setProperty("contentY", max(0, y - 40))
             self.app.processEvents()
-        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint())
+            QTest.qWait(30)                                            # the layout settles before the pointer goes there
+        point = it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
+        QTest.mouseMove(self.root, point)                              # a hand moves the pointer there first
+        self.app.processEvents()
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, point)
         self.app.processEvents()
 
     def step(self):
@@ -6573,9 +6578,9 @@ class ManualWindow(PickerBase):
         self.assertFalse(self.item("make_group_" + red).property("checked"))
         self.click("make_group_" + red)
         self.assertTrue(self.item("make_group_" + red).property("checked"))
-        self.assertEqual(self.shell.make.tickedGroups, 1)
+        self.assertEqual(self.shell.make.groupTicks.count, 1)
         self.click("make_group_" + red)
-        self.assertEqual(self.shell.make.tickedGroups, 0)
+        self.assertEqual(self.shell.make.groupTicks.count, 0)
 
     def test_no_groups_no_section_in_the_usual_make_screen(self):
         self.open_natural_make()
@@ -6594,6 +6599,24 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         self.assertEqual(self.step(), "make")
         self.assertFalse(self.item("make_section_groups").property("visible"))
+
+    def test_home_lists_the_groups_to_reset(self):
+        red, ps = self.saved_groups()
+        self.shell.startManual()                                          # away from Home and back: the screen reads the groups when it opens
+        self.app.processEvents()
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertTrue(self.has("home_group_" + red) and self.has("home_group_" + ps))
+        self.assertTrue(self.item("home_section_groups").property("visible"))
+        self.assertFalse(self.item("home_group_" + red).property("checked"))
+        self.click("home_group_" + red)
+        self.assertTrue(self.item("home_group_" + red).property("checked"))
+        self.assertEqual(self.shell.apply.groupTicks.count, 1)
+
+    def test_home_has_no_group_section_without_groups(self):
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertFalse(self.item("home_section_groups").property("visible"))
 
     def test_the_family_switch_is_greyed_without_a_game_list_file(self):
         self.shell.startManual()
@@ -6811,6 +6834,62 @@ class ManualMake(PickerBase):
 
 
 @need_qt
+class GroupTicksTests(QtCase):
+    """The list of saved groups with a box each, as the usual Make and Reset show it."""
+
+    def setUp(self):
+        import groups, shutil, tempfile
+        qt_app()
+        self.groups = groups
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        saved, self.red = groups.assign([], "Red games", {"tone": [134, 100, 100]}, [1, 2])
+        saved, self.ps = groups.assign(saved, "PS5 games", {"platform": "ps5"}, [3])
+        groups.save(self.tmp, saved)
+        from qtui.groupticks import GroupTicks
+        self.ticks = GroupTicks(self.tmp)
+
+    def test_the_groups_are_listed_unticked(self):
+        self.assertEqual([(g["name"], g["label"], g["count"], g["ticked"]) for g in self.ticks.choices],
+                         [("Red games", "Steam case, red", 2, False), ("PS5 games", "PlayStation 5", 1, False)])
+        self.assertEqual((self.ticks.count, self.ticks.ids(), self.ticks.ticked()), (0, set(), []))
+
+    def test_a_click_ticks_and_unticks(self):
+        self.ticks.toggle(self.red)
+        self.assertEqual([g["ticked"] for g in self.ticks.choices], [True, False])
+        self.assertEqual((self.ticks.count, self.ticks.ids(), [g["name"] for g in self.ticks.ticked()]), (1, {self.red}, ["Red games"]))
+        self.ticks.toggle(self.red)
+        self.assertEqual(self.ticks.count, 0)
+        self.ticks.toggle("nope")
+        self.assertEqual(self.ticks.count, 0)
+
+    def test_the_signal_fires_on_a_change_only(self):
+        seen = []
+        self.ticks.changed.connect(lambda: seen.append(1))
+        self.ticks.toggle("nope")
+        self.assertEqual(seen, [])
+        self.ticks.toggle(self.ps)
+        self.assertEqual(len(seen), 1)
+
+    def test_refresh_reads_the_file_again_and_forgets_ticks_of_groups_that_are_gone(self):
+        self.ticks.toggle(self.red)
+        self.groups.save(self.tmp, [g for g in self.groups.load(self.tmp) if g["id"] != self.red])
+        self.ticks.refresh()
+        self.assertEqual(([g["name"] for g in self.ticks.choices], self.ticks.count), (["PS5 games"], 0))
+
+    def test_clear_unticks_everything(self):
+        self.ticks.toggle(self.red)
+        self.ticks.toggle(self.ps)
+        self.ticks.clear()
+        self.assertEqual((self.ticks.count, [g["ticked"] for g in self.ticks.choices]), (0, [False, False]))
+
+    def test_a_damaged_file_lists_nothing(self):
+        with open(os.path.join(self.tmp, "groups.json"), "w") as f:
+            f.write("[[[")
+        self.ticks.refresh()
+        self.assertEqual(self.ticks.choices, [])
+
+
 class GroupsInMake(PickerBase):
     """Make saves the groups of the manual flow, and the usual Make lists them: left alone unless ticked, then repainted and deleted."""
     RESULT = {"ok": 2, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0, "not_games": 0, "unlisted": 0, "skipped": 0}
@@ -6913,21 +6992,21 @@ class GroupsInMake(PickerBase):
         self.run_make()
         self.shell.startNatural()
         self.shell.look.hue = 84
-        self.make.refreshGroups()
+        self.make.groupTicks.refresh()
 
     def test_the_usual_make_lists_the_groups_unticked(self):
         self.natural_with_groups()
-        self.assertEqual([(g["name"], g["count"], g["ticked"]) for g in self.make.groupChoices], [("Red games", 1, False), ("PlayStation 5", 1, False)])
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
-        self.assertEqual([g["ticked"] for g in self.make.groupChoices], [True, False])
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
-        self.assertEqual([g["ticked"] for g in self.make.groupChoices], [False, False])
-        self.make.toggleGroup("nope")                                                        # an unknown id changes nothing
+        self.assertEqual([(g["name"], g["count"], g["ticked"]) for g in self.make.groupTicks.choices], [("Red games", 1, False), ("PlayStation 5", 1, False)])
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
+        self.assertEqual([g["ticked"] for g in self.make.groupTicks.choices], [True, False])
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
+        self.assertEqual([g["ticked"] for g in self.make.groupTicks.choices], [False, False])
+        self.make.groupTicks.toggle("nope")                                                        # an unknown id changes nothing
 
     def test_no_groups_no_list(self):
         self.shell.startNatural()
-        self.make.refreshGroups()
-        self.assertEqual(self.make.groupChoices, [])
+        self.make.groupTicks.refresh()
+        self.assertEqual(self.make.groupTicks.choices, [])
 
     def test_unticked_groups_are_left_alone_and_games_without_a_group_are_made(self):
         self.natural_with_groups()
@@ -6939,7 +7018,7 @@ class GroupsInMake(PickerBase):
 
     def test_a_ticked_group_is_repainted_with_a_warning_and_deleted(self):
         self.natural_with_groups()
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
         self.make.start()
         self.wait_for(lambda: self.make.asking, 8)
         self.assertTrue(self.make.asking)
@@ -6952,13 +7031,13 @@ class GroupsInMake(PickerBase):
         self.assertIsNone(self.sc.cover_group(self.cover(1)))
         self.assertEqual([g["name"] for g in self.saved()], ["PlayStation 5"])               # the other group is untouched
         self.assertEqual(self.sc.cover_platform(self.cover(3)), "ps5")
-        self.assertEqual([g["name"] for g in self.make.groupChoices], ["PlayStation 5"])
-        self.assertEqual(self.make.tickedGroups, 0)
+        self.assertEqual([g["name"] for g in self.make.groupTicks.choices], ["PlayStation 5"])
+        self.assertEqual(self.make.groupTicks.count, 0)
 
     def test_declining_the_question_changes_nothing(self):
         self.natural_with_groups()
         before = open(self.cover(1), "rb").read()
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
         self.make.start()
         self.wait_for(lambda: self.make.asking, 8)
         self.make.decline()
@@ -6969,8 +7048,8 @@ class GroupsInMake(PickerBase):
         self.give("steam", 1, 3, colour=3, name="Red games")
         self.run_make()
         self.shell.startNatural()
-        self.make.refreshGroups()
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.groupTicks.refresh()
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
         self.spy(result=dict(self.RESULT, files=[os.path.join(self.covers, "Hades_1.png")]))
         self.run_make()
         self.assertEqual([(g["name"], g["games"]) for g in self.saved()], [("Red games", [3])])
@@ -6979,8 +7058,8 @@ class GroupsInMake(PickerBase):
         self.give("steam", 1, colour=3, name="Red games")
         self.run_make()
         self.shell.startNatural()
-        self.make.refreshGroups()
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.groupTicks.refresh()
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
         self.spy(error="offline")
         self.run_make()
         self.assertEqual([g["name"] for g in self.saved()], ["Red games"])
@@ -6988,10 +7067,138 @@ class GroupsInMake(PickerBase):
     def test_the_engine_is_told_which_games_to_repaint_in_the_usual_flow_only(self):
         self.natural_with_groups()
         calls = self.spy()
-        self.make.toggleGroup(self.make.groupChoices[0]["id"])
+        self.make.groupTicks.toggle(self.make.groupTicks.choices[0]["id"])
         self.run_make()
         self.assertEqual(calls[-1][1]["repaint"], {1})
         self.assertNotIn("platforms", calls[-1][1])
+
+
+class GroupReset(PickerBase):
+    """Reset leaves the covers of your groups on Steam unless the group is ticked; a ticked group is reset and deleted."""
+
+    def setUp(self):
+        super().setUp()
+        import groups
+        from unittest import mock
+        self.groups = groups
+        self.grid = os.path.join(self.tmp, "userdata", "111", "config", "grid")
+        os.makedirs(self.grid)
+        os.makedirs(os.path.join(self.tmp, "config"))
+        for name, value in (("steam_running", lambda: False), ("start_steam", lambda steam: None), ("close_steam", lambda steam, timeout=60: True)):
+            patcher = mock.patch.object(self.sc, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.make, self.ap = self.shell.make, self.shell.apply
+        # games 1 (a red Steam-case group) and 3 (a PS5 group) are made by hand; game 2 is made by the usual flow; all three are on Steam
+        self.shell.startManual()
+        self.load()
+        self.picker.toggle(1)
+        self.shell.cases.pick("steam")
+        self.shell.cases.pickColour(3)
+        self.shell.cases.groupName = "Red games"
+        self.shell.cases.assign()
+        self.picker.toggle(3)
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.run_make()
+        self.shell.startNatural()
+        self.run_make()
+        self.ap.refresh()
+        self.wait_for(lambda: self.ap.canApply)
+        self.ap.apply()
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"], self.ap.status)
+        self.red = next(g["id"] for g in self.groups.load(self.covers) if g["name"] == "Red games")
+        self.ps = next(g["id"] for g in self.groups.load(self.covers) if g["name"] == "PlayStation 5")
+
+    def run_make(self):
+        self.make.start()
+        self.wait_for(lambda: not self.make.running or self.make.asking, 10)
+        if self.make.asking:
+            self.make.confirm()
+            self.wait_for(lambda: not self.make.running, 10)
+
+    def on_steam(self):
+        return sorted(n for n in os.listdir(self.grid) if n.endswith("p.png"))
+
+    def reset(self):
+        self.asked = []
+        self.ap.confirmNeeded.connect(lambda title, paragraphs, go, alt: self.asked.append((title, paragraphs, go, alt)))
+        self.ap.reset()
+        self.wait_for(lambda: self.ap.asking or not self.ap.busy, 10)
+
+    def question(self):
+        return " ".join(p["text"] for p in self.asked[-1][1])
+
+    def tick(self, group_id):
+        self.ap.groupTicks.refresh()                                       # the screen reads the file when it opens
+        self.ap.groupTicks.toggle(group_id)
+
+    def test_the_reset_lists_the_groups_unticked(self):
+        self.ap.groupTicks.refresh()
+        self.assertEqual([(g["name"], g["ticked"]) for g in self.ap.groupTicks.choices], [("Red games", False), ("PlayStation 5", False)])
+
+    def test_unticked_groups_stay_on_steam_and_the_question_says_so(self):
+        self.reset()
+        self.assertTrue(self.ap.asking, self.ap.status)
+        text = self.question()
+        self.assertIn("1 covers made by this app will be removed", text)
+        self.assertIn("Red games", text)
+        self.assertIn("PlayStation 5", text)
+        self.assertIn("left as they are", text)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # only the usual cover went
+        self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["Red games", "PlayStation 5"])
+
+    def test_a_ticked_group_is_reset_and_deleted(self):
+        self.tick(self.red)
+        self.reset()
+        text = self.question()
+        self.assertIn("Red games", text)
+        self.assertIn("deleted", text)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["3p.png"])
+        self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["PlayStation 5"])
+        cover = os.path.join(self.covers, "Hades_1.png")
+        self.assertIsNone(self.sc.cover_group(cover))                                    # the cover in the covers folder is a usual one again
+        self.assertEqual(self.ap.groupTicks.count, 0)
+        self.assertEqual([g["name"] for g in self.ap.groupTicks.choices], ["PlayStation 5"])
+
+    def test_all_covers_in_unticked_groups_means_nothing_to_reset(self):
+        os.remove(os.path.join(self.grid, "2p.png"))
+        self.reset()
+        self.assertFalse(self.ap.asking)
+        self.assertIn("groups", self.ap.status)
+        self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
+
+    def test_remove_all_also_spares_unticked_groups(self):
+        with open(os.path.join(self.grid, "9p.png"), "wb") as f:
+            f.write(b"someone else's art")
+        self.reset()
+        self.assertTrue(self.ap.asking)
+        self.ap.confirmAlternate()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # ours of the usual flow and the other art went, the groups stay
+
+    def test_declining_changes_nothing(self):
+        self.tick(self.red)
+        self.reset()
+        self.ap.decline()
+        self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
+        self.assertEqual(len(self.groups.load(self.covers)), 2)
+
+    def test_a_failed_reset_deletes_no_group(self):
+        from unittest import mock
+        self.tick(self.red)
+        self.reset()
+        with mock.patch.object(self.sc, "reset_to_default", side_effect=self.sc.SteamcaseError("disk full")):
+            self.ap.confirm()
+            self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(len(self.groups.load(self.covers)), 2)
+        self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
 
 
 class ManualFlowEndToEnd(PickerBase):

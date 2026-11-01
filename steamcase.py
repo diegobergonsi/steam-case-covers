@@ -1916,11 +1916,12 @@ def find_other_art(steam, user=None, ours=()):
     return sorted(n for n in files if _COVER_NAME.match(n) and n not in ours), sorted(n for n in files if _JPG_NAME.match(n))
 
 
-def reset_to_default(steam, user=None, names=None, everything=False):
+def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
     """Remove our covers from Steam's grid folder so Steam shows its own default art again.
     Only files recognised as ours go; the files are moved into a normal backup, so restore_backup() undoes this.
     `names`: result of an earlier find_our_covers() (default: scan now).
     `everything`: also remove every other custom portrait (SteamGridDB, set by hand in Steam, any format), so no custom art is left.
+    `keep`: file names that stay whatever else is removed (the covers of groups the user did not tick): they are not "other art" either.
     Returns {"removed", "backup", "account", "account_name"}."""
     grid = grid_dir(steam, user)
     acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
@@ -1931,7 +1932,7 @@ def reset_to_default(steam, user=None, names=None, everything=False):
     other = []
     if everything:
         extra_png, other = find_other_art(steam, user, names)
-        names += extra_png
+        names += [n for n in extra_png if n not in keep]
     if not names and not other:
         return dict(info, removed=0, backup=None)
     with _Lock(os.path.dirname(grid)):

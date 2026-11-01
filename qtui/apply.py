@@ -4,18 +4,27 @@
 that closes Steam, copies the covers (with a backup) and starts Steam again. The words are those the app has always used.
 Restore and Reset live on Home and will use the same worker."""
 import os
+import re
 import sys
 import threading
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+import groups
 import steamcase as sc
+from qtui.groupticks import GroupTicks
 
 MAX_NAME = 28                               # a long account name must not push the buttons off the window
 OPEN_NOTE = "Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first."
 CHECKING_NOTE = "Checking whether Steam is open\u2026"
 CLOSED_NOTE = "Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it."
 CLOSE_WARNING = "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first."
+
+
+def _appid(name):
+    """The app id in the name of a cover in Steam's folder (<appid>p.png), or None."""
+    m = re.fullmatch(r"([0-9]+)p\.png", name)
+    return int(m.group(1)) if m else None
 
 
 def _short(name):
@@ -48,6 +57,9 @@ class Apply(QObject):
         self._watching, self._probing = False, False
         self._accounts, self._who, self._choice = [], "", None
         self._raw = {}                                  # folder id -> the name as Steam knows it
+        self._ticks = GroupTicks(covers_dir, self)      # the groups of the manual way, ticked to be reset with the rest
+        self._reset_ticked = set()                      # the groups ticked when the reset began
+        self._reset_games = set()                       # the games whose covers this reset removes from Steam
         self._busy = self._asking = self._applied = False
         self._pending = None                            # (mode, names) waiting for the answer to the question
         self._mode = "apply"
@@ -62,6 +74,11 @@ class Apply(QObject):
         make.runningChanged.connect(self._make_changed)
         make.doneChanged.connect(self.canApplyChanged)
         make.doneChanged.connect(self.undoChanged)       # the accounts are read when the screen opens (refresh), not at start-up
+
+    @Property(QObject, constant=True)
+    def groupTicks(self):
+        """The groups of the manual way with a box each (see GroupTicks): ticked ones are reset with the rest, the others stay on Steam."""
+        return self._ticks
 
     # ----- Steam -----
     @Property(bool, notify=steamChanged)
@@ -331,6 +348,8 @@ class Apply(QObject):
         self._busy = True
         self.canApplyChanged.emit()
         self.undoChanged.emit()
+        self._ticks.refresh()
+        self._reset_ticked = self._ticks.ids()
         self._req += 1
         self._set_status("Looking for covers made by this app\u2026 (a few seconds)", "wait")
         threading.Thread(target=self._scan_worker, args=(self._req, self._acc()), daemon=True).start()
@@ -370,15 +389,21 @@ class Apply(QObject):
             self.undoChanged.emit()
             self.failed.emit(error)
             return
+        names, keep, stay, going = self._by_groups(names)
         if not names and not other:
             self._busy = False
-            self._set_status("No custom covers were found in \u201c%s\u201d. Nothing to reset." % who, "wait")
+            self._set_status("No custom covers were found in \u201c%s\u201d. Nothing to reset." % who if not keep else
+                             "Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it." % who, "wait")
             self.canApplyChanged.emit()
             self.undoChanged.emit()
             return
         paragraphs = []
         if names:
             paragraphs.append({"text": "%d covers made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for them." % (len(names), who), "kind": "main"})
+        if stay:
+            paragraphs.append({"text": "Your groups are left as they are: %s." % ", ".join("\u201c%s\u201d (%d)" % (g["name"], n) for g, n in stay), "kind": "main"})
+        for g, n in going:
+            paragraphs.append({"text": "The group \u201c%s\u201d (%d %s) will be reset and deleted." % (g["name"], n, "cover" if n == 1 else "covers"), "kind": "main"})
         if other:
             paragraphs.append({"text": "Found %d more custom covers that this app did not make (from SteamGridDB or set by hand in Steam)." % other, "kind": "main"})
         paragraphs.append({"text": "A backup is kept, so \u201cRestore previous artwork\u201d brings everything back.", "kind": "muted"})
@@ -389,7 +414,20 @@ class Apply(QObject):
             go, alt = (close + "remove all") if close else "Remove all", ""
         else:
             go, alt = "Close Steam and reset" if close else "Reset", ""
-        self._ask("reset", "Reset to Steam's default art", paragraphs, go, alt, {"names": names, "everything": not names})
+        self._reset_games = {a for a in map(_appid, names) if a is not None}
+        self._ask("reset", "Reset to Steam's default art", paragraphs, go, alt, {"names": names, "everything": not names, "keep": keep})
+
+    def _by_groups(self, names):
+        """(names to reset, names to keep, [(group, covers)] left as they are, [(group, covers)] ticked): `names` are our covers on Steam (<appid>p.png). A cover of a group
+        that is not ticked stays; a cover of a ticked group goes with the rest."""
+        saved = self._ticks.groups()
+        stay_games = {a: g for g in saved if g["id"] not in self._reset_ticked for a in g["games"]}
+        keep = [n for n in names if _appid(n) in stay_games]
+        gone = [n for n in names if n not in keep]
+        count = lambda group, among: sum(1 for n in among if _appid(n) in group["games"])
+        stay = [(g, count(g, keep)) for g in saved if g["id"] not in self._reset_ticked and count(g, keep)]
+        going = [(g, count(g, gone)) for g in saved if g["id"] in self._reset_ticked and count(g, gone)]
+        return gone, keep, stay, going
 
     @Slot()
     def decline(self):
@@ -421,7 +459,8 @@ class Apply(QObject):
         self._req += 1
         self._set_status("Closing Steam\u2026" if self._steam_open else "Working\u2026", "wait")
         job = {"mode": mode, "restart": self.restart, "account": self._acc(), "files": self._make.files() if mode == "apply" else [],
-               "names": (names or {}).get("names"), "everything": True if alternate else (names or {}).get("everything", False)}
+               "names": (names or {}).get("names"), "everything": True if alternate else (names or {}).get("everything", False),
+               "keep": (names or {}).get("keep") or []}
         threading.Thread(target=self._work, args=(self._req, job), daemon=True).start()
 
     def _work(self, req, job):
@@ -447,7 +486,7 @@ class Apply(QObject):
                     text = "Nothing to change: all %d covers were already in the Steam account \u201c%s\u201d." % (r["unchanged"], r["account_name"])
             elif job["mode"] == "reset":
                 say("Removing our covers\u2026")
-                r = sc.reset_to_default(steam, job["account"], job["names"], job["everything"])
+                r = sc.reset_to_default(steam, job["account"], job["names"], job["everything"], keep=job["keep"])
                 text = "Done. %d covers removed from the Steam account \u201c%s\u201d: Steam shows its own default art again. Press \u201cRestore previous artwork\u201d to bring them back." % (
                     r["removed"], r["account_name"])
             else:
@@ -477,6 +516,20 @@ class Apply(QObject):
         except RuntimeError:
             pass
 
+    def _forget_reset_groups(self):
+        """After a reset: the games it removed from Steam leave their groups (a group left without games goes) and their covers lose the group note, so the usual flow
+        treats them as usual covers again."""
+        gone = self._reset_games & {a for g in self._ticks.groups() if g["id"] in self._reset_ticked for a in g["games"]}
+        try:
+            if gone:
+                groups.save(self._covers, groups.drop_games(groups.load(self._covers), gone))
+                sc.forget_group(self._covers, gone)
+        except OSError as e:
+            self.failed.emit("The covers were reset, but your groups could not be saved: %s" % e)
+        self._reset_games, self._reset_ticked = set(), set()
+        self._ticks.clear()
+        self._ticks.refresh()
+
     def _on_stage(self, req, text):
         if req == self._req and self._busy:
             self._set_status(text, "wait")
@@ -493,4 +546,6 @@ class Apply(QObject):
         else:
             self._set_status(text, "ok")
             self._set_applied(self._mode == "apply")         # a restore or a reset undoes what was applied
+            if self._mode == "reset":
+                self._forget_reset_groups()
         self.refreshUndo()

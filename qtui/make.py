@@ -11,7 +11,7 @@ from PySide6.QtGui import QDesktopServices
 import groups
 import steamcase as sc
 from qtui import reasons
-from qtui.cases import case_label
+from qtui.groupticks import GroupTicks
 
 STATUS_IDLE = "Not started."
 MAX_THUMBS = 5                              # covers shown under the status
@@ -66,8 +66,7 @@ class Make(QObject):
         self._files = []
         self._running = self._searching = self._asking = self._making = False
         self._cancel = threading.Event()
-        self._groups = groups.load(covers_dir)          # the saved groups, listed in the usual Make
-        self._ticked = set()                            # the ids of those ticked to be repainted
+        self._ticks = GroupTicks(covers_dir, self)      # the saved groups, listed in the usual Make with a box each: the ones ticked are repainted
         self._req = 0
         self._snap = None
         self._pending = None                            # (snapshot, own art, problems) waiting for the answer to the question
@@ -190,28 +189,10 @@ class Make(QObject):
                 {"key": "hundred", "label": "100% games", "value": marked, "step": 3},
                 {"key": "art", "label": "Art", "value": art, "step": 2}]
 
-    # ----- the groups of the manual flow, in the usual Make -----
-    @Property("QVariantList", notify=groupsChanged)
-    def groupChoices(self):
-        """The saved groups, each with a box (unticked at first): {"id", "name", "label", "count", "ticked"}."""
-        return [{"id": g["id"], "name": g["name"], "label": case_label(g["case"]), "count": len(g["games"]), "ticked": g["id"] in self._ticked} for g in self._groups]
-
-    @Property(int, notify=groupsChanged)
-    def tickedGroups(self):
-        return len(self._ticked)
-
-    @Slot(str)
-    def toggleGroup(self, group_id):
-        if any(g["id"] == group_id for g in self._groups):
-            self._ticked ^= {group_id}
-            self.groupsChanged.emit()
-
-    @Slot()
-    def refreshGroups(self):
-        """Read the saved groups again (the manual flow may have changed them)."""
-        self._groups = groups.load(self._covers)
-        self._ticked &= {g["id"] for g in self._groups}
-        self.groupsChanged.emit()
+    @Property(QObject, constant=True)
+    def groupTicks(self):
+        """The groups of the manual way with a box each (see GroupTicks)."""
+        return self._ticks
 
     # ----- state helpers -----
     def _set_status(self, text, kind):
@@ -248,8 +229,8 @@ class Make(QObject):
                         released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, custom=False,
                         treatment=sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None)    # console cases have no gold: only the marks count
         else:
-            self.refreshGroups()
-            snap["repaint"] = [g for g in self._groups if g["id"] in self._ticked]
+            self._ticks.refresh()
+            snap["repaint"] = self._ticks.ticked()
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1
@@ -411,8 +392,8 @@ class Make(QObject):
                 groups.save(self._covers, groups.drop_games(groups.load(self._covers), done))
         except OSError as e:
             self.failed.emit("Could not save your groups", "The covers are made, but your groups could not be saved: %s" % e)
-        self._ticked.clear()
-        self.refreshGroups()
+        self._ticks.clear()
+        self._ticks.refresh()
 
     @Slot()
     def cancel(self):

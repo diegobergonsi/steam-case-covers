@@ -12,7 +12,7 @@ ScreenFrame {
     title: shell.returning ? "Welcome back" : "Cases for your games"
     subtitle: shell.returning ? "Pick up where you left off." : "Give every game in your Steam library a case, in about five minutes."
 
-    Component.onCompleted: { apply.refresh(); apply.watching = true }
+    Component.onCompleted: { apply.refresh(); apply.watching = true; apply.groupTicks.refresh() }
     Component.onDestruction: apply.watching = false
 
     Section {
@@ -149,6 +149,29 @@ ScreenFrame {
             text: screen.apply.undoHint
             color: Theme.faint
             font.pixelSize: Theme.smallSize
+        }
+    }
+
+    Section {
+        objectName: "home_section_groups"
+        heading: "Your groups"
+        visible: screen.apply.groupTicks.choices.length > 0
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.bodySize
+            text: "Reset leaves the covers of these groups on Steam. Tick a group to reset it too. That deletes the group."
+        }
+        Repeater {
+            model: screen.apply.groupTicks.choices
+            delegate: SwitchRow {
+                objectName: "home_group_" + modelData.id
+                label: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                checked: modelData.ticked
+                enabled: !screen.apply.busy
+                onToggled: screen.apply.groupTicks.toggle(modelData.id)
+            }
         }
     }
 

@@ -78,17 +78,16 @@ ScreenFrame {
         }
     }
     Section {
-        objectName: "case_section_group"
-        heading: "Group"
+        objectName: "case_section_groups"
+        heading: "Your groups"
+        visible: screen.cases.groupList.length > 0
         Text {
             objectName: "case_group_intro"
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: screen.cases.groupList.length > 0
-                  ? "Your games go in a group, which the app remembers. Add them to one you made, or pick a case above for a new group."
-                  : "Your games go in a group, which the app remembers. Name it below once you pick a case."
+            text: "The app remembers your groups. Pick one to add the games you ticked to it, or pick a case above for a new group."
         }
         Repeater {
             model: screen.cases.groupList
@@ -111,11 +110,16 @@ ScreenFrame {
                 }
             }
         }
+    }
+    Section {
+        objectName: "case_section_new_group"
+        heading: "Name your group"
+        visible: screen.cases.selectedKey !== "" && screen.cases.selectedGroup === ""
         Flow {
             objectName: "case_colours"
             width: parent.width
             spacing: Theme.s8
-            visible: screen.cases.selectedKey === "steam" && screen.cases.selectedGroup === ""
+            visible: screen.cases.selectedKey === "steam"
             Repeater {
                 id: colourRepeater
                 model: screen.cases.colourChoices.length
@@ -139,7 +143,6 @@ ScreenFrame {
             objectName: "case_group_name"
             width: parent.width
             height: Theme.controlHeight
-            visible: screen.cases.selectedKey !== "" && screen.cases.selectedGroup === ""
             placeholderText: "Name this group"
             placeholderTextColor: Theme.faint
             color: Theme.text
