@@ -3852,6 +3852,105 @@ class SteamMarksMoved(Base):
                 self.assertTrue(sc.is_steamcase_cover(out))
 
 
+class HandMadeCovers(Base):
+    """A cover made by hand (a console case or a group's Steam case) carries a group note, and every check of the usual flow ignores it."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.art = os.path.join(self.tmp, "art.png")
+        sc.Image.new("RGB", (60, 90), (30, 200, 30)).save(self.art)
+
+    def make(self, name, hue=0, **kw):
+        out = os.path.join(self.covers, name)
+        platform = kw.get("platform")
+        frame = sc.load_platform_frame(platform) if platform else sc.load_frame(hue)
+        sc.build_cover(self.art, out, frame, hue, **kw)
+        return out
+
+    def with_note(self, src, key, value):
+        """A copy of the cover with one PNG note set (value None: removed)."""
+        from PIL.PngImagePlugin import PngInfo
+        out = os.path.join(self.tmp, "n_%s.png" % key)
+        meta = PngInfo()
+        with sc.Image.open(src) as im:
+            for k, v in im.info.items():
+                if isinstance(v, str) and k != key:
+                    meta.add_text(k, v)
+            if value is not None:
+                meta.add_text(key, value)
+            im.save(out, pnginfo=meta)
+        return out
+
+    def test_a_group_note_is_written_and_read_back(self):
+        path = self.make("a.png", group="g1")
+        self.assertEqual(sc.cover_group(path), "g1")
+        self.assertIsNone(sc.cover_group(self.make("b.png")))
+
+    def test_a_damaged_group_note_reads_as_false(self):
+        path = self.make("a.png", group="g1")
+        for bad in ("", "G1", "g 1", "g1;", "x" * 13, "é"):
+            with self.subTest(bad=bad):
+                self.assertIs(sc.cover_group(self.with_note(path, sc.GROUP_CHUNK, bad)), False)
+        self.assertIs(sc.cover_group(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_a_bad_group_id_is_refused_before_anything_is_written(self):
+        for bad in ("", "G1", "g 1", "x" * 13, 5, "a/b"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.make("a.png", group=bad)
+        self.assertFalse(os.path.exists(os.path.join(self.covers, "a.png")))
+
+    def test_by_hand_means_a_console_case_or_a_group_note(self):
+        self.assertIsNone(sc.cover_by_hand(self.make("plain.png")))
+        self.assertIs(sc.cover_by_hand(self.make("group.png", group="g1")), True)
+        self.assertIs(sc.cover_by_hand(self.make("console.png", platform="ps5")), True)
+        self.assertIs(sc.cover_by_hand(self.make("both.png", platform="ps5", group="g1")), True)
+        self.assertIs(sc.cover_by_hand(self.with_note(self.make("g2.png", group="g1"), sc.GROUP_CHUNK, "BAD")), False)       # a damaged note: the cover is rebuilt
+        self.assertIs(sc.cover_by_hand(os.path.join(self.tmp, "missing.png")), False)
+
+    def test_covers_by_hand_are_ours(self):
+        for kw in ({"group": "g1"}, {"group": "g1", "hue": 134}, {"group": "g1", "treatment": "ribbon"}, {"group": "g1", "treatment": "rosette", "hue": 134},
+                   {"group": "g1", "platform": "ps5"}, {"group": "g1", "platform": "switch", "treatment": "ribbon"}):
+            with self.subTest(**kw):
+                self.assertTrue(sc.is_steamcase_cover(self.make("c.png", **kw)))
+
+    def test_a_group_note_never_goes_with_a_theme_or_a_damaged_note(self):
+        themed = self.make("t.png", theme="halloween")
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(themed, sc.GROUP_CHUNK, "g1")))
+        grouped = self.make("g.png", group="g1")
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(grouped, sc.GROUP_CHUNK, "NOPE")))
+        console = self.make("c.png", platform="ps5", group="g1")
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(console, sc.GROUP_CHUNK, "NOPE")))
+        self.assertFalse(sc.is_steamcase_cover(self.with_note(grouped, sc.THEME_CHUNK, "halloween")))
+
+    def folder(self):
+        """A usual library (two blue halloween covers) and, sorting before them, covers by hand: a red one with full marks and art of the user's, and a console one."""
+        self.make("Plain_1_1.png", theme="halloween")
+        self.make("Plain_2_2.png", theme="halloween")
+        self.make("A_3_3.png", hue=134, treatment="ribbon", group="g1", from_art="custom fedcba9876543210")
+        self.make("A_4_4.png", platform="ps5", group="g1")
+
+    def test_the_checks_of_the_usual_flow_ignore_covers_by_hand(self):
+        self.folder()
+        self.assertEqual(sc.existing_cover_colour(self.covers), (0, 100, 100))                       # not that of the first cover by name, which is red
+        self.assertFalse(sc.mixed_cover_colours(self.covers))
+        self.assertFalse(sc.mixed_cover_themes(self.covers))
+        self.assertEqual(sc.existing_cover_theme(self.covers), "halloween")
+        self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
+        self.assertFalse(sc.covers_in_other_colour(self.covers, 0))
+        self.assertFalse(sc.covers_in_other_look(self.covers, 0))
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_other_art(self.covers, {}))                                   # the art of a cover by hand is not in question
+        self.assertEqual(sc.covers_with_art(self.covers), set())
+
+    def test_a_damaged_group_note_makes_the_usual_flow_ask(self):
+        self.folder()
+        self.with_note(os.path.join(self.covers, "A_3_3.png"), sc.GROUP_CHUNK, "BAD")
+        shutil.copy(os.path.join(self.tmp, "n_%s.png" % sc.GROUP_CHUNK), os.path.join(self.covers, "A_3_3.png"))
+        self.assertTrue(sc.covers_in_other_look(self.covers, 0))                                     # as for a damaged console note: the cover is rebuilt
+
+
 def use_cases_dir(test, mutate=None):
     """Point the engine at a copy of assets/cases (changed by `mutate(data)` on the parsed cases.json), with every cache that depends on it cleared before and after."""
     d = tempfile.mkdtemp()

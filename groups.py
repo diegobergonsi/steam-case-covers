@@ -9,7 +9,7 @@ import steamcase as sc
 
 FILE = "groups.json"
 MAX_NAME = 40
-_ID = re.compile(r"[a-z0-9]{1,12}")                     # the id goes into a PNG note on every cover of the group
+_ID = sc.GROUP_ID
 
 
 def _whole(v):

@@ -59,7 +59,7 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
         try:
             for n in os.listdir(covers_dir):
                 appid = sc.appid_of(n)
-                if n.lower().endswith(".png") and appid is not None and not sc.cover_platform(os.path.join(covers_dir, n)):        # console covers are left alone: they change nothing here
+                if n.lower().endswith(".png") and appid is not None and sc.cover_by_hand(os.path.join(covers_dir, n)) is None:        # covers by hand are left alone: they change nothing here
                     have = sc.cover_treatment(os.path.join(covers_dir, n)) or None
                     styles.add(have)
                     changed = changed or have != (treatment if int(appid) in completed else None)
