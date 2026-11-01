@@ -738,10 +738,57 @@ def load_frame(hue=0, family=False, *, sat=100, val=100):
     return frame
 
 
+MARKS_DY_MAX = 290                          # the rosette is about 160 rows tall and must end above ROSETTE_ROWS, where the ribbon's half of the overlay starts
+MIN_WINDOW = 400                            # the art window of a console case is at least this wide and tall
+
+
+def _check_cases(data):
+    """SteamcaseError (one sentence naming the platform and the problem) unless `data`, the parsed cases.json, describes every case sensibly:
+    "window" four whole numbers inside the 600 x 900 picture and at least MIN_WINDOW each way; "marks_dy", "corner" and "overlay", if given, whole numbers inside it."""
+    def fail(where, what):
+        raise SteamcaseError("cases.json: %s: %s" % (where, what))
+
+    def whole(value):
+        return isinstance(value, int) and not isinstance(value, bool)
+
+    def numbers(where, name, value, count):
+        if not (isinstance(value, list) and len(value) == count and all(whole(v) for v in value)):
+            fail(where, "%s must be %d whole numbers" % (name, count))
+        return value
+    if not isinstance(data, dict):
+        fail("the file", "must hold one entry per case")
+    for platform in PLATFORMS:
+        info = data.get(platform)
+        if not isinstance(info, dict):
+            fail(platform, "this case is missing")
+        if "window" not in info:
+            fail(platform, "window is missing")
+        x0, y0, x1, y1 = numbers(platform, "window", info["window"], 4)
+        if not (0 <= x0 < x1 <= SIZE[0] and 0 <= y0 < y1 <= SIZE[1]):
+            fail(platform, "window must lie inside the %d x %d picture, left before right and top before bottom" % SIZE)
+        if x1 - x0 < MIN_WINDOW or y1 - y0 < MIN_WINDOW:
+            fail(platform, "window must be at least %d x %d" % (MIN_WINDOW, MIN_WINDOW))
+        if "marks_dy" in info and not (whole(info["marks_dy"]) and 0 <= info["marks_dy"] <= MARKS_DY_MAX):
+            fail(platform, "marks_dy must be a whole number from 0 to %d" % MARKS_DY_MAX)
+        if "corner" in info:
+            cx, cy = numbers(platform, "corner", info["corner"], 2)
+            if not (0 <= cx < SIZE[0] and 0 <= cy < SIZE[1]):
+                fail(platform, "corner must lie inside the picture")
+        if "overlay" in info:
+            ox0, oy0, ox1, oy1 = numbers(platform, "overlay", info["overlay"], 4)
+            if not (0 <= ox0 < ox1 <= SIZE[0] and 0 <= oy0 < oy1 <= SIZE[1]):
+                fail(platform, "overlay must lie inside the picture, left before right and top before bottom")
+
+
 @functools.lru_cache(maxsize=1)
 def _case_windows():
-    with open(os.path.join(CASES_DIR, "cases.json"), encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(os.path.join(CASES_DIR, "cases.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SteamcaseError("cases.json: cannot be read (%s)" % e)
+    _check_cases(data)
+    return data
 
 
 def platform_window(platform):
@@ -759,9 +806,21 @@ def platform_overlay(platform):
 
 
 def platform_marks_dy(platform):
-    """How far down the 100% rosette is moved on this console case: the banner holds the logo, the marks go on the art (the Switch's tab is only a corner: 0)."""
-    platform_window(platform)
-    return int(_case_windows()[platform].get("marks_dy", platform_window(platform)[1]))
+    """How far down the 100% rosette is moved on this console case: below the banner that holds the logo, and never above the art window (the Switch's tab is only
+    a corner: its "marks_dy" is 0, so the rosette starts at the top of the art)."""
+    y0 = platform_window(platform)[1]
+    return max(_case_windows()[platform].get("marks_dy", y0), y0)
+
+
+@functools.lru_cache(maxsize=1)
+def _rosette_right():
+    """The right edge of the rosette in the completion overlay."""
+    return _rosette_overlay().getchannel("A").getbbox()[2]
+
+
+def platform_marks_dx(platform):
+    """How far left the 100% rosette is moved on this console case so it stays inside the art window (0 when it fits)."""
+    return min(0, platform_window(platform)[2] - _rosette_right())
 
 
 def platform_corner(platform):
@@ -834,7 +893,8 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, them
     if platform is not None:
         _check_platform(platform, treatment, theme)
         with Image.open(DEFAULT_ART) as im:
-            return finish_treatment(_compose(im.convert("RGBA"), load_platform_frame(platform, family), platform_window(platform)), treatment, platform_marks_dy(platform))
+            return finish_treatment(_compose(im.convert("RGBA"), load_platform_frame(platform, family), platform_window(platform)), treatment,
+                                    platform_marks_dy(platform), platform_marks_dx(platform))
     hue, sat, val = treatment_colour(treatment, (hue, sat, val))
     with Image.open(DEFAULT_ART) as im:
         return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment)
@@ -953,7 +1013,7 @@ def _gold_border():
     return plate
 
 
-def finish_treatment(cover, treatment, dy=0):
+def finish_treatment(cover, treatment, dy=0, dx=0):
     """`cover` (the finished 600 x 900 composition) with the marks of a 100% game: the rosette over the platform badges and, unless the
     treatment is a rosette-only one, the ribbon at the bottom, kept inside the case's own outline. For "gold-border" the whole cover is then shrunk by BORDER pixels
     on each side and set inside a gold border, so the marks stay on the art. No treatment: `cover` itself."""
@@ -961,9 +1021,9 @@ def finish_treatment(cover, treatment, dy=0):
         return cover
     case, kind = split_treatment(treatment)
     marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
-    if dy:                                                              # a console case: the rosette moves down below the banner, the ribbon stays at the bottom
+    if dy or dx:                                                        # a console case: the rosette moves below the banner and inside the window, the ribbon stays at the bottom
         lowered = Image.new("RGBA", marks.size, (0, 0, 0, 0))
-        lowered.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (0, dy))
+        lowered.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (dx, dy))
         lowered.paste(marks.crop((0, ROSETTE_ROWS, marks.width, marks.height)), (0, ROSETTE_ROWS))
         marks = lowered
     marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
@@ -1078,7 +1138,8 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
             raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
         art = im.convert("RGBA")
-    cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment, platform_marks_dy(platform) if platform else 0)
+    cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment,
+                             platform_marks_dy(platform) if platform else 0, platform_marks_dx(platform) if platform else 0)
     part = _tmp(out_path, "part")                  # write aside, then rename: a crash never leaves a half-written cover
     note = PngInfo()
     if platform is not None:
@@ -1652,8 +1713,8 @@ def _platform_reference(key, family):
     (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0."""
     platform, treatment = key
     frame, window = load_platform_frame(platform, family), platform_window(platform)
-    dy = platform_marks_dy(platform)
-    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame, window), treatment, dy) for c in (0, 255))
+    dy, dx = platform_marks_dy(platform), platform_marks_dx(platform)
+    black, white = (finish_treatment(_compose(Image.new("RGBA", SIZE, (c, c, c, 255)), frame, window), treatment, dy, dx) for c in (0, 255))
     widest = functools.reduce(ImageChops.lighter, ImageChops.difference(black, white).split())
     return Image.blend(black, white, 0.5), widest.point(lambda d: 255 if d <= 2 else 0).filter(ImageFilter.MinFilter(7))
 

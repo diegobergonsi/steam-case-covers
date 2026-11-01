@@ -61,11 +61,15 @@ def engine_problems():
     try:
         from PIL import Image
         with tempfile.TemporaryDirectory() as d:
-            src, out = os.path.join(d, "p.png"), os.path.join(d, "c.png")
+            src = os.path.join(d, "p.png")
             Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
-            sc.build_cover(src, out, sc.load_platform_frame("ps5"), platform="ps5")
-            if sc.cover_platform(out) != "ps5" or not sc.is_steamcase_cover(out):
-                problems.append("a console case cover is not recognised as ours")
+            for i, platform in enumerate(sc.PLATFORMS):                      # every case, with the family corner and the marks that move (None, ribbon, rosette in turn)
+                out = os.path.join(d, platform + ".png")
+                sc.build_cover(src, out, sc.load_platform_frame(platform, True), platform=platform, treatment=(None, "ribbon", "rosette")[i % 3])
+                if sc.cover_platform(out) != platform or not sc.is_steamcase_cover(out):
+                    problems.append("the %s console case cover is not recognised as ours" % platform)
+    except sc.SteamcaseError as e:
+        problems.append("the console cases cannot be used: %s" % e)
     except Exception as e:
         problems.append("a console case cover could not be built: %s" % e)
     return problems

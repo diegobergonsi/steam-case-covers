@@ -3347,7 +3347,7 @@ class PlatformCases(Base):
         frame = sc.load_platform_frame("xboxseries")
         x0, y0, x1, y1 = sc.platform_window("xboxseries")
         tab = sc.platform_overlay("xboxseries")
-        self.assertEqual(sc.platform_marks_dy("xboxseries"), 0)                                         # nothing of ours at the top right: the rosette stays where it is
+        self.assertEqual(sc.platform_marks_dy("xboxseries"), y0)                                        # nothing of ours at the top right: the rosette starts at the art
         self.assertTrue(tab[0] <= x0 + 1 and tab[1] <= y0 + 1 and 200 <= tab[2] - tab[0] <= 360 and 90 <= tab[3] - tab[1] <= 130, tab)
         self.assertEqual(frame.getpixel((x1 - 60, y0 + 20))[3], 0)                                     # art shows at the top right
         self.assertGreater(frame.getpixel((tab[0] + 20, tab[1] + 20))[3], 200)                         # the tab holds the sphere
@@ -3362,11 +3362,21 @@ class PlatformCases(Base):
                     plain, marked = os.path.join(self.tmp, "p.png"), os.path.join(self.tmp, "m.png")
                     sc.build_cover(art, plain, sc.load_platform_frame(p), platform=p)
                     sc.build_cover(art, marked, sc.load_platform_frame(p), platform=p, treatment=treatment)
-                    dy = sc.platform_marks_dy(p)
+                    dy, (x0, y0, x1, y1) = sc.platform_marks_dy(p), sc.platform_window(p)
+                    self.assertGreaterEqual(dy, y0)                                                                          # never above the art
                     with sc.Image.open(plain) as a, sc.Image.open(marked) as b:
-                        top = (0, 0, sc.SIZE[0], dy)
-                        self.assertEqual(a.convert("RGBA").crop(top).tobytes(), b.convert("RGBA").crop(top).tobytes())        # the banner is untouched
-                        self.assertNotEqual(a.convert("RGBA").tobytes(), b.convert("RGBA").tobytes())                      # the marks are there
+                        diff = sc.ImageChops.difference(a.convert("RGBA"), b.convert("RGBA")).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
+                        top = diff.crop((0, 0, sc.SIZE[0], dy))
+                        self.assertIsNone(top.getbbox())                                                                     # the banner is untouched
+                        rosette = diff.crop((0, 0, sc.SIZE[0], 450)).getbbox()
+                        self.assertIsNotNone(rosette)
+                        self.assertTrue(rosette[0] >= x0 and rosette[2] <= x1 and rosette[1] >= max(y0, dy) and rosette[3] <= y1, (rosette, (x0, y0, x1, y1)))   # inside the art window
+                        tab = sc.platform_overlay(p)
+                        if tab:
+                            self.assertTrue(rosette[0] >= tab[2] or rosette[1] >= tab[3] or rosette[2] <= tab[0] or rosette[3] <= tab[1], (rosette, tab))     # not over the tab
+                        if treatment == "ribbon":
+                            ribbon = diff.crop((0, 450, sc.SIZE[0], sc.SIZE[1])).getbbox()
+                            self.assertTrue(ribbon and ribbon[1] + 450 >= 780 and ribbon[3] + 450 <= 880, ribbon)             # the ribbon stays at the bottom, whatever dy is
 
     def test_compose_default_window_is_unchanged(self):
         art = sc.Image.new("RGBA", (300, 450), (200, 60, 60, 255))
@@ -3722,6 +3732,76 @@ class ConsoleMake(StoreMocks):
     def test_a_listed_game_missing_from_the_library_is_ignored(self):
         res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5", 99: "ps4"})
         self.assertEqual((res["ok"], os.listdir(self.covers)), (1, ["Game_1_1.png"]))
+
+
+def use_cases_dir(test, mutate=None):
+    """Point the engine at a copy of assets/cases (changed by `mutate(data)` on the parsed cases.json), with every cache that depends on it cleared before and after."""
+    d = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, d, True)
+    shutil.copytree(sc.CASES_DIR, d, dirs_exist_ok=True)
+    if mutate:
+        path = os.path.join(d, "cases.json")
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        mutate(data)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    clear = lambda: (sc._case_windows.cache_clear(), sc._platform_reference.cache_clear())
+    patcher = mock.patch.object(sc, "CASES_DIR", d)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    clear()
+    test.addCleanup(clear)
+    return d
+
+
+class CasesJsonIsChecked(Base):
+    """A hand-made cases.json that is a little off is refused with one clear sentence, not a raw error from deep inside."""
+    BAD = {
+        "no window": lambda d: d["ps5"].pop("window"),
+        "a window that is not four numbers": lambda d: d["ps5"].update(window=[0, 0, 600]),
+        "a window with text in it": lambda d: d["ps5"].update(window=[0, "a", 600, 900]),
+        "a window outside the picture": lambda d: d["ps5"].update(window=[0, 100, 700, 900]),
+        "a window that is upside down": lambda d: d["ps5"].update(window=[100, 100, 50, 900]),
+        "a window that is too small": lambda d: d["ps5"].update(window=[0, 0, 300, 300]),
+        "marks_dy as text": lambda d: d["ps5"].update(marks_dy="abc"),
+        "marks_dy too big": lambda d: d["ps5"].update(marks_dy=400),
+        "marks_dy below zero": lambda d: d["ps5"].update(marks_dy=-5),
+        "a corner past the right edge": lambda d: d["ps5"].update(corner=[700, 10]),
+        "a corner with a negative number": lambda d: d["ps5"].update(corner=[-5, 10]),
+        "an overlay outside the picture": lambda d: d["switch"].update(overlay=[0, 0, 700, 100]),
+        "a missing platform": lambda d: d.pop("xbox360"),
+    }
+
+    def test_every_malformed_file_is_refused_in_words(self):
+        for what, mutate in self.BAD.items():
+            with self.subTest(what):
+                use_cases_dir(self, mutate)
+                for call in (lambda: sc.platform_window("ps5"), lambda: sc.load_platform_frame("ps5", True), lambda: sc.platform_marks_dy("ps5")):
+                    with self.assertRaises(sc.SteamcaseError) as caught:
+                        call()
+                    self.assertIn("cases.json", str(caught.exception))
+
+    def test_the_shipped_file_and_one_with_optional_parts_left_out_are_accepted(self):
+        use_cases_dir(self)
+        self.assertEqual(sc.platform_window("ps5")[0] >= 0, True)
+        use_cases_dir(self, lambda d: [d["ps5"].pop(k, None) for k in ("marks_dy", "corner", "overlay")])
+        x0, y0, _, _ = sc.platform_window("ps5")
+        self.assertEqual((sc.platform_marks_dy("ps5"), sc.platform_corner("ps5"), sc.platform_overlay("ps5")), (y0, (x0, y0), None))
+
+    def test_the_self_test_reports_a_bad_file_instead_of_raising(self):
+        from qtui import selfcheck
+        use_cases_dir(self, lambda d: d["ps5"].update(corner=[700, 10]))
+        problems = selfcheck.engine_problems()
+        self.assertTrue(any("cases.json" in p for p in problems), problems)
+
+    def test_the_self_test_builds_every_case_with_options_on(self):
+        from qtui import selfcheck
+        calls = []
+        real = sc.build_cover
+        with mock.patch.object(sc, "build_cover", lambda *a, **kw: calls.append(kw.get("platform")) or real(*a, **kw)):
+            self.assertEqual(selfcheck.engine_problems(), [])
+        self.assertEqual(sorted(p for p in calls if p), sorted(sc.PLATFORMS))
 
 
 class SelfCheckConsoleCases(Base):
