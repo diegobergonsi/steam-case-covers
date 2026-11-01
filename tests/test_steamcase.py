@@ -3916,6 +3916,11 @@ class ConsoleCaseCredits(unittest.TestCase):
         self.assertNotIn("build_cases", text)
         self.assertNotIn("not the official wordmark", text)
 
+    def test_it_says_the_logos_are_not_ours_and_came_from_an_icon_website(self):
+        text = self.text()
+        self.assertRegex(text, r"(?i)logos[^.]*downloaded from a (public )?website of icons")
+        self.assertRegex(text, r"(?i)not (the )?(intellectual )?property of this project|not our intellectual property")
+
     def test_the_drawing_tool_and_its_logo_files_are_gone(self):
         self.assertFalse(os.path.exists(os.path.join(sc.HERE, "tools", "build_cases.py")))
         self.assertFalse(os.path.exists(os.path.join(sc.HERE, "tools", "src", "cases")))
