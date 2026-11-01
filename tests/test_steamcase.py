@@ -3297,7 +3297,16 @@ class PlatformCases(Base):
                 x0, y0, x1, y1 = sc.platform_window(p)
                 self.assertTrue(0 <= x0 < x1 <= sc.SIZE[0] and 0 <= y0 < y1 <= sc.SIZE[1])
                 self.assertTrue(x1 - x0 >= 400 and y1 - y0 >= 400)
-                self.assertEqual(frame.getchannel("A").crop((x0, y0, x1, y1)).getextrema(), (0, 0))      # the art shows through
+                alpha = frame.getchannel("A").crop((x0, y0, x1, y1))
+                tab = sc.platform_overlay(p)                                                       # a part of the window the frame itself covers (the Switch's red tab)
+                if tab is None:
+                    self.assertEqual(alpha.getextrema(), (0, 0))                                   # the art shows through
+                else:
+                    covered = alpha.copy()
+                    covered.paste(0, (tab[0] - x0, tab[1] - y0, tab[2] - x0, tab[3] - y0))
+                    self.assertEqual(covered.getextrema(), (0, 0))                                 # the art shows through everywhere else
+                    inside = alpha.crop((tab[0] - x0, tab[1] - y0, tab[2] - x0, tab[3] - y0))                # the tab may be slanted: most of its box is opaque
+                    self.assertGreater(sum(inside.getdata()) / (inside.width * inside.height), 150)
 
     def test_labels_cover_every_platform(self):
         self.assertEqual(set(sc.PLATFORM_LABELS), set(sc.PLATFORMS))
@@ -3308,16 +3317,56 @@ class PlatformCases(Base):
             with self.assertRaises(ValueError):
                 call("ps9")
 
-    def test_family_corner_stays_inside_the_case(self):
+    def test_family_corner_stays_in_the_art_and_never_covers_the_banner(self):
         for p in sc.PLATFORMS:
             with self.subTest(platform=p):
                 plain, family = sc.load_platform_frame(p), sc.load_platform_frame(p, True)
                 self.assertNotEqual(plain.tobytes(), family.tobytes())
-                silhouette = plain.getchannel("A").copy()
                 x0, y0, x1, y1 = sc.platform_window(p)
-                silhouette.paste(255, (x0, y0, x1, y1))                  # the window is part of the case: the art shows there
-                outside = sc.Image.eval(silhouette, lambda a: 255 if a == 0 else 0)
-                self.assertEqual(sc.ImageChops.multiply(outside, family.getchannel("A")).getbbox(), None)
+                diff = sc.ImageChops.difference(plain, family).convert("RGB").convert("L").point(lambda v: 255 if v else 0)
+                box = diff.getbbox()
+                self.assertTrue(box[0] >= x0 and box[1] >= y0 and box[2] <= x1 and box[3] <= y1, (p, box, (x0, y0, x1, y1)))     # only inside the art window
+                cx, cy = sc.platform_corner(p)
+                tab = sc.platform_overlay(p)
+                if tab is not None:
+                    self.assertTrue(cy >= tab[3] - 2, (p, cy, tab))                                # under the tab, which holds the logo
+
+    def test_the_playstation_covers_run_edge_to_edge_like_the_printed_covers(self):
+        """From photographs: the PS3 and PS4 inserts have a banner and no coloured border."""
+        for p in ("ps3", "ps4"):
+            with self.subTest(platform=p):
+                x0, y0, x1, y1 = sc.platform_window(p)
+                self.assertEqual((x0, x1, y1), (0, sc.SIZE[0], sc.SIZE[1]))
+                self.assertTrue(60 <= y0 <= 100, y0)
+                frame = sc.load_platform_frame(p)
+                self.assertGreater(frame.getpixel((300, 10))[3], 250)                                    # the banner is opaque
+                self.assertEqual(frame.getpixel((300, y0 + 40))[3], 0)                                   # the art runs to the edges below it
+
+    def test_the_series_x_case_is_a_thin_shell_with_a_slanted_tab_and_art_to_the_top(self):
+        """From photographs: the art reaches the top edge on the right of the tab."""
+        frame = sc.load_platform_frame("xboxseries")
+        x0, y0, x1, y1 = sc.platform_window("xboxseries")
+        tab = sc.platform_overlay("xboxseries")
+        self.assertEqual(sc.platform_marks_dy("xboxseries"), 0)                                         # nothing of ours at the top right: the rosette stays where it is
+        self.assertTrue(tab[0] <= x0 + 1 and tab[1] <= y0 + 1 and 200 <= tab[2] - tab[0] <= 360 and 90 <= tab[3] - tab[1] <= 130, tab)
+        self.assertEqual(frame.getpixel((x1 - 60, y0 + 20))[3], 0)                                     # art shows at the top right
+        self.assertGreater(frame.getpixel((tab[0] + 20, tab[1] + 20))[3], 200)                         # the tab holds the sphere
+
+    def test_the_100_marks_start_below_the_banner(self):
+        """The rosette (and the ribbon, at the bottom) must never hide the logo of the case."""
+        art = os.path.join(self.tmp, "a.png")
+        sc.Image.new("RGB", (120, 180), (30, 30, 30)).save(art)
+        for p in sc.PLATFORMS:
+            for treatment in ("ribbon", "rosette"):
+                with self.subTest(platform=p, treatment=treatment):
+                    plain, marked = os.path.join(self.tmp, "p.png"), os.path.join(self.tmp, "m.png")
+                    sc.build_cover(art, plain, sc.load_platform_frame(p), platform=p)
+                    sc.build_cover(art, marked, sc.load_platform_frame(p), platform=p, treatment=treatment)
+                    dy = sc.platform_marks_dy(p)
+                    with sc.Image.open(plain) as a, sc.Image.open(marked) as b:
+                        top = (0, 0, sc.SIZE[0], dy)
+                        self.assertEqual(a.convert("RGBA").crop(top).tobytes(), b.convert("RGBA").crop(top).tobytes())        # the banner is untouched
+                        self.assertNotEqual(a.convert("RGBA").tobytes(), b.convert("RGBA").tobytes())                      # the marks are there
 
     def test_compose_default_window_is_unchanged(self):
         art = sc.Image.new("RGBA", (300, 450), (200, 60, 60, 255))
@@ -3347,15 +3396,16 @@ class PlatformCases(Base):
                 self.assertNotIn(chunk, im.info)
 
     def test_art_stays_inside_the_window(self):
-        for p in ("ps4", "switch"):
+        for p in ("ps5", "switch"):
             with self.subTest(platform=p):
                 out = self.build(p)
                 x0, y0, x1, y1 = sc.platform_window(p)
                 with sc.Image.open(out) as im:
                     im = im.convert("RGBA")
                     green = lambda px: px[1] > 150 and px[0] < 90 and px[2] < 90
-                    self.assertTrue(green(im.getpixel((x0 + 30, y0 + 30))))
+                    self.assertTrue(green(im.getpixel((x0 + 30, y1 - 30))))                  # (not near the top-left: the Switch's tab is there)
                     self.assertTrue(green(im.getpixel((x1 - 30, y1 - 30))))
+                    self.assertTrue(green(im.getpixel((x1 - 30, y0 + 30))))
                     self.assertFalse(green(im.getpixel((x0 - 8, y0 + 100))))           # the case's border, outside the window
 
     def test_platform_with_a_theme_is_refused(self):
@@ -3594,7 +3644,8 @@ class ConsoleMake(StoreMocks):
         sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, family={2})
         def green(path):
             with sc.Image.open(path) as im:
-                return sum(1 for px in im.convert("RGB").crop((0, 0, 207, 207)).getdata() if all(abs(a - b) <= 8 for a, b in zip(px, sc.FAMILY_COLOR)))
+                cx, cy = sc.platform_corner("ps5")
+                return sum(1 for px in im.convert("RGB").crop((cx, cy, cx + 207, cy + 207)).getdata() if all(abs(a - b) <= 8 for a, b in zip(px, sc.FAMILY_COLOR)))
         self.assertEqual(green(self.cv(1)), 0)
         self.assertGreater(green(self.cv(2)), 1000)
 
@@ -3666,7 +3717,7 @@ class ConsoleMake(StoreMocks):
                 for family in (False, True):
                     with self.subTest(platform=p, treatment=treatment, family=family):
                         mask = sc._platform_reference((p, treatment), family)[1]
-                        self.assertGreaterEqual(mask.histogram()[255] / (sc.SIZE[0] * sc.SIZE[1]), 0.10)
+                        self.assertGreaterEqual(mask.histogram()[255] / (sc.SIZE[0] * sc.SIZE[1]), 0.06)
 
     def test_a_listed_game_missing_from_the_library_is_ignored(self):
         res = sc.make_covers({1: None}, self.covers, platforms={1: "ps5", 99: "ps4"})
