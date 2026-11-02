@@ -4663,7 +4663,11 @@ class HomeScreen(AddWindow):
         nav = self.item("nav").property("width")
         # a wider font (Windows) must wrap the name onto a second line, never run out of the menu or into the steps
         self.assertLessEqual(title.property("x") + title.property("width"), nav - title.property("x"))
-        title.setProperty("text", "Steam Case Covers Steam Case Covers")                 # as long as a wide font makes the name
+        from PySide6.QtGui import QFont
+        font = title.property("font")                                                  # spread the letters until the name is 1.5 times as wide as the room it has,
+        spread = (1.5 * title.property("width") - title.property("implicitWidth")) / len(title.property("text"))      # as a wide font (Windows) makes it
+        font.setLetterSpacing(QFont.AbsoluteSpacing, spread)
+        title.setProperty("font", font)
         self.app.processEvents()
         self.assertEqual(title.property("lineCount"), 2)
         self.assertLessEqual(title.property("contentWidth"), title.property("width"))
