@@ -47,6 +47,8 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     ctx.setContextProperty("customArtHelp", CUSTOM_ART_HELP)
     ctx.setContextProperty("pageHelp", PAGE_HELP)
     ctx.setContextProperty("discordIcon", _asset_url(assets_dir, "discord.png"))
+    ctx.setContextProperty("kofiIcon", _asset_url(assets_dir, "kofi.png"))
+    ctx.setContextProperty("updateIcon", _asset_url(assets_dir, "update.png"))
     engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
     if problems or not engine.rootObjects():
         raise RuntimeError("The window could not be built:\n" + "\n".join(problems or ["Main.qml produced no window"]))

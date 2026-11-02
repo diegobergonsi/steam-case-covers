@@ -3908,6 +3908,18 @@ class UpdatesState(QtCase):
             self.u.openLink("https://github.com/x/releases")
             self.assertEqual(opened.call_count, 1)
 
+    def test_kofi_opens_the_page_or_copies_the_link(self):
+        from unittest import mock
+        import steamcase as sc
+        from PySide6.QtGui import QGuiApplication
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.u.openKofi()
+        self.assertEqual((opened.call_args[0][0].toString(), self.seen), (sc.KOFI_URL, []))
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=False):
+            self.u.openKofi()
+        self.assertEqual(QGuiApplication.clipboard().text(), sc.KOFI_URL)
+        self.assertEqual(self.seen[-1], ("Support on Ko-fi", [{"text": "Your browser did not open, so the link was copied. Paste it into your browser:\n" + sc.KOFI_URL, "kind": "main"}], "OK", "", ""))
+
     def test_discord_opens_the_invite_or_copies_it(self):
         from unittest import mock
         import steamcase as sc
@@ -4621,6 +4633,34 @@ class HomeScreen(AddWindow):
             self.click("footer_discord")
         self.assertEqual(opened.call_args[0][0].toString(), sc.DISCORD_URL)
 
+    def test_kofi_in_the_navigation_sits_under_discord_and_opens_the_page(self):
+        from unittest import mock
+        from PySide6.QtCore import QPointF
+        import steamcase as sc
+        self.open_home()
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("footer_kofi")
+        self.assertEqual(opened.call_args[0][0].toString(), sc.KOFI_URL)
+        y = lambda n: self.item(n).mapToScene(QPointF(0, 0)).y()
+        self.assertLess(y("footer_discord"), y("footer_kofi"))
+        self.assertLess(y("footer_kofi"), y("footer_updates"))
+
+    def test_the_words_of_the_three_navigation_links_start_at_the_same_place(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        def label(it):
+            for c in it.childItems():
+                found = c if c.objectName() == "label" else label(c)
+                if found is not None:
+                    return found
+        xs = {n: label(self.item(n)).mapToScene(QPointF(0, 0)).x() for n in ("footer_discord", "footer_kofi", "footer_updates")}
+        self.assertEqual(len(set(xs.values())), 1, xs)
+
+    def test_every_navigation_link_has_an_icon(self):
+        self.open_home()
+        for n, png in (("footer_discord", "discord.png"), ("footer_kofi", "kofi.png"), ("footer_updates", "update.png")):
+            self.assertTrue(self.item(n).property("icon").toString().endswith(png), n)
+
     def test_check_for_updates_shows_the_answer_in_a_dialog_and_opens_the_page_on_ok(self):
         from unittest import mock
         from PySide6.QtTest import QTest
@@ -4784,7 +4824,7 @@ class HomeScreen(AddWindow):
         self.open_home()
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        for name, text in (("footer_discord", "Join our Discord"), ("footer_updates", "Check for updates")):
+        for name, text in (("footer_discord", "Join our Discord"), ("footer_kofi", "Support on Ko-fi"), ("footer_updates", "Check for updates")):
             it = self.item(name)
             self.assertTrue(it.property("activeFocusOnTab"), name)
             iface = QAccessible.queryAccessibleInterface(it)

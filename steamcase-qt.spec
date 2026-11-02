@@ -4,7 +4,7 @@
 import os, sys
 
 # keep in step with qtui/assets.py (a test compares them)
-ASSETS = ["frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "halloween_overlay.png"]
+ASSETS = ["frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "kofi.png", "update.png", "halloween_overlay.png"]
 # the console cases, in assets/cases (keep in step with qtui/assets.py, a test compares them)
 CASE_FILES = ["cases.json", "ps3.png", "ps4.png", "ps5.png", "xbox360.png", "xboxone.png", "xboxseries.png", "switch.png", "switch2.png"]
 # assets/version.txt only exists in release builds (the workflow writes the tag into it); source runs report "dev"

@@ -40,7 +40,7 @@ Item {
             sourceSize.height: Theme.iconPixels
             fillMode: Image.PreserveAspectFit
         }
-        Text { text: link.text; color: area.containsMouse ? Theme.text : Theme.muted; font.pixelSize: Theme.bodySize }
+        Text { objectName: "label"; text: link.text; color: area.containsMouse ? Theme.text : Theme.muted; font.pixelSize: Theme.bodySize }
     }
     MouseArea {
         id: area

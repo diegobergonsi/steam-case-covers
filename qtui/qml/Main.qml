@@ -69,9 +69,9 @@ ApplicationWindow {
                 }
             }
         }
-        NavLink {                                                 // footer: Discord and updates
+        NavLink {                                                 // footer: Discord, Ko-fi and updates
             objectName: "footer_discord"
-            y: nav.height - Theme.navRowHeight - Theme.navRowHeight - Theme.s8
+            y: nav.height - 3 * Theme.navRowHeight - Theme.s8
             width: nav.width
             text: "Join our Discord"
             description: "Join our Discord server: ask for help, share ideas and report bugs. Opens in your web browser."
@@ -79,10 +79,20 @@ ApplicationWindow {
             onActivated: shell.updates.openDiscord()
         }
         NavLink {
+            objectName: "footer_kofi"
+            y: nav.height - 2 * Theme.navRowHeight - Theme.s8
+            width: nav.width
+            text: "Support on Ko-fi"
+            description: "Support the author on Ko-fi with a small donation. Optional, the app is free. Opens in your web browser."
+            icon: kofiIcon
+            onActivated: shell.updates.openKofi()
+        }
+        NavLink {
             objectName: "footer_updates"
             y: nav.height - Theme.navRowHeight - Theme.s8
             width: nav.width
             text: shell.updates.checking ? "Checking\u2026" : "Check for updates"
+            icon: updateIcon
             onActivated: shell.updates.check()
         }
     }
