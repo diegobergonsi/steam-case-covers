@@ -46,9 +46,10 @@ ApplicationWindow {
             Behavior on y { NumberAnimation { duration: Theme.dur(200); easing.type: Easing.OutCubic } }
         }
         Text {
+            objectName: "nav_title"
             x: Theme.s24
             y: Theme.s24
-            text: "Case Covers"
+            text: "Steam Case Covers"
             color: Theme.text
             font.pixelSize: Theme.sectionSize
             font.bold: true
