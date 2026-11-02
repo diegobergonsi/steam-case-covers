@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""The two links of the navigation: "Check for updates" (asks GitHub only when clicked, installs nothing) and "Discord". The words are those the app has always used.
+"""The links of the navigation: "Check for updates" (asks GitHub only when clicked, installs nothing), "Discord" and "Support on Ko-fi". The words are those the app has always used.
 Every answer is a `message` for the window's dialog: a title, paragraphs, the label of the OK button, the label of Cancel ("" = an information box) and a link to open on OK."""
 import threading
 
@@ -68,6 +68,14 @@ class Updates(QObject):
         """Open a web link in the browser. Anything that is not http(s) is ignored."""
         if url.startswith("https://") or url.startswith("http://"):
             QDesktopServices.openUrl(QUrl(url))
+
+    @Slot()
+    def openKofi(self):
+        """Open the author's Ko-fi page in the browser. If no browser opens, the link is copied and shown instead."""
+        if not QDesktopServices.openUrl(QUrl(sc.KOFI_URL)):
+            QGuiApplication.clipboard().setText(sc.KOFI_URL)
+            self.message.emit("Support on Ko-fi", [{"text": "Your browser did not open, so the link was copied. Paste it into your browser:\n%s" % sc.KOFI_URL, "kind": "main"}],
+                              "OK", "", "")
 
     @Slot()
     def openDiscord(self):

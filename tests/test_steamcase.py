@@ -2707,6 +2707,46 @@ class DiscordButton(unittest.TestCase):
             self.assertIn(must, text)
 
 
+class KofiButton(unittest.TestCase):
+    """The Ko-fi icon in the window's navigation, under Discord: one link, one bundled image, credited."""
+    PNG = os.path.join(sc.HERE, "assets", "kofi.png")
+
+    def test_the_link_is_the_one_the_readme_uses(self):
+        self.assertEqual(sc.KOFI_URL, "https://ko-fi.com/diegobergonsi")
+        with open(os.path.join(sc.HERE, "README.md"), encoding="utf-8") as f:
+            links = set(re.findall(r"https://ko-fi\.com/[A-Za-z0-9]+", f.read()))
+        self.assertEqual(links, {sc.KOFI_URL})
+
+    def test_the_image_is_a_square_coral_mark_on_transparency(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        with sc.Image.open(self.PNG) as im:
+            im = im.convert("RGBA")
+        self.assertEqual(im.size, (96, 96))
+        solid = [p for p in pixels(im) if p[3] == 255]
+        self.assertGreater(len(solid), 1500)
+        self.assertTrue(all(p[:3] == (0xFF, 0x5E, 0x5B) for p in solid))                  # Ko-fi's coral, nothing else
+        self.assertEqual(im.getpixel((0, 0))[3], 0)
+
+    def test_the_mark_is_readable_on_the_navigation_background(self):
+        def lum(rgb):
+            c = [x / 255 for x in rgb]
+            c = [x / 12.92 if x <= .03928 else ((x + .055) / 1.055) ** 2.4 for x in c]
+            return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+        with open(os.path.join(sc.HERE, "qtui", "qml", "Theme.qml"), encoding="utf-8") as f:
+            window = re.search(r'readonly property color bg: "#([0-9a-fA-F]{6})"', f.read()).group(1)
+        bg = tuple(int(int(window[i:i + 2], 16) / 1.3) for i in (0, 2, 4))
+        self.assertGreaterEqual((lum((0xFF, 0x5E, 0x5B)) + .05) / (lum(bg) + .05), 3.0)
+
+    def test_the_packaged_app_bundles_the_image_and_credits_the_source(self):
+        with open(os.path.join(sc.HERE, "steamcase-qt.spec"), encoding="utf-8") as f:
+            self.assertIn("kofi.png", f.read())
+        with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
+            text = f.read()
+        for must in ("Ko-fi", "kofi.svg", "trademark"):
+            self.assertIn(must, text)
+
+
 class HalloweenOverlay(unittest.TestCase):
     """The artwork of the Halloween case theme: a transparent overlay with a web and a spider, a pumpkin and a hanging spider."""
 
