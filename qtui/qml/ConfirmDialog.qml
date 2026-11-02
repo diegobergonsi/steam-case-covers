@@ -63,6 +63,7 @@ FocusScope {
         list[(at + delta + list.length) % list.length].forceActiveFocus()
     }
     function close(answer, alt) {
+        if (Window.window) Window.window.contentItem.forceActiveFocus()         // first take the focus off the buttons: hiding a button that has it makes Qt print a warning
         visible = false
         var back = returnTo
         if (alt === true) alternated(); else if (answer) confirmed(); else declined()

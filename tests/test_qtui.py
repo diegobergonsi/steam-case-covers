@@ -4049,6 +4049,24 @@ class MakeScreen(QtCase, FakeStore):
             self.wait_for(lambda: not self.make.running)
         self.assertTrue(self.text("make_status").startswith("Stopped. "))
 
+    def test_after_a_stopped_run_the_main_button_says_how_many_covers_it_adds(self):
+        from unittest import mock
+        import steamcase as sc
+        real = sc.make_covers
+        stopped = lambda games, out, **kw: dict(real(games, out, **kw), cancelled=True)       # as if Cancel was pressed after the covers were made
+        with mock.patch.object(sc, "make_covers", stopped):
+            self.click("make_main")
+            self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertTrue(self.text("make_status").startswith("Stopped. "))
+        self.assertEqual(self.text("make_main"), "Add the 2 covers to Steam \u2192")
+        self.assertEqual(self.make.nextText, "Add the 2 covers to Steam \u2192")
+        self.click("make_again")                                          # a whole run puts the usual words back
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertTrue(self.text("make_status").startswith("Done. "))
+        self.assertEqual(self.text("make_main"), "Next: Add to Steam \u2192")
+
     def test_replacing_covers_asks_first_and_declining_changes_nothing(self):
         self.click("make_main")
         self.wait_for(lambda: self.make.done and not self.make.running)
@@ -6534,6 +6552,38 @@ class ManualWindow(PickerBase):
         self.click("games_clear")
         self.assertEqual(self.picker.selectedCount, 0)
 
+    def test_a_button_that_has_the_focus_can_become_disabled_without_a_qt_warning(self):
+        """Make, Apply and the others are disabled while they work, with the keyboard focus still on them; Qt printed a warning each time."""
+        from PySide6.QtCore import qInstallMessageHandler
+        seen = []
+        previous = qInstallMessageHandler(lambda mode, ctx, msg: seen.append(msg))
+        self.addCleanup(qInstallMessageHandler, previous)
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        button = self.item("games_next")
+        button.forceActiveFocus()
+        self.app.processEvents()
+        self.assertTrue(button.property("activeFocus"))
+        self.click("games_clear")                                    # no game is ticked: the focused button is disabled
+        self.app.processEvents()
+        self.assertFalse(button.property("enabled"))
+        self.assertEqual([m for m in seen if "activeFocusOnTab" in m], [])
+
+    def test_closing_a_dialog_does_not_make_qt_complain_about_the_focus(self):
+        from unittest import mock
+        from PySide6.QtCore import qInstallMessageHandler
+        seen = []
+        previous = qInstallMessageHandler(lambda mode, ctx, msg: seen.append(msg))
+        self.addCleanup(qInstallMessageHandler, previous)
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=False):      # no browser: the link is shown in a dialog
+            self.click("footer_kofi")
+        self.wait_for(lambda: self.has("main_dlg_confirm") and self.item("main_dlg_confirm").property("visible"))
+        self.click("main_dlg_confirm")
+        self.app.processEvents()
+        self.assertFalse(self.item("main_dlg_card").property("visible"))
+        self.assertEqual([m for m in seen if "activeFocusOnTab" in m], [])
+
     def test_the_games_screen_search_filters_and_says_when_nothing_matches(self):
         self.shell.startManual()
         self.wait_for(lambda: self.picker.rows)
@@ -6696,6 +6746,20 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         self.assertEqual(self.step(), "make")
         self.assertFalse(self.item("make_section_groups").property("visible"))
+
+    def test_a_group_named_like_its_case_is_not_shown_with_the_name_twice(self):
+        import groups
+        from qtui.cases import group_caption
+        self.assertEqual(group_caption("Xbox One", "Xbox One", 1), "Xbox One \u00b7 1 game")
+        self.assertEqual(group_caption("Dad's games", "Xbox One", 2), "Dad's games \u00b7 Xbox One \u00b7 2 games")
+        saved, same = groups.assign([], "Xbox One", {"platform": "xboxone"}, [3])
+        groups.save(self.covers, saved)
+        self.shell.startManual()
+        self.app.processEvents()
+        self.shell.go(0)
+        self.app.processEvents()
+        self.wait_for(lambda: not self.shell.apply.busy)
+        self.assertEqual(self.item("home_group_" + same).property("label"), "Xbox One \u00b7 1 game")
 
     def test_home_lists_the_groups_to_reset(self):
         red, ps = self.saved_groups()

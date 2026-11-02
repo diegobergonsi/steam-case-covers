@@ -12,6 +12,25 @@ RED = {"tone": [134, 100, 100]}
 PS5 = {"platform": "ps5"}
 
 
+def run_load(folder, limit_mb=800, timeout=15):
+    """groups.load(folder) in a separate process with a memory limit and a time limit, so a loader that reads forever cannot hurt the test run.
+    Returns (finished, printed): finished is False when the time ran out."""
+    import subprocess
+    code = ("import sys, json\n"
+            "try:\n"
+            "    import resource; resource.setrlimit(resource.RLIMIT_AS, (%d << 20, %d << 20))\n"
+            "except (ImportError, ValueError, OSError):\n"
+            "    pass                                    # no such limit here (macOS refuses it): the time limit still protects the run\n"
+            "sys.path.insert(0, %r)\n"
+            "import groups\n"
+            "print(json.dumps(groups.load(%r)))\n") % (limit_mb, limit_mb, os.path.dirname(os.path.dirname(os.path.abspath(__file__))), folder)
+    try:
+        r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, ""
+    return r.returncode == 0, r.stdout.strip() or r.stderr.strip()[-300:]
+
+
 class Store(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -152,6 +171,63 @@ class Edit(unittest.TestCase):
         dropped = gr.drop_games(groups, {2, 3, 99})
         self.assertEqual([(g["name"], g["games"]) for g in dropped], [("A", [1])])              # B lost its only game: gone
 
+
+
+class DamagedFile(unittest.TestCase):
+    """groups.json is read when the window opens, so a damaged, huge or odd file must give no groups, quickly, and never take the app down."""
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.path = os.path.join(self.tmp, "groups.json")
+
+    def good(self, games):
+        return json.dumps({"groups": [{"id": "gabc12345", "name": "A", "case": {"platform": "ps5"}, "games": games}]})
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs named pipes")
+    def test_a_named_pipe_is_not_waited_for(self):
+        os.mkfifo(self.path)
+        self.assertEqual(run_load(self.tmp), (True, "[]"))
+
+    @unittest.skipUnless(os.path.exists("/dev/zero"), "needs /dev/zero")
+    def test_a_link_to_an_endless_file_is_not_read(self):
+        os.symlink("/dev/zero", self.path)
+        self.assertEqual(run_load(self.tmp), (True, "[]"))
+
+    def test_a_link_to_a_good_file_is_not_followed(self):
+        real = os.path.join(self.tmp, "elsewhere.json")
+        with open(real, "w") as f:
+            f.write(self.good([1]))
+        try:
+            os.symlink(real, self.path)
+        except (OSError, NotImplementedError):
+            self.skipTest("no symbolic links here")
+        self.assertEqual(gr.load(self.tmp), [])
+
+    def test_a_file_over_the_size_limit_is_ignored(self):
+        with open(self.path, "w") as f:
+            f.write(" " * (gr.MAX_BYTES + 10) + self.good([1]))
+        self.assertEqual(gr.load(self.tmp), [])
+        with open(self.path, "w") as f:
+            f.write(self.good([1]))
+        self.assertEqual([g["games"] for g in gr.load(self.tmp)], [[1]])             # the control: a normal file still loads
+
+    def test_deeply_nested_json_gives_no_groups(self):
+        with open(self.path, "w") as f:
+            f.write("[" * 100000)
+        self.assertEqual(run_load(self.tmp), (True, "[]"))
+
+    def test_a_group_with_very_many_games_loads_quickly_and_is_capped(self):
+        import time
+        with open(self.path, "w") as f:
+            f.write(self.good(list(range(1, 150001))))
+        t = time.time()
+        got = gr.load(self.tmp)
+        self.assertLess(time.time() - t, 5)
+        self.assertLessEqual(len(got[0]["games"]), sc.MAX_APPS)
+
+    def test_a_directory_in_the_place_of_the_file_gives_no_groups(self):
+        os.mkdir(self.path)
+        self.assertEqual(gr.load(self.tmp), [])
 
 if __name__ == "__main__":
     unittest.main()
