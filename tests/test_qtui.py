@@ -4645,6 +4645,17 @@ class HomeScreen(AddWindow):
         self.assertLess(y("footer_discord"), y("footer_kofi"))
         self.assertLess(y("footer_kofi"), y("footer_updates"))
 
+    def test_the_words_of_the_three_navigation_links_start_at_the_same_place(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        def label(it):
+            for c in it.childItems():
+                found = c if c.objectName() == "label" else label(c)
+                if found is not None:
+                    return found
+        xs = {n: label(self.item(n)).mapToScene(QPointF(0, 0)).x() for n in ("footer_discord", "footer_kofi", "footer_updates")}
+        self.assertEqual(len(set(xs.values())), 1, xs)
+
     def test_check_for_updates_shows_the_answer_in_a_dialog_and_opens_the_page_on_ok(self):
         from unittest import mock
         from PySide6.QtTest import QTest

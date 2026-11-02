@@ -32,7 +32,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.s8
         Image {
-            visible: link.icon != ""
+            opacity: link.icon != "" ? 1 : 0           // a link without an icon keeps the icon's room, so the words of all links line up
             source: link.icon
             width: Theme.iconSize
             height: Theme.iconSize
@@ -40,7 +40,7 @@ Item {
             sourceSize.height: Theme.iconPixels
             fillMode: Image.PreserveAspectFit
         }
-        Text { text: link.text; color: area.containsMouse ? Theme.text : Theme.muted; font.pixelSize: Theme.bodySize }
+        Text { objectName: "label"; text: link.text; color: area.containsMouse ? Theme.text : Theme.muted; font.pixelSize: Theme.bodySize }
     }
     MouseArea {
         id: area
