@@ -4678,7 +4678,19 @@ class HomeScreen(AddWindow):
         self.open_home()
         title = self.item("nav_title")
         self.assertEqual(title.property("text"), "Steam Case Covers")
-        self.assertLessEqual(title.property("implicitWidth") + title.property("x"), self.item("nav").property("width"))
+        nav = self.item("nav").property("width")
+        # a wider font (Windows) must wrap the name onto a second line, never run out of the menu or into the steps
+        self.assertLessEqual(title.property("x") + title.property("width"), nav - title.property("x"))
+        from PySide6.QtGui import QFont
+        font = title.property("font")                                                  # spread the letters until the name is 1.5 times as wide as the room it has,
+        spread = (1.5 * title.property("width") - title.property("implicitWidth")) / len(title.property("text"))      # as a wide font (Windows) makes it
+        font.setLetterSpacing(QFont.AbsoluteSpacing, spread)
+        title.setProperty("font", font)
+        self.app.processEvents()
+        self.assertEqual(title.property("lineCount"), 2)
+        self.assertLessEqual(title.property("contentWidth"), title.property("width"))
+        self.assertLessEqual(title.property("y") + title.property("height"), 72)       # Theme.navTop: where the steps start
+        self.assertFalse(title.property("truncated"))
 
     def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):
         import re
