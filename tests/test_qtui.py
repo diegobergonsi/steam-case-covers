@@ -445,7 +445,7 @@ class StepStates(unittest.TestCase):
 
     def test_the_steps_and_their_labels(self):
         self.assertEqual(sp.STEPS, ("home", "game_list", "look", "hundred", "make", "add"))
-        self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
+        self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1. Game list", "2. Look", "3. 100% games", "4. Make", "5. Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
         self.assertEqual(sp.hint("hundred", "active"), "(optional)")
         self.assertEqual(sp.hint("look", "locked"), "")                          # a locked step is dimmed; it needs no words
@@ -3283,7 +3283,7 @@ class Tokens(unittest.TestCase):
     def test_the_guide_names_the_steps_like_the_window(self):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
             text = f.read()
-        self.assertIn("1 Game list, 2 Look, 3 100% games (optional), 4 Make, 5 Add to Steam", text)
+        self.assertIn("1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam", text)
         self.assertNotIn("Extras", text.replace("Extras became", ""))
 
     def qml_files(self):
@@ -3380,7 +3380,7 @@ class ShellWindow(QtCase):
 
     def test_the_window_has_six_nav_items_and_the_footer(self):
         self.assertEqual([self.item("nav_" + k).property("label") for k in ("home", "game_list", "look", "hundred", "make", "add")],
-                         ["Home", "1  Game list", "2  Look", "3  100% games", "4  Make", "5  Add to Steam"])
+                         ["Home", "1. Game list", "2. Look", "3. 100% games", "4. Make", "5. Add to Steam"])
         self.assertEqual(self.item("footer_updates").property("text"), "Check for updates")
         self.assertEqual(self.item("footer_discord").property("text"), "Join our Discord")
 
@@ -3412,7 +3412,7 @@ class ShellWindow(QtCase):
         self.assertLessEqual(hint.mapToScene(QPointF(hint.width(), 0)).x(), row.mapToScene(QPointF(row.width(), 0)).x() - 20)   # inside the list, clear of the right mark
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3  100% games (optional), locked")
+        self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3. 100% games (optional), locked")
 
     def test_the_steps_are_evenly_spaced_with_or_without_a_hint(self):
         from PySide6.QtCore import QPointF
@@ -4655,6 +4655,34 @@ class HomeScreen(AddWindow):
                     return found
         xs = {n: label(self.item(n)).mapToScene(QPointF(0, 0)).x() for n in ("footer_discord", "footer_kofi", "footer_updates")}
         self.assertEqual(len(set(xs.values())), 1, xs)
+
+    def test_the_navigation_title_is_the_whole_name_of_the_app(self):
+        self.open_home()
+        title = self.item("nav_title")
+        self.assertEqual(title.property("text"), "Steam Case Covers")
+        nav = self.item("nav").property("width")
+        # a wider font (Windows) must wrap the name onto a second line, never run out of the menu or into the steps
+        self.assertLessEqual(title.property("x") + title.property("width"), nav - title.property("x"))
+        from PySide6.QtGui import QFont
+        font = title.property("font")                                                  # spread the letters until the name is 1.5 times as wide as the room it has,
+        spread = (1.5 * title.property("width") - title.property("implicitWidth")) / len(title.property("text"))      # as a wide font (Windows) makes it
+        font.setLetterSpacing(QFont.AbsoluteSpacing, spread)
+        title.setProperty("font", font)
+        self.app.processEvents()
+        self.assertEqual(title.property("lineCount"), 2)
+        self.assertLessEqual(title.property("contentWidth"), title.property("width"))
+        self.assertLessEqual(title.property("y") + title.property("height"), 72)       # Theme.navTop: where the steps start
+        self.assertFalse(title.property("truncated"))
+
+    def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):
+        import re
+        self.open_home()
+        for key in ("game_list", "look", "hundred", "make", "add"):
+            self.assertRegex(self.item("nav_%s_label" % key).property("text"), r"^[1-5]\. \S", key)
+        self.shell.startManual()
+        self.app.processEvents()
+        for key in ("game_list", "pick", "case", "hundred", "make", "add"):
+            self.assertRegex(self.item("nav_%s_label" % key).property("text"), r"^[1-6]\. \S", key)
 
     def test_every_navigation_link_has_an_icon(self):
         self.open_home()
@@ -6331,7 +6359,7 @@ class ManualSteps(unittest.TestCase):
     def test_the_steps_and_their_labels(self):
         self.assertEqual(sp.STEPS_MANUAL, ("home", "game_list", "pick", "case", "hundred", "make", "add"))
         self.assertEqual([sp.labels("manual")[k] for k in sp.STEPS_MANUAL],
-                         ["Home", "1  Game list", "2  Games", "3  Case", "4  100% games", "5  Make", "6  Add to Steam"])
+                         ["Home", "1. Game list", "2. Games", "3. Case", "4. 100% games", "5. Make", "6. Add to Steam"])
         self.assertEqual(sp.labels("natural"), sp.LABELS)
 
     def test_a_fresh_start_opens_only_the_game_list(self):

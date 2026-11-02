@@ -46,9 +46,13 @@ ApplicationWindow {
             Behavior on y { NumberAnimation { duration: Theme.dur(200); easing.type: Easing.OutCubic } }
         }
         Text {
+            objectName: "nav_title"
             x: Theme.s24
             y: Theme.s24
-            text: "Case Covers"
+            width: nav.width - 2 * Theme.s24              // a wide font wraps the name onto a second line instead of running out of the menu
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
+            text: "Steam Case Covers"
             color: Theme.text
             font.pixelSize: Theme.sectionSize
             font.bold: true

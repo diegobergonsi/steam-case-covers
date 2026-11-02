@@ -3,15 +3,28 @@
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); `0.x` versions are pre-releases.
 
 ## [Unreleased]
-- Changed: on every case the rosette of a 100% game is now at the top left, under the banner, and the green family corner at the top right, so neither hides the logo. The "100% Complete" ribbon is the same width on every case. Covers you made before are still recognised.
-- New: **groups** in "Pick games by hand". The games you give a case are put in a named group that the app remembers: a console case, or the Steam case in a colour of your own (blue, violet, magenta, red, gold, green, black, graphite or silver). You can add games to a group later or delete it. The step by step way leaves your groups alone; on the Make step and in Reset you can tick a group to repaint or reset it (that deletes the group). The rosette and ribbon still only go on games that are really at 100%.
-- Changed: the game art now fits its case a little better. A tall art used to be cropped about 10% at the top and the bottom (titles got cut); now it is squeezed about 5% and cropped about 5%. This is on every case and applies to covers you make from now on.
-- New: **Pick games by hand**, a second way through the window, from Home. After your game list you tick specific games (search by name or scroll) and put them in a console case: PlayStation 3, 4 or 5, Xbox 360, Xbox One, Xbox Series X|S, Nintendo Switch or Switch 2 (or the Steam case). Make and Add to Steam then work only for the games you ticked, and the step by step way is unchanged and leaves those covers alone. Console cases have no colour, brightness or theme; the green family corner and the 100% highlight are optional. The logos are their owners' trademarks (see docs/THIRD_PARTY.md).
-- New: a "Support on Ko-fi" button in the window's navigation, under Discord. It opens the author's Ko-fi page in your browser only when you click it (nothing is sent before that); if no browser opens, the link is copied and shown instead. The app stays free and nothing asks you to pay. The Ko-fi mark is from Simple Icons (CC0); see `docs/THIRD_PARTY.md`. "Check for updates" has a small refresh icon too, so the three links line up. The window's smallest height grew from 460 to 500 pixels to fit the extra link.
-- New window (Qt): the app has a new look, with a list of steps on the left (Game list, Look, 100% games (optional), Make, Add to Steam) and a Home screen that shows your progress and holds Restore and Reset. Every screen with choices that change the cover shows a preview beside them, there are soft shadows and gentle motion ("Reduce effects" turns it off), and Make shows thumbnails of the covers it built. Every option of the old window is still there. The app now remembers its switches between runs (skip blurry covers, own art, only installed games, start Steam again, reduce effects); nothing else is saved. Running from source needs Python 3.10 or newer and PySide6. The Linux download is about 70 MB (it was about 26 MB) because it carries Qt.
-- Documentation: the README screenshots show the new window (Home, Look and 100% games).
-- New: an optional switch in step 2, "Use my own custom art where I have it". For games where you set your own art (in Steam's menu or from SteamGridDB), your picture goes inside the case instead of Steam's portrait; games without art of your own are unchanged. The app copies your art into its own folder (so Apply moving the file out of Steam's folder loses nothing) and never changes your files. Switching it on or off, or changing your art, rebuilds only the covers that change, after asking. On the command line: `--use-custom-art` and `--no-custom-art` on `make` and `run` (and `--user` on `make`); with neither, covers already made from your art keep it. Restore also brings back art of yours that the app kept a copy of when Steam's folder no longer holds it. Not tested yet: Windows, macOS and art from a real SteamGridDB library.
-- Release pages now show that version's notes from this changelog (instead of a list of pull requests), with a line on how to check the downloads. New releases are also announced on the project's Discord with a short summary (the first sentence of each change) and a link to the full notes. A release needs its section in this file before the tag is pushed, or the release step stops.
+
+## [1.6.0] - 2026-11-02
+
+### ✨ New
+- A brand new window, with your steps on the left and a live preview beside every choice. Home shows your progress, and there is soft motion ("Reduce effects" turns it off). Every option of the old window is still there, and the app now remembers your switches.
+- Pick games by hand and give them a console case. From Home, tick the games you want and choose: PlayStation 3, 4 or 5, Xbox 360, Xbox One, Xbox Series X|S, Nintendo Switch or Switch 2 (or the Steam case). Make and Add to Steam then work only on those games, and the usual way leaves them alone.
+- Groups remember the games you picked by hand. They are saved in named groups: a console case, or the Steam case in a colour you choose. Add games to a group later, or delete it. On Make and Reset you can tick a group to repaint or reset it.
+- Use your own art inside the case. A new switch in step 2, "Use my own custom art where I have it", puts the picture you chose in Steam inside the case. Your files are never changed. On the command line: `--use-custom-art` and `--no-custom-art`.
+- A "Support on Ko-fi" button under Discord. It only opens the page when you click it, and the app stays free. "Check for updates" got a small icon too.
+
+### 🔧 Changed
+- The rosette of a 100% game is now at the top left of every case and the green family corner at the top right, so neither hides a logo. The "100% Complete" ribbon is the same width everywhere. Covers made before are still recognised.
+- Tall game art is squeezed a little and cropped a little, instead of losing 10% at the top and bottom, so titles are not cut. This applies to covers you make from now on.
+- To run from the code, use `python -m qtui` (it was `python gui.py`). It needs Python 3.10 or newer and PySide6.
+- The Linux download is about 70 MB instead of 26 MB, because the new window carries Qt. The window also can't be made quite as short as before (500 px instead of 460).
+
+### 💡 Good to know
+- The new window has not been tried yet on a real Windows or macOS computer, on the Steam Deck or on a touchscreen. The automatic tests pass on all three systems, but please tell us on Discord or GitHub if something looks wrong.
+
+### 🧰 Behind the scenes
+- Release pages now show these notes, and new releases are announced on the project's Discord.
+- Documentation: the README screenshots show the new window.
 
 ## [1.5.0] - 2026-10-29
 - New: a Halloween case theme. Under the colour swatches, "Case theme" offers "Classic" (as before) and "Halloween": a cobweb with a spider, a pumpkin and a spider hanging from the top, drawn on the case in whatever colour you picked. The Halloween case goes with the rosette-only marks for 100% games, so choosing it switches that choice to "Rosette only" and greys it out; going back to Classic restores your choice. Switching the theme asks before it replaces covers you already made, and "Remove only ours" still finds themed covers. On the command line: `--theme {classic,halloween}`; without it the covers already in the folder keep their theme. The artwork is original (see `docs/THIRD_PARTY.md`). Covers made before are untouched.

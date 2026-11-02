@@ -3,9 +3,9 @@
 """Which steps of the window are open, done, active or locked."""
 
 STEPS = ("home", "game_list", "look", "hundred", "make", "add")
-LABELS = {"home": "Home", "game_list": "1  Game list", "look": "2  Look", "hundred": "3  100% games", "make": "4  Make", "add": "5  Add to Steam"}
+LABELS = {"home": "Home", "game_list": "1. Game list", "look": "2. Look", "hundred": "3. 100% games", "make": "4. Make", "add": "5. Add to Steam"}
 STEPS_MANUAL = ("home", "game_list", "pick", "case", "hundred", "make", "add")          # the manual flow: tick games, give them a case
-LABELS_MANUAL = {"home": "Home", "game_list": "1  Game list", "pick": "2  Games", "case": "3  Case", "hundred": "4  100% games", "make": "5  Make", "add": "6  Add to Steam"}
+LABELS_MANUAL = {"home": "Home", "game_list": "1. Game list", "pick": "2. Games", "case": "3. Case", "hundred": "4. 100% games", "make": "5. Make", "add": "6. Add to Steam"}
 
 HINTS = {"hundred": "(optional)"}                  # a small line under the name of a step
 
