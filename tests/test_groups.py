@@ -19,8 +19,8 @@ def run_load(folder, limit_mb=800, timeout=15):
     code = ("import sys, json\n"
             "try:\n"
             "    import resource; resource.setrlimit(resource.RLIMIT_AS, (%d << 20, %d << 20))\n"
-            "except ImportError:\n"
-            "    pass\n"
+            "except (ImportError, ValueError, OSError):\n"
+            "    pass                                    # no such limit here (macOS refuses it): the time limit still protects the run\n"
             "sys.path.insert(0, %r)\n"
             "import groups\n"
             "print(json.dumps(groups.load(%r)))\n") % (limit_mb, limit_mb, os.path.dirname(os.path.dirname(os.path.abspath(__file__))), folder)
