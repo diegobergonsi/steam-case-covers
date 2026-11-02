@@ -4049,6 +4049,24 @@ class MakeScreen(QtCase, FakeStore):
             self.wait_for(lambda: not self.make.running)
         self.assertTrue(self.text("make_status").startswith("Stopped. "))
 
+    def test_after_a_stopped_run_the_main_button_says_how_many_covers_it_adds(self):
+        from unittest import mock
+        import steamcase as sc
+        real = sc.make_covers
+        stopped = lambda games, out, **kw: dict(real(games, out, **kw), cancelled=True)       # as if Cancel was pressed after the covers were made
+        with mock.patch.object(sc, "make_covers", stopped):
+            self.click("make_main")
+            self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertTrue(self.text("make_status").startswith("Stopped. "))
+        self.assertEqual(self.text("make_main"), "Add the 2 covers to Steam \u2192")
+        self.assertEqual(self.make.nextText, "Add the 2 covers to Steam \u2192")
+        self.click("make_again")                                          # a whole run puts the usual words back
+        self.wait_for(lambda: self.make.done and not self.make.running)
+        self.settle()
+        self.assertTrue(self.text("make_status").startswith("Done. "))
+        self.assertEqual(self.text("make_main"), "Next: Add to Steam \u2192")
+
     def test_replacing_covers_asks_first_and_declining_changes_nothing(self):
         self.click("make_main")
         self.wait_for(lambda: self.make.done and not self.make.running)

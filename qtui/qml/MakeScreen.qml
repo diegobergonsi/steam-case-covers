@@ -108,7 +108,7 @@ ScreenFrame {
         PrimaryButton {                               // one button for the whole job, so the keyboard focus stays: Make covers, Cancel, Next
             id: mainButton
             objectName: "make_main"
-            text: screen.make.running ? "Cancel" : screen.make.done ? "Next: Add to Steam \u2192" : "Make covers"
+            text: screen.make.running ? "Cancel" : screen.make.done ? screen.make.nextText : "Make covers"
             quiet: screen.make.running
             enabled: screen.make.running ? screen.make.canCancel : screen.make.done || screen.make.canMake
             onClicked: screen.make.running ? screen.make.cancel() : screen.make.done ? shell.next() : screen.make.start()

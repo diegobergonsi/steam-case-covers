@@ -64,6 +64,7 @@ class Make(QObject):
         self._covers = covers_dir
         self._account = account or (lambda: None)       # the Steam account folder the user chose, or None
         self._files = []
+        self._stopped = False                           # the last run was stopped with Cancel (what it made is still ready)
         self._running = self._searching = self._asking = self._making = False
         self._cancel = threading.Event()
         self._ticks = GroupTicks(covers_dir, self)      # the saved groups, listed in the usual Make with a box each: the ones ticked are repainted
@@ -128,6 +129,14 @@ class Make(QObject):
     @Property(int, notify=doneChanged)
     def fileCount(self):
         return len(self._files)
+
+    @Property(str, notify=doneChanged)
+    def nextText(self):
+        """The words of the main button once covers are ready: after a stopped run it says how many covers it would add, since that is not the whole set."""
+        n = len(self._files)
+        if self._stopped and n:
+            return "Add the %d %s to Steam \u2192" % (n, "cover" if n == 1 else "covers")
+        return "Next: Add to Steam \u2192"
 
     @Property(int, notify=progressChanged)
     def finished(self):
@@ -367,6 +376,7 @@ class Make(QObject):
             self.failed.emit("Could not make covers", error)
             return
         self._save_groups(res)
+        self._stopped = bool(res["cancelled"])
         if res["files"]:
             self._files = list(res["files"])
             self.doneChanged.emit()
