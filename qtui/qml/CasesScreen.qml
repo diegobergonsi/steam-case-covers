@@ -94,7 +94,7 @@ ScreenFrame {
             delegate: ButtonRow {
                 PrimaryButton {
                     objectName: "case_group_" + modelData.id
-                    text: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                    text: modelData.caption
                     quiet: screen.cases.selectedGroup !== modelData.id
                     onClicked: screen.cases.pickGroup(modelData.id)
                 }

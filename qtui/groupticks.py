@@ -5,7 +5,7 @@ Nothing is ticked at first."""
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 import groups
-from qtui.cases import case_label
+from qtui.cases import case_label, group_caption
 
 
 class GroupTicks(QObject):
@@ -20,7 +20,7 @@ class GroupTicks(QObject):
     @Property("QVariantList", notify=changed)
     def choices(self):
         """{"id", "name", "label" (its case), "count", "ticked"} for every saved group."""
-        return [{"id": g["id"], "name": g["name"], "label": case_label(g["case"]), "count": len(g["games"]), "ticked": g["id"] in self._ticked} for g in self._groups]
+        return [{"id": g["id"], "name": g["name"], "label": case_label(g["case"]), "caption": group_caption(g["name"], case_label(g["case"]), len(g["games"])), "count": len(g["games"]), "ticked": g["id"] in self._ticked} for g in self._groups]
 
     @Property(int, notify=changed)
     def count(self):

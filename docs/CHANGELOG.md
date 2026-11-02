@@ -19,6 +19,11 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - To run from the code, use `python -m qtui` (it was `python gui.py`). It needs Python 3.10 or newer and PySide6.
 - The Linux download is about 70 MB instead of 26 MB, because the new window carries Qt. The window also can't be made quite as short as before (500 px instead of 460).
 
+### 🛠 Fixed
+- After a crash in the middle of "Add to Steam", Restore works right away instead of waiting ten minutes, and the half-copied file the crash left in Steam's folder is cleaned up.
+- An empty game list now says it is empty, instead of saying there is none, and `--only` refuses anything that is not a real Steam app id.
+- The "Cannot set activeFocusOnTab" warning that Qt printed when a dialog closed is gone.
+
 ### 💡 Good to know
 - The new window has not been tried yet on a real Windows or macOS computer, on the Steam Deck or on a touchscreen. The automatic tests pass on all three systems, but please tell us on Discord or GitHub if something looks wrong.
 

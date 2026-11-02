@@ -57,7 +57,7 @@ ScreenFrame {
                     model: screen.make.groupTicks.choices
                     delegate: SwitchRow {
                         objectName: "make_group_" + modelData.id
-                        label: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                        label: modelData.caption
                         checked: modelData.ticked
                         enabled: screen.make.canMake
                         onToggled: screen.make.groupTicks.toggle(modelData.id)

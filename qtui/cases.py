@@ -22,6 +22,12 @@ def _colour_choices():
 COLOURS = _colour_choices()
 
 
+def group_caption(name, label, count):
+    """The line that names a group in a list: its name, its case (left out when the name already says it) and how many games."""
+    games = "%d %s" % (count, "game" if count == 1 else "games")
+    return " \u00b7 ".join([name] + ([label] if label and label != name else []) + [games])
+
+
 def case_label(case):
     """How a group's case is named: a console's name, or "Steam case, red" for the Steam case in a colour (a group's "case" as groups.py keeps it)."""
     if "platform" in case:
@@ -136,7 +142,7 @@ class Cases(QObject):
         for g in self._groups:
             case = g["case"]
             tone = tuple(case["tone"]) if "tone" in case else None
-            out.append({"id": g["id"], "name": g["name"], "label": case_label(case), "count": len(g["games"]),
+            out.append({"id": g["id"], "name": g["name"], "label": case_label(case), "caption": group_caption(g["name"], case_label(case), len(g["games"])), "count": len(g["games"]),
                         "color": sc.case_color(*tone) if tone else ""})
         return out
 

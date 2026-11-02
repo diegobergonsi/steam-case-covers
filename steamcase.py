@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
@@ -390,8 +390,10 @@ def owned_ids(json_path):
         raise SteamcaseError("That file has no games in it. This usually means you were not logged in to Steam in your browser when you saved it. "
                              "Click “Download your userdata.json” again, log in when Steam asks, then save the page. "
                              "If the page you see shows no games even though you are logged in, refresh it (F5, or Cmd+R on a Mac) before saving.")
-    if not ids or not isinstance(ids, list):
+    if not isinstance(ids, list):
         raise SteamcaseError("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam." % LIBRARY_JSON_URL)
+    if not ids:
+        raise SteamcaseError("The game list in that file is empty. Save %s while logged in to Steam." % LIBRARY_JSON_URL)
     if len(ids) > MAX_APPS:
         raise SteamcaseError("That game list has %d entries; a real library has far fewer. Refusing it." % len(ids))
     try:
@@ -1630,6 +1632,25 @@ def _safe_copy(src, dst):
             os.remove(tmp)
 
 
+_LEFTOVER = re.compile(r"^[0-9]{1,10}p\.(png|jpg)\.[0-9]+\.[0-9a-f]{8}\.(tmp)$")
+
+
+def _remove_leftovers(grid):
+    """Delete the half-copied files (<appid>p.png.<process>.<id>.tmp) a run that was killed in the middle of copying leaves in Steam's folder.
+    Called while this run holds the lock, so no other run is writing one. Only regular files with exactly that name go."""
+    try:
+        names = os.listdir(grid)
+    except OSError:
+        return
+    for n in names:
+        p = os.path.join(grid, n)
+        try:
+            if _LEFTOVER.match(n) and stat.S_ISREG(os.lstat(p).st_mode):
+                os.remove(p)
+        except OSError:
+            pass
+
+
 def find_covers(covers_dir):
     cdir = os.path.abspath(covers_dir)
     if not os.path.isdir(cdir):
@@ -1654,6 +1675,7 @@ def apply_covers(steam, covers_dir, user=None, files=None):
         raise SteamcaseError("%d cover files are missing (deleted since they were made). Click “Make covers” again. Nothing was changed." % len(gone))
     os.makedirs(grid, exist_ok=True)
     with _Lock(os.path.dirname(grid)):
+        _remove_leftovers(grid)
         acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
         info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
         work, added, replaced, moved = [], [], [], []
@@ -1704,20 +1726,59 @@ def apply_covers(steam, covers_dir, user=None, files=None):
         return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), jpg_moved=len(moved), backup=backup)
 
 
+def _pid_alive(pid):
+    """False only when that process certainly does not exist (any doubt says True: a lock is then kept, as before)."""
+    if pid == os.getpid():
+        return True
+    try:
+        if sys.platform.startswith("win"):
+            import ctypes
+            k = ctypes.WinDLL("kernel32", use_last_error=True)
+            handle = k.OpenProcess(0x1000, False, pid)                # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return ctypes.get_last_error() != 87                  # ERROR_INVALID_PARAMETER: no such process
+            try:
+                code = ctypes.c_ulong()
+                return not k.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == 259     # STILL_ACTIVE
+            finally:
+                k.CloseHandle(handle)
+        os.kill(pid, 0)                                               # signal 0 only asks whether the process exists
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True
+
+
 class _Lock:
-    """One Apply/Restore at a time per Steam account (two open windows, or a script and a window)."""
+    """One Apply/Restore at a time per Steam account (two open windows, or a script and a window).
+    The lock is a folder holding the process number of its owner, so a lock left by a run that crashed is taken over at once;
+    one with no owner written yet, or whose owner may still be running, is respected, and anything older than ten minutes is stale anyway."""
 
     def __init__(self, cfg):
         self.path = os.path.join(cfg, ".steamcase.lock")
+
+    def _owner_gone(self):
+        try:
+            with open(os.path.join(self.path, "pid"), encoding="ascii") as f:
+                pid = int(f.read().strip())
+        except (OSError, ValueError):
+            return False                                              # unknown owner: not proof of anything
+        return pid > 0 and not _pid_alive(pid)
 
     def __enter__(self):
         for _ in range(3):
             try:
                 os.mkdir(self.path)                                  # atomic: only one run can create it
+                try:
+                    with open(os.path.join(self.path, "pid"), "w", encoding="ascii") as f:
+                        f.write(str(os.getpid()))
+                except OSError:
+                    pass                                              # the lock still works, only without the quick take-over
                 return self
             except FileExistsError:
                 try:
-                    stale = time.time() - os.path.getmtime(self.path) > 600       # left behind by a crashed run
+                    stale = self._owner_gone() or time.time() - os.path.getmtime(self.path) > 600       # left behind by a crashed run
                 except OSError:
                     continue
                 if stale:
@@ -1937,6 +1998,7 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
     if not names and not other:
         return dict(info, removed=0, backup=None)
     with _Lock(os.path.dirname(grid)):
+        _remove_leftovers(grid)
         base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
         backup, k = base, 1
         while True:
@@ -2048,6 +2110,7 @@ def restore_backup(steam, backup_dir, user=None, keep=False, originals=None):
     if not all(_COVER_NAME.match(n) for n in names) or not all(_JPG_NAME.match(n) for n in jpgs):
         raise SteamcaseError("The backup's manifest lists unexpected files; refusing to use it.")
     with _Lock(cfg):
+        _remove_leftovers(grid)
         n = _undo(grid, real, m)
         n += _bring_back_art(grid, os.path.join(originals or originals_dir(), pick_account(steam, user)))
         if not keep:
@@ -2157,6 +2220,12 @@ def cmd_list(args):
 def _hue_arg(text):
     if not re.fullmatch(r"[0-9]{1,3}", text) or int(text) > 359:
         raise argparse.ArgumentTypeError("%r is not a whole number from 0 to 359" % text)
+    return int(text)
+
+
+def _appid_arg(text):
+    if not re.fullmatch(r"[0-9]{1,10}", text) or not 0 < int(text) < 2 ** 32:
+        raise argparse.ArgumentTypeError("%r is not a Steam app id (a whole number from 1 to 4294967295)" % text)
     return int(text)
 
 
@@ -2337,7 +2406,7 @@ def main():
     for name, fn in (("make", cmd_make), ("run", cmd_run)):
         p = sub.add_parser(name, help=name + " covers" if name == "make" else "make + apply")
         common(p, make=True, apply_=(name == "run"))
-        p.add_argument("--only", type=int, nargs="+", metavar="APPID", help="only these app IDs")
+        p.add_argument("--only", type=_appid_arg, nargs="+", metavar="APPID", help="only these app IDs")
         p.add_argument("--force", action="store_true", help="rebuild covers that already exist")
         p.add_argument("--hue", type=_hue_arg, default=None, metavar="DEGREES",
                        help="turn the case colour by this many degrees, 0 to 359 (0 is the original blue; covers in another colour are rebuilt). "

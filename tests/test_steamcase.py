@@ -549,6 +549,61 @@ class Concurrency(Base):
         os.utime(lock, (old, old))
         self.assertEqual(sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])["applied"], 1)
 
+    def dead_pid(self):
+        import subprocess
+        p = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True, text=True)
+        return int(p.stdout)                                           # that process has ended and been collected
+
+    def test_the_lock_records_who_holds_it(self):
+        with sc._Lock(self.cfg):
+            with open(os.path.join(self.cfg, ".steamcase.lock", "pid")) as f:
+                self.assertEqual(f.read().strip(), str(os.getpid()))
+        self.assertFalse(os.path.exists(os.path.join(self.cfg, ".steamcase.lock")))
+
+    def test_a_lock_left_by_a_run_that_is_gone_is_taken_over_at_once(self):
+        lock = os.path.join(self.cfg, ".steamcase.lock")
+        os.makedirs(lock)
+        with open(os.path.join(lock, "pid"), "w") as f:
+            f.write(str(self.dead_pid()))                              # fresh lock, but its owner crashed
+        self.assertEqual(sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])["applied"], 1)
+
+    def test_a_lock_held_by_a_live_run_is_respected(self):
+        lock = os.path.join(self.cfg, ".steamcase.lock")
+        os.makedirs(lock)
+        with open(os.path.join(lock, "pid"), "w") as f:
+            f.write(str(os.getpid()))                                  # this process is alive
+        with self.assertRaises(sc.SteamcaseError) as cm:
+            sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        self.assertIn("Another steamcase window", str(cm.exception))
+
+    def test_a_fresh_lock_with_no_owner_written_yet_is_respected(self):
+        os.makedirs(os.path.join(self.cfg, ".steamcase.lock"))
+        with self.assertRaises(sc.SteamcaseError):
+            sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+
+    def test_a_half_copied_file_left_by_a_crashed_run_is_removed_by_apply_restore_and_reset(self):
+        junk = os.path.join(self.grid, "10p.png.730352.488da39e.tmp")
+        mine = os.path.join(self.grid, "notes.tmp")                     # not ours: must stay
+        os.makedirs(self.grid, exist_ok=True)
+        for p in (junk, mine):
+            with open(p, "wb") as f:
+                f.write(b"x" * 100)
+        r = sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        self.assertFalse(os.path.exists(junk))
+        self.assertTrue(os.path.exists(mine))
+        with open(junk, "wb") as f:
+            f.write(b"x")
+        sc.restore_backup(self.steam, r["backup"])
+        self.assertFalse(os.path.exists(junk))
+        with open(junk, "wb") as f:
+            f.write(b"x")
+        sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+        with open(junk, "wb") as f:
+            f.write(b"x")
+        sc.reset_to_default(self.steam, names=["1p.png"])               # something to remove, so Reset does its work
+        self.assertFalse(os.path.exists(junk))
+        self.assertTrue(os.path.exists(mine))
+
     def test_simultaneous_makes_do_not_trip_over_each_other(self):
         if sc.Image is None:
             self.skipTest("Pillow missing")
@@ -628,6 +683,25 @@ class Attacks(Base):
         json.dump({"rgOwnedApps": list(range(1, sc.MAX_APPS + 2))}, open(p, "w"))
         with self.assertRaises(sc.SteamcaseError):
             sc.owned_ids(p)
+
+    def test_an_empty_game_list_is_called_empty_not_missing(self):
+        p = os.path.join(self.tmp, "empty.json")
+        json.dump({"rgOwnedApps": []}, open(p, "w"))
+        with self.assertRaises(sc.SteamcaseError) as cm:
+            sc.owned_ids(p)
+        self.assertIn("is empty", str(cm.exception))
+        self.assertNotIn("has no game list", str(cm.exception))
+        json.dump({"rgOwnedApps": "x"}, open(p, "w"))
+        with self.assertRaises(sc.SteamcaseError) as cm:
+            sc.owned_ids(p)
+        self.assertIn("has no game list", str(cm.exception))                    # the control: a file without a list still says so
+
+    def test_only_takes_real_app_ids(self):
+        import subprocess
+        for bad in ("-1", "0", "99999999999"):
+            r = subprocess.run([sys.executable, os.path.join(sc.HERE, "steamcase.py"), "make", "--only", bad], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0, bad)
+            self.assertIn("--only", r.stderr, bad)
 
     def test_a_library_saved_while_logged_out_gets_a_clear_message(self):
         p = os.path.join(self.tmp, "loggedout.json")

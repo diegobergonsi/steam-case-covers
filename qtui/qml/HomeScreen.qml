@@ -167,7 +167,7 @@ ScreenFrame {
             model: screen.apply.groupTicks.choices
             delegate: SwitchRow {
                 objectName: "home_group_" + modelData.id
-                label: modelData.name + " · " + modelData.label + " · " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                label: modelData.caption
                 checked: modelData.ticked
                 enabled: !screen.apply.busy
                 onToggled: screen.apply.groupTicks.toggle(modelData.id)
