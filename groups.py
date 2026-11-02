@@ -3,8 +3,9 @@
 """Groups of covers made by hand: a name, a case and the games in it, kept in groups.json in the covers folder.
 A group is {"id", "name", "case", "games"}: "case" is {"platform": one of steamcase.PLATFORMS} (a console case) or {"tone": [hue, sat, val]} (the Steam case
 in that colour; gold is the tone of steamcase.GOLD_HUE). A game is in one group only. The file may be damaged or edited: load() never raises, it keeps what is good."""
-import json, os, re, stat, uuid
+import json, os, re, uuid
 
+import safefile
 import steamcase as sc
 
 FILE = "groups.json"
@@ -53,20 +54,9 @@ def _games(values):
 
 
 def _read(path):
-    """The JSON in the file, or None. Only a regular file (not a link, a named pipe or a device such as /dev/zero, which never ends) of at most
-    MAX_BYTES is read, and a file that is too deeply nested to decode counts as damaged."""
+    """The JSON in the file, or None: the file must be a regular file of at most MAX_BYTES (see safefile), and one too deeply nested to decode counts as damaged."""
     try:
-        if not stat.S_ISREG(os.lstat(path).st_mode):
-            return None
-        flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-        fd = os.open(path, flags)
-        with os.fdopen(fd, "rb") as f:
-            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):      # it may have been swapped between the two looks
-                return None
-            raw = f.read(MAX_BYTES + 1)
-        if len(raw) > MAX_BYTES:
-            return None
-        return json.loads(raw.decode("utf-8"))
+        return json.loads(safefile.read_small_file(path, MAX_BYTES).decode("utf-8"))
     except (OSError, ValueError, RecursionError, MemoryError):
         return None
 

@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, completion, filecmp, functools, hashlib, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 try:
     from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
@@ -372,15 +372,15 @@ def installed_games(steam):
 
 def _load_library_json(json_path):
     path = os.path.expanduser(json_path)
+    name = os.path.basename(path)
     try:
-        if os.path.getsize(path) > MAX_LIBRARY_FILE:
-            raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
-        with open(path, encoding="utf-8-sig") as f:
-            return json.load(f)
-    except SteamcaseError:
-        raise
+        return json.loads(safefile.read_small_file(path, MAX_LIBRARY_FILE, follow_links=True).decode("utf-8-sig"))
+    except safefile.FileTooBig:
+        raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
+    except safefile.NotRegularFile:
+        raise SteamcaseError("Could not read %s as a game list (not a regular file)." % name)
     except (OSError, ValueError, RecursionError, MemoryError, UnicodeError) as e:
-        raise SteamcaseError("Could not read %s as a game list (%s)." % (os.path.basename(path), type(e).__name__))
+        raise SteamcaseError("Could not read %s as a game list (%s)." % (name, type(e).__name__))
 
 
 def owned_ids(json_path):

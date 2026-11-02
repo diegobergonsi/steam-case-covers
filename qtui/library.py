@@ -2,7 +2,6 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Step 1 of the window: the game list. The saved userdata.json is noticed by itself, checked, and unlocks the next step."""
 import os
-import stat
 import threading
 
 from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
@@ -103,11 +102,6 @@ class Library(QObject):
     @staticmethod
     def _check(path):
         """(number of items, "") for a good game list, (0, reason) otherwise."""
-        try:
-            if not stat.S_ISREG(os.stat(os.path.expanduser(path)).st_mode):         # a named pipe or a device would block the read for ever
-                return 0, "Could not read %s as a game list (not a regular file)." % os.path.basename(path)
-        except OSError:
-            pass                                                                      # missing or unreadable: the engine words it
         try:
             return len(sc.owned_ids(path)), ""
         except sc.SteamcaseError as e:
