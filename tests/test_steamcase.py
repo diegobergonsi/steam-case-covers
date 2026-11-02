@@ -2900,6 +2900,18 @@ class ReleaseMessage(unittest.TestCase):
             text = f.read()
         self.assertIn("Halloween", self.rm.section(text, "v1.5.0"))
 
+    def test_the_changelog_has_the_1_6_0_notes_and_nothing_waits_under_unreleased(self):
+        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
+            text = f.read()
+        notes = self.rm.section(text, "v1.6.0")
+        for word in ("Qt", "Ko-fi", "console", "Groups", "custom art", "Good to know", "Steam Deck"):
+            self.assertIn(word, notes)
+        self.assertRegex(text, r"## \[1\.6\.0\] - 2026-11-02")
+        self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # everything that was waiting is in 1.6.0
+        description = self.rm.announcement(text, "v1.6.0", "https://example.test/r")["embeds"][0]["description"]
+        self.assertNotIn("Documentation", description)
+        self.assertLess(len(description), 1500)
+
     def test_the_release_page_body_is_the_section_plus_how_to_check_the_files(self):
         body = self.rm.release_body(self.SAMPLE, "v1.5.0")
         self.assertTrue(body.startswith("- New: a thing."))
