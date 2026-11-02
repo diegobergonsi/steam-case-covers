@@ -30,6 +30,7 @@ The console cases in `assets/cases/` (PlayStation 3, 4 and 5, Xbox 360, Xbox One
 | `tools/src/steam_logo.svg` | SVG Repo ("steam" icon) | **License not verified.** The logo itself is Valve's trademark. If a rights holder objects, it will be replaced. |
 | `tools/src/discord.svg` (rendered to `assets/discord.png`) | Simple Icons 13.0.0 ("Discord" icon) | CC0 1.0 (public domain dedication). The logo itself is Discord's trademark; see Trademarks above. |
 | `tools/src/kofi.svg` (rendered to `assets/kofi.png`) | Simple Icons 13.0.0 ("Ko-fi" icon) | CC0 1.0 (public domain dedication). The logo itself is Ko-fi's trademark; see Trademarks above. |
+| `tools/src/update.svg` (rendered to `assets/update.png`) | Drawn for this project | The project's own artwork (GPL-3.0-or-later, like the code). |
 | `tools/src/tux.svg` | KDE Breeze icon theme (`preferences-system-linux`), from the Arch Linux `breeze-icons` package | LGPL-3.0-or-later (package metadata also lists LGPL-2.1-only). Text: `tools/src/LICENSE-LGPL-3.0.txt` |
 | `tools/src/fonts/NunitoSans.ttf` | Nunito Sans, Google Fonts | SIL Open Font License 1.1 (`tools/src/fonts/OFL.txt`) |
 

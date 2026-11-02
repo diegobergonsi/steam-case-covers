@@ -92,6 +92,7 @@ ApplicationWindow {
             y: nav.height - Theme.navRowHeight - Theme.s8
             width: nav.width
             text: shell.updates.checking ? "Checking\u2026" : "Check for updates"
+            icon: updateIcon
             onActivated: shell.updates.check()
         }
     }

@@ -2747,6 +2747,31 @@ class KofiButton(unittest.TestCase):
             self.assertIn(must, text)
 
 
+class UpdateIcon(unittest.TestCase):
+    """The refresh icon of "Check for updates" in the navigation: the project's own drawing, one bundled image."""
+    PNG = os.path.join(sc.HERE, "assets", "update.png")
+
+    def test_the_image_is_a_square_mark_in_the_muted_text_colour_on_transparency(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        with sc.Image.open(self.PNG) as im:
+            im = im.convert("RGBA")
+        self.assertEqual(im.size, (96, 96))
+        solid = [p for p in pixels(im) if p[3] == 255]
+        self.assertGreater(len(solid), 500)
+        self.assertTrue(all(p[:3] == (0x93, 0xA7, 0xBB) for p in solid))                  # Theme.muted, the colour of the link's words
+        self.assertEqual(im.getpixel((0, 0))[3], 0)
+        with open(os.path.join(sc.HERE, "qtui", "qml", "Theme.qml"), encoding="utf-8") as f:
+            self.assertIn('readonly property color muted: "#93a7bb"', f.read())
+
+    def test_the_packaged_app_bundles_the_image_and_says_the_drawing_is_ours(self):
+        with open(os.path.join(sc.HERE, "steamcase-qt.spec"), encoding="utf-8") as f:
+            self.assertIn("update.png", f.read())
+        with open(os.path.join(sc.HERE, "docs", "THIRD_PARTY.md"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertRegex(text, r"`tools/src/update\.svg`[^\n]*own")
+
+
 class HalloweenOverlay(unittest.TestCase):
     """The artwork of the Halloween case theme: a transparent overlay with a web and a spider, a pumpkin and a hanging spider."""
 

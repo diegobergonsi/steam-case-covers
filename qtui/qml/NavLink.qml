@@ -32,7 +32,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.s8
         Image {
-            opacity: link.icon != "" ? 1 : 0           // a link without an icon keeps the icon's room, so the words of all links line up
+            visible: link.icon != ""
             source: link.icon
             width: Theme.iconSize
             height: Theme.iconSize

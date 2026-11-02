@@ -3,7 +3,7 @@
 """The pictures the packaged app must carry (the build recipe steamcase-qt.spec bundles exactly these)."""
 import os
 
-REQUIRED_ASSETS = ("frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "kofi.png", "halloween_overlay.png")
+REQUIRED_ASSETS = ("frame.png", "family_corner.png", "completion_overlay.png", "default_art.png", "icon.png", "discord.png", "kofi.png", "update.png", "halloween_overlay.png")
 
 REQUIRED_CASES = ("cases.json", "ps3.png", "ps4.png", "ps5.png", "xbox360.png", "xboxone.png", "xboxseries.png", "switch.png", "switch2.png")      # in assets/cases
 

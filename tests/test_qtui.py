@@ -4656,6 +4656,11 @@ class HomeScreen(AddWindow):
         xs = {n: label(self.item(n)).mapToScene(QPointF(0, 0)).x() for n in ("footer_discord", "footer_kofi", "footer_updates")}
         self.assertEqual(len(set(xs.values())), 1, xs)
 
+    def test_every_navigation_link_has_an_icon(self):
+        self.open_home()
+        for n, png in (("footer_discord", "discord.png"), ("footer_kofi", "kofi.png"), ("footer_updates", "update.png")):
+            self.assertTrue(self.item(n).property("icon").toString().endswith(png), n)
+
     def test_check_for_updates_shows_the_answer_in_a_dialog_and_opens_the_page_on_ok(self):
         from unittest import mock
         from PySide6.QtTest import QTest
