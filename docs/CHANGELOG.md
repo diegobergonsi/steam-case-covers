@@ -22,6 +22,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 ### 🛠 Fixed
 - After a crash in the middle of "Add to Steam", Restore works right away instead of waiting ten minutes, and the half-copied file the crash left in Steam's folder is cleaned up.
 - An empty game list now says it is empty, instead of saying there is none, and `--only` refuses anything that is not a real Steam app id.
+- The command line no longer hangs or runs out of memory when the game list is a named pipe or an endless file. The saved games page, the settings and your groups are read with the same care now.
 - The "Cannot set activeFocusOnTab" warning that Qt printed when a dialog closed is gone.
 
 ### 💡 Good to know

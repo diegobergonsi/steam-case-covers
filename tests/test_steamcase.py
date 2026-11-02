@@ -3076,7 +3076,7 @@ class ReleaseMessage(unittest.TestCase):
         with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
             text = f.read()
         notes = self.rm.section(text, "v1.6.0")
-        for word in ("Qt", "Ko-fi", "console", "Groups", "custom art", "Good to know", "Steam Deck"):
+        for word in ("Qt", "Ko-fi", "console", "Groups", "custom art", "Good to know", "Steam Deck", "named pipe"):
             self.assertIn(word, notes)
         self.assertRegex(text, r"## \[1\.6\.0\] - 2026-11-02")
         self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # everything that was waiting is in 1.6.0
