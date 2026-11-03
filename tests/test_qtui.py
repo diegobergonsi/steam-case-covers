@@ -778,6 +778,7 @@ class GameListRemembered(QtCase):
         self.assertFalse(self.shell().library.ready)
 
 
+@need_qt
 class GameListFlow(QtCase):
     """The whole of step 1 as a person lives it: Home, the page is saved slowly, the app notices, Look opens."""
     @classmethod
