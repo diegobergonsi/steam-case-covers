@@ -119,8 +119,10 @@ class Shell(QObject):
 
     @Property(int, notify=stepsChanged)
     def resume(self):
-        """The step Continue leads to: the first one not done, or the first step again when all are."""
-        return next((i for i, step in enumerate(self._steps) if step["state"] == "active"), 1)
+        """The step Continue leads to: the first one not done. When all are, the first step again; by hand, the games to pick (the game list is the same
+        screen in both ways, so landing on it would look like the other way)."""
+        again = max(self.stepIndex("pick"), 1) if self._flow == "manual" else 1
+        return next((i for i, step in enumerate(self._steps) if step["state"] == "active"), again)
 
     @Property(QObject, constant=True)
     def library(self):
