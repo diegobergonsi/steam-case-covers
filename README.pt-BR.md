@@ -93,7 +93,7 @@ O suporte ao macOS é **no melhor esforço**: o autor só testou num MacBook Air
 <details>
 <summary><b>Linux e Steam Deck</b></summary>
 
-No Steam Deck, mude primeiro para o **Modo Desktop**. O programa precisa de uma janela de desktop, pois ele não roda no Modo Jogo.
+No Steam Deck, mude primeiro para o **Modo Desktop**. O programa precisa de uma janela de desktop, e por isso ele não roda no Modo Jogo.
 
 Baixe o `SteamCaseCovers-linux` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases/latest) e abra. No Steam Deck aparece um pequeno aviso: clique em **Launch** e o programa abre.
 
@@ -167,7 +167,7 @@ O passo 3, **Destaque os seus jogos com 100%**, é opcional. Os jogos em que voc
 1. Clique em **Abrir a minha página de jogos** (ou **Copiar link**). O navegador abre a sua página de jogos da Steam, ordenada por conquistas. Entre na sua conta se pedir e espere os seus jogos carregarem.
 2. Salve ela (Ctrl+S, ou Cmd+S no Mac) como **"Página da Web, completa"** no Chrome ou no Firefox, com o nome `games.html`. O navegador também salva uma pasta ao lado. O programa percebe o arquivo na sua pasta Downloads sozinho, ou você pode clicar em **Procurar…** e escolhê-lo.
 3. Escolha o que esses jogos ganham: **Roseta e faixa** (a roseta no canto superior esquerdo e a faixa "100% Complete" embaixo; é o padrão) ou **Só a roseta** (só a roseta, sem faixa sobre a arte).
-4. Escolha como esses jogos ficam: **Caixa dourada** (a case inteira fica dourada), **Borda dourada** (uma borda dourada por fora da case, que fica cerca de 5% menor), **Caixa normal** (a sua case continua como está; é o padrão depois que uma página é carregada) ou **Sem caixa especial** (nenhum destaque, então as marcas não se aplicam). As opções só podem ser escolhidas depois que uma página é carregada. Depois clique em **Criar capas**.
+4. Escolha como esses jogos ficam: **Case dourada** (a case inteira fica dourada), **Borda dourada** (uma borda dourada por fora da case, que fica cerca de 5% menor), **Case normal** (a sua case continua como está; é o padrão depois que uma página é carregada) ou **Sem case especial** (nenhum destaque, então as marcas não se aplicam). As opções só podem ser escolhidas depois que uma página é carregada. Depois clique em **Criar capas**.
 
 > [!NOTE]
 > A página salva contém um token de login temporário da sua conta da Steam. O programa só lê quais jogos estão com 100%: ele nunca usa, guarda nem registra o token. Você pode apagar o `games.html` e a pasta dele depois que as capas estiverem criadas. O programa nunca apaga os seus arquivos sozinho.
@@ -327,7 +327,7 @@ A Steam monta essa página no seu navegador depois que ela carrega. "Página da 
 <details>
 <summary><b>Posso remover os destaques depois?</b></summary>
 
-Pode. Carregue uma página de novo (ou qualquer página), escolha **Sem caixa especial** e clique em **Criar capas**: o programa pergunta antes e refaz as capas destacadas como capas normais. Na linha de comando, use `--completed-style none`. Adicione as capas à Steam de novo no passo 5 para ver a mudança lá.
+Pode. Carregue uma página de novo (ou qualquer página), escolha **Sem case especial** e clique em **Criar capas**: o programa pergunta antes e refaz as capas destacadas como capas normais. Na linha de comando, use `--completed-style none`. Adicione as capas à Steam de novo no passo 5 para ver a mudança lá.
 
 </details>
 

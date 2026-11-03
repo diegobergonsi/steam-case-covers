@@ -114,6 +114,9 @@ class Table(unittest.TestCase):
     def test_the_table_has_nothing_left_over_from_texts_that_are_gone(self):
         self.assertEqual(sorted(k[:70] for k in self.table if k not in self.keys), [])
 
+    def test_the_portuguese_says_case_not_caixa(self):
+        self.assertEqual(sorted(k[:50] for k, v in self.table.items() if "caixa" in v.lower()), [])      # the project calls a case a "case" in Portuguese
+
     def test_placeholders_and_plural_forms_match_the_english(self):
         import re
         for key, text in self.table.items():
