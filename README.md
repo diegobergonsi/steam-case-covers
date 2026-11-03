@@ -1,4 +1,9 @@
 <p align="center">
+  <a href="README.md"><img src="assets/flag_us.png" height="22" alt="English"></a> &nbsp;
+  <a href="README.pt-BR.md"><img src="assets/flag_br.png" height="22" alt="Português (Brasil)"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/preview.png"><img src="assets/preview.png" alt="Steam Case Covers: your Steam library as a fan of physical game boxes"></a>
 </p>
 
@@ -199,7 +204,7 @@ Good to know:
 
 **The app itself**
 - Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's
-- English and Brazilian Portuguese: the app starts in your system's language, and two small flags under the name switch it at any time (the command line and this README stay in English)
+- English and Brazilian Portuguese: the app starts in your system's language, and two small flags under the name switch it at any time (the command line stays in English; this README is also in [Brazilian Portuguese](README.pt-BR.md))
 - A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 - Free software: no ads, no account, no telemetry
 
@@ -389,7 +394,7 @@ My Ko-fi page also covers [WakeDeck](https://wakedeck.app), another small app I 
 
 ## 🙏 Acknowledgments
 
-Thanks to [SteamGridDB](https://www.steamgriddb.com) and its community for making custom Steam artwork easy to share, and to the authors of [Pillow](https://python-pillow.org), [PyInstaller](https://pyinstaller.org), the [Nunito Sans](https://fonts.google.com/specimen/Nunito+Sans) font and the KDE Breeze icon theme. Details are in [THIRD_PARTY.md](THIRD_PARTY.md).
+Thanks to [SteamGridDB](https://www.steamgriddb.com) and its community for making custom Steam artwork easy to share, and to the authors of [Pillow](https://python-pillow.org), [PyInstaller](https://pyinstaller.org), the [Nunito Sans](https://fonts.google.com/specimen/Nunito+Sans) font and the KDE Breeze icon theme. Details are in [THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
 Game artwork shown above belongs to its publishers and developers. Covers you generate contain that artwork: keep them for personal use.
 
