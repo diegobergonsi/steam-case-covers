@@ -8,6 +8,7 @@ from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 import steamcase as sc
+from qtui import settings
 from qtui.filepicker import pick_file
 from qtui.system import SAVE_KEY
 from qtui.watcher import DownloadWatcher
@@ -108,8 +109,19 @@ class Library(QObject):
         except sc.SteamcaseError as e:
             return 0, str(e)
 
-    def _accept(self, path, count):
+    def restore(self):
+        """Use the game list of the last run again, when that file is still there and still a game list. Installed-only, chosen before, wins over it."""
+        remembered = settings.load_library(self._shell.settingsPath)
+        if not remembered or self._path or self._installed or not os.path.isfile(remembered):
+            return
+        count, why = self._check(remembered)
+        if not why:
+            self._accept(remembered, count, remember=False)
+
+    def _accept(self, path, count, remember=True):
         self._path, self._count = path, count
+        if remember:
+            settings.save_library(os.path.abspath(path), self._shell.settingsPath)
         self.pathChanged.emit()
         if self._installed:                         # a file wins over "installed only", as before
             self._installed = False
