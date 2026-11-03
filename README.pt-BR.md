@@ -4,13 +4,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/preview.png"><img src="assets/preview.png" alt="Steam Case Covers: a sua biblioteca da Steam como um leque de caixas de jogos de verdade"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/preview.png"><img src="assets/preview.png" alt="Steam Case Covers: a sua biblioteca da Steam como um leque de cases de jogos de verdade"></a>
 </p>
 
 <h1 align="center">steam-case-covers</h1>
 
 <p align="center">
-  Dê a cada jogo da sua biblioteca da Steam uma capa de "caixa de jogo de verdade".<br>
+  Dê a cada jogo da sua biblioteca da Steam uma capa de "case de jogo de verdade".<br>
   Tudo roda no seu computador: sem login, sem chave de API, sem envio de nada.
 </p>
 
@@ -33,8 +33,8 @@
 
 <p align="center">
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home-pt.png"><img src="assets/screenshot-home-pt.png" width="280" alt="Início: os passos à esquerda com as bandeiras de idioma, Escolher jogos à mão e a seção Desfazer"></a>
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look-pt.png"><img src="assets/screenshot-look-pt.png" width="280" alt="O passo Visual: uma prévia da caixa e as opções de cor"></a>
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100-pt.png"><img src="assets/screenshot-100-pt.png" width="280" alt="O passo Jogos 100%: uma caixa dourada com roseta e faixa, e as opções para marcar esses jogos"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look-pt.png"><img src="assets/screenshot-look-pt.png" width="280" alt="O passo Visual: uma prévia da case e as opções de cor"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100-pt.png"><img src="assets/screenshot-100-pt.png" width="280" alt="O passo Jogos 100%: uma case dourada com roseta e faixa, e as opções para marcar esses jogos"></a>
   <br>
   <em>O programa inteiro: Início e depois cinco passos curtos, sem terminal. A prévia acompanha cada escolha.</em>
 </p>
@@ -48,12 +48,12 @@
 
 ## O que é?
 
-A Steam mostra a sua biblioteca como cartões verticais. Esta ferramenta coloca a arte de cada jogo dentro de uma "caixa" (azul por padrão, ou em qualquer cor e tom que você escolher, do vivo ao cinza-escuro e ao preto) com uma faixa da Steam e os ícones das plataformas, como um jogo de console em caixa, e instala o resultado como a sua arte personalizada.
+Cada jogo na sua biblioteca Steam aparece como uma arte vertical. Esta ferramenta coloca essa arte dentro de uma "caixa" (azul por padrão, ou em qualquer cor e tom que você escolher, do vivo ao cinza-escuro e ao preto) com uma faixa da Steam e os ícones das plataformas, como se fosse um jogo físico de console, e instala o resultado como a sua arte personalizada.
 
 A arte vem dos próprios servidores da Steam. As capas são criadas no seu computador e ficam nele.
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="Uma biblioteca da Steam com caixas azuis, dois jogos com 100% dentro de uma borda dourada, e Leaf it Alone com um canto verde de família"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="Uma biblioteca da Steam com cases azuis, dois jogos com 100% dentro de uma borda dourada, e Leaf it Alone com um canto verde de família"></a>
   <br>
   <em>Como as capas ficam dentro da Steam. Leaf it Alone vem da biblioteca de alguém da família, por isso tem o canto verde. Coral Island está nas duas bibliotecas, por isso não tem (o pequeno “2” é um selo da própria Steam). Coral Island e V Rising estão com 100%, aqui com a opção de borda dourada.</em>
 </p>
@@ -65,7 +65,7 @@ A arte vem dos próprios servidores da Steam. As capas são criadas no seu compu
 <details>
 <summary><b>Windows</b></summary>
 
-Baixe o `SteamCaseCovers-windows.exe` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases) e dê dois cliques nele.
+Baixe o `SteamCaseCovers-windows.exe` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases/latest) e dê dois cliques nele.
 
 Se aparecer "O Windows protegeu o seu PC", clique em **Mais informações** e depois em **Executar assim mesmo**. O programa não tem assinatura de código (isso custa dinheiro), e é por isso que o Windows avisa. Alguns antivírus também marcam programas deste tipo.
 
@@ -74,7 +74,7 @@ Se aparecer "O Windows protegeu o seu PC", clique em **Mais informações** e de
 <details>
 <summary><b>macOS</b></summary>
 
-Baixe o `SteamCaseCovers-macos.zip` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases) e dê dois cliques para descompactar. **Antes de abrir o programa**, rode isto no **Terminal** (mude o caminho se o programa não estiver em Downloads) e só então dê dois cliques no programa:
+Baixe o `SteamCaseCovers-macos.zip` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases/latest) e dê dois cliques para descompactar. **Antes de abrir o programa**, rode isto no **Terminal** (mude o caminho se o programa não estiver em Downloads) e só então dê dois cliques no programa:
 
 ```bash
 xattr -dr com.apple.quarantine ~/Downloads/SteamCaseCovers.app
@@ -93,11 +93,11 @@ O suporte ao macOS é **no melhor esforço**: o autor só testou num MacBook Air
 <details>
 <summary><b>Linux e Steam Deck</b></summary>
 
-No Steam Deck, mude primeiro para o **Modo Desktop**. O programa precisa de uma janela de desktop, então ele não roda no Modo Jogo.
+No Steam Deck, mude primeiro para o **Modo Desktop**. O programa precisa de uma janela de desktop, pois ele não roda no Modo Jogo.
 
-Baixe o `SteamCaseCovers-linux` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases) e abra. No Steam Deck aparece um pequeno aviso: clique em **Launch** e o programa abre.
+Baixe o `SteamCaseCovers-linux` na [página de Releases](https://github.com/diegobergonsi/steam-case-covers/releases/latest) e abra. No Steam Deck aparece um pequeno aviso: clique em **Launch** e o programa abre.
 
-Se o seu gerenciador de arquivos não o executar, torne-o executável e inicie-o por um terminal:
+Se o seu gerenciador de arquivos não o executar, torne-o executável e o inicie pelo terminal:
 
 ```bash
 chmod +x SteamCaseCovers-linux
@@ -118,7 +118,7 @@ python -m pip install -r requirements-qt.txt
 python -m qtui
 ```
 
-No macOS e no Linux, use `python3` em vez de `python`. Rode os testes com `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests` (no PowerShell do Windows, rode antes `$env:QT_QPA_PLATFORM="offscreen"`). `python -m qtui --selftest` monta a janela sem mostrá-la.
+No macOS e no Linux, use `python3` em vez de `python`. Rode os testes com `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests` (no PowerShell do Windows, rode antes `$env:QT_QPA_PLATFORM="offscreen"`). `python -m qtui --selftest` monta a janela sem mostrar ela.
 
 </details>
 
@@ -128,11 +128,11 @@ Os arquivos de cada versão vêm com uma lista `SHA256SUMS` para você conferir 
 
 ## 🔧 Como funciona
 
-1. **Pegue a sua lista de jogos.** Clique em **Abrir a página no meu navegador**. O navegador abre a Steam: entre na sua conta se pedir, e você vai cair numa página de texto simples. Salve-a (Ctrl+S, ou Cmd+S no Mac) como `userdata.json`. O programa percebe o arquivo sozinho. O navegador não abriu? Clique em **Copiar link** e cole você mesmo. Ou ligue **Só os meus jogos instalados** para pular este passo: os jogos que não estão instalados neste computador, inclusive os compartilhados por alguém da família, ficam de fora (passe o mouse no **i** ao lado). No Mac com Safari, escolha o formato **Código-Fonte da Página** ao salvar (ou use o Chrome ou o Firefox).
-2. **Escolha o visual.** Escolha o visual das caixas: arraste os controles de Cor, Intensidade da cor e Brilho ou toque numa das nove amostras (seis cores, depois Preto, Grafite e Prata), e a prévia mostra o resultado. A Intensidade da cor e o Brilho só descem a partir do azul original, então a caixa pode ter qualquer tom, do vivo ao cinza-escuro e ao preto; o logo e o texto brancos continuam brancos. O **Tema** pode transformar as caixas numa de **Halloween**: uma teia com uma aranha, uma abóbora e uma aranha pendurada no alto, por cima da cor que você escolheu. A caixa de Halloween mostra só a roseta nos seus jogos com 100% (a faixa esconderia os enfeites), e a janela escolhe isso por você. Se você definiu a sua própria arte para alguns jogos (no menu da Steam ou pelo SteamGridDB), ligue **Usar a minha própria arte onde eu tiver** e a sua arte vai para dentro da caixa no lugar da arte da Steam; os jogos sem arte sua ficam com a da Steam. O programa guarda uma cópia da sua arte na pasta dele e nunca muda os seus arquivos.
+1. **Pegue a sua lista de jogos.** Clique em **Abrir a página no meu navegador**. O navegador abre a Steam: entre na sua conta se pedir, e você vai cair numa página de texto simples. Salve ela (Ctrl+S, ou Cmd+S no Mac) como `userdata.json`. O programa percebe o arquivo sozinho pelo nome. O navegador não abriu? Clique em **Copiar link** e cole você mesmo. Ou selecione **Só os meus jogos instalados** para pular este passo: os jogos que não estão instalados no computador, inclusive os compartilhados por alguém da família, ficam de fora (passe o mouse no **i** ao lado). No Mac com Safari, escolha o formato **Código-Fonte da Página** ao salvar (ou use Chrome ou Firefox).
+2. **Escolha o visual.** Escolha o visual das cases: arraste os controles de Cor, Intensidade da cor e Brilho ou toque numa das nove amostras (seis cores, depois Preto, Grafite e Prata), e a prévia mostra o resultado. A Intensidade da cor e o Brilho só descem a partir do azul original, então a case pode ter qualquer tom, do vivo ao cinza-escuro e ao preto; o logo e o texto brancos continuam brancos. O **Tema** pode transformar as cases numa de **Halloween**: uma teia com uma aranha, uma abóbora e uma aranha pendurada no alto, por cima da cor que você escolheu. A case de Halloween mostra só a roseta nos seus jogos com 100% (a faixa esconderia os enfeites), e a janela escolhe isso por você. Se você definiu a sua própria arte para alguns jogos (no menu da Steam ou pelo SteamGridDB), selecione **Usar a minha própria arte onde eu tiver** e a sua arte vai para dentro da case no lugar da arte da Steam; os jogos sem arte sua ficam com a da Steam. O programa guarda uma cópia da sua arte na pasta dele e nunca muda os seus arquivos.
 3. **Destaque os seus jogos com 100% (opcional).** Carregue a sua página de jogos da Steam e os jogos em que você desbloqueou todas as conquistas ganham uma marca. Detalhes mais abaixo. Você pode pular este passo.
 4. **Crie as capas.** Confira as suas escolhas (cada uma leva de volta ao seu passo) e clique em **Criar capas**, depois espere. Você pode cancelar e rodar de novo mais tarde: as capas prontas são mantidas, então ele continua de onde parou. Se você já criou capas em outra cor ou tema, o programa pergunta antes de substituí-las.
-5. **Adicione-as à Steam.** Clique em **Aplicar na Steam**. Se houver mais de uma conta da Steam neste computador, a janela mostra qual será alterada; escolha outra com os botões de conta. A sua arte atual é copiada para um backup antes.
+5. **Adicione-as à Steam.** Clique em **Aplicar na Steam**. Se houver mais de uma conta da Steam no computador, a janela mostra qual será alterada; escolha outra com os botões de conta. A sua arte atual é copiada para um backup antes.
 
 > [!WARNING]
 > O passo 5 **fecha a Steam para você** (qualquer jogo aberto para e os downloads pausam), adiciona as capas e inicia a Steam de novo. Salve o seu jogo antes. O programa pergunta antes de fazer qualquer coisa.
@@ -142,14 +142,14 @@ Mudou de ideia? No **Início** (a primeira entrada da lista à esquerda):
 * **Restaurar a arte anterior** desfaz o último Aplicar. Aperte de novo para voltar mais um passo.
 * **Voltar à arte padrão da Steam** remove as capas que este programa criou. Funciona mesmo que você não tenha backup. Se ele também encontrar arte personalizada que este programa não criou (do SteamGridDB, ou definida à mão na Steam), ele pergunta se deve remover essa também: **Remover só as capas deste programa** a mantém, **Remover todas** traz de volta a arte da própria Steam em todo lugar. Restaurar desfaz qualquer um dos dois.
 
-### Opcional: escolher jogos à mão, em caixas de console ou numa cor sua
+### Opcional: escolher jogos à mão, em cases de console ou numa cor sua
 
-Alguns jogos pertencem a outra caixa: The Last of Us é um jogo de PlayStation, Forza é um jogo de Xbox. No **Início**, **Escolher jogos à mão** abre um segundo caminho pela janela (o passo a passo continua como está). Depois da sua lista de jogos, você marca os jogos que quer (procure pelo nome, ou role a lista) e escolhe uma caixa para eles: **PlayStation 5, 4 ou 3, Xbox Series X|S, Xbox One ou Xbox 360, Nintendo Switch ou Switch 2**, ou a caixa da Steam, que aqui pode ter uma cor própria (azul, violeta, magenta, vermelho, dourado, verde, preto, grafite ou prata). Você pode marcar mais jogos e dar a eles outra caixa, ou seguir em frente. Os jogos que você não marca ficam como estão (as capas deles não mudam), e **Criar** e **Adicionar à Steam** funcionam como antes, só para os jogos que você marcou.
+Alguns jogos pertencem a outra case: The Last of Us é um jogo de PlayStation, Forza é um jogo de Xbox. No **Início**, **Escolher jogos à mão** abre um segundo caminho pela janela (o passo a passo continua como está). Depois da sua lista de jogos, você marca os jogos que quer (procure pelo nome, ou role a lista) e escolhe uma case para eles: **PlayStation 5, 4 ou 3, Xbox Series X|S, Xbox One ou Xbox 360, Nintendo Switch ou Switch 2**, ou a case da Steam, que aqui pode ter uma cor própria (azul, violeta, magenta, vermelho, dourado, verde, preto, grafite ou prata). Você pode marcar mais jogos e dar a eles outra case, ou seguir em frente. Os jogos que você não marca ficam como estão (as capas deles não mudam), e **Criar** e **Adicionar à Steam** funcionam como antes, só para os jogos que você marcou.
 
-* As caixas de console são fixas: sem cor, brilho nem tema. Elas são desenhadas para preencher o mesmo cartão alto da caixa da Steam.
-* **Grupos.** Os jogos a que você dá uma caixa entram num **grupo** com um nome que você pode mudar ("Jogos largados", "Xbox 360"), e o programa lembra dele. Da próxima vez você pode adicionar jogos a um grupo que criou, ou apagá-lo. Um jogo fica em um grupo só. As cores são só visual: o dourado é uma cor como as outras, e a roseta e a faixa só vão em jogos que realmente estão com 100% na página de jogos que você carregou.
+* As cases de console são fixas: sem cor, brilho nem tema. Elas são desenhadas para preencher o mesmo cartão alto da case da Steam.
+* **Grupos.** Os jogos a que você dá uma case entram num **grupo** com um nome que você pode mudar ("Jogos largados", "Xbox 360"), e o programa lembra dele. Da próxima vez você pode adicionar jogos a um grupo que criou, ou apagá-lo. Um jogo fica em um grupo só. As cores são só visual: o dourado é uma cor como as outras, e a roseta e a faixa só vão em jogos que realmente estão com 100% na página de jogos que você carregou.
 * **O caminho de sempre deixa os seus grupos em paz.** Quando você cria capas de novo pelo passo a passo, as capas dos seus grupos não são repintadas. No passo **Criar** você pode marcar um grupo para repintar as capas dele com o visual que escolheu; isso apaga o grupo. **Voltar à arte padrão da Steam** (no Início) funciona do mesmo jeito: ele deixa os seus grupos na Steam, a não ser que você os marque.
-* Os jogos compartilhados pelo Compartilhamento em Família da Steam só ganham o canto verde se você ligar **Marcar os jogos da família com um canto verde** (isso precisa do arquivo da sua lista de jogos).
+* Os jogos compartilhados pelo Compartilhamento em Família da Steam só ganham o canto verde se você selecionar **Marcar os jogos da família com um canto verde** (isso precisa do arquivo da sua lista de jogos).
 * Os seus jogos com 100% ganham a roseta e a faixa (ou só a roseta) se você carregar a sua página de jogos no passo **Jogos 100%** deste caminho e mantiver **Destacar**.
 * O caminho de sempre nunca muda nem remove uma capa de console: só escolher o jogo de novo aqui faz isso.
 * Os logos de PlayStation, Xbox e Nintendo pertencem aos seus donos, e este projeto não é afiliado a eles. Veja [THIRD_PARTY](docs/THIRD_PARTY.md) (em inglês).
@@ -159,15 +159,15 @@ Alguns jogos pertencem a outra caixa: The Last of Us é um jogo de PlayStation, 
 O passo 3, **Destaque os seus jogos com 100%**, é opcional. Os jogos em que você desbloqueou todas as conquistas ganham uma roseta no canto superior esquerdo, logo abaixo da faixa, e uma faixa "100% Complete" na parte de baixo (você pode ficar só com a roseta). Funciona como o passo 1: o programa não consegue ver as suas conquistas sozinho, então você salva mais uma página pelo seu próprio navegador.
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-100.png"><img src="assets/library-100.png" width="560" alt="Uma biblioteca da Steam de jogos completados com 100%: cada capa tem uma caixa dourada, uma roseta sobre os ícones das plataformas e uma faixa azul 100% Complete"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-100.png"><img src="assets/library-100.png" width="560" alt="Uma biblioteca da Steam de jogos completados com 100%: cada capa tem uma case dourada, uma roseta sobre os ícones das plataformas e uma faixa azul 100% Complete"></a>
   <br>
-  <em>Jogos completados com 100%, com a opção de caixa dourada.</em>
+  <em>Jogos completados com 100%, com a opção de case dourada.</em>
 </p>
 
 1. Clique em **Abrir a minha página de jogos** (ou **Copiar link**). O navegador abre a sua página de jogos da Steam, ordenada por conquistas. Entre na sua conta se pedir e espere os seus jogos carregarem.
-2. Salve-a (Ctrl+S, ou Cmd+S no Mac) como **"Página da Web, completa"** no Chrome ou no Firefox, com o nome `games.html`. O navegador também salva uma pasta ao lado. O programa percebe o arquivo na sua pasta Downloads sozinho, ou você pode clicar em **Procurar…** e escolhê-lo.
+2. Salve ela (Ctrl+S, ou Cmd+S no Mac) como **"Página da Web, completa"** no Chrome ou no Firefox, com o nome `games.html`. O navegador também salva uma pasta ao lado. O programa percebe o arquivo na sua pasta Downloads sozinho, ou você pode clicar em **Procurar…** e escolhê-lo.
 3. Escolha o que esses jogos ganham: **Roseta e faixa** (a roseta no canto superior esquerdo e a faixa "100% Complete" embaixo; é o padrão) ou **Só a roseta** (só a roseta, sem faixa sobre a arte).
-4. Escolha como esses jogos ficam: **Caixa dourada** (a caixa inteira fica dourada), **Borda dourada** (uma borda dourada por fora da caixa, que fica cerca de 5% menor), **Caixa normal** (a sua caixa continua como está; é o padrão depois que uma página é carregada) ou **Sem caixa especial** (nenhum destaque, então as marcas não se aplicam). As opções só podem ser escolhidas depois que uma página é carregada. Depois clique em **Criar capas**.
+4. Escolha como esses jogos ficam: **Caixa dourada** (a case inteira fica dourada), **Borda dourada** (uma borda dourada por fora da case, que fica cerca de 5% menor), **Caixa normal** (a sua case continua como está; é o padrão depois que uma página é carregada) ou **Sem caixa especial** (nenhum destaque, então as marcas não se aplicam). As opções só podem ser escolhidas depois que uma página é carregada. Depois clique em **Criar capas**.
 
 > [!NOTE]
 > A página salva contém um token de login temporário da sua conta da Steam. O programa só lê quais jogos estão com 100%: ele nunca usa, guarda nem registra o token. Você pode apagar o `games.html` e a pasta dele depois que as capas estiverem criadas. O programa nunca apaga os seus arquivos sozinho.
@@ -186,15 +186,15 @@ Bom saber:
 
 **Capas**
 - Para os seus jogos instalados, ou para a biblioteca inteira
-- Cada capa é o retrato do próprio jogo dentro de uma caixa, com a faixa da Steam e os ícones das plataformas
+- Cada capa é o retrato do próprio jogo dentro de uma case, com a faixa da Steam e os ícones das plataformas
 - Os jogos compartilhados pelo Compartilhamento em Família da Steam também ganham capas, com um canto verde e um ícone de família
 - Opção de "pular capas borradas" para jogos que a Steam não tem um retrato de verdade
 
 **Deixe do seu jeito**
-- Escolha jogos à mão e coloque-os numa caixa de PlayStation, Xbox ou Nintendo, ou numa cor sua, em grupos que o programa lembra
-- Se quiser, coloque a arte que você mesmo definiu (no menu da Steam ou do SteamGridDB) dentro da caixa, para os jogos que a têm
-- Escolha a cor, a intensidade da cor e o brilho das caixas com três controles ou uma amostra pronta (inclusive preto, grafite e prata), com prévia ao vivo e, se quiser, um tema de Halloween (uma teia com uma aranha, uma abóbora e uma aranha pendurada) em qualquer cor
-- Opcional: os jogos em que você desbloqueou todas as conquistas ganham uma roseta e uma faixa "100% Complete" (ou só a roseta) e, se quiser, uma caixa dourada ou uma borda dourada ([como funciona](#optional-highlight-your-100-games))
+- Escolha jogos à mão e coloque-os numa case de PlayStation, Xbox ou Nintendo, ou numa cor sua, em grupos que o programa lembra
+- Se quiser, coloque a arte que você mesmo definiu (no menu da Steam ou do SteamGridDB) dentro da case, para os jogos que a têm
+- Escolha a cor, a intensidade da cor e o brilho das cases com três controles ou uma amostra pronta (inclusive preto, grafite e prata), com prévia ao vivo e, se quiser, um tema de Halloween (uma teia com uma aranha, uma abóbora e uma aranha pendurada) em qualquer cor
+- Opcional: os jogos em que você desbloqueou todas as conquistas ganham uma roseta e uma faixa "100% Complete" (ou só a roseta) e, se quiser, uma case dourada ou uma borda dourada ([como funciona](#optional-highlight-your-100-games))
 
 **Instale com segurança**
 - Um clique: a Steam é fechada com educação, recebe backup, é atualizada e reiniciada
@@ -265,9 +265,9 @@ A linha de comando fala inglês (os comentários acima são do próprio comando)
 | `restore` | Desfaz o último apply (rode de novo para voltar mais um) |
 | `reset` | Remove da Steam as capas que este programa criou (`--everything` também remove arte personalizada de outras origens) |
 
-O `list` marca com `(family)` os jogos da sua biblioteca de Família da Steam. O `make` mantém a cor das capas que já estão na pasta, a não ser que você passe `--hue`, `--saturation` ou `--brightness`; uma opção que você deixa de fora mantém o valor das capas que já estão lá, ou o original (`--hue 0 --saturation 100 --brightness 100` pede o azul original). O `--use-custom-art` coloca a arte que você mesmo definiu dentro da caixa, para os jogos que a têm (use `--user` com `make` para escolher a conta); o `--no-custom-art` volta ao retrato da Steam em todas as capas; sem nenhum dos dois, as capas já feitas com a sua arte continuam com ela. O `--theme` é `classic` ou `halloween`, e sem ele as capas que já estão na pasta mantêm o tema; com o tema de Halloween, os jogos com 100% ganham só a roseta, então `--completed-marks full` é recusado. A saturação e o brilho vão de 0 a 100, onde 100 é o original e valores menores dão uma caixa mais cinza ou mais escura.
+O `list` marca com `(family)` os jogos da sua biblioteca de Família da Steam. O `make` mantém a cor das capas que já estão na pasta, a não ser que você passe `--hue`, `--saturation` ou `--brightness`; uma opção que você deixa de fora mantém o valor das capas que já estão lá, ou o original (`--hue 0 --saturation 100 --brightness 100` pede o azul original). O `--use-custom-art` coloca a arte que você mesmo definiu dentro da case, para os jogos que a têm (use `--user` com `make` para escolher a conta); o `--no-custom-art` volta ao retrato da Steam em todas as capas; sem nenhum dos dois, as capas já feitas com a sua arte continuam com ela. O `--theme` é `classic` ou `halloween`, e sem ele as capas que já estão na pasta mantêm o tema; com o tema de Halloween, os jogos com 100% ganham só a roseta, então `--completed-marks full` é recusado. A saturação e o brilho vão de 0 a 100, onde 100 é o original e valores menores dão uma case mais cinza ou mais escura.
 
-O `--games-page FILE` é a página de jogos salva como "Página da Web, completa" (veja [acima](#optional-highlight-your-100-games)). O `--completed-style` é `ribbon` (a caixa normal; é o padrão quando você passa uma página), `gold-case`, `gold-border` ou `none`; o `none` remove o destaque das capas feitas antes. O `--completed-marks` é `full` (a roseta e a faixa, o padrão) ou `rosette` (só a roseta) e funciona com todos os estilos, menos `none`. Sem nenhuma das duas opções, as capas mantêm o visual que têm.
+O `--games-page FILE` é a página de jogos salva como "Página da Web, completa" (veja [acima](#optional-highlight-your-100-games)). O `--completed-style` é `ribbon` (a case normal; é o padrão quando você passa uma página), `gold-case`, `gold-border` ou `none`; o `none` remove o destaque das capas feitas antes. O `--completed-marks` é `full` (a roseta e a faixa, o padrão) ou `rosette` (só a roseta) e funciona com todos os estilos, menos `none`. Sem nenhuma das duas opções, as capas mantêm o visual que têm.
 
 Rode `python steamcase.py -h` para ver todas as opções, como `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` e `--user` (o número da pasta da conta dentro de `userdata` da Steam, para escolher uma entre várias contas).
 
@@ -278,21 +278,21 @@ Rode `python steamcase.py -h` para ver todas as opções, como `--only`, `--hue`
 <details>
 <summary><b>Ele diz que a minha lista de jogos está vazia</b></summary>
 
-Você não estava logado na Steam no seu navegador quando salvou a página. Nesse caso a Steam não mostra erro; ela devolve uma lista vazia. Clique em **Abrir a página no meu navegador** de novo: ele abre primeiro a página de login da Steam, então entre lá e depois salve a página em que você cair. Se a página não mostrar jogos mesmo você tendo acabado de entrar, atualize-a (F5, ou Cmd+R no Mac) antes de salvar.
+Você não estava logado na Steam no seu navegador quando salvou a página. Nesse caso a Steam não mostra erro; ela devolve uma lista vazia. Clique em **Abrir a página no meu navegador** de novo: ele abre primeiro a página de login da Steam, então entre lá e depois salve a página em que você cair. Se a página não mostrar jogos mesmo você tendo acabado de entrar, atualize ela (F5, ou Cmd+R no Mac) antes de salvar.
 
 </details>
 
 <details>
 <summary><b>Por que algumas capas ficam borradas?</b></summary>
 
-Muitos jogos antigos ou menores não têm um retrato de verdade na Steam. A Steam monta um substituto a partir da imagem larga do cabeçalho, então o banner do título fica no meio de uma cópia borrada de si mesmo. Ligue **Pular capas borradas** (passe o mouse no **i** ao lado) para deixar esses jogos em paz.
+Muitos jogos antigos ou menores não têm um retrato de verdade na Steam. A Steam monta um substituto a partir da imagem larga do cabeçalho, então o banner do título fica no meio de uma cópia borrada de si mesmo. Selecione **Pular capas borradas** (passe o mouse no **i** ao lado) para deixar esses jogos em paz.
 
 </details>
 
 <details>
-<summary><b>Eu defini arte personalizada à mão na Steam. Estas capas vão substituí-la?</b></summary>
+<summary><b>Eu defini arte personalizada à mão na Steam. Estas capas vão substituir ela?</b></summary>
 
-A Steam mostra a arte que você definiu à mão (ou pegou do SteamGridDB) antes destas capas. O **Aplicar na Steam** move essa arte dos jogos cobertos para o backup, para a caixa aparecer, e **Restaurar a arte anterior** a traz de volta. Para limpar tudo isso e ficar com a arte da própria Steam, use **Voltar à arte padrão da Steam** e escolha **Remover todas**.
+A Steam mostra a arte que você definiu à mão (ou pegou do SteamGridDB) antes destas capas. O **Aplicar na Steam** move essa arte dos jogos cobertos para o backup, para a case aparecer, e **Restaurar a arte anterior** a traz de volta. Para limpar tudo isso e ficar com a arte da própria Steam, use **Voltar à arte padrão da Steam** e escolha **Remover todas**.
 
 </details>
 
@@ -306,14 +306,14 @@ Na sua própria pasta de usuário: `~/.local/share/steamcase/covers` no Linux, `
 <details>
 <summary><b>Um jogo da biblioteca da minha família não ganhou capa</b></summary>
 
-Os jogos compartilhados com você pelo Compartilhamento em Família da Steam não estão na sua própria lista de jogos, então o programa precisa comparar os arquivos da própria Steam com a sua lista para distingui-los. Desligue **Só os meus jogos instalados** e carregue a sua lista de jogos (**Abrir a página no meu navegador**, ou **Procurar…** até um `userdata.json` mais antigo: ele não precisa conter o jogo compartilhado). Os jogos compartilhados ganham então capas com um canto verde. Se a lista for antiga, jogos que você comprou depois de salvá-la podem ser confundidos com compartilhados, então salve-a de novo depois de comprar jogos. Isto só foi testado numa família pequena: por favor [abra uma issue](https://github.com/diegobergonsi/steam-case-covers/issues) se faltarem jogos.
+Os jogos compartilhados com você pelo Compartilhamento em Família da Steam não estão na sua própria lista de jogos, então o programa precisa comparar os arquivos da própria Steam com a sua lista para distingui-los. Desmarque **Só os meus jogos instalados** e carregue a sua lista de jogos (**Abrir a página no meu navegador**, ou **Procurar…** até um `userdata.json` mais antigo: ele não precisa conter o jogo compartilhado). Os jogos compartilhados ganham então capas com um canto verde. Se a lista for antiga, jogos que você comprou depois de salvar ela podem ser confundidos com compartilhados, então salve ela de novo depois de comprar jogos. Isto só foi testado numa família pequena: por favor [abra uma issue](https://github.com/diegobergonsi/steam-case-covers/issues) se faltarem jogos.
 
 </details>
 
 <details>
 <summary><b>O que acontece se eu mudar a cor depois de criar as capas?</b></summary>
 
-Quando você clica em **Criar capas**, o programa pergunta antes de substituir as capas que você já criou em outra cor, tom ou tema de caixa. Se você disser que sim, ele refaz todas no visual novo, o que baixa a arte de novo. A Steam continua mostrando a sua arte atual até você adicionar as capas novas no passo 5, e **Restaurar a arte anterior** pode desfazer isso. Existe um conjunto de capas por vez. Só o azul original foi conferido para texto legível: faixas amarelo-vivo ou verde-limão deixam o texto branco mais difícil de ler, e o mesmo pode acontecer com uma caixa muito clara.
+Quando você clica em **Criar capas**, o programa pergunta antes de substituir as capas que você já criou em outra cor, tom ou tema de case. Se você disser que sim, ele refaz todas no visual novo, o que baixa a arte de novo. A Steam continua mostrando a sua arte atual até você adicionar as capas novas no passo 5, e **Restaurar a arte anterior** pode desfazer isso. Existe um conjunto de capas por vez. Só o azul original foi conferido para texto legível: faixas amarelo-vivo ou verde-limão deixam o texto branco mais difícil de ler, e o mesmo pode acontecer com uma case muito clara.
 
 </details>
 
