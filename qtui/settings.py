@@ -19,11 +19,41 @@ def settings_path():
 
 
 LANGUAGE_CODES = ("en", "pt-BR")          # the languages of the window (see qtui/i18n.py)
+LIBRARY_FILE = "library.txt"              # the path of the game list the user used last, next to settings.json (only the path: the file stays where it is)
 LANGUAGE_FILE = "language.txt"            # the one word of the language the user chose, next to settings.json
 
 
 def language_path(path=None):
     return os.path.join(os.path.dirname(path or settings_path()), LANGUAGE_FILE)
+
+
+def library_path(path=None):
+    return os.path.join(os.path.dirname(path or settings_path()), LIBRARY_FILE)
+
+
+def load_library(path=None):
+    """The path of the game list used last, or "" when there is none or the note is not a plain absolute path."""
+    try:
+        text = safefile.read_small_file(library_path(path), 4096, follow_links=True).decode("utf-8").strip()
+    except (OSError, ValueError):
+        return ""
+    return text if text and "\0" not in text and os.path.isabs(text) else ""
+
+
+def save_library(value, path=None):
+    """Remember the game list in use, atomically. True when written, False for something that is not a path or a folder that is not writable."""
+    if not isinstance(value, str) or not value or "\0" in value or not os.path.isabs(value):
+        return False
+    target = library_path(path)
+    tmp = "%s.%s.tmp" % (target, uuid.uuid4().hex[:8])
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(value)
+        os.replace(tmp, target)
+        return True
+    except OSError:
+        return False
 
 
 def load_language(path=None):

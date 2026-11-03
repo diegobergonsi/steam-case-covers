@@ -712,6 +712,73 @@ class GameListScreen(QtCase):
 
 
 @need_qt
+class GameListRemembered(QtCase):
+    """The game list you used is remembered: after a restart "Pick games by hand" opens the games to pick instead of asking for the file again."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads)
+        self.settings = os.path.join(self.tmp, "config", "settings.json")
+        self.list = os.path.join(self.downloads, "userdata.json")
+        with open(self.list, "w") as f:
+            json.dump({"rgOwnedApps": [1, 2, 3]}, f)
+
+    def shell(self):
+        from qtui.shell import Shell
+        shell = Shell(self.settings, downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
+        self.addCleanup(shell.deleteLater)
+        return shell
+
+    def test_a_game_list_that_was_used_is_there_after_a_restart(self):
+        first = self.shell()
+        self.assertFalse(first.library.ready)
+        self.assertTrue(first.library.useFile(self.list))
+        again = self.shell()                                                    # the app was closed and opened
+        self.assertTrue(again.library.ready)
+        self.assertEqual(again.library.path, self.list)
+        self.assertEqual((again.steps[1]["state"], again.steps[2]["state"]), ("done", "active"))   # the game list is done, the next step is open
+
+    def test_pick_games_by_hand_after_a_restart_opens_the_games_to_pick(self):
+        self.shell().library.useFile(self.list)
+        again = self.shell()
+        again.startManual()
+        self.assertEqual(again.steps[again.current]["key"], "pick")
+
+    def test_a_game_list_that_is_gone_is_forgotten_quietly(self):
+        self.shell().library.useFile(self.list)
+        os.remove(self.list)
+        again = self.shell()
+        self.assertFalse(again.library.ready)
+        self.assertEqual(again.library.path, "")
+
+    def test_a_game_list_that_became_something_else_is_not_used(self):
+        self.shell().library.useFile(self.list)
+        with open(self.list, "w") as f:
+            f.write("not a game list")
+        self.assertFalse(self.shell().library.ready)
+
+    def test_installed_only_chosen_before_wins_over_the_remembered_file(self):
+        first = self.shell()
+        first.library.useFile(self.list)
+        first.setSwitch("installed_only", True)
+        again = self.shell()
+        self.assertTrue(again.library.installedOnly)
+        self.assertEqual(again.library.path, "")
+
+    def test_a_garbled_memory_is_ignored(self):
+        from qtui import settings
+        self.shell().library.useFile(self.list)
+        with open(settings.library_path(self.settings), "wb") as f:
+            f.write(b"\x00\xff" * 50)
+        self.assertFalse(self.shell().library.ready)
+
+
+@need_qt
 class GameListFlow(QtCase):
     """The whole of step 1 as a person lives it: Home, the page is saved slowly, the app notices, Look opens."""
     @classmethod
