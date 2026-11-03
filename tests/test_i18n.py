@@ -74,5 +74,42 @@ class Words(unittest.TestCase):
         self.assertEqual(i18n.language(), "pt-BR")
 
 
+@need_qt
+class Saving(unittest.TestCase):
+    def setUp(self):
+        import shutil, tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.path = os.path.join(self.tmp, "settings.json")
+
+    def test_the_choice_is_saved_next_to_the_settings_and_read_back(self):
+        from qtui import settings
+        self.assertIsNone(settings.load_language(self.path))
+        self.assertTrue(settings.save_language("pt-BR", self.path))
+        self.assertEqual(settings.load_language(self.path), "pt-BR")
+        self.assertTrue(settings.save_language("en", self.path))
+        self.assertEqual(settings.load_language(self.path), "en")
+
+    def test_a_damaged_or_odd_file_is_no_choice(self):
+        from qtui import settings
+        target = settings.language_path(self.path)
+        for content in ("", "klingon", "pt-BR\n\n", "x" * 5000, "\x00\x01"):
+            with open(target, "w") as f:
+                f.write(content)
+            self.assertIn(settings.load_language(self.path), (None, "pt-BR"), repr(content[:10]))
+        with open(target, "w") as f:
+            f.write("klingon")
+        self.assertIsNone(settings.load_language(self.path))
+        self.assertFalse(settings.save_language("klingon", self.path))
+
+    def test_the_settings_file_keeps_its_old_shape(self):
+        from qtui import settings
+        settings.save_language("pt-BR", self.path)
+        settings.save_settings(dict(settings.DEFAULTS), self.path)
+        import json
+        with open(self.path) as f:
+            self.assertEqual(list(json.load(f)), list(settings.SETTING_KEYS))
+
+
 if __name__ == "__main__":
     unittest.main()

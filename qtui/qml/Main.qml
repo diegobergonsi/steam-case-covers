@@ -48,7 +48,7 @@ ApplicationWindow {
         Text {
             objectName: "nav_title"
             x: Theme.s24
-            y: Theme.s24
+            y: Theme.s16
             width: nav.width - 2 * Theme.s24              // a wide font wraps the name onto a second line instead of running out of the menu
             wrapMode: Text.WordWrap
             maximumLineCount: 2
@@ -56,6 +56,26 @@ ApplicationWindow {
             color: Theme.text
             font.pixelSize: Theme.sectionSize
             font.bold: true
+        }
+        Row {
+            objectName: "nav_languages"
+            x: Theme.s24
+            y: Theme.navFlagsY
+            spacing: Theme.s8
+            LanguageFlag {
+                objectName: "language_en"
+                source: usFlag
+                name: "English"
+                current: shell.language === "en"
+                onActivated: shell.setLanguage("en")
+            }
+            LanguageFlag {
+                objectName: "language_pt"
+                source: brFlag
+                name: "Português (Brasil)"
+                current: shell.language === "pt-BR"
+                onActivated: shell.setLanguage("pt-BR")
+            }
         }
         Column {
             y: Theme.navTop

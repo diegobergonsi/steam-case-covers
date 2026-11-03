@@ -4690,7 +4690,7 @@ class HomeScreen(AddWindow):
         self.app.processEvents()
         self.assertEqual(title.property("lineCount"), 2)
         self.assertLessEqual(title.property("contentWidth"), title.property("width"))
-        self.assertLessEqual(title.property("y") + title.property("height"), 72)       # Theme.navTop: where the steps start
+        self.assertLessEqual(title.property("y") + title.property("height"), 68)       # Theme.navFlagsY: where the language flags start
         self.assertFalse(title.property("truncated"))
 
     def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):

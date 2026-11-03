@@ -4,7 +4,7 @@
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 import steamcase as sc
-from qtui import settings, steps, system
+from qtui import i18n, settings, steps, system
 from qtui.apply import Apply
 from qtui.cases import Cases
 from qtui.hundred import Hundred
@@ -23,11 +23,14 @@ class Shell(QObject):
     currentChanged = Signal()
     reduceEffectsChanged = Signal()
     flowChanged = Signal()
+    languageChanged = Signal()
 
     def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
         super().__init__(parent)
         self._path = settings_path
         self._values = settings.load_settings(settings_path)
+        i18n.set_language(settings.load_language(settings_path) or i18n.system_language())      # the saved choice wins over the system's language
+        i18n.use_in_engine()
         self._facts = {k: False for k in FACTS + MANUAL_FACTS}
         self._flow = "natural"                  # or "manual": ticking games and giving them a console case
         self._current = 0
@@ -93,6 +96,21 @@ class Shell(QObject):
 
     def _save(self):
         settings.save_settings(self._values, self._path)
+
+    @Property(str, notify=languageChanged)
+    def language(self):
+        return i18n.language()
+
+    @Slot(str)
+    def setLanguage(self, code):
+        """Change the language of the window now and remember it. A language we do not have, or the one in use, changes nothing."""
+        if code not in settings.LANGUAGE_CODES or code == i18n.language():
+            return
+        i18n.set_language(code)
+        settings.save_language(code, self._path)
+        self._steps = self._build()
+        i18n.announce_change(self)
+        self.languageChanged.emit()
 
     @Property(bool, notify=stepsChanged)
     def returning(self):

@@ -8,7 +8,10 @@ to the same English text when there is no entry, so a new sentence works at once
 The table of Portuguese is qtui/i18n_pt_br.py. The language starts from the system, a saved choice wins, and it can change while the window is open."""
 import os
 
-from PySide6.QtCore import QCoreApplication, QLocale, QTranslator
+try:
+    from PySide6.QtCore import QCoreApplication, QLocale, QObject, QTranslator
+except ImportError:                                      # the plain-Python parts (the words) work without Qt; only QML needs the translator
+    QCoreApplication = QLocale = QObject = QTranslator = None
 
 from qtui.i18n_pt_br import PT_BR
 
@@ -25,7 +28,8 @@ def detect(locale_name):
 
 def system_language():
     """The language of this computer, or the one STEAMCASE_LANG asks for (a way to force it, and what the tests use)."""
-    return detect(os.environ.get("STEAMCASE_LANG") or QLocale.system().name())
+    system = QLocale.system().name() if QLocale is not None else (os.environ.get("LC_ALL") or os.environ.get("LANG") or "")
+    return detect(os.environ.get("STEAMCASE_LANG") or system)
 
 
 def choose(saved, system_name):
@@ -47,14 +51,15 @@ def _pick(language, source, n=-1):
     return text
 
 
-class Translator(QTranslator):
-    """Answers every qsTr of the QML for one language (Qt puts the number in at %n itself)."""
-    def __init__(self, language):
-        super().__init__()
-        self.language = language
+if QTranslator is not None:
+    class Translator(QTranslator):
+        """Answers every qsTr of the QML for one language (Qt puts the number in at %n itself)."""
+        def __init__(self, language):
+            super().__init__()
+            self.language = language
 
-    def translate(self, context, source, disambiguation=None, n=-1):
-        return _pick(self.language, source, n)
+        def translate(self, context, source, disambiguation=None, n=-1):
+            return _pick(self.language, source, n)
 
 
 _language = None
@@ -72,11 +77,37 @@ def set_language(code):
     if code not in LANGUAGES:
         raise ValueError("unknown language: %r" % (code,))
     _language = code
-    if QCoreApplication.instance() is not None:
+    if QCoreApplication is not None and QCoreApplication.instance() is not None:
         if _translator is not None:
             QCoreApplication.removeTranslator(_translator)
         _translator = Translator(code)
         QCoreApplication.installTranslator(_translator)
+
+
+def announce_change(*roots):
+    """After a change of language: every property of these objects (and of their children) that has a notify signal tells QML to read it again, so the words
+    that come from Python (names of steps, notes, labels) change too. The ones that wait for a signal with arguments are left to their own events."""
+    done = set()
+    for root in roots:
+        for obj in [root] + root.findChildren(QObject):
+            if id(obj) in done:
+                continue
+            done.add(id(obj))
+            meta = obj.metaObject()
+            fired = set()
+            for i in range(meta.propertyCount()):
+                signal = meta.property(i).notifySignal()
+                if signal.isValid() and signal.parameterCount() == 0 and signal.methodIndex() not in fired:
+                    fired.add(signal.methodIndex())
+                    signal.invoke(obj)
+
+
+def use_in_engine():
+    """The messages of the engine (steamcase.py, completion.py) that the window shows are translated with tr(); the command line never calls this."""
+    import completion
+    import steamcase
+    steamcase.translate = tr
+    completion._t = tr
 
 
 def N_(text):
