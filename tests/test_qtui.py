@@ -4703,6 +4703,27 @@ class HomeScreen(AddWindow):
         for key in ("game_list", "pick", "case", "hundred", "make", "add"):
             self.assertRegex(self.item("nav_%s_label" % key).property("text"), r"^[1-6]\. \S", key)
 
+    def test_the_flags_change_the_language_of_the_window_and_it_is_remembered(self):
+        from qtui import i18n, settings
+        self.addCleanup(i18n.set_language, "en")
+        self.open_home()
+        self.assertEqual((self.item("nav_game_list_label").property("text"), self.shell.language), ("1. Game list", "en"))
+        self.assertIsNotNone(self.item("language_en")); self.assertIsNotNone(self.item("language_pt"))
+        self.click("language_pt")
+        self.app.processEvents()
+        self.assertEqual((self.shell.language, self.item("nav_game_list_label").property("text")), ("pt-BR", "1. Lista de jogos"))
+        self.assertEqual(settings.load_language(self.shell._path), "pt-BR")
+        self.click("language_en")
+        self.app.processEvents()
+        self.assertEqual((self.shell.language, self.item("nav_game_list_label").property("text")), ("en", "1. Game list"))
+
+    def test_a_second_choice_of_the_same_language_changes_nothing(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        self.shell.setLanguage("en")
+        self.shell.setLanguage("klingon")
+        self.assertEqual(self.shell.language, "en")
+
     def test_every_navigation_link_has_an_icon(self):
         self.open_home()
         for n, png in (("footer_discord", "discord.png"), ("footer_kofi", "kofi.png"), ("footer_updates", "update.png")):

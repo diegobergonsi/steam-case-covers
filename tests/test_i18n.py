@@ -75,6 +75,42 @@ class Words(unittest.TestCase):
 
 
 @need_qt
+class Table(unittest.TestCase):
+    """qtui/i18n_pt_br.py against what the code asks for (tools/i18n_keys.py)."""
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        import i18n_keys
+        cls.keys = i18n_keys.all_keys()
+        from qtui.i18n_pt_br import PT_BR
+        cls.table = PT_BR
+
+    def test_every_text_of_the_window_has_a_portuguese_translation(self):
+        self.assertEqual(sorted(k[:70] for k in self.keys if k not in self.table), [])
+
+    def test_the_table_has_nothing_left_over_from_texts_that_are_gone(self):
+        self.assertEqual(sorted(k[:70] for k in self.table if k not in self.keys), [])
+
+    def test_placeholders_and_plural_forms_match_the_english(self):
+        import re
+        for key, text in self.table.items():
+            plural = "%n" in key and "|" in key
+            english, portuguese = (key.split("|"), text.split("|")) if plural else ([key], [text])
+            self.assertEqual(len(english), len(portuguese), key[:70])
+            for a, b in zip(english, portuguese):
+                self.assertEqual(re.findall(r"%%|%1|%[sd]", a), re.findall(r"%%|%1|%[sd]", b), key[:70])
+                self.assertEqual(sorted(set(re.findall(r"%n", a))), sorted(set(re.findall(r"%n", b))) if "%n" in a else [], key[:70])
+
+    def test_a_translation_keeps_the_spaces_around_it(self):
+        for key, text in self.table.items():
+            self.assertEqual((key[:1] == " ", key[-1:] == " "), (text[:1] == " ", text[-1:] == " "), repr(key[:50]))
+
+    def test_the_words_that_must_stay_the_same_did_not_change(self):
+        for word in ("Steam Case Covers", "Halloween"):
+            self.assertIn(self.table.get(word, word), (word,))
+
+
+@need_qt
 class Saving(unittest.TestCase):
     def setUp(self):
         import shutil, tempfile
