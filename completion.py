@@ -5,7 +5,9 @@
 The page ("Webpage, Complete" from your browser) is only read as text. Nothing but whole numbers
 ever leaves read_games_page: no page text, no script content, no token (the page holds one).
 """
-import errno, os, re, stat
+import os, re
+
+import safefile
 
 MAX_GAMES_PAGE = 40 * 1024 * 1024        # the real page is a few MB; anything bigger is not it
 
@@ -20,30 +22,14 @@ class PageError(ValueError):
 
 def read_games_page(path):
     """{app id: (unlocked, total)} for every game row that shows achievement progress."""
-    name = os.path.basename(path)
     try:
-        st = os.lstat(path)
-    except OSError:
-        raise PageError("That file could not be opened. (%s)" % name)
-    if not stat.S_ISREG(st.st_mode):
+        text = safefile.read_small_file(path, MAX_GAMES_PAGE).decode("utf-8", errors="replace")
+    except safefile.NotRegularFile:
         raise PageError("That is not a plain file. Pick the .html file you saved.")
-    try:
-        # the checks above can go stale before the open: no link is followed now, and the descriptor is checked again
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
-    except OSError as e:
-        if e.errno == errno.ELOOP:
-            raise PageError("That is not a plain file. Pick the .html file you saved.")
-        raise PageError("That file could not be opened. (%s)" % name)
-    try:
-        with os.fdopen(fd, "rb") as f:
-            st = os.fstat(f.fileno())
-            if not stat.S_ISREG(st.st_mode):
-                raise PageError("That is not a plain file. Pick the .html file you saved.")
-            if st.st_size > MAX_GAMES_PAGE:
-                raise PageError("That file is too big to be your Steam games page.")
-            text = f.read(MAX_GAMES_PAGE + 1).decode("utf-8", errors="replace")
+    except safefile.FileTooBig:
+        raise PageError("That file is too big to be your Steam games page.")
     except OSError:
-        raise PageError("That file could not be read.")
+        raise PageError("That file could not be opened. (%s)" % os.path.basename(path))
     if not _ROW.search(text):
         if "rgRecentlyPlayedGames" in text:
             raise PageError("This page was saved without its game list. Save it again as 'Webpage, Complete', not 'HTML only'.")

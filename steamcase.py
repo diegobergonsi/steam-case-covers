@@ -14,7 +14,8 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, completion, filecmp, functools, hashlib, json, os, re, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, completion, filecmp, functools, hashlib, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+from typing import NamedTuple
 
 try:
     from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
@@ -372,15 +373,15 @@ def installed_games(steam):
 
 def _load_library_json(json_path):
     path = os.path.expanduser(json_path)
+    name = os.path.basename(path)
     try:
-        if os.path.getsize(path) > MAX_LIBRARY_FILE:
-            raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
-        with open(path, encoding="utf-8-sig") as f:
-            return json.load(f)
-    except SteamcaseError:
-        raise
+        return json.loads(safefile.read_small_file(path, MAX_LIBRARY_FILE, follow_links=True).decode("utf-8-sig"))
+    except safefile.FileTooBig:
+        raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
+    except safefile.NotRegularFile:
+        raise SteamcaseError("Could not read %s as a game list (not a regular file)." % name)
     except (OSError, ValueError, RecursionError, MemoryError, UnicodeError) as e:
-        raise SteamcaseError("Could not read %s as a game list (%s)." % (os.path.basename(path), type(e).__name__))
+        raise SteamcaseError("Could not read %s as a game list (%s)." % (name, type(e).__name__))
 
 
 def owned_ids(json_path):
@@ -972,41 +973,14 @@ def apply_theme(cover, theme):
     return Image.alpha_composite(cover, marks)
 
 
-def cover_theme(path):
-    """The theme (one of THEMES) a cover was made with, read from its PNG header without decoding the picture; None for a classic cover.
-    False if this is not a readable PNG or the note is not exactly one we write: the cover is then rebuilt."""
-    try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return False
-        with Image.open(path, formats=["PNG"]) as im:
-            theme = im.info.get(THEME_CHUNK)
-    except Exception:
-        return False
-    return theme if theme is None or theme in THEMES else False
-
-
 def existing_cover_theme(covers_dir):
     """The theme of the covers already in the folder (that of the first readable one by name), or None when there are none or they are classic."""
-    try:
-        names = sorted(os.listdir(covers_dir))
-    except OSError:
-        return None
-    for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None and cover_by_hand(os.path.join(covers_dir, n)) is None:       # a cover by hand has no theme to report
-            theme = cover_theme(os.path.join(covers_dir, n))
-            if theme is not False:
-                return theme
-    return None
+    return next((notes.theme for _, _, notes in usual_covers(covers_dir) if notes.theme is not False), None)
 
 
 def covers_in_other_theme(covers_dir, theme):
     """True if the covers folder holds a cover made with another theme than `theme` (None is the classic case); a garbled note counts as another."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return False
-    return any(n.lower().endswith(".png") and appid_of(n) is not None and cover_by_hand(os.path.join(covers_dir, n)) is None
-               and cover_theme(os.path.join(covers_dir, n)) != theme for n in names)
+    return any(notes.theme != theme for _, _, notes in usual_covers(covers_dir))
 
 
 @functools.lru_cache(maxsize=1)
@@ -1064,20 +1038,6 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
     return done
 
 
-def cover_colour(path):
-    """The case colour (hue, sat, val) a cover was made in, read from its PNG header without decoding the picture.
-    Covers made before colours existed have no hue note and count as 0; those without a tone note count as full tone (100, 100).
-    None if this is not a readable PNG, or if a note is not what we write (the hue a whole number from 0 to 359, the tone two whole
-    numbers from 0 to 100 split by a space): the cover is then rebuilt rather than taken for blue."""
-    try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return None
-        with Image.open(path, formats=["PNG"]) as im:
-            return _noted_colour(im.info)
-    except Exception:
-        return None
-
-
 def _noted_colour(info):
     """The case colour (hue, sat, val) the notes in a PNG's `info` give (see cover_colour), or None if a note is garbled."""
     hue, tone = info.get(HUE_CHUNK), info.get(TONE_CHUNK)
@@ -1093,72 +1053,156 @@ def _noted_colour(info):
     return (hue, int(m.group(1)), int(m.group(2))) if m else None
 
 
+def _png_info(path):
+    """The text notes of a PNG we may read (not a link, a plain file, not too big), or None. Reads the header only, never decodes the picture."""
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+            return None
+        with Image.open(path, formats=["PNG"]) as im:
+            return dict(im.info)
+    except Exception:
+        return None
+
+
+class CoverNotes(NamedTuple):
+    """What a cover says about itself in its PNG header. A field is its value, None when the cover has no such note, and False (colour: None) when the note
+    is not exactly one we write: the cover is then rebuilt rather than taken for what it might be."""
+    colour: object          # (hue, sat, val): covers made before colours existed count as hue 0, those without a tone note as full tone; None when a colour note is garbled
+    treatment: object       # one of TREATMENTS (a 100% game), or None
+    theme: object           # one of THEMES, or None for the classic case
+    platform: object        # one of PLATFORMS (a console case), or None for the Steam case
+    group: object           # the id of the group a cover by hand was made in, or None
+    art: object             # "custom <hash>" for a cover built from the user's own art (see art_note), or None for Steam's portrait
+
+
+def _noted(value, valid):
+    return value if value is None or valid(value) else False
+
+
+def notes_of(info):
+    """The CoverNotes of a PNG's `info`."""
+    return CoverNotes(_noted_colour(info),
+                      _noted(info.get(DONE_CHUNK), lambda v: v in TREATMENTS),
+                      _noted(info.get(THEME_CHUNK), lambda v: v in THEMES),
+                      _noted(info.get(PLATFORM_CHUNK), lambda v: v in PLATFORMS),
+                      _noted(info.get(GROUP_CHUNK), lambda v: bool(GROUP_ID.fullmatch(v))),
+                      _noted(info.get(ART_CHUNK), lambda v: bool(re.fullmatch(r"custom [0-9a-f]{16}", v))))
+
+
+def read_notes(path):
+    """The CoverNotes of the file at `path`, or None if it is not a readable PNG. The one place a cover's notes are read."""
+    info = _png_info(path)
+    return None if info is None else notes_of(info)
+
+
+def by_hand(notes):
+    """True for a cover made by hand (a console case or a group's Steam case): the usual flow leaves it alone. None for a usual cover. False if the file is not a
+    readable PNG or one of those notes is not one we write: the cover is then rebuilt."""
+    if notes is None or notes.platform is False or notes.group is False:
+        return False
+    return True if notes.platform or notes.group else None
+
+
+def scan_covers(covers_dir):
+    """[(appid, path)] of the cover files (<name>_<appid>.png) in the folder, by name; empty if it cannot be listed."""
+    try:
+        names = sorted(os.listdir(covers_dir))
+    except OSError:
+        return []
+    return [(int(appid), os.path.join(covers_dir, n)) for n in names if n.lower().endswith(".png") for appid in [appid_of(n)] if appid is not None]
+
+
+def usual_covers(covers_dir):
+    """[(appid, path, notes)] of the covers the usual flow looks after: readable ones that are not made by hand."""
+    found = []
+    for appid, path in scan_covers(covers_dir):
+        notes = read_notes(path)
+        if by_hand(notes) is None:
+            found.append((appid, path, notes))
+    return found
+
+
+class CoverSpec(NamedTuple):
+    """What a cover must be to be kept as it is, field by field (see CoverNotes). A field left at KEEP is not compared."""
+    colour: object = KEEP
+    treatment: object = KEEP
+    theme: object = KEEP
+    art: object = KEEP
+    platform: object = KEEP         # None: the Steam case
+    group: object = KEEP
+
+
+def matches(notes, spec):
+    """True if a cover with these notes (None: missing or unreadable) is what `spec` asks for, so make_covers keeps it. The same question every "would it be rebuilt"
+    check asks, so they cannot disagree with the run itself."""
+    if notes is None or (spec.colour != KEEP and not same_colour(notes.colour, spec.colour)):
+        return False
+    return all(want == KEEP or have == want for have, want in ((notes.treatment, spec.treatment), (notes.theme, spec.theme), (notes.art, spec.art),
+                                                                (notes.platform, spec.platform), (notes.group, spec.group)))
+
+
+def _spec_for(platform, colour, treatment, theme, art, group):
+    """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour, theme or art to compare, and an earlier gold
+    look keeps only its marks there."""
+    if platform:
+        return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group)
+    return CoverSpec(colour, treatment, theme, art, None, group)
+
+
+
+def cover_colour(path):
+    """The case colour (hue, sat, val) a cover was made in (see CoverNotes), or None if the file is unreadable or a colour note is garbled."""
+    notes = read_notes(path)
+    return notes.colour if notes else None
+
+
+def cover_theme(path):
+    """The theme of a cover (None: classic; False: unreadable file or a note we do not write)."""
+    notes = read_notes(path)
+    return False if notes is None else notes.theme
+
+
+def cover_treatment(path):
+    """The treatment of a cover (None: a plain cover; False: unreadable file or a note we do not write)."""
+    notes = read_notes(path)
+    return False if notes is None else notes.treatment
+
+
+def cover_platform(path):
+    """The console case of a cover (None: the Steam case; False: unreadable file or a note we do not write)."""
+    notes = read_notes(path)
+    return False if notes is None else notes.platform
+
+
+def cover_group(path):
+    """The group id of a cover made by hand (None: no group; False: unreadable file or a note we do not write)."""
+    notes = read_notes(path)
+    return False if notes is None else notes.group
+
+
+def cover_art(path):
+    """The art note of a cover (None: made from Steam's portrait; False: unreadable file or a note we do not write)."""
+    notes = read_notes(path)
+    return False if notes is None else notes.art
+
+
+def cover_by_hand(path):
+    """by_hand() of the file at `path`."""
+    return by_hand(read_notes(path))
+
+
 def cover_hue(path):
     """The case hue of a cover (see cover_colour), or None when unknown."""
     colour = cover_colour(path)
     return colour[0] if colour else None
 
 
-def cover_treatment(path):
-    """The treatment (one of TREATMENTS) a cover was made with, read from its PNG header without decoding the picture; None for a plain cover.
-    False if this is not a readable PNG or the note is not exactly one we write: the cover is then rebuilt."""
-    try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return False
-        with Image.open(path, formats=["PNG"]) as im:
-            done = im.info.get(DONE_CHUNK)
-    except Exception:
-        return False
-    return done if done is None or done in TREATMENTS else False
-
-
-def cover_platform(path):
-    """The console case (one of PLATFORMS) a cover was made in, read from its PNG header without decoding the picture; None for a cover without the note
-    (the Steam case). False if this is not a readable PNG or the note is not exactly one we write."""
-    try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return False
-        with Image.open(path, formats=["PNG"]) as im:
-            note = im.info.get(PLATFORM_CHUNK)
-    except Exception:
-        return False
-    return note if note is None or note in PLATFORMS else False
-
-
-def cover_group(path):
-    """The id of the group a cover was made in by hand, read from its PNG header without decoding the picture; None for a cover without the note.
-    False if this is not a readable PNG or the note is not exactly one we write."""
-    try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return False
-        with Image.open(path, formats=["PNG"]) as im:
-            note = im.info.get(GROUP_CHUNK)
-    except Exception:
-        return False
-    return note if note is None or GROUP_ID.fullmatch(note) else False
-
-
-def cover_by_hand(path):
-    """True for a cover made by hand (a console case or a group's Steam case): the usual flow leaves it alone. None for any other cover. False if this is not a
-    readable PNG or a note is not one we write: the cover is then rebuilt, as for a damaged console note."""
-    console, group = cover_platform(path), cover_group(path)
-    if console is False or group is False:
-        return False
-    return True if console or group else None
-
-
 def forget_group(covers_dir, appids):
     """Take the group note off the covers in the folder of these games (a set of appids); the pictures and every other note stay. How many covers lost a note.
     A Steam-case cover is a usual cover again; a console cover still is by hand, its case is its own note. Damaged files, links and other covers are left alone."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return 0
     count = 0
-    for n in names:
-        appid = appid_of(n)
-        path = os.path.join(covers_dir, n)
-        if not n.lower().endswith(".png") or appid is None or int(appid) not in appids or not _is_plain_file(path) or not isinstance(cover_group(path), str):
+    for appid, path in scan_covers(covers_dir):
+        if appid not in appids or not _is_plain_file(path) or not isinstance(cover_group(path), str):
             continue
         part = _tmp(path, "part")
         try:
@@ -1191,19 +1235,6 @@ def art_note(path):
         for block in iter(lambda: f.read(1 << 20), b""):
             h.update(block)
     return "custom " + h.hexdigest()[:16]
-
-
-def cover_art(path):
-    """The art note of a cover (see art_note), read from its PNG header without decoding the picture; None for a cover made from Steam's portrait.
-    False if this is not a readable PNG or the note is not exactly one we write: the cover is then rebuilt."""
-    try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return False
-        with Image.open(path, formats=["PNG"]) as im:
-            note = im.info.get(ART_CHUNK)
-    except Exception:
-        return False
-    return note if note is None or re.fullmatch(r"custom [0-9a-f]{16}", note) else False
 
 
 def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, treatment=None, theme=None, from_art=None, platform=None, group=None):
@@ -1246,14 +1277,14 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
 
 
 # ---------- make ----------
-def _wanted_look(appid, path, colour, completed, treatment, theme=None):
-    """(treatment, case colour) the cover of `appid` at `path` should have (see make_covers). Without a page (`completed` None)
-    a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain.
+def _wanted_look(appid, notes, colour, completed, treatment, theme=None):
+    """(treatment, case colour) the cover of `appid`, whose notes are `notes` (None if it is missing or unreadable), should have (see make_covers). Without a page
+    (`completed` None) a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain.
     With a theme (not None or KEEP) the marks are the rosette alone: a full-marks treatment kept from before becomes its rosette-only twin."""
     if completed is not None:
         target = treatment if appid in completed else None
     else:
-        target = cover_treatment(path) or None
+        target = (notes.treatment if notes else None) or None
     if theme not in (None, KEEP) and target is not None and split_treatment(target)[1] == "full":
         target = compose_treatment(split_treatment(target)[0], "rosette")
     return target, treatment_colour(target, colour)
@@ -1395,10 +1426,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         want_p = platforms.get(appid) if platforms is not None else None
         want_g = groups.get(appid) if platforms is not None else None
-        if platforms is None and os.path.exists(dest) and appid not in repaint and cover_by_hand(dest):      # the natural flow leaves a cover by hand alone
+        notes = read_notes(dest)                        # None while there is no cover yet
+        if platforms is None and appid not in repaint and by_hand(notes):      # the natural flow leaves a cover by hand alone
             res["ok"] += 1
             res["platforms"] += 1
-            res["completed"] += bool(cover_treatment(dest))
+            res["completed"] += bool(notes.treatment)
             res["files"].append(dest)
             report(n, appid, name, "exists")
             continue
@@ -1415,14 +1447,13 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
-        target, colour = _wanted_look(appid, dest, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
+        target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
-            kept = cover_platform(dest) == want_p and cover_treatment(dest) == target and cover_art(dest) == wanted_art and cover_group(dest) == want_g
+            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g)
         else:
-            kept = (same_colour(cover_colour(dest), colour) and cover_treatment(dest) == target and cover_theme(dest) == theme and cover_art(dest) == wanted_art
-                    and cover_platform(dest) is None and cover_group(dest) == want_g)
-        if os.path.exists(dest) and not force and kept:
+            spec = CoverSpec(colour, target, theme, wanted_art, None, want_g)
+        if not force and matches(notes, spec):
             res["ok"] += 1
             res["platforms"] += bool(want_p)
             res["completed"] += target is not None
@@ -1477,25 +1508,17 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
     one in another case colour (a "gold-case" cover is compared as gold), with another treatment or, unless `theme` is KEEP, in another theme.
     Unless `custom_art` is KEEP, also one whose art differs: custom art newly on, off or changed ({appid: path}, as for make_covers).
     Covers whose colour notes are unreadable are not counted."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return False
-    for n in names:
-        appid = appid_of(n)
-        if n.lower().endswith(".png") and appid is not None:
-            path = os.path.join(covers_dir, n)
-            by_hand = cover_by_hand(path)
-            if by_hand is False:                                     # a damaged note of a cover by hand: the natural flow rebuilds the cover, so it must ask
-                return True
-            c = cover_colour(path)
-            if c is None or by_hand:                                 # a cover by hand is left alone by the natural flow
-                continue
-            target, colour = _wanted_look(int(appid), path, (hue, sat, val), completed, treatment, theme)     # appid_of gives text; `completed` holds numbers
-            if not same_colour(c, colour) or cover_treatment(path) != target or (theme != KEEP and cover_theme(path) != theme):
-                return True
-            if custom_art != KEEP and cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
-                return True
+    for appid, path in scan_covers(covers_dir):
+        notes = read_notes(path)
+        state = by_hand(notes)
+        if state is False:                                           # a damaged note of a cover by hand: the natural flow rebuilds the cover, so it must ask
+            return True
+        if state or notes.colour is None:                            # a cover by hand is left alone by the natural flow
+            continue
+        target, colour = _wanted_look(appid, notes, (hue, sat, val), completed, treatment, theme)
+        art = KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
+        if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art)):
+            return True
     return False
 
 
@@ -1505,25 +1528,13 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
     make_covers) or, for the Steam case, in another colour (`tone`: (hue, sat, val)) or theme. A garbled platform note counts as another case.
     `tones` ({appid: colour}) and `groups` ({appid: group id}) are those of make_covers: a cover in another colour of its own, or in another group (or in one when none
     is wanted), is counted."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return 0
     count = 0
-    for name in names:
-        appid = appid_of(name)
-        if not name.lower().endswith(".png") or appid is None or int(appid) not in platforms:
+    for appid, path in scan_covers(covers_dir):
+        if appid not in platforms:
             continue
-        path = os.path.join(covers_dir, name)
-        want, have = platforms[int(appid)], cover_platform(path)
-        target, colour = _wanted_look(int(appid), path, (tones or {}).get(int(appid), tone), completed, treatment)
-        if have != want or cover_group(path) != (groups or {}).get(int(appid)):
-            count += 1
-        elif want:
-            count += cover_treatment(path) != _console_marks(target)
-        else:
-            count += (not same_colour(cover_colour(path), colour) or cover_treatment(path) != target or cover_theme(path) is not None
-                      or cover_art(path) is not None)             # Make passes no art of the user's here, so a cover built from it is rebuilt
+        notes = read_notes(path)
+        target, colour = _wanted_look(appid, notes, (tones or {}).get(appid, tone), completed, treatment)
+        count += not matches(notes, _spec_for(platforms[appid], colour, target, None, None, (groups or {}).get(appid)))
     return count
 
 
@@ -1531,29 +1542,13 @@ def covers_with_other_art(covers_dir, custom_art, games=None):
     """True if make_covers with this `custom_art` ({appid: path}) would rebuild a cover already in the folder because of its art alone: a cover made
     from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared.
     `games`: only covers of these appids count (the run leaves the others alone); default: all."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return False
-    for n in names:
-        appid = appid_of(n)
-        if n.lower().endswith(".png") and appid is not None and (games is None or int(appid) in games):
-            path = os.path.join(covers_dir, n)
-            if cover_colour(path) is None or cover_by_hand(path) is not None:
-                continue
-            if cover_art(path) != (art_note(custom_art[int(appid)]) if int(appid) in custom_art else None):
-                return True
-    return False
+    return any(notes.colour is not None and notes.art != (art_note(custom_art[appid]) if appid in custom_art else None)
+               for appid, _, notes in usual_covers(covers_dir) if games is None or appid in games)
 
 
 def covers_with_art(covers_dir):
     """{appid} of the covers in the folder that were built from the user's own art."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return set()
-    return {int(appid_of(n)) for n in names
-            if n.lower().endswith(".png") and appid_of(n) is not None and cover_art(os.path.join(covers_dir, n)) and cover_by_hand(os.path.join(covers_dir, n)) is None}
+    return {appid for appid, _, notes in usual_covers(covers_dir) if notes.art}
 
 
 def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
@@ -1565,60 +1560,23 @@ def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
 def existing_cover_colour(covers_dir):
     """The case colour (hue, sat, val) of the covers already in the folder (that of the first one by name), or None when there are none.
     "gold-case" covers are skipped: their notes say gold, not the colour the user chose."""
-    try:
-        names = sorted(os.listdir(covers_dir))
-    except OSError:
-        return None
-    for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None:
-            path = os.path.join(covers_dir, n)
-            c = cover_colour(path)
-            if c is not None and cover_by_hand(path) is None and not is_gold_case(cover_treatment(path)):
-                return c
-    return None
+    return next((notes.colour for _, _, notes in usual_covers(covers_dir) if notes.colour is not None and not is_gold_case(notes.treatment)), None)
 
 
 def mixed_cover_colours(covers_dir):
     """True if the covers folder holds covers in more than one case colour (what an interrupted colour change leaves behind).
     "gold-case" covers are skipped (they are always gold, see existing_cover_colour) and so are covers whose notes are unreadable."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return False
-    seen = set()
-    for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None:
-            path = os.path.join(covers_dir, n)
-            c = cover_colour(path)
-            if c is not None and cover_by_hand(path) is None and not is_gold_case(cover_treatment(path)):
-                seen.add(tone_key(*c))
-                if len(seen) > 1:
-                    return True
-    return False
+    return len({tone_key(*notes.colour) for _, _, notes in usual_covers(covers_dir) if notes.colour is not None and not is_gold_case(notes.treatment)}) > 1
 
 
 def covers_with_full_marks(covers_dir):
     """True if the covers folder holds a 100% cover with the full marks (the rosette and the ribbon): what a theme turns into the rosette alone."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return False
-    for n in names:
-        if n.lower().endswith(".png") and appid_of(n) is not None:
-            treatment = cover_treatment(os.path.join(covers_dir, n))
-            if treatment and cover_by_hand(os.path.join(covers_dir, n)) is None and split_treatment(treatment)[1] == "full":
-                return True
-    return False
+    return any(notes.treatment and split_treatment(notes.treatment)[1] == "full" for _, _, notes in usual_covers(covers_dir))
 
 
 def mixed_cover_themes(covers_dir):
     """True if the covers folder holds covers in more than one case theme (what an interrupted theme change leaves behind). A garbled note counts as a theme of its own."""
-    try:
-        names = os.listdir(covers_dir)
-    except OSError:
-        return False
-    return len({cover_theme(os.path.join(covers_dir, n)) for n in names
-                if n.lower().endswith(".png") and appid_of(n) is not None and cover_by_hand(os.path.join(covers_dir, n)) is None}) > 1
+    return len({notes.theme for _, _, notes in usual_covers(covers_dir)}) > 1
 
 
 def _safe_copy(src, dst):

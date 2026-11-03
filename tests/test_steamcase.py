@@ -2821,6 +2821,104 @@ class KofiButton(unittest.TestCase):
             self.assertIn(must, text)
 
 
+class CoverNotesAndSpec(unittest.TestCase):
+    """read_notes, by_hand, matches, scan_covers and usual_covers: the one place a cover's notes are read and compared."""
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def png(self, name, **notes):
+        from PIL.PngImagePlugin import PngInfo
+        info = PngInfo()
+        for key, value in notes.items():
+            info.add_text(key, value)
+        path = os.path.join(self.tmp, name)
+        sc.Image.new("RGBA", (8, 8)).save(path, pnginfo=info)
+        return path
+
+    def test_an_unreadable_file_has_no_notes(self):
+        self.assertIsNone(sc.read_notes(os.path.join(self.tmp, "missing_1.png")))
+        bad = os.path.join(self.tmp, "bad_1.png")
+        with open(bad, "w") as f:
+            f.write("not a picture")
+        self.assertIsNone(sc.read_notes(bad))
+        link = os.path.join(self.tmp, "link_2.png")
+        try:
+            os.symlink(self.png("real_3.png"), link)
+        except (OSError, NotImplementedError):
+            return
+        self.assertIsNone(sc.read_notes(link))
+
+    def test_each_note_is_its_value_none_when_absent_and_false_when_it_is_not_one_we_write(self):
+        plain = sc.read_notes(self.png("plain_1.png"))
+        self.assertEqual(plain, sc.CoverNotes((0, 100, 100), None, None, None, None, None))
+        full = sc.read_notes(self.png("full_2.png", **{sc.HUE_CHUNK: "120", sc.TONE_CHUNK: "40 70", sc.DONE_CHUNK: "ribbon", sc.THEME_CHUNK: "halloween",
+                                                       sc.ART_CHUNK: "custom 0123456789abcdef"}))
+        self.assertEqual(full, sc.CoverNotes((120, 40, 70), "ribbon", "halloween", None, None, "custom 0123456789abcdef"))
+        console = sc.read_notes(self.png("ps5_3.png", **{sc.PLATFORM_CHUNK: "ps5", sc.GROUP_CHUNK: "gabc12345"}))
+        self.assertEqual((console.platform, console.group), ("ps5", "gabc12345"))
+        garbled = sc.read_notes(self.png("bad_4.png", **{sc.HUE_CHUNK: "400", sc.DONE_CHUNK: "gold-sparkle", sc.THEME_CHUNK: "xmas", sc.PLATFORM_CHUNK: "atari",
+                                                         sc.GROUP_CHUNK: "Not valid!", sc.ART_CHUNK: "custom xyz"}))
+        self.assertEqual(garbled, sc.CoverNotes(None, False, False, False, False, False))
+
+    def test_by_hand(self):
+        notes = lambda **k: sc.read_notes(self.png("n_%d.png" % len(os.listdir(self.tmp)), **k))
+        self.assertIsNone(sc.by_hand(notes()))                                           # a usual cover
+        self.assertTrue(sc.by_hand(notes(**{sc.PLATFORM_CHUNK: "ps5"})))
+        self.assertTrue(sc.by_hand(notes(**{sc.GROUP_CHUNK: "gabc12345"})))
+        self.assertIs(sc.by_hand(notes(**{sc.PLATFORM_CHUNK: "atari"})), False)           # a damaged note: the cover is rebuilt
+        self.assertIs(sc.by_hand(notes(**{sc.GROUP_CHUNK: "Not valid!"})), False)
+        self.assertIs(sc.by_hand(None), False)                                           # unreadable
+        self.assertIs(sc.cover_by_hand(os.path.join(self.tmp, "missing_9.png")), False)
+
+    def test_the_old_readers_answer_as_before(self):
+        path = self.png("x_1.png", **{sc.DONE_CHUNK: "ribbon", sc.PLATFORM_CHUNK: "xboxone"})
+        self.assertEqual((sc.cover_treatment(path), sc.cover_platform(path), sc.cover_theme(path), sc.cover_group(path), sc.cover_art(path)), ("ribbon", "xboxone", None, None, None))
+        missing = os.path.join(self.tmp, "missing_2.png")
+        self.assertEqual((sc.cover_treatment(missing), sc.cover_platform(missing), sc.cover_theme(missing), sc.cover_group(missing), sc.cover_art(missing)), (False,) * 5)
+        self.assertIsNone(sc.cover_colour(missing))
+        self.assertEqual(sc.cover_hue(self.png("h_3.png", **{sc.HUE_CHUNK: "200"})), 200)
+
+    def test_matches_compares_only_the_fields_the_spec_names(self):
+        notes = sc.read_notes(self.png("m_1.png", **{sc.HUE_CHUNK: "90", sc.DONE_CHUNK: "ribbon"}))
+        spec = sc.CoverSpec
+        self.assertTrue(sc.matches(notes, spec()))                                       # nothing asked: anything matches
+        self.assertTrue(sc.matches(notes, spec(colour=(90, 100, 100), treatment="ribbon", theme=None, art=None, platform=None, group=None)))
+        self.assertFalse(sc.matches(notes, spec(colour=(91, 100, 100))))
+        self.assertFalse(sc.matches(notes, spec(treatment=None)))                        # None is a wish too: no marks
+        self.assertFalse(sc.matches(notes, spec(theme="halloween")))
+        self.assertFalse(sc.matches(notes, spec(platform="ps5")))
+        self.assertFalse(sc.matches(notes, spec(group="gabc12345")))
+        self.assertFalse(sc.matches(None, spec()))                                       # missing or unreadable: make it
+        garbled = sc.read_notes(self.png("g_2.png", **{sc.DONE_CHUNK: "gold-sparkle"}))
+        self.assertFalse(sc.matches(garbled, spec(treatment=None)))                      # a note we do not write never equals anything
+
+    def test_the_same_look_at_zero_colourfulness_is_the_same_colour(self):
+        notes = sc.read_notes(self.png("z_1.png", **{sc.HUE_CHUNK: "10", sc.TONE_CHUNK: "0 50"}))
+        self.assertTrue(sc.matches(notes, sc.CoverSpec(colour=(200, 0, 50))))            # the hue means nothing at 0 sat
+
+    def test_a_console_spec_ignores_the_colour_and_the_theme(self):
+        notes = sc.read_notes(self.png("c_1.png", **{sc.PLATFORM_CHUNK: "ps4", sc.DONE_CHUNK: "ribbon"}))
+        self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "gold-case-rosette", "halloween", "custom x", None)) is False)
+        self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "ribbon", "halloween", "custom x", None)))
+
+    def test_scan_covers_lists_only_cover_files_by_name(self):
+        self.png("B_Game_20.png"), self.png("A_Game_3.png"), self.png("notes.png"), self.png("C_Game_4.PNG")
+        open(os.path.join(self.tmp, "D_Game_5.txt"), "w").close()
+        self.assertEqual([a for a, _ in sc.scan_covers(self.tmp)], [3, 20])
+        self.assertEqual(sc.scan_covers(os.path.join(self.tmp, "nowhere")), [])
+
+    def test_usual_covers_leaves_out_covers_by_hand_and_unreadable_files(self):
+        self.png("U_Game_1.png"), self.png("H_Game_2.png", **{sc.GROUP_CHUNK: "gabc12345"}), self.png("P_Game_3.png", **{sc.PLATFORM_CHUNK: "ps5"})
+        with open(os.path.join(self.tmp, "X_Game_4.png"), "w") as f:
+            f.write("not a picture")
+        found = sc.usual_covers(self.tmp)
+        self.assertEqual([a for a, _, _ in found], [1])
+        self.assertIsInstance(found[0][2], sc.CoverNotes)
+
+
 class UpdateIcon(unittest.TestCase):
     """The refresh icon of "Check for updates" in the navigation: the project's own drawing, one bundled image."""
     PNG = os.path.join(sc.HERE, "assets", "update.png")
@@ -2978,7 +3076,7 @@ class ReleaseMessage(unittest.TestCase):
         with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
             text = f.read()
         notes = self.rm.section(text, "v1.6.0")
-        for word in ("Qt", "Ko-fi", "console", "Groups", "custom art", "Good to know", "Steam Deck"):
+        for word in ("Qt", "Ko-fi", "console", "Groups", "custom art", "Good to know", "Steam Deck", "named pipe"):
             self.assertIn(word, notes)
         self.assertRegex(text, r"## \[1\.6\.0\] - 2026-11-02")
         self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # everything that was waiting is in 1.6.0

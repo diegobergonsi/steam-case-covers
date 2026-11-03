@@ -3,9 +3,9 @@
 """The five switches the window remembers between sessions. Nothing else is ever saved: no account, no path."""
 import json
 import os
-import stat
 import uuid
 
+import safefile
 import steamcase as sc
 
 SETTING_KEYS = ("skip_auto_art", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
@@ -23,11 +23,7 @@ def load_settings(path=None):
     gives the default of that switch only; unknown keys are ignored."""
     try:
         path = path or settings_path()
-        if not stat.S_ISREG(os.stat(path).st_mode):         # a named pipe or a device would block open() for ever
-            raise OSError("not a regular file")
-        with open(path, "rb") as f:
-            raw = f.read(MAX_SETTINGS + 1)
-        data = json.loads(raw) if len(raw) <= MAX_SETTINGS else None
+        data = json.loads(safefile.read_small_file(path, MAX_SETTINGS, follow_links=True))
     except (OSError, ValueError, RecursionError, MemoryError):
         data = None
     if not isinstance(data, dict):

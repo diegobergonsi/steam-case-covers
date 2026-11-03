@@ -2,7 +2,6 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The sentences of the question "replace the covers you made?": why Make covers would rebuild covers that are already in the folder.
 The words are those the app has always used, covered by tests in tests/test_steamcase.py (ReplaceReason)."""
-import os
 
 import steamcase as sc
 
@@ -67,15 +66,10 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
         tail = "the %s theme" % theme.capitalize() if theme else "the Classic case"
     styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
     if completed is not None:
-        try:
-            for n in os.listdir(covers_dir):
-                appid = sc.appid_of(n)
-                if n.lower().endswith(".png") and appid is not None and sc.cover_by_hand(os.path.join(covers_dir, n)) is None:        # covers by hand are left alone: they change nothing here
-                    have = sc.cover_treatment(os.path.join(covers_dir, n)) or None
-                    styles.add(have)
-                    changed = changed or have != (treatment if int(appid) in completed else None)
-        except OSError:
-            pass
+        for appid, _, notes in sc.usual_covers(covers_dir):                # covers by hand are left alone: they change nothing here
+            have = notes.treatment or None
+            styles.add(have)
+            changed = changed or have != (treatment if appid in completed else None)
     if tail and not changed:
         if colour:
             return "Change your covers?", "This replaces the covers you already made in another colour or theme.%s" % ribbon
