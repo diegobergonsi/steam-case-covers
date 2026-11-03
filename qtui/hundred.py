@@ -14,8 +14,9 @@ from qtui.filepicker import pick_file
 from qtui.reasons import MARKS, STYLES
 from qtui.system import GAMES_PAGE_URL, SAVE_KEY, THEME_NOTE
 from qtui.watcher import DownloadWatcher
+from qtui.i18n import N_, tr, trn
 
-WAITING = "No games page loaded. Your covers keep the look they have."
+WAITING = N_("No games page loaded. Your covers keep the look they have.")
 
 
 class Hundred(QObject):
@@ -43,7 +44,7 @@ class Hundred(QObject):
         self._choosing = False
         self._style, self._marks = "ribbon", "full"
         self._marks_before = None           # the marks chosen before Halloween forced the rosette
-        self._status, self._kind, self._note = WAITING, "wait", ""
+        self._status, self._kind, self._note = tr(WAITING), "wait", ""
         self._picked.connect(self._on_picked)
         self._read.connect(self._on_read)
         self._look.themeChanged.connect(self._theme_changed)
@@ -86,16 +87,16 @@ class Hundred(QObject):
 
     @Property("QVariantList", constant=True)
     def styles(self):
-        return [{"key": k, "label": v} for k, v in STYLES]
+        return [{"key": k, "label": tr(v)} for k, v in STYLES]
 
     @Property("QVariantList", constant=True)
     def manualStyles(self):
         """What the manual flow offers: console cases have no gold, so a 100% game is either highlighted or left plain."""
-        return [{"key": "ribbon", "label": "Highlight them"}, {"key": "none", "label": "Leave them plain"}]
+        return [{"key": "ribbon", "label": tr("Highlight them")}, {"key": "none", "label": tr("Leave them plain")}]
 
     @Property("QVariantList", constant=True)
     def markChoices(self):
-        return [{"key": k, "label": v} for k, v in MARKS]
+        return [{"key": k, "label": tr(v)} for k, v in MARKS]
 
     @Property(bool, notify=choicesChanged)
     def styleEnabled(self):
@@ -177,7 +178,7 @@ class Hundred(QObject):
         self._req += 1
         self._pending += 1
         self.busyChanged.emit()
-        self._set_status("Reading %s…" % os.path.basename(path), "wait")
+        self._set_status(tr("Reading %s…") % os.path.basename(path), "wait")
         threading.Thread(target=self._worker, args=(self._req, path), daemon=True).start()
 
     @Slot(str)
@@ -192,7 +193,7 @@ class Hundred(QObject):
         except completion.PageError as e:
             done, error = None, str(e)
         except Exception:                            # never echo what went wrong in detail: it could quote the page
-            done, error = None, "That file could not be read."
+            done, error = None, tr("That file could not be read.")
         try:
             self._read.emit(req, path, done, error)
         except RuntimeError:
@@ -205,15 +206,15 @@ class Hundred(QObject):
             return
         name = os.path.basename(path)                # only the file's name is shown, never anything from inside it
         if error:
-            kept = " The page you loaded before is still used." if self._path else ""
+            kept = tr(" The page you loaded before is still used.") if self._path else ""
             self._set_status("%s: %s%s" % (name, error, kept), "error")
             return
         self._path, self._completed = path, set(done)
         n = len(done)
-        found = "Found %d %s at 100%% in %s." % (n, "game" if n == 1 else "games", name) if n else "No game in %s is at 100%% yet." % name
-        self._set_status(found + " The game list from step 1 decides which games get covers.", "ok",
-                         "Done with the page? You can delete %s and its folder: they hold a temporary login token for your Steam account, "
-                         "which this app does not use or keep." % name)
+        found = trn("Found %n game at 100%% in %s.|Found %n games at 100%% in %s.", n) % name if n else tr("No game in %s is at 100%% yet.") % name
+        self._set_status(found + tr(" The game list from step 1 decides which games get covers."), "ok",
+                         tr("Done with the page? You can delete %s and its folder: they hold a temporary login token for your Steam account, "
+                         "which this app does not use or keep.") % name)
         self.pathChanged.emit()
         self._sync()
 
@@ -234,14 +235,14 @@ class Hundred(QObject):
     def openPage(self):
         QDesktopServices.openUrl(QUrl(GAMES_PAGE_URL))
         # Qt cannot tell whether a browser really opened, so always show the way out
-        self._set_status("Opening your browser… Log in to Steam if it asks and wait until your games have loaded. Then press %s and save the page "
-                         "as “Webpage, Complete”, named games.html. Nothing opened? Click “Copy link” and paste it into your browser." % SAVE_KEY, "wait")
+        self._set_status(tr("Opening your browser… Log in to Steam if it asks and wait until your games have loaded. Then press %s and save the page "
+                         "as “Webpage, Complete”, named games.html. Nothing opened? Click “Copy link” and paste it into your browser.") % SAVE_KEY, "wait")
 
     @Slot()
     def copyLink(self):
         QGuiApplication.clipboard().setText(GAMES_PAGE_URL)
-        self._set_status("Link copied. Paste it into your browser, log in if asked, then save the page as “Webpage, Complete”, "
-                         "named games.html (%s)." % SAVE_KEY, "ok")
+        self._set_status(tr("Link copied. Paste it into your browser, log in if asked, then save the page as “Webpage, Complete”, "
+                         "named games.html (%s).") % SAVE_KEY, "ok")
 
     @Slot()
     def browse(self):
@@ -252,7 +253,7 @@ class Hundred(QObject):
 
         def ask():
             try:
-                path = pick_file("Choose your saved games page", self._downloads, ("Web pages", "*.html *.htm"))
+                path = pick_file(tr("Choose your saved games page"), self._downloads, (tr("Web pages"), "*.html *.htm"))
             except Exception:
                 path = None                                     # no chooser worked: Qt's own dialog
             self._picked.emit(path)
