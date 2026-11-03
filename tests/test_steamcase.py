@@ -2769,11 +2769,25 @@ class ReadmeLanguages(unittest.TestCase):
 
     def test_the_portuguese_one_shows_the_program_in_portuguese(self):
         en, pt = self.read("README.md"), self.read("README.pt-BR.md")
-        for name in ("home", "look", "100"):
+        for name in ("home", "look", "100", "cases"):
             self.assertIn("assets/screenshot-%s.png" % name, en)
             self.assertIn("assets/screenshot-%s-pt.png" % name, pt)
             self.assertNotIn("assets/screenshot-%s.png" % name, pt)
             self.assertTrue(os.path.isfile(os.path.join(sc.HERE, "assets", "screenshot-%s-pt.png" % name)))
+            self.assertTrue(os.path.isfile(os.path.join(sc.HERE, "assets", "screenshot-%s.png" % name)))
+
+    def test_the_four_screenshots_sit_in_one_grid_of_two_rows_of_two_with_the_same_size(self):
+        from PIL import Image
+        for name, suffix in (("README.md", ""), ("README.pt-BR.md", "-pt")):
+            text = self.read(name)
+            grid = re.search(r"<table.*?</table>", text, re.S).group(0)
+            self.assertEqual(len(re.findall(r"<tr>", grid)), 2, name)
+            self.assertEqual(len(re.findall(r"<td", grid)), 4, name)
+            widths = set(re.findall(r'<img src="assets/screenshot-[a-z0-9]+%s\.png" width="(\d+)"' % suffix, grid))
+            self.assertEqual(len(widths), 1, name)                                          # one width for all four
+            for row in re.findall(r"<tr>.*?</tr>", grid, re.S):                              # the two pictures of a row have the same height
+                sizes = {Image.open(os.path.join(sc.HERE, "assets", f)).size for f in re.findall(r'assets/(screenshot-[a-z0-9]+%s\.png)"' % suffix, row)}
+                self.assertEqual(len(sizes), 1, "%s: %s" % (name, sizes))
 
     def test_the_words_the_project_keeps_out_of_public_files_are_in_neither(self):
         for name in ("README.md", "README.pt-BR.md"):
