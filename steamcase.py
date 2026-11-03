@@ -53,6 +53,8 @@ PLATFORM_LABELS = {"ps3": "PlayStation 3", "ps4": "PlayStation 4", "ps5": "PlayS
                    "xboxseries": "Xbox Series X|S", "switch": "Nintendo Switch", "switch2": "Nintendo Switch 2"}
 GROUP_CHUNK = "steamcase-group"            # PNG note naming the group (groups.py) of a cover made by hand; a short id of lower-case letters and digits
 GROUP_ID = re.compile(r"[a-z0-9]{1,12}")
+LAYOUT_CHUNK = "steamcase-layout"           # PNG note naming how a cover was drawn (LAYOUT); covers made before v1.6.0 carry none
+LAYOUT = "2"                                # v1.6.0: the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round)
 PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
 CASES_DIR = os.path.join(HERE, "assets", "cases")    # one <platform>.png per case (transparent art window) and cases.json (the window of each)
 KEEP = "keep"                             # in place of a theme: each existing cover keeps the theme it has
@@ -1081,6 +1083,7 @@ class CoverNotes(NamedTuple):
     platform: object        # one of PLATFORMS (a console case), or None for the Steam case
     group: object           # the id of the group a cover by hand was made in, or None
     art: object             # "custom <hash>" for a cover built from the user's own art (see art_note), or None for Steam's portrait
+    layout: object = None   # LAYOUT for a cover drawn the way this version draws it, None for a cover of an earlier version (no note), False for another note
 
 
 def _noted(value, valid):
@@ -1094,7 +1097,8 @@ def notes_of(info):
                       _noted(info.get(THEME_CHUNK), lambda v: v in THEMES),
                       _noted(info.get(PLATFORM_CHUNK), lambda v: v in PLATFORMS),
                       _noted(info.get(GROUP_CHUNK), lambda v: bool(GROUP_ID.fullmatch(v))),
-                      _noted(info.get(ART_CHUNK), lambda v: bool(re.fullmatch(r"custom [0-9a-f]{16}", v))))
+                      _noted(info.get(ART_CHUNK), lambda v: bool(re.fullmatch(r"custom [0-9a-f]{16}", v))),
+                      _noted(info.get(LAYOUT_CHUNK), lambda v: v == LAYOUT))
 
 
 def read_notes(path):
@@ -1138,6 +1142,7 @@ class CoverSpec(NamedTuple):
     art: object = KEEP
     platform: object = KEEP         # None: the Steam case
     group: object = KEEP
+    layout: object = KEEP           # LAYOUT for a cover with marks or a family corner: those were drawn in other places before v1.6.0, so an older cover is not kept
 
 
 def matches(notes, spec):
@@ -1146,7 +1151,12 @@ def matches(notes, spec):
     if notes is None or (spec.colour != KEEP and not same_colour(notes.colour, spec.colour)):
         return False
     return all(want == KEEP or have == want for have, want in ((notes.treatment, spec.treatment), (notes.theme, spec.theme), (notes.art, spec.art),
-                                                                (notes.platform, spec.platform), (notes.group, spec.group)))
+                                                                (notes.platform, spec.platform), (notes.group, spec.group), (notes.layout, spec.layout)))
+
+
+def _drawing_for(treatment, family=False):
+    """What a cover with these marks (and a family corner or not) must say about its drawing: marks and the family corner moved in v1.6.0, a plain cover did not."""
+    return LAYOUT if treatment is not None or family else KEEP
 
 
 def _spec_for(platform, colour, treatment, theme, art, group):
@@ -1154,7 +1164,7 @@ def _spec_for(platform, colour, treatment, theme, art, group):
     look keeps only its marks there."""
     if platform:
         return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group)
-    return CoverSpec(colour, treatment, theme, art, None, group)
+    return CoverSpec(colour, treatment, theme, art, None, group, _drawing_for(treatment))
 
 
 
@@ -1280,6 +1290,7 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
         note.add_text(ART_CHUNK, from_art)                          # covers from Steam's portrait carry none
     if group is not None:
         note.add_text(GROUP_CHUNK, group)                           # covers made by hand carry it: the usual flow leaves them alone
+    note.add_text(LAYOUT_CHUNK, LAYOUT)                             # how this cover is drawn: a later version that draws something elsewhere can tell it from this one
     cover.save(part, format="PNG", optimize=True, pnginfo=note)
     _replace(part, out_path)
 
@@ -1460,7 +1471,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
             spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g)
         else:
-            spec = CoverSpec(colour, target, theme, wanted_art, None, want_g)
+            spec = CoverSpec(colour, target, theme, wanted_art, None, want_g, _drawing_for(target, appid in family))
         if not force and matches(notes, spec):
             res["ok"] += 1
             res["platforms"] += bool(want_p)
@@ -1511,11 +1522,11 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
 
 
 # ---------- apply / backup / restore ----------
-def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None, theme=KEEP, custom_art=KEEP):
+def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, treatment=None, theme=KEEP, custom_art=KEEP, drawing=True):
     """True if make_covers with this colour, `completed`, `treatment` and `theme` would rebuild a cover already in the folder (stops at the first one):
     one in another case colour (a "gold-case" cover is compared as gold), with another treatment or, unless `theme` is KEEP, in another theme.
     Unless `custom_art` is KEEP, also one whose art differs: custom art newly on, off or changed ({appid: path}, as for make_covers).
-    Covers whose colour notes are unreadable are not counted."""
+    Unless `drawing` is False, also a cover with marks that an earlier version drew (see LAYOUT). Covers whose colour notes are unreadable are not counted."""
     for appid, path in scan_covers(covers_dir):
         notes = read_notes(path)
         state = by_hand(notes)
@@ -1525,7 +1536,7 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
             continue
         target, colour = _wanted_look(appid, notes, (hue, sat, val), completed, treatment, theme)
         art = KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
-        if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art)):
+        if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art, layout=_drawing_for(target) if drawing else KEEP)):
             return True
     return False
 
@@ -1562,7 +1573,12 @@ def covers_with_art(covers_dir):
 def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
     """True if the covers folder already holds a cover made in a different case colour than (`hue`, `sat`, `val`) (stops at the first one).
     No page loaded: each cover keeps its treatment, so a "gold-case" cover stays gold and is not counted (see covers_in_other_look)."""
-    return covers_in_other_look(covers_dir, hue, sat, val)
+    return covers_in_other_look(covers_dir, hue, sat, val, drawing=False)
+
+
+def covers_with_old_drawing(covers_dir):
+    """True if a cover with marks (a 100% game) in the folder was drawn by an earlier version: the next make draws it again, even with the same choices."""
+    return any(notes.treatment and notes.layout != LAYOUT for _, _, notes in usual_covers(covers_dir))
 
 
 def existing_cover_colour(covers_dir):
