@@ -48,7 +48,7 @@
 
 ## O que é?
 
-Cada jogo na sua biblioteca Steam aparece como uma arte vertical. Esta ferramenta coloca essa arte dentro de uma "caixa" (azul por padrão, ou em qualquer cor e tom que você escolher, do vivo ao cinza-escuro e ao preto) com uma faixa da Steam e os ícones das plataformas, como se fosse um jogo físico de console, e instala o resultado como a sua arte personalizada.
+Cada jogo na sua biblioteca Steam aparece como uma arte vertical. Esta ferramenta coloca essa arte dentro de uma "case" (azul por padrão, ou em qualquer cor e tom que você escolher, do vivo ao cinza-escuro e ao preto) com uma faixa da Steam e os ícones das plataformas, como se fosse um jogo físico de console, e instala o resultado como a sua arte personalizada.
 
 A arte vem dos próprios servidores da Steam. As capas são criadas no seu computador e ficam nele.
 
