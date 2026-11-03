@@ -6,6 +6,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 - Documentation: the README is also in Brazilian Portuguese (`README.pt-BR.md`), with screenshots of the program in Portuguese. Both READMEs show the screenshots in a grid, with a new one of the console cases. Both READMEs start with two flags that switch between them.
 - The program's Brazilian Portuguese now says "case" instead of "caixa", like the README.
+- Fix: covers of your 100% games (and of family games) made by an older version were kept as they were, with the rosette and the corner on the wrong side, even after Reset. They are now made again, and the app asks first. Plain covers are left alone.
 
 ## [1.6.0] - 2026-11-03
 

@@ -90,6 +90,9 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     elif not styles:
         what = tr("your 100%% games get highlighted covers (“%s”)") % label
         title, one = tr("Highlight your 100% games?"), tr("This replaces the covers of your 100%% games with highlighted ones (“%s”).") % label
+    elif not changed and sc.covers_with_old_drawing(covers_dir):
+        what = tr("your 100% covers are drawn again")
+        title, one = tr("Draw your 100% covers again?"), tr("Your 100% covers were made by an earlier version, which drew the rosette at the top right. They are made again with the rosette at the top left.")
     else:
         what = tr("your 100% covers are updated to match your games page")
         title, one = tr("Update your 100% covers?"), (tr("Some covers you already made are made again to match your games page: "

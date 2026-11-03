@@ -2372,6 +2372,105 @@ def BORDER_AT(v, axis):
     return sc.BORDER + v * (sc.SIZE[axis] - 2 * sc.BORDER) / sc.SIZE[axis]
 
 
+class DrawingVersion(unittest.TestCase):
+    """Covers made by an earlier drawing (v1.5.0: the rosette at the top right, the family corner at the top left) must not be kept as if they were current:
+    the notes in their PNG (colour, treatment, theme...) can match while the picture does not."""
+    IDS = (11, 12, 13)
+
+    def setUp(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        def art(appid):
+            b = io.BytesIO(); sc.Image.new("RGB", (600, 900), (appid * 7, 90, 150)).save(b, "PNG"); return b.getvalue()
+        real = (sc.store_items, sc.http_get)
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": "Game %d" % i, "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/%d.jpg" % i}} for i in ids}
+        sc.http_get = lambda url, tries=3: art(int(re.search(r"h/([0-9]+)\.jpg", url).group(1)))
+        self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
+        self.out = os.path.join(self.tmp, "covers")
+
+    def make(self, **kw):
+        return sc.make_covers({i: "Game %d" % i for i in self.IDS}, self.out, log=lambda *a: None, **kw)
+
+    def path(self, appid):
+        return dict(sc.scan_covers(self.out))[appid]
+
+    def read(self, appid):
+        with open(self.path(appid), "rb") as f:
+            return f.read()
+
+    def make_old(self, appid):
+        """Turn a cover into what v1.5.0 left: the same picture and notes, but no note about the drawing."""
+        path = self.path(appid)
+        with sc.Image.open(path) as im:
+            im.load()
+            info = {k: v for k, v in im.info.items() if k != sc.LAYOUT_CHUNK}
+            note = sc.PngInfo()
+            for k, v in info.items():
+                if isinstance(v, str):
+                    note.add_text(k, v)
+            im.save(path, format="PNG", pnginfo=note)
+
+    def test_every_new_cover_says_which_drawing_it_has(self):
+        self.make(completed={11}, treatment="ribbon")
+        for appid in self.IDS:
+            self.assertEqual(sc.read_notes(self.path(appid)).layout, sc.LAYOUT)
+
+    def test_a_100_percent_cover_of_the_old_drawing_is_drawn_again_with_the_same_choices(self):
+        self.make(completed={11}, treatment="ribbon")
+        self.make_old(11)
+        self.assertIsNone(sc.read_notes(self.path(11)).layout)
+        self.make(completed={11}, treatment="ribbon")                        # the very same choices
+        self.assertEqual(sc.read_notes(self.path(11)).layout, sc.LAYOUT)
+
+    def test_a_plain_cover_of_the_old_drawing_is_kept(self):                # nothing drawn on it has moved, and the changelog promises old covers stay
+        self.make(completed={11}, treatment="ribbon")
+        self.make_old(12)
+        before = self.read(12)
+        self.make(completed={11}, treatment="ribbon")
+        self.assertEqual(self.read(12), before)
+        self.assertIsNone(sc.read_notes(self.path(12)).layout)
+
+    def test_a_family_cover_of_the_old_drawing_is_drawn_again(self):         # the green corner moved from the top left to the top right
+        self.make(family={13})
+        self.make_old(13)
+        self.make(family={13})
+        self.assertEqual(sc.read_notes(self.path(13)).layout, sc.LAYOUT)
+
+    def test_without_options_an_old_gold_cover_is_drawn_again_in_the_same_look(self):
+        self.make(completed={11}, treatment="gold-case")
+        self.make_old(11)
+        self.make()                                                         # no options: every cover keeps its look
+        notes = sc.read_notes(self.path(11))
+        self.assertEqual((notes.treatment, notes.layout), ("gold-case", sc.LAYOUT))
+
+    def test_the_question_before_making_counts_the_old_100_percent_covers(self):
+        self.make(completed={11}, treatment="ribbon")
+        self.assertFalse(sc.covers_in_other_look(self.out, 0, 100, 100, completed={11}, treatment="ribbon"))
+        self.make_old(11)
+        self.assertTrue(sc.covers_in_other_look(self.out, 0, 100, 100, completed={11}, treatment="ribbon"))
+
+    def test_the_window_asks_with_words_that_say_why(self):
+        from qtui import reasons
+        self.make(completed={11}, treatment="ribbon")
+        self.assertIsNone(reasons.replace_reason(self.out, (0, 100, 100), {11}, "ribbon"))      # nothing to ask when the covers are current
+        self.make_old(11)
+        title, text = reasons.replace_reason(self.out, (0, 100, 100), {11}, "ribbon")
+        self.assertIn("again", title)
+        self.assertIn("earlier version", text)
+        self.assertIn("top left", text)
+        self.assertTrue(sc.covers_with_old_drawing(self.out))
+        self.make(completed={11}, treatment="ribbon")
+        self.assertFalse(sc.covers_with_old_drawing(self.out))
+
+    def test_a_garbled_drawing_note_counts_as_an_old_one(self):
+        self.make(completed={11}, treatment="ribbon")
+        self.assertIs(sc.notes_of({sc.LAYOUT_CHUNK: "x"}).layout, False)
+        self.assertFalse(sc.matches(sc.notes_of({sc.DONE_CHUNK: "ribbon", sc.HUE_CHUNK: "0", sc.LAYOUT_CHUNK: "x"}), sc.CoverSpec(treatment="ribbon", layout=sc.LAYOUT)))
+
+
 class Treatments(unittest.TestCase):
     """The marks of a 100% game: the rosette over the badges, the cut ribbon at the bottom, and the three case treatments."""
     DISC, BAND = (255, 207, 10), (26, 159, 255)
