@@ -13,7 +13,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 import steamcase as sc
 from qtui import i18n
 from qtui.preview import PreviewProvider
-from qtui.system import CUSTOM_ART_HELP, PAGE_HELP, SAVE_KEY
+from qtui.system import CUSTOM_ART_HELP, SAVE_KEY, page_help
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _styled = False
@@ -48,7 +48,7 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
         ctx.setContextProperty("familyHelp", i18n.tr(sc.FAMILY_HELP))
         ctx.setContextProperty("autoArtHelp", i18n.tr(sc.AUTO_ART_HELP))
         ctx.setContextProperty("customArtHelp", i18n.tr(CUSTOM_ART_HELP))
-        ctx.setContextProperty("pageHelp", i18n.tr(PAGE_HELP))
+        ctx.setContextProperty("pageHelp", page_help())
     help_texts()
     shell.languageChanged.connect(help_texts)
     ctx.setContextProperty("discordIcon", _asset_url(assets_dir, "discord.png"))

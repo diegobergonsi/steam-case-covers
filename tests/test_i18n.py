@@ -75,6 +75,29 @@ class Words(unittest.TestCase):
 
 
 @need_qt
+class PageHelp(unittest.TestCase):
+    """The help of the games page names the key that saves a page: Ctrl+S, or Cmd+S on a Mac. Its Portuguese must follow."""
+    def tearDown(self):
+        i18n.set_language("en")
+
+    def test_the_portuguese_help_names_the_key_of_this_computer(self):
+        from unittest import mock
+        from qtui import system
+        i18n.set_language("pt-BR")
+        for key in ("Ctrl+S", "Cmd+S"):
+            with mock.patch.object(system, "SAVE_KEY", key):
+                text = system.page_help()
+            self.assertIn("Como salvar a página", text)
+            self.assertIn("aperte %s e salve" % key, text)
+            self.assertIn("100%:", text)
+
+    def test_the_english_help_is_the_text_of_page_help_constant(self):
+        from qtui import system
+        i18n.set_language("en")
+        self.assertEqual(system.page_help(), system.PAGE_HELP)
+
+
+@need_qt
 class Table(unittest.TestCase):
     """qtui/i18n_pt_br.py against what the code asks for (tools/i18n_keys.py)."""
     @classmethod
