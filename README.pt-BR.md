@@ -60,9 +60,9 @@ Cada jogo na sua biblioteca Steam aparece como uma arte vertical. Esta ferrament
 A arte vem dos próprios servidores da Steam. As capas são criadas no seu computador e ficam nele.
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="Uma biblioteca da Steam com cases azuis, dois jogos com 100% dentro de uma borda dourada, e Leaf it Alone com um canto verde de família"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="Uma biblioteca da Steam com cases da Steam, cases de PlayStation 5 e de Xbox One, jogos com 100% com roseta e borda dourada, e Leaf it Alone com um canto verde de família"></a>
   <br>
-  <em>Como as capas ficam dentro da Steam. Leaf it Alone vem da biblioteca de alguém da família, por isso tem o canto verde. Coral Island está nas duas bibliotecas, por isso não tem (o pequeno “2” é um selo da própria Steam). Coral Island e V Rising estão com 100%, aqui com a opção de borda dourada.</em>
+  <em>Como as capas ficam dentro da Steam: a case da Steam, cases de console (God of War, Horizon Zero Dawn e The Last of Us em cases de PlayStation 5, Hellblade e State of Decay 2 em cases de Xbox One) e jogos com 100% com roseta, alguns com a opção de borda dourada. Leaf it Alone vem da biblioteca de alguém da família, por isso tem o canto verde. Coral Island está nas duas bibliotecas, por isso não tem (o pequeno “2” é um selo da própria Steam).</em>
 </p>
 
 <a id="install"></a>

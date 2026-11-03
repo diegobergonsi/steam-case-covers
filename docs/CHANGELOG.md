@@ -4,9 +4,18 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
-- Documentation: the README is also in Brazilian Portuguese (`README.pt-BR.md`), with screenshots of the program in Portuguese. Both READMEs show the screenshots in a grid, with a new one of the console cases. Both READMEs start with two flags that switch between them.
-- The program's Brazilian Portuguese now says "case" instead of "caixa", like the README.
-- Fix: covers of your 100% games (and of family games) made by an older version were kept as they were, with the rosette and the corner on the wrong side, even after Reset. They are now made again, and the app asks first. Plain covers are left alone.
+## [1.6.1] - 2026-11-03
+
+### 🛠 Fixed
+- Covers of your 100% games made by an older version are now made again, so the rosette is on the right side. Before, the app kept the old ones, even after Reset. The app asks first. Covers of games from your family library get the same treatment, and plain covers are left alone.
+- When you pick games by hand, "Continue" and "Pick games by hand" now open the screen where you pick games. Before, once every step was done they opened the game list, which looks just like the step by step way.
+- The app remembers the game list you used, so after you close and open it again you do not have to get the file again.
+
+### 🔧 Changed
+- In Brazilian Portuguese, the program now says "case" instead of "caixa".
+
+### 📝 Behind the scenes
+- Documentation: the README is also in Brazilian Portuguese (`README.pt-BR.md`), with screenshots of the program in Portuguese and a new one of the console cases. Both READMEs start with two flags that switch between them, and show the screenshots in a grid. The picture of a Steam library now shows console cases too.
 
 ## [1.6.0] - 2026-11-03
 
