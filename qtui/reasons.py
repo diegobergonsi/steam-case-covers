@@ -4,9 +4,10 @@
 The words are those the app has always used, covered by tests in tests/test_steamcase.py (ReplaceReason)."""
 
 import steamcase as sc
+from qtui.i18n import N_, tr, trn
 
-STYLES = [("gold-case", "Gold case"), ("gold-border", "Gold border"), ("ribbon", "Normal case"), ("none", "No special case")]    # values: sc.CASES, or "none"
-MARKS = [("full", "Rosette and ribbon"), ("rosette", "Rosette only")]                                                            # values: sc.MARKS
+STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("ribbon", N_("Normal case")), ("none", N_("No special case"))]    # values: sc.CASES, or "none"
+MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only"))]                                                            # values: sc.MARKS
 
 
 def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None):
@@ -15,9 +16,8 @@ def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, t
     n = sc.covers_in_other_case(covers_dir, platforms, tone, treatment, completed, tones, groups)
     if not n:
         return None
-    if n == 1:
-        return "Replace the covers you made?", "This replaces 1 cover you already made with a new one in the case you picked."
-    return "Replace the covers you made?", "This replaces %d covers you already made with new ones in the cases you picked." % n
+    return tr("Replace the covers you made?"), trn("This replaces %n cover you already made with a new one in the case you picked.|"
+                                                    "This replaces %n covers you already made with new ones in the cases you picked.", n)
 
 
 def group_repaint_reason(groups):
@@ -27,14 +27,14 @@ def group_repaint_reason(groups):
     lines = []
     for g in groups:
         n = len(g["games"])
-        lines.append("The group \u201c%s\u201d (%d game%s) will be repainted and deleted." % (g["name"], n, "" if n == 1 else "s"))
-    return "Repaint your groups?", " ".join(lines)
+        lines.append(trn("The group \u201c%s\u201d (%n game) will be repainted and deleted.|The group \u201c%s\u201d (%n games) will be repainted and deleted.", n) % g["name"])
+    return tr("Repaint your groups?"), " ".join(lines)
 
 
 def look_label(treatment):
     """How a treatment (one of sc.TREATMENTS) is named in the question: its case, then its marks, so a change of marks alone reads as one."""
     case, marks = sc.split_treatment(treatment)
-    return "%s, %s" % (dict(STYLES)[case], dict(MARKS)[marks].lower())
+    return "%s, %s" % (tr(dict(STYLES)[case]), tr(dict(MARKS)[marks]).lower())
 
 
 def replace_reason(covers_dir, tone, completed, treatment, theme=None, custom_art=sc.KEEP, games=None):
@@ -44,11 +44,11 @@ def replace_reason(covers_dir, tone, completed, treatment, theme=None, custom_ar
     if custom_art == sc.KEEP or not sc.covers_with_other_art(covers_dir, custom_art, games):
         return look
     if custom_art:
-        title, extra = "Use your own art?", "The covers you already made for games with your own art are made again with that art inside."
+        title, extra = tr("Use your own art?"), tr("The covers you already made for games with your own art are made again with that art inside.")
     else:
-        title, extra = "Go back to Steam's art?", "The covers you made with your own art are made again with Steam's own art."
+        title, extra = tr("Go back to Steam's art?"), tr("The covers you made with your own art are made again with Steam's own art.")
     if look is None:
-        return title, "This replaces covers you already made. " + extra
+        return title, tr("This replaces covers you already made. ") + extra
     return look[0], look[1] + " " + extra
 
 
@@ -59,11 +59,11 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     colour = sc.covers_in_other_colour(covers_dir, *tone)
     ribbon = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
     if theme and completed is None and sc.covers_with_full_marks(covers_dir):
-        ribbon = (" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
-                  "load your games page and pick “Rosette and ribbon”." % theme.capitalize())
+        ribbon = (tr(" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
+                  "load your games page and pick “Rosette and ribbon”.") % theme.capitalize())
     tail = ""                                            # the theme every cover is made in, when it changes
     if sc.covers_in_other_theme(covers_dir, theme):
-        tail = "the %s theme" % theme.capitalize() if theme else "the Classic case"
+        tail = tr("the %s theme") % theme.capitalize() if theme else tr("the Classic case")
     styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
     if completed is not None:
         for appid, _, notes in sc.usual_covers(covers_dir):                # covers by hand are left alone: they change nothing here
@@ -72,30 +72,30 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
             changed = changed or have != (treatment if appid in completed else None)
     if tail and not changed:
         if colour:
-            return "Change your covers?", "This replaces the covers you already made in another colour or theme.%s" % ribbon
-        return "Change the theme of your covers?", "This replaces the covers you already made with new ones in %s.%s" % (tail, ribbon)
+            return tr("Change your covers?"), tr("This replaces the covers you already made in another colour or theme.%s") % ribbon
+        return tr("Change the theme of your covers?"), tr("This replaces the covers you already made with new ones in %s.%s") % (tail, ribbon)
     if colour and not changed:
-        return "Change the colour of your covers?", "This replaces the covers you already made in another colour."
+        return tr("Change the colour of your covers?"), tr("This replaces the covers you already made in another colour.")
     styles &= set(sc.TREATMENTS)
     label = look_label(treatment) if treatment else None
     if treatment is None:
-        what = "the covers of your 100% games are made again as normal covers"
-        title, one = "Remove the 100% highlight?", "You chose “No special case”: " + what + "."
+        what = tr("the covers of your 100% games are made again as normal covers")
+        title, one = tr("Remove the 100% highlight?"), tr("You chose “No special case”: ") + what + "."
     elif not completed:
-        what = "the covers with a highlight lose it, as no game on your page is at 100%"
-        title, one = "Remove the 100% highlight?", "No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers."
+        what = tr("the covers with a highlight lose it, as no game on your page is at 100%")
+        title, one = tr("Remove the 100% highlight?"), tr("No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers.")
     elif styles - {treatment}:
-        what = "the covers of your 100%% games made with another look are made again as “%s”" % label
-        title, one = "Change the look of your 100% games?", "This replaces the covers of your 100%% games made with another look with “%s”." % label
+        what = tr("the covers of your 100%% games made with another look are made again as “%s”") % label
+        title, one = tr("Change the look of your 100% games?"), tr("This replaces the covers of your 100%% games made with another look with “%s”.") % label
     elif not styles:
-        what = "your 100%% games get highlighted covers (“%s”)" % label
-        title, one = "Highlight your 100% games?", "This replaces the covers of your 100%% games with highlighted ones (“%s”)." % label
+        what = tr("your 100%% games get highlighted covers (“%s”)") % label
+        title, one = tr("Highlight your 100% games?"), tr("This replaces the covers of your 100%% games with highlighted ones (“%s”).") % label
     else:
-        what = "your 100% covers are updated to match your games page"
-        title, one = "Update your 100% covers?", ("Some covers you already made are made again to match your games page: "
-                                                  "games you finished get the highlight, games no longer at 100% lose it.")
+        what = tr("your 100% covers are updated to match your games page")
+        title, one = tr("Update your 100% covers?"), (tr("Some covers you already made are made again to match your games page: "
+                                                  "games you finished get the highlight, games no longer at 100% lose it."))
     if colour:
-        return "Change your covers?", "This replaces the covers you already made in another colour, and %s.%s" % (what, " All your covers are also made in %s." % tail if tail else "")
+        return tr("Change your covers?"), tr("This replaces the covers you already made in another colour, and %s.%s") % (what, tr(" All your covers are also made in %s.") % tail if tail else "")
     if tail:
-        return "Change your covers?", "%s All your covers are also made in %s." % (one, tail)
+        return tr("Change your covers?"), tr("%s All your covers are also made in %s.") % (one, tail)
     return title, one

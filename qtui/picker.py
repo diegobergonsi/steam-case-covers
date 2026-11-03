@@ -7,8 +7,9 @@ import threading
 from PySide6.QtCore import Property, QAbstractListModel, QModelIndex, QObject, Qt, Signal, Slot
 
 import steamcase as sc
+from qtui.i18n import N_, tr, trn
 
-NO_GAMES = "No games found. Install a game first, or load your userdata.json."
+NO_GAMES = N_("No games found. Install a game first, or load your userdata.json.")
 
 
 class RowsModel(QAbstractListModel):
@@ -104,14 +105,14 @@ class Picker(QObject):
     @Property(str, notify=statusChanged)
     def status(self):
         if self._loading:
-            return "Loading your games…"
+            return tr("Loading your games…")
         if self._error:
             return self._error
         if not self._all:
-            return "" if self._key is None else NO_GAMES
+            return "" if self._key is None else tr(NO_GAMES)
         if not self._rows:
-            return "No games match “%s”." % self._query.strip()
-        return ("%d games. " % len(self._all) + self._note).strip()
+            return tr("No games match “%s”.") % self._query.strip()
+        return (trn("%n game.|%n games.", len(self._all)) + " " + self._note).strip()
 
     @Property(str, notify=statusChanged)
     def statusKind(self):
@@ -178,7 +179,7 @@ class Picker(QObject):
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:                          # never leave the window stuck in "Loading"
-            error = "Unexpected problem: %s" % e
+            error = tr("Unexpected problem: %s") % e
         try:
             self._loaded.emit(req, rows, errors, (error, key))
         except RuntimeError:
@@ -195,17 +196,17 @@ class Picker(QObject):
             self._selected = set()
             self._refresh()
             self.selectionChanged.emit()
-            self.failed.emit("Cannot list your games", error)
+            self.failed.emit(tr("Cannot list your games"), error)
             return
         self._key = key
         self._all = sorted(rows, key=lambda r: (r[1].casefold(), r[0]))
         self._selected &= {a for a, _ in self._all}
         if errors and not self._all:
-            self._error = "Could not reach Steam's servers: %s." % sc.explain_error(errors[-1]).rstrip(".")
+            self._error = tr("Could not reach Steam's servers: %s.") % sc.explain_error(errors[-1]).rstrip(".")
             self._key = None
-            self.failed.emit("Cannot list your games", self._error)
+            self.failed.emit(tr("Cannot list your games"), self._error)
         elif errors:
-            self._note = "Some names could not be loaded (connection problem?), so those games are missing."
+            self._note = tr("Some names could not be loaded (connection problem?), so those games are missing.")
         self._refresh()
         self.selectionChanged.emit()
 

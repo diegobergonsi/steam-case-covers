@@ -9,32 +9,32 @@ import "."
 ScreenFrame {
     id: screen
     readonly property var library: shell.library
-    title: "Get your game list"
-    subtitle: "Steam keeps it on a web page you save once."
+    title: qsTr("Get your game list")
+    subtitle: qsTr("Steam keeps it on a web page you save once.")
 
     Section {
         objectName: "gamelist_section_list"
-        heading: "Your game list"
+        heading: qsTr("Your game list")
         Text {
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: "Steam keeps your game list on a web page. Open it and log in if asked. A page of text appears: press " + saveKey + " and save it, keeping the name userdata.json. The app notices the file by itself."
+            text: qsTr("Steam keeps your game list on a web page. Open it and log in if asked. A page of text appears: press ") + saveKey + qsTr(" and save it, keeping the name userdata.json. The app notices the file by itself.")
         }
         ButtonRow {
             // the one filled button of the screen is "Open the page" until a list is ready, then it turns quiet and "Next" takes over (same button: focus stays)
-            PrimaryButton { objectName: "gamelist_open"; text: "Open the page in my browser"; quiet: screen.library.ready; onClicked: screen.library.openDownloadPage() }
-            QuietButton { objectName: "gamelist_browse"; text: "Browse…"; onClicked: screen.library.browse() }
-            QuietButton { objectName: "gamelist_copy"; text: "Copy link"; onClicked: screen.library.copyLink() }
+            PrimaryButton { objectName: "gamelist_open"; text: qsTr("Open the page in my browser"); quiet: screen.library.ready; onClicked: screen.library.openDownloadPage() }
+            QuietButton { objectName: "gamelist_browse"; text: qsTr("Browse…"); onClicked: screen.library.browse() }
+            QuietButton { objectName: "gamelist_copy"; text: qsTr("Copy link"); onClicked: screen.library.copyLink() }
         }
     }
     Section {
         objectName: "gamelist_section_skip"
-        heading: "Or skip it"
+        heading: qsTr("Or skip it")
         SwitchRow {
             objectName: "gamelist_installed"
-            label: "Only my installed games (no file needed)"
+            label: qsTr("Only my installed games (no file needed)")
             tip: familyHelp
             checked: screen.library.installedOnly
             onToggled: (value) => screen.library.installedOnly = value
@@ -47,13 +47,13 @@ ScreenFrame {
     }
 
     footer: [
-        PrimaryButton { objectName: "gamelist_next"; text: "Next →"; enabled: screen.library.ready; onClicked: shell.next() }
+        PrimaryButton { objectName: "gamelist_next"; text: qsTr("Next →"); enabled: screen.library.ready; onClicked: shell.next() }
     ]
 
     FileDialog {                                      // only when the desktop has no chooser of its own (see Library.browse)
         id: dialog
-        title: "Choose your userdata.json"
-        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        title: qsTr("Choose your userdata.json")
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
         onAccepted: screen.library.useFileUrl(selectedFile.toString())
     }
     Connections {

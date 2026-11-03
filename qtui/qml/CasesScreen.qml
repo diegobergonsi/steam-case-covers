@@ -9,12 +9,12 @@ ScreenFrame {
     id: screen
     readonly property var cases: shell.cases
     readonly property var picker: shell.picker
-    title: "Pick a case"
-    subtitle: "Pick the case for the games you ticked. You can do this again for other games, or go on."
+    title: qsTr("Pick a case")
+    subtitle: qsTr("Pick the case for the games you ticked. You can do this again for other games, or go on.")
 
     Section {
         objectName: "case_section_grid"
-        heading: "Cases"
+        heading: qsTr("Cases")
         Flow {
             width: parent.width
             spacing: Theme.s12
@@ -79,7 +79,7 @@ ScreenFrame {
     }
     Section {
         objectName: "case_section_groups"
-        heading: "Your groups"
+        heading: qsTr("Your groups")
         visible: screen.cases.groupList.length > 0
         Text {
             objectName: "case_group_intro"
@@ -87,7 +87,7 @@ ScreenFrame {
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: "The app remembers your groups. Pick one to add the games you ticked to it, or pick a case above for a new group."
+            text: qsTr("The app remembers your groups. Pick one to add the games you ticked to it, or pick a case above for a new group.")
         }
         Repeater {
             model: screen.cases.groupList
@@ -100,7 +100,7 @@ ScreenFrame {
                 }
                 QuietButton {
                     objectName: "case_group_delete_" + modelData.id
-                    text: "Delete group"
+                    text: qsTr("Delete group")
                     onClicked: screen.cases.deleteGroup(modelData.id)
                 }
             }
@@ -108,7 +108,7 @@ ScreenFrame {
     }
     Section {
         objectName: "case_section_new_group"
-        heading: "Name your group"
+        heading: qsTr("Name your group")
         visible: screen.cases.selectedKey !== "" && screen.cases.selectedGroup === ""
         Flow {
             objectName: "case_colours"
@@ -138,14 +138,14 @@ ScreenFrame {
             objectName: "case_group_name"
             width: parent.width
             height: Theme.controlHeight
-            placeholderText: "Name this group"
+            placeholderText: qsTr("Name this group")
             placeholderTextColor: Theme.faint
             color: Theme.text
             font.pixelSize: Theme.bodySize
             selectByMouse: true
             maximumLength: 40
             text: screen.cases.groupName
-            Accessible.name: "Name of this group"
+            Accessible.name: qsTr("Name of this group")
             background: Rectangle {
                 radius: Theme.radiusField
                 color: Theme.bg
@@ -162,7 +162,7 @@ ScreenFrame {
     }
     Section {
         objectName: "case_section_games"
-        heading: "Your games"
+        heading: qsTr("Your games")
         Text {
             objectName: "case_applies"
             width: parent.width
@@ -170,20 +170,20 @@ ScreenFrame {
             color: Theme.muted
             font.pixelSize: Theme.bodySize
             text: screen.picker.selectedCount > 0
-                  ? "Applies to " + screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " ticked game." : " ticked games.")
-                  : "No games are ticked now. Pick more games to give them a case, or go on."
+                  ? qsTr("Applies to %n ticked game.|Applies to %n ticked games.", "", screen.picker.selectedCount)
+                  : qsTr("No games are ticked now. Pick more games to give them a case, or go on.")
         }
         ButtonRow {
             PrimaryButton {
                 objectName: "case_assign"
                 text: screen.cases.selectedGroup !== ""
-                      ? "Add " + screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " game" : " games") + " to " + screen.cases.groupName
-                      : "Use this case for " + screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " game" : " games")
+                      ? qsTr("Add %n game to %1|Add %n games to %1", "", screen.picker.selectedCount).arg(screen.cases.groupName)
+                      : qsTr("Use this case for %n game|Use this case for %n games", "", screen.picker.selectedCount)
                 enabled: screen.cases.canAssign
                 quiet: !enabled
                 onClicked: screen.cases.assign()
             }
-            QuietButton { objectName: "case_more"; text: "Pick more games"; onClicked: shell.goKey("pick") }
+            QuietButton { objectName: "case_more"; text: qsTr("Pick more games"); onClicked: shell.goKey("pick") }
         }
         Repeater {
             model: screen.cases.summary
@@ -192,16 +192,16 @@ ScreenFrame {
                 width: parent.width
                 color: Theme.text
                 font.pixelSize: Theme.bodySize
-                text: modelData.label + ": " + modelData.count + (modelData.count === 1 ? " game" : " games")
+                text: modelData.label + ": " + qsTr("%n game|%n games", "", modelData.count)
             }
         }
     }
     Section {
         objectName: "case_section_options"
-        heading: "Options"
+        heading: qsTr("Options")
         SwitchRow {
             objectName: "case_family"
-            label: "Mark family games with a green corner"
+            label: qsTr("Mark family games with a green corner")
             tip: familyHelp
             enabled: screen.cases.familyAvailable
             checked: screen.cases.family
@@ -210,11 +210,11 @@ ScreenFrame {
         StatusLine {
             objectName: "case_family_note"
             visible: !screen.cases.familyAvailable
-            text: "Load your game list file in step 1 to use this (family games cannot be told apart without it)."
+            text: qsTr("Load your game list file in step 1 to use this (family games cannot be told apart without it).")
         }
     }
 
     footer: [
-        PrimaryButton { objectName: "case_next"; text: "Next →"; enabled: screen.cases.assignedCount > 0; onClicked: shell.next() }
+        PrimaryButton { objectName: "case_next"; text: qsTr("Next →"); enabled: screen.cases.assignedCount > 0; onClicked: shell.next() }
     ]
 }

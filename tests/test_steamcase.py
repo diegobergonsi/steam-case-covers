@@ -3082,7 +3082,7 @@ class ReleaseMessage(unittest.TestCase):
         self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # everything that was waiting is in 1.6.0
         description = self.rm.announcement(text, "v1.6.0", "https://example.test/r")["embeds"][0]["description"]
         self.assertNotIn("Documentation", description)
-        self.assertLess(len(description), 1500)
+        self.assertLess(len(description), 1700)
 
     def test_the_release_page_body_is_the_section_plus_how_to_check_the_files(self):
         body = self.rm.release_body(self.SAMPLE, "v1.5.0")

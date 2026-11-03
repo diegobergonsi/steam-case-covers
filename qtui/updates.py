@@ -8,6 +8,7 @@ from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 import steamcase as sc
+from qtui.i18n import tr
 
 
 class Updates(QObject):
@@ -40,7 +41,7 @@ class Updates(QObject):
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:
-            error = "Unexpected problem: %s" % e
+            error = tr("Unexpected problem: %s") % e
         try:
             self._checked.emit(result, error)
         except RuntimeError:
@@ -50,18 +51,18 @@ class Updates(QObject):
         self._checking = False
         self.checkingChanged.emit()
         if error:
-            self.message.emit("Could not check for updates", [{"text": error, "kind": "main"}], "OK", "", "")
+            self.message.emit(tr("Could not check for updates"), [{"text": error, "kind": "main"}], "OK", "", "")
         elif r["newer"] is False:
-            self.message.emit("No update needed", [{"text": "You have the latest version (%s)." % r["current"], "kind": "main"}], "OK", "", "")
+            self.message.emit(tr("No update needed"), [{"text": tr("You have the latest version (%s).") % r["current"], "kind": "main"}], "OK", "", "")
         else:
             if r["newer"]:
-                head = "A newer version is available: %s (you have %s)." % (r["latest"], r["current"])
+                head = tr("A newer version is available: %s (you have %s).") % (r["latest"], r["current"])
             else:
-                head = "The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare." % r["latest"]
-            self.message.emit("Update available", [
+                head = tr("The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare.") % r["latest"]
+            self.message.emit(tr("Update available"), [
                 {"text": head, "kind": "main"},
-                {"text": "Nothing is downloaded or installed unless you choose to do it yourself on that page.", "kind": "muted"}],
-                "Open GitHub page", "Not now", r["url"])
+                {"text": tr("Nothing is downloaded or installed unless you choose to do it yourself on that page."), "kind": "muted"}],
+                tr("Open GitHub page"), tr("Not now"), r["url"])
 
     @Slot(str)
     def openLink(self, url):
@@ -74,7 +75,7 @@ class Updates(QObject):
         """Open the author's Ko-fi page in the browser. If no browser opens, the link is copied and shown instead."""
         if not QDesktopServices.openUrl(QUrl(sc.KOFI_URL)):
             QGuiApplication.clipboard().setText(sc.KOFI_URL)
-            self.message.emit("Support on Ko-fi", [{"text": "Your browser did not open, so the link was copied. Paste it into your browser:\n%s" % sc.KOFI_URL, "kind": "main"}],
+            self.message.emit(tr("Support on Ko-fi"), [{"text": tr("Your browser did not open, so the link was copied. Paste it into your browser:\n%s") % sc.KOFI_URL, "kind": "main"}],
                               "OK", "", "")
 
     @Slot()
@@ -82,5 +83,5 @@ class Updates(QObject):
         """Open the project's Discord invite in the browser. If no browser opens, the link is copied and shown instead."""
         if not QDesktopServices.openUrl(QUrl(sc.DISCORD_URL)):
             QGuiApplication.clipboard().setText(sc.DISCORD_URL)
-            self.message.emit("Join our Discord", [{"text": "Your browser did not open, so the invite link was copied. Paste it into your browser:\n%s" % sc.DISCORD_URL, "kind": "main"}],
+            self.message.emit(tr("Join our Discord"), [{"text": tr("Your browser did not open, so the invite link was copied. Paste it into your browser:\n%s") % sc.DISCORD_URL, "kind": "main"}],
                               "OK", "", "")

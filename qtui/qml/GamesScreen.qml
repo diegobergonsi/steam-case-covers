@@ -8,23 +8,23 @@ import "."
 ScreenFrame {
     id: screen
     readonly property var picker: shell.picker
-    title: "Pick your games"
-    subtitle: "Tick the games that get a case. Games you do not tick are left alone."
+    title: qsTr("Pick your games")
+    subtitle: qsTr("Tick the games that get a case. Games you do not tick are left alone.")
     Component.onCompleted: picker.ensureLoaded()
 
     Section {
         objectName: "games_section_search"
-        heading: "Find games"
+        heading: qsTr("Find games")
         TextField {
             objectName: "games_search"
             width: parent.width
             height: Theme.controlHeight
-            placeholderText: "Search by name…"
+            placeholderText: qsTr("Search by name…")
             placeholderTextColor: Theme.faint
             color: Theme.text
             font.pixelSize: Theme.bodySize
             selectByMouse: true
-            Accessible.name: "Search your games by name"
+            Accessible.name: qsTr("Search your games by name")
             background: Rectangle {
                 radius: Theme.radiusField
                 color: Theme.bg
@@ -36,18 +36,18 @@ ScreenFrame {
         Text {
             objectName: "games_count"
             width: parent.width
-            text: screen.picker.selectedCount + (screen.picker.selectedCount === 1 ? " game selected" : " games selected")
+            text: qsTr("%n game selected|%n games selected", "", screen.picker.selectedCount)
             color: Theme.muted
             font.pixelSize: Theme.bodySize
         }
         ButtonRow {
-            QuietButton { objectName: "games_all"; text: "Select all shown"; enabled: list.count > 0; onClicked: screen.picker.selectAllShown() }
-            QuietButton { objectName: "games_clear"; text: "Clear"; enabled: screen.picker.selectedCount > 0; onClicked: screen.picker.clearAll() }
+            QuietButton { objectName: "games_all"; text: qsTr("Select all shown"); enabled: list.count > 0; onClicked: screen.picker.selectAllShown() }
+            QuietButton { objectName: "games_clear"; text: qsTr("Clear"); enabled: screen.picker.selectedCount > 0; onClicked: screen.picker.clearAll() }
         }
     }
     Section {
         objectName: "games_section_list"
-        heading: "Your games"
+        heading: qsTr("Your games")
         StatusLine {
             objectName: "games_status"
             text: screen.picker.status
@@ -73,7 +73,7 @@ ScreenFrame {
                 border.color: Theme.text
             }
             Accessible.role: Accessible.List
-            Accessible.name: "Your games"
+            Accessible.name: qsTr("Your games")
             onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0       // a tab into the list lands on the first game
             Keys.onPressed: (event) => {
                 if ((event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && list.currentItem) {
@@ -138,6 +138,6 @@ ScreenFrame {
     }
 
     footer: [
-        PrimaryButton { objectName: "games_next"; text: "Next: Case →"; enabled: screen.picker.selectedCount > 0; onClicked: shell.next() }
+        PrimaryButton { objectName: "games_next"; text: qsTr("Next: Case →"); enabled: screen.picker.selectedCount > 0; onClicked: shell.next() }
     ]
 }

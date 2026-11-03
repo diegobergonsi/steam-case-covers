@@ -33,6 +33,7 @@ class QtCase(unittest.TestCase):
         import gc
         gc.collect()
         super().tearDown()
+os.environ.setdefault("STEAMCASE_LANG", "en")
 QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
 
 
@@ -4689,7 +4690,7 @@ class HomeScreen(AddWindow):
         self.app.processEvents()
         self.assertEqual(title.property("lineCount"), 2)
         self.assertLessEqual(title.property("contentWidth"), title.property("width"))
-        self.assertLessEqual(title.property("y") + title.property("height"), 72)       # Theme.navTop: where the steps start
+        self.assertLessEqual(title.property("y") + title.property("height"), 68)       # Theme.navFlagsY: where the language flags start
         self.assertFalse(title.property("truncated"))
 
     def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):
@@ -4701,6 +4702,27 @@ class HomeScreen(AddWindow):
         self.app.processEvents()
         for key in ("game_list", "pick", "case", "hundred", "make", "add"):
             self.assertRegex(self.item("nav_%s_label" % key).property("text"), r"^[1-6]\. \S", key)
+
+    def test_the_flags_change_the_language_of_the_window_and_it_is_remembered(self):
+        from qtui import i18n, settings
+        self.addCleanup(i18n.set_language, "en")
+        self.open_home()
+        self.assertEqual((self.item("nav_game_list_label").property("text"), self.shell.language), ("1. Game list", "en"))
+        self.assertIsNotNone(self.item("language_en")); self.assertIsNotNone(self.item("language_pt"))
+        self.click("language_pt")
+        self.app.processEvents()
+        self.assertEqual((self.shell.language, self.item("nav_game_list_label").property("text")), ("pt-BR", "1. Lista de jogos"))
+        self.assertEqual(settings.load_language(self.shell._path), "pt-BR")
+        self.click("language_en")
+        self.app.processEvents()
+        self.assertEqual((self.shell.language, self.item("nav_game_list_label").property("text")), ("en", "1. Game list"))
+
+    def test_a_second_choice_of_the_same_language_changes_nothing(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        self.shell.setLanguage("en")
+        self.shell.setLanguage("klingon")
+        self.assertEqual(self.shell.language, "en")
 
     def test_every_navigation_link_has_an_icon(self):
         self.open_home()
@@ -5277,7 +5299,7 @@ class MakeState(QtCase, FakeStore):
         from qtui.make import result_text
         base = {"ok": 3, "missing": [], "failed": [], "cancelled": False, "family": 0, "completed": 0, "not_games": 0, "unlisted": 0}
         self.assertEqual(result_text(base, []), ("Done. 3 covers ready.", "ok"))
-        self.assertEqual(result_text(dict(base, ok=1, cancelled=True), []), ("Stopped. 1 covers ready.", "ok"))
+        self.assertEqual(result_text(dict(base, ok=1, cancelled=True), []), ("Stopped. 1 cover ready.", "ok"))
         self.assertEqual(result_text(dict(base, missing=[1]), [])[0], "Done. 3 covers ready. 1 game has no portrait on Steam.")
         self.assertIn("2 games have no portrait on Steam.", result_text(dict(base, missing=[1, 2]), [])[0])
         self.assertIn("1 of them is a family game and has a green corner.", result_text(dict(base, family=1), [])[0])
@@ -5286,7 +5308,7 @@ class MakeState(QtCase, FakeStore):
         self.assertIn("2 of them are 100% and are highlighted.", result_text(dict(base, completed=2), [])[0])
         self.assertIn("Skipped 5 items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists).", result_text(dict(base, not_games=3, unlisted=2), [])[0])
         self.assertEqual(result_text(dict(base, failed=[1]), []),
-                         ("Done. 3 covers ready. 1 could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only those.", "wait"))
+                         ("Done. 3 covers ready. 1 could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only that one.", "wait"))
         self.assertEqual(result_text(dict(base, ok=0), []), ("Done. 0 covers ready.", "wait"))
         self.assertIn("Could not keep a copy of your own art for 2 games: Apply moves those files into the backup, and Restore brings them back.", result_text(base, ["a", "b"])[0])
 
@@ -7305,7 +7327,7 @@ class GroupReset(PickerBase):
         self.reset()
         self.assertTrue(self.ap.asking, self.ap.status)
         text = self.question()
-        self.assertIn("1 covers made by this app will be removed", text)
+        self.assertIn("1 cover made by this app will be removed", text)
         self.assertIn("Red games", text)
         self.assertIn("PlayStation 5", text)
         self.assertIn("left as they are", text)

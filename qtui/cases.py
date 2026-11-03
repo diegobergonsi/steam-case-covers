@@ -7,6 +7,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import groups
 import steamcase as sc
 from qtui import tones
+from qtui.i18n import tr
 
 ORDER = ("steam", "ps5", "ps4", "ps3", "xboxseries", "xboxone", "xbox360", "switch2", "switch")       # the Steam case first, then newest to oldest
 LABELS = dict(sc.PLATFORM_LABELS, steam="Steam")
@@ -15,11 +16,10 @@ LABELS = dict(sc.PLATFORM_LABELS, steam="Steam")
 def _colour_choices():
     """The nine ready-made colours of the Look step: [{"label", "color", "hue", "sat", "val"}]. The first is named Blue, and the orange one Gold: it is the colour of the
     gold case (sc.GOLD_HUE is one of the hues of the swatches)."""
-    names = {(0, 100, 100): "Blue", (sc.GOLD_HUE, 100, 100): "Gold"}
+    names = {(0, 100, 100): tr("Blue"), (sc.GOLD_HUE, 100, 100): tr("Gold")}
     return [dict(label=names.get((x["hue"], x["sat"], x["val"]), x["name"]), color=x["color"], hue=x["hue"], sat=x["sat"], val=x["val"]) for x in tones.swatches()]
 
 
-COLOURS = _colour_choices()
 
 
 def group_caption(name, label, count):
@@ -33,8 +33,8 @@ def case_label(case):
     if "platform" in case:
         return LABELS.get(case["platform"], "")
     tone = tuple(case["tone"])
-    found = next((c["label"] for c in COLOURS if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*tone)), "custom colour")
-    return "Steam case, " + found.lower()
+    found = next((c["label"] for c in _colour_choices() if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*tone)), tr("custom colour"))
+    return tr("Steam case, ") + found.lower()
 
 
 class Cases(QObject):
@@ -84,17 +84,18 @@ class Cases(QObject):
     # ----- the colour of the Steam case, the name and the groups -----
     @Property("QVariantList", constant=True)
     def colourChoices(self):
-        return COLOURS
+        return _colour_choices()
 
     @Property(int, notify=colourChanged)
     def colourIndex(self):
         """The index in colourChoices of the colour picked, or -1 (a saved group in a colour the list does not have)."""
-        return next((i for i, c in enumerate(COLOURS) if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*self._tone)), -1)
+        return next((i for i, c in enumerate(_colour_choices()) if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*self._tone)), -1)
 
     @Slot(int)
     def pickColour(self, index):
-        if 0 <= index < len(COLOURS):
-            c = COLOURS[index]
+        colours = _colour_choices()
+        if 0 <= index < len(colours):
+            c = colours[index]
             self._tone, self._gid = (c["hue"], c["sat"], c["val"]), ""
             self._follow_case()
             self.colourChanged.emit()

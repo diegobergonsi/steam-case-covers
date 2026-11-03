@@ -4,10 +4,11 @@
 import math
 
 import steamcase as sc
+from qtui.i18n import N_, tr
 
 ORIGINAL = (0, 100, 100)
-HUE_NAMES = {0: "Original", 42: "Violet", 84: "Magenta", 134: "Red", 176: "Orange", 276: "Green"}       # by the degrees of sc.HUE_SWATCHES
-GREY_HINT = "Colour has no effect on grey or black."
+HUE_NAMES = {0: N_("Original"), 42: N_("Violet"), 84: N_("Magenta"), 134: N_("Red"), 176: N_("Orange"), 276: N_("Green")}       # by the degrees of sc.HUE_SWATCHES
+GREY_HINT = N_("Colour has no effect on grey or black.")
 
 
 def clamp_tone(hue, sat, val):
@@ -23,8 +24,9 @@ def clamp_tone(hue, sat, val):
 
 
 ORIGINAL_ANGLE = 210                                  # the original blue, in degrees on a colour wheel: the hue slider turns the case from there
-BANDS = ((15, "red"), (40, "orange"), (65, "yellow"), (90, "lime"), (150, "green"), (175, "teal"), (200, "cyan"), (245, "blue"), (285, "violet"),
-         (320, "magenta"), (340, "pink"), (360, "red"))   # the colour family up to each angle on the wheel
+BANDS = ((15, N_("red")), (40, N_("orange")), (65, N_("yellow")), (90, N_("lime")), (150, N_("green")), (175, N_("teal")), (200, N_("cyan")), (245, N_("blue")), (285, N_("violet")),
+         (320, N_("magenta")), (340, N_("pink")), (360, N_("red")))   # the colour family up to each angle on the wheel
+NEUTRAL_NAMES = (N_("Black"), N_("Graphite"), N_("Silver"))                 # the names sc.NEUTRAL_SWATCHES carries, so they get translated
 DARK, PALE, GREY_AT = 45, 45, 8                       # brightness up to DARK is "dark", colourfulness up to PALE is "pale", up to GREY_AT is no colour at all
 
 
@@ -34,31 +36,31 @@ def tone_name(hue, sat, val):
     hue, sat, val = clamp_tone(hue, sat, val)
     key = sc.tone_key(hue, sat, val)
     if key == sc.tone_key(0):
-        return "Original"
+        return tr("Original")
     for grey, s, v in sc.NEUTRAL_SWATCHES:
         if key == sc.tone_key(0, s, v):
-            return grey
+            return tr(grey)
     for h in sc.HUE_SWATCHES:
         if key == sc.tone_key(h):
-            return HUE_NAMES[h]
+            return tr(HUE_NAMES[h])
     if sat <= GREY_AT or val <= 10:                    # no colour to speak of: a grey
-        return "Black" if val <= 10 else "Dark grey" if val < 30 else "Grey" if val < 60 else "Light grey"
+        return tr("Black") if val <= 10 else tr("Dark grey") if val < 30 else tr("Grey") if val < 60 else tr("Light grey")
     angle = (ORIGINAL_ANGLE + hue) % 360
-    family = next(name for top, name in BANDS if angle < top)
-    prefix = "Dark " if val <= DARK else "Pale " if sat <= PALE else ""
-    return prefix + family if prefix else family.capitalize()
+    word = tr(next(name for top, name in BANDS if angle < top))      # the colour family, in lower case: "blue"
+    text = tr("Dark %s") % word if val <= DARK else tr("Pale %s") % word if sat <= PALE else word
+    return text[:1].upper() + text[1:]
 
 
 def tone_hint(hue, sat, val):
     """Without colour or light the Colour slider does nothing: say so."""
     _, sat, val = clamp_tone(hue, sat, val)
-    return GREY_HINT if sat == 0 or val == 0 else ""
+    return tr(GREY_HINT) if sat == 0 or val == 0 else ""
 
 
 def swatches():
     """The nine ready-made tones: six colours at full tone, then three greys, as [{"name", "color", "hue", "sat", "val"}]."""
-    out = [{"name": HUE_NAMES.get(h, "Colour %d°" % h), "color": sc.case_color(h), "hue": h, "sat": 100, "val": 100} for h in sc.HUE_SWATCHES]
-    out += [{"name": n, "color": sc.case_color(0, s, v), "hue": 0, "sat": s, "val": v} for n, s, v in sc.NEUTRAL_SWATCHES]
+    out = [{"name": tr(HUE_NAMES[h]) if h in HUE_NAMES else tr("Colour %d°") % h, "color": sc.case_color(h), "hue": h, "sat": 100, "val": 100} for h in sc.HUE_SWATCHES]
+    out += [{"name": tr(n), "color": sc.case_color(0, s, v), "hue": 0, "sat": s, "val": v} for n, s, v in sc.NEUTRAL_SWATCHES]
     return out
 
 

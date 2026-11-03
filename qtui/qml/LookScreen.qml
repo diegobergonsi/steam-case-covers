@@ -8,8 +8,8 @@ ScreenFrame {
     id: screen
     objectName: "look_screen"
     readonly property var look: shell.look
-    title: "Choose the look"
-    subtitle: "The preview changes as you pick."
+    title: qsTr("Choose the look")
+    subtitle: qsTr("The preview changes as you pick.")
 
     // the track shows the case in its current colour; reading the three values here makes the binding follow them
     // each track depends on the other two values only: the track of a slider does not change when that slider moves (nor is it redrawn)
@@ -42,19 +42,19 @@ ScreenFrame {
 
             Section {
                 objectName: "look_section_colour"
-                heading: "Case colour"
+                heading: qsTr("Case colour")
                 note: screen.look.toneName
                 Column {
                     width: parent.width
                     spacing: Theme.s8
-                    Text { text: "Colour"; color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    GradientSlider { objectName: "look_hue"; width: parent.width; label: "Colour"; from: 0; to: 359; value: screen.look.hue
+                    Text { text: qsTr("Colour"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                    GradientSlider { objectName: "look_hue"; width: parent.width; label: qsTr("Colour"); from: 0; to: 359; value: screen.look.hue
                         stops: screen.look.hueColors(); onMoved: (v) => screen.look.hue = v }
-                    Text { text: "Colourfulness"; color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    GradientSlider { objectName: "look_sat"; width: parent.width; label: "Colourfulness"; from: 0; to: 100; value: screen.look.sat
+                    Text { text: qsTr("Colourfulness"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                    GradientSlider { objectName: "look_sat"; width: parent.width; label: qsTr("Colourfulness"); from: 0; to: 100; value: screen.look.sat
                         stops: screen.stopsFor("sat"); onMoved: (v) => screen.look.sat = v }
-                    Text { text: "Brightness"; color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    GradientSlider { objectName: "look_val"; width: parent.width; label: "Brightness"; from: 0; to: 100; value: screen.look.val
+                    Text { text: qsTr("Brightness"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                    GradientSlider { objectName: "look_val"; width: parent.width; label: qsTr("Brightness"); from: 0; to: 100; value: screen.look.val
                         stops: screen.stopsFor("val"); onMoved: (v) => screen.look.val = v }
                 }
                 Flow {
@@ -84,7 +84,7 @@ ScreenFrame {
             }
             Section {
                 objectName: "look_section_theme"
-                heading: "Theme"
+                heading: qsTr("Theme")
                 ChoiceChips {
                     objectName: "look_theme"
                     width: parent.width
@@ -95,10 +95,10 @@ ScreenFrame {
             }
             Section {
                 objectName: "look_section_art"
-                heading: "Art"
-                SwitchRow { objectName: "look_custom_art"; label: "Use my own custom art where I have it"; tip: customArtHelp
+                heading: qsTr("Art")
+                SwitchRow { objectName: "look_custom_art"; label: qsTr("Use my own custom art where I have it"); tip: customArtHelp
                     checked: screen.look.useCustomArt; onToggled: (v) => screen.look.useCustomArt = v }
-                SwitchRow { objectName: "look_skip_blurry"; label: "Skip blurry covers"; tip: autoArtHelp
+                SwitchRow { objectName: "look_skip_blurry"; label: qsTr("Skip blurry covers"); tip: autoArtHelp
                     checked: screen.look.skipAutoArt; onToggled: (v) => screen.look.skipAutoArt = v }
             }
         }
@@ -107,7 +107,7 @@ ScreenFrame {
     footer: [
         PrimaryButton {
             objectName: "look_next"
-            text: "Next: 100% games →"
+            text: qsTr("Next: 100% games →")
             onClicked: { shell.setFact("look_done", true); shell.next() }
         }
     ]

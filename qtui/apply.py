@@ -13,12 +13,13 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import groups
 import steamcase as sc
 from qtui.groupticks import GroupTicks
+from qtui.i18n import N_, tr, trn
 
 MAX_NAME = 28                               # a long account name must not push the buttons off the window
-OPEN_NOTE = "Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first."
-CHECKING_NOTE = "Checking whether Steam is open\u2026"
-CLOSED_NOTE = "Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it."
-CLOSE_WARNING = "Steam will be closed automatically. Any running game stops and downloads pause. Save your game first."
+OPEN_NOTE = N_("Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first.")
+CHECKING_NOTE = N_("Checking whether Steam is open\u2026")
+CLOSED_NOTE = N_("Steam is closed, so nothing will be interrupted. Your current artwork is backed up first, so you can undo it.")
+CLOSE_WARNING = N_("Steam will be closed automatically. Any running game stops and downloads pause. Save your game first.")
 
 
 def _appid(name):
@@ -89,8 +90,8 @@ class Apply(QObject):
     def note(self):
         """The warning follows reality; until Steam has been asked it says so, and takes the space the answer will need."""
         if not self._known:
-            return CHECKING_NOTE
-        return OPEN_NOTE if self._steam_open else CLOSED_NOTE
+            return tr(CHECKING_NOTE)
+        return tr(OPEN_NOTE) if self._steam_open else tr(CLOSED_NOTE)
 
     @Property(str, notify=steamChanged)
     def noteKind(self):
@@ -146,7 +147,7 @@ class Apply(QObject):
 
     @Property(str, notify=accountChanged)
     def accountLabel(self):
-        return "Steam account: %s" % _short(self._who) if self._who else ""
+        return tr("Steam account: %s") % _short(self._who) if self._who else ""
 
     @Property(bool, notify=accountChanged)
     def canChoose(self):
@@ -175,7 +176,7 @@ class Apply(QObject):
             who = sc.account_label(steam, self._acc() or sc.pick_account(steam))
         except (sc.SteamcaseError, OSError):
             accounts, who = [], ""
-        found = [{"key": a, "label": _short("Account %s" % label if label.isdigit() else label)} for a, label in accounts]
+        found = [{"key": a, "label": _short(tr("Account %s") % label if label.isdigit() else label)} for a, label in accounts]
         self._raw = dict(accounts)
         if (found, who) != (self._accounts, self._who):
             self._accounts, self._who = found, who
@@ -213,7 +214,7 @@ class Apply(QObject):
     @Property(str, notify=canApplyChanged)
     def readyText(self):
         n = len(self._make.files())
-        return "No covers yet. Make them first." if n == 0 else "1 cover is ready to add." if n == 1 else "%d covers are ready to add." % n
+        return tr("No covers yet. Make them first.") if n == 0 else trn("%n cover is ready to add.|%n covers are ready to add.", n)
 
     @Property(bool, notify=appliedChanged)
     def applied(self):
@@ -269,7 +270,7 @@ class Apply(QObject):
     def undoHint(self):
         """Why Restore is greyed out; gone as soon as there is something to say instead."""
         if self._undo_known and not self._backup and not self._status and self._idle() and not self.canApply:
-            return "Nothing to undo yet: \u201cRestore previous artwork\u201d works once you have used \u201cApply to Steam\u201d in this app."
+            return tr("Nothing to undo yet: \u201cRestore previous artwork\u201d works once you have used \u201cApply to Steam\u201d in this app.")
         return ""
 
     @Slot()
@@ -311,11 +312,11 @@ class Apply(QObject):
             steam = sc.steam_dir()
             return sc.account_label(steam, sc.pick_account(steam, self._acc()))
         except sc.SteamcaseError:
-            return "your Steam account"
+            return tr("your Steam account")
 
     def _ask(self, mode, title, paragraphs, go, alt="", names=None):
         if self._steam_open:
-            paragraphs.append({"text": CLOSE_WARNING, "kind": "warn"})
+            paragraphs.append({"text": tr(CLOSE_WARNING), "kind": "warn"})
         self._pending = (mode, names)
         self._asking = True
         self.undoChanged.emit()
@@ -326,19 +327,19 @@ class Apply(QObject):
         """Ask first: nothing changes until the user says yes."""
         if self._asking or not self.canApply:
             return
-        self._ask("apply", "Add covers to Steam",
-                  [{"text": "%d covers will be added to the Steam account \u201c%s\u201d." % (len(self._make.files()), self._who_is()), "kind": "main"},
-                   {"text": "Your current artwork is backed up first. You can undo this from the Home screen.", "kind": "muted"}],
-                  "Close Steam and add them" if self._steam_open else "Add them")
+        self._ask("apply", tr("Add covers to Steam"),
+                  [{"text": trn("%n cover will be added to the Steam account \u201c%s\u201d.|%n covers will be added to the Steam account \u201c%s\u201d.", len(self._make.files())) % self._who_is(), "kind": "main"},
+                   {"text": tr("Your current artwork is backed up first. You can undo this from the Home screen."), "kind": "muted"}],
+                  tr("Close Steam and add them") if self._steam_open else tr("Add them"))
 
     @Slot()
     def restore(self):
         if self._asking or not self.canRestore:
             return
-        self._ask("restore", "Restore previous artwork",
-                  [{"text": "Your artwork from before the last Apply will be put back on the Steam account \u201c%s\u201d." % self._who_is(), "kind": "main"},
-                   {"text": "The covers added by that Apply are removed.", "kind": "muted"}],
-                  "Close Steam and restore" if self._steam_open else "Restore")
+        self._ask("restore", tr("Restore previous artwork"),
+                  [{"text": tr("Your artwork from before the last Apply will be put back on the Steam account \u201c%s\u201d.") % self._who_is(), "kind": "main"},
+                   {"text": tr("The covers added by that Apply are removed."), "kind": "muted"}],
+                  tr("Close Steam and restore") if self._steam_open else tr("Restore"))
 
     @Slot()
     def reset(self):
@@ -351,7 +352,7 @@ class Apply(QObject):
         self._ticks.refresh()
         self._reset_ticked = self._ticks.ids()
         self._req += 1
-        self._set_status("Looking for covers made by this app\u2026 (a few seconds)", "wait")
+        self._set_status(tr("Looking for covers made by this app\u2026 (a few seconds)"), "wait")
         threading.Thread(target=self._scan_worker, args=(self._req, self._acc()), daemon=True).start()
 
     def _scan_worker(self, req, account):
@@ -359,7 +360,7 @@ class Apply(QObject):
         other = 0
         try:
             steam = sc.steam_dir()
-            names = sc.find_our_covers(steam, account, progress=lambda i, n: self._tell(req, "Checking Steam's artwork\u2026 %d of %d" % (i, n)),
+            names = sc.find_our_covers(steam, account, progress=lambda i, n: self._tell(req, tr("Checking Steam's artwork\u2026 %d of %d") % (i, n)),
                                        cancelled=lambda: req != self._req)
             who = sc.account_label(steam, sc.pick_account(steam, account))
             extra, others = sc.find_other_art(steam, account, names)
@@ -367,7 +368,7 @@ class Apply(QObject):
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:
-            error = "Unexpected problem: %s" % e
+            error = tr("Unexpected problem: %s") % e
         try:
             self._scanned.emit(req, names, who, other, error)
         except RuntimeError:
@@ -392,30 +393,32 @@ class Apply(QObject):
         names, keep, stay, going = self._by_groups(names)
         if not names and not other:
             self._busy = False
-            self._set_status("No custom covers were found in \u201c%s\u201d. Nothing to reset." % who if not keep else
-                             "Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it." % who, "wait")
+            self._set_status(tr("No custom covers were found in \u201c%s\u201d. Nothing to reset.") % who if not keep else
+                             tr("Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it.") % who, "wait")
             self.canApplyChanged.emit()
             self.undoChanged.emit()
             return
         paragraphs = []
         if names:
-            paragraphs.append({"text": "%d covers made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for them." % (len(names), who), "kind": "main"})
+            paragraphs.append({"text": trn("%n cover made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for it.|"
+                                           "%n covers made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for them.", len(names)) % who, "kind": "main"})
         if stay:
-            paragraphs.append({"text": "Your groups are left as they are: %s." % ", ".join("\u201c%s\u201d (%d)" % (g["name"], n) for g, n in stay), "kind": "main"})
+            paragraphs.append({"text": tr("Your groups are left as they are: %s.") % ", ".join("\u201c%s\u201d (%d)" % (g["name"], n) for g, n in stay), "kind": "main"})
         for g, n in going:
-            paragraphs.append({"text": "The group \u201c%s\u201d (%d %s) will be reset and deleted." % (g["name"], n, "cover" if n == 1 else "covers"), "kind": "main"})
+            paragraphs.append({"text": trn("The group \u201c%s\u201d (%n cover) will be reset and deleted.|The group \u201c%s\u201d (%n covers) will be reset and deleted.", n) % g["name"], "kind": "main"})
         if other:
-            paragraphs.append({"text": "Found %d more custom covers that this app did not make (from SteamGridDB or set by hand in Steam)." % other, "kind": "main"})
-        paragraphs.append({"text": "A backup is kept, so \u201cRestore previous artwork\u201d brings everything back.", "kind": "muted"})
-        close = "Close Steam and " if self._steam_open else ""
+            paragraphs.append({"text": trn("Found %n more custom cover that this app did not make (from SteamGridDB or set by hand in Steam).|"
+                                           "Found %n more custom covers that this app did not make (from SteamGridDB or set by hand in Steam).", other), "kind": "main"})
+        paragraphs.append({"text": tr("A backup is kept, so \u201cRestore previous artwork\u201d brings everything back."), "kind": "muted"})
+        closing = self._steam_open
         if other and names:
-            go, alt = (close + "remove only ours") if close else "Remove only ours", (close + "remove all") if close else "Remove all"
+            go, alt = (tr("Close Steam and remove only ours"), tr("Close Steam and remove all")) if closing else (tr("Remove only ours"), tr("Remove all"))
         elif other:
-            go, alt = (close + "remove all") if close else "Remove all", ""
+            go, alt = tr("Close Steam and remove all") if closing else tr("Remove all"), ""
         else:
-            go, alt = "Close Steam and reset" if close else "Reset", ""
+            go, alt = tr("Close Steam and reset") if closing else tr("Reset"), ""
         self._reset_games = {a for a in map(_appid, names) if a is not None}
-        self._ask("reset", "Reset to Steam's default art", paragraphs, go, alt, {"names": names, "everything": not names, "keep": keep})
+        self._ask("reset", tr("Reset to Steam's default art"), paragraphs, go, alt, {"names": names, "everything": not names, "keep": keep})
 
     def _by_groups(self, names):
         """(names to reset, names to keep, [(group, covers)] left as they are, [(group, covers)] ticked): `names` are our covers on Steam (<appid>p.png). A cover of a group
@@ -457,7 +460,7 @@ class Apply(QObject):
         self.canApplyChanged.emit()
         self.undoChanged.emit()
         self._req += 1
-        self._set_status("Closing Steam\u2026" if self._steam_open else "Working\u2026", "wait")
+        self._set_status(tr("Closing Steam\u2026") if self._steam_open else tr("Working\u2026"), "wait")
         job = {"mode": mode, "restart": self.restart, "account": self._acc(), "files": self._make.files() if mode == "apply" else [],
                "names": (names or {}).get("names"), "everything": True if alternate else (names or {}).get("everything", False),
                "keep": (names or {}).get("keep") or []}
@@ -470,47 +473,51 @@ class Apply(QObject):
         try:
             steam = sc.steam_dir()
             if sc.steam_running():
-                say("Closing Steam\u2026")
+                say(tr("Closing Steam\u2026"))
                 if not sc.close_steam(steam):
-                    raise sc.SteamcaseError("Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again."
-                                            + (" If macOS asked for permission, allow it first and then press the button again." if sys.platform == "darwin" else ""))
+                    raise sc.SteamcaseError(tr("Steam did not close in time. Close it yourself (Steam menu, then Exit) and press the button again.")
+                                            + (tr(" If macOS asked for permission, allow it first and then press the button again.") if sys.platform == "darwin" else ""))
             if job["mode"] == "apply":
-                say("Backing up and copying covers\u2026")
+                say(tr("Backing up and copying covers\u2026"))
                 r = sc.apply_covers(steam, self._covers, job["account"], files=job["files"])
                 if r["applied"]:
-                    text = "Done. %d covers added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s" % (
-                        r["applied"], r["account_name"], r["replaced"], r["unchanged"], r["backup"])
+                    text = trn("Done. %n cover added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s|"
+                               "Done. %n covers added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s",
+                               r["applied"]) % (r["account_name"], r["replaced"], r["unchanged"], r["backup"])
                     if r["jpg_moved"]:
-                        text += " Art you had set by hand in Steam (%d games) was moved into the backup; Restore brings it back." % r["jpg_moved"]
+                        text += " " + trn("Art you had set by hand in Steam (%n game) was moved into the backup; Restore brings it back.|"
+                                          "Art you had set by hand in Steam (%n games) was moved into the backup; Restore brings it back.", r["jpg_moved"])
                 else:
-                    text = "Nothing to change: all %d covers were already in the Steam account \u201c%s\u201d." % (r["unchanged"], r["account_name"])
+                    text = trn("Nothing to change: the cover was already in the Steam account \u201c%s\u201d.|"
+                               "Nothing to change: all %n covers were already in the Steam account \u201c%s\u201d.", r["unchanged"]) % r["account_name"]
             elif job["mode"] == "reset":
-                say("Removing our covers\u2026")
+                say(tr("Removing our covers\u2026"))
                 r = sc.reset_to_default(steam, job["account"], job["names"], job["everything"], keep=job["keep"])
-                text = "Done. %d covers removed from the Steam account \u201c%s\u201d: Steam shows its own default art again. Press \u201cRestore previous artwork\u201d to bring them back." % (
-                    r["removed"], r["account_name"])
+                text = trn("Done. %n cover removed from the Steam account \u201c%s\u201d: Steam shows its own default art again. Press \u201cRestore previous artwork\u201d to bring it back.|"
+                           "Done. %n covers removed from the Steam account \u201c%s\u201d: Steam shows its own default art again. Press \u201cRestore previous artwork\u201d to bring them back.",
+                           r["removed"]) % r["account_name"]
             else:
                 backups = sc.list_backups(steam, job["account"])
                 if not backups:
-                    raise sc.SteamcaseError("No backup found.")
+                    raise sc.SteamcaseError(tr("No backup found."))
                 n = sc.restore_backup(steam, backups[0], job["account"])
                 left = len(sc.list_backups(steam, job["account"]))
-                text = "Restored your previous artwork (%d files)." % n
+                text = trn("Restored your previous artwork (%n file).|Restored your previous artwork (%n files).", n)
                 if left:
-                    text += " %d older backup%s left: press Restore again to go one step further back." % (left, "" if left == 1 else "s")
+                    text += " " + trn("%n older backup left: press Restore again to go one step further back.|%n older backups left: press Restore again to go one step further back.", left)
             if job["restart"]:
-                say("Starting Steam\u2026")
+                say(tr("Starting Steam\u2026"))
                 try:
                     sc.start_steam(steam)
-                    text += " Steam is starting."
+                    text += tr(" Steam is starting.")
                 except sc.SteamcaseError as e:
-                    text += " Could not start Steam (%s). Please open it yourself." % e
+                    text += tr(" Could not start Steam (%s). Please open it yourself.") % e
             else:
-                text += " Start Steam to see the change."
+                text += tr(" Start Steam to see the change.")
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:                          # never leave the window stuck in "busy"
-            error = "Unexpected problem: %s" % e
+            error = tr("Unexpected problem: %s") % e
         try:
             self._finished.emit(req, text, error)
         except RuntimeError:
@@ -525,7 +532,7 @@ class Apply(QObject):
                 groups.save(self._covers, groups.drop_games(groups.load(self._covers), gone))
                 sc.forget_group(self._covers, gone)
         except OSError as e:
-            self.failed.emit("The covers were reset, but your groups could not be saved: %s" % e)
+            self.failed.emit(tr("The covers were reset, but your groups could not be saved: %s") % e)
         self._reset_games, self._reset_ticked = set(), set()
         self._ticks.clear()
         self._ticks.refresh()

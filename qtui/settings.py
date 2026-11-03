@@ -18,6 +18,39 @@ def settings_path():
     return os.path.join(os.path.dirname(sc.default_covers_dir()), "settings.json")
 
 
+LANGUAGE_CODES = ("en", "pt-BR")          # the languages of the window (see qtui/i18n.py)
+LANGUAGE_FILE = "language.txt"            # the one word of the language the user chose, next to settings.json
+
+
+def language_path(path=None):
+    return os.path.join(os.path.dirname(path or settings_path()), LANGUAGE_FILE)
+
+
+def load_language(path=None):
+    """The language the user chose last ("en" or "pt-BR"), or None when there is no choice yet (the system's language is then used)."""
+    try:
+        code = safefile.read_small_file(language_path(path), 32, follow_links=True).decode("utf-8").strip()
+    except (OSError, ValueError):
+        return None
+    return code if code in LANGUAGE_CODES else None
+
+
+def save_language(code, path=None):
+    """Remember the language, atomically. True when written, False for a language we do not have or a folder that is not writable."""
+    if code not in LANGUAGE_CODES:
+        return False
+    target = language_path(path)
+    tmp = "%s.%s.tmp" % (target, uuid.uuid4().hex[:8])
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(code)
+        os.replace(tmp, target)
+        return True
+    except OSError:
+        return False
+
+
 def load_settings(path=None):
     """All five switches. A missing, unreadable, oversized or garbled file gives the defaults, and a value that is not a true/false
     gives the default of that switch only; unknown keys are ignored."""

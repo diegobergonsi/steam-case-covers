@@ -12,8 +12,9 @@ import groups
 import steamcase as sc
 from qtui import reasons
 from qtui.groupticks import GroupTicks
+from qtui.i18n import N_, tr, trn
 
-STATUS_IDLE = "Not started."
+STATUS_IDLE = N_("Not started.")
 MAX_THUMBS = 5                              # covers shown under the status
 MAX_NAME = 60                               # a long game name is cut in the progress line
 
@@ -21,27 +22,28 @@ MAX_NAME = 60                               # a long game name is cut in the pro
 def result_text(res, problems):
     """(sentence, kind) for the result of sc.make_covers; `problems`: art of the user's that could not be copied. Kind is "ok" for a clean run."""
     n, miss, bad = res["ok"], len(res["missing"]), len(res["failed"])
-    text = "%s%d covers ready." % ("Stopped. " if res["cancelled"] else "Done. ", n)
+    text = "%s %s" % (tr("Stopped.") if res["cancelled"] else tr("Done."), trn("%n cover ready.|%n covers ready.", n))
     if miss:
-        text += " %d %s no portrait on Steam." % (miss, "game has" if miss == 1 else "games have")
+        text += " " + trn("%n game has no portrait on Steam.|%n games have no portrait on Steam.", miss)
     fam = res.get("family", 0)
     if fam:
-        text += " %d of them %s and %s a green corner." % (fam, "is a family game" if fam == 1 else "are family games", "has" if fam == 1 else "have")
+        text += " " + trn("%n of them is a family game and has a green corner.|%n of them are family games and have a green corner.", fam)
     consoles = res.get("platforms", 0)
     if consoles:
-        text += " %d of them %s in a console case." % (consoles, "is" if consoles == 1 else "are")
+        text += " " + trn("%n of them is in a console case.|%n of them are in a console case.", consoles)
     done = res.get("completed", 0)
     if done:
-        text += " %d of them %s 100%% and %s highlighted." % (done, "is" if done == 1 else "are", "is" if done == 1 else "are")
+        text += " " + trn("%n of them is 100% and is highlighted.|%n of them are 100% and are highlighted.", done)
     skipped = res.get("not_games", 0) + res.get("unlisted", 0)
     if skipped:
-        text += " Skipped %d items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists)." % skipped
+        text += " " + trn("Skipped %n item that isn't a game you can play (DLC, soundtracks, tools, and apps Steam no longer lists).|"
+                          "Skipped %n items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists).", skipped)
     if bad:
-        text += " %d could not be downloaded (connection problem?): click “Make again” to retry only those." % bad
+        text += " " + trn("%n could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only that one.|"
+                          "%n could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only those.", bad)
     if problems:
-        k = len(problems)
-        text += " Could not keep a copy of your own art for %d %s: Apply moves %s into the backup, and Restore brings %s back." % (
-            k, "game" if k == 1 else "games", "that file" if k == 1 else "those files", "it" if k == 1 else "them")
+        text += " " + trn("Could not keep a copy of your own art for %n game: Apply moves that file into the backup, and Restore brings it back.|"
+                          "Could not keep a copy of your own art for %n games: Apply moves those files into the backup, and Restore brings them back.", len(problems))
     return text, "ok" if n and not bad else "wait"
 
 
@@ -73,8 +75,8 @@ class Make(QObject):
         self._pending = None                            # (snapshot, own art, problems) waiting for the answer to the question
         self._question = ("", "")                      # what is being asked, kept here so a screen that opens late can still show it
         self._can = True
-        self._before = (STATUS_IDLE, "wait")            # the status to go back to when the question is declined
-        self._status, self._kind = STATUS_IDLE, "wait"
+        self._before = (tr(STATUS_IDLE), "wait")            # the status to go back to when the question is declined
+        self._status, self._kind = tr(STATUS_IDLE), "wait"
         self._finished = self._total = 0
         self._art_done.connect(self._on_art)
         self._progressed.connect(self._on_progress)
@@ -135,8 +137,8 @@ class Make(QObject):
         """The words of the main button once covers are ready: after a stopped run it says how many covers it would add, since that is not the whole set."""
         n = len(self._files)
         if self._stopped and n:
-            return "Add the %d %s to Steam \u2192" % (n, "cover" if n == 1 else "covers")
-        return "Next: Add to Steam \u2192"
+            return trn("Add the %n cover to Steam \u2192|Add the %n covers to Steam \u2192", n)
+        return tr("Next: Add to Steam \u2192")
 
     @Property(int, notify=progressChanged)
     def finished(self):
@@ -174,29 +176,29 @@ class Make(QObject):
         if self._shell.flow == "manual":
             cases = self._shell.cases
             count = cases.assignedCount
-            marked = "Skipped" if not hundred.loaded else "Left plain" if hundred.style == "none" else "Highlighted"
-            return [{"key": "games", "label": "Games", "value": "%d %s" % (count, "game" if count == 1 else "games"), "step": self._shell.stepIndex("pick")},
-                    {"key": "cases", "label": "Cases", "value": ", ".join(s["label"] for s in cases.summary), "step": self._shell.stepIndex("case")},
-                    {"key": "hundred", "label": "100% games", "value": marked, "step": self._shell.stepIndex("hundred")}]
+            marked = tr("Skipped") if not hundred.loaded else tr("Left plain") if hundred.style == "none" else tr("Highlighted")
+            return [{"key": "games", "label": tr("Games"), "value": trn("%n game|%n games", count), "step": self._shell.stepIndex("pick")},
+                    {"key": "cases", "label": tr("Cases"), "value": ", ".join(s["label"] for s in cases.summary), "step": self._shell.stepIndex("case")},
+                    {"key": "hundred", "label": tr("100% games"), "value": marked, "step": self._shell.stepIndex("hundred")}]
         if library.installedOnly:
-            games = "Installed games"
+            games = tr("Installed games")
         else:
-            games = "Your game list" if library.path else "Not chosen yet"
+            games = tr("Your game list") if library.path else tr("Not chosen yet")
         if not hundred.loaded:
-            marked = "Skipped"
+            marked = tr("Skipped")
         elif hundred.style == "none":
-            marked = "No special case"
+            marked = tr("No special case")
         else:
             marked = reasons.look_label(hundred.values()[1])
-        art = [text for text, on in (("Your own art", look.useCustomArt), ("blurry art skipped", look.skipAutoArt)) if on]
+        art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt)) if on]
         art = ", ".join(art)
-        art = (art[0].upper() + art[1:]) if art else "Steam's art"
-        theme = "Classic case" if look.theme == "classic" else look.theme.capitalize()
-        return [{"key": "games", "label": "Games", "value": games, "step": 1},
-                {"key": "colour", "label": "Colour", "value": look.toneName, "step": 2},
-                {"key": "theme", "label": "Theme", "value": theme, "step": 2},
-                {"key": "hundred", "label": "100% games", "value": marked, "step": 3},
-                {"key": "art", "label": "Art", "value": art, "step": 2}]
+        art = (art[0].upper() + art[1:]) if art else tr("Steam's art")
+        theme = tr("Classic case") if look.theme == "classic" else tr(look.theme.capitalize())
+        return [{"key": "games", "label": tr("Games"), "value": games, "step": 1},
+                {"key": "colour", "label": tr("Colour"), "value": look.toneName, "step": 2},
+                {"key": "theme", "label": tr("Theme"), "value": theme, "step": 2},
+                {"key": "hundred", "label": tr("100% games"), "value": marked, "step": 3},
+                {"key": "art", "label": tr("Art"), "value": art, "step": 2}]
 
     @Property(QObject, constant=True)
     def groupTicks(self):
@@ -248,7 +250,7 @@ class Make(QObject):
             self._begin(snap, {}, None, ())              # {}: the option is off, covers made from your own art go back to Steam's portrait
             return
         self._set_state(running=True, searching=True)
-        self._set_status("Looking for your own art…", "wait")
+        self._set_status(tr("Looking for your own art…"), "wait")
         threading.Thread(target=self._art_worker, args=(self._req, snap), daemon=True).start()
 
     def _art_worker(self, req, snap):
@@ -263,7 +265,7 @@ class Make(QObject):
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:                          # never leave the window stuck in "running"
-            error = "Unexpected problem: %s" % e
+            error = tr("Unexpected problem: %s") % e
         try:
             self._art_done.emit(req, art, games, problems, error)
         except RuntimeError:
@@ -276,7 +278,7 @@ class Make(QObject):
         if error:
             self._set_state(running=False)
             self._set_status(error, "error")
-            self.failed.emit("Cannot read your own art", error)
+            self.failed.emit(tr("Cannot read your own art"), error)
             return
         self._begin(self._snap, art, games, problems)
 
@@ -325,7 +327,7 @@ class Make(QObject):
         self._finished, self._total = 0, 0
         self.progressChanged.emit()
         self._set_state(running=True, making=True)
-        self._set_status("Looking up your games on Steam…", "wait")
+        self._set_status(tr("Looking up your games on Steam…"), "wait")
         threading.Thread(target=self._make_worker, args=(self._req, snap, custom_art), daemon=True).start()
 
     def _make_worker(self, req, snap, custom_art):
@@ -336,7 +338,7 @@ class Make(QObject):
             steam = sc.steam_dir()
             games, family = sc.load_library(steam, snap["lib"])
             if not games:
-                raise sc.SteamcaseError("No games found. Install a game first, or load your userdata.json.")
+                raise sc.SteamcaseError(tr("No games found. Install a game first, or load your userdata.json."))
             manual = snap.get("manual")
             extra = {"platforms": snap["platforms"], "tones": snap["tones"], "groups": snap["groups"]} if manual else {}
             if snap.get("repaint"):
@@ -348,7 +350,7 @@ class Make(QObject):
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:
-            error = "Unexpected problem: %s" % e
+            error = tr("Unexpected problem: %s") % e
         try:
             self._made.emit(req, res, error)
         except RuntimeError:
@@ -373,7 +375,7 @@ class Make(QObject):
         self._set_state(running=False, making=False)
         if error:
             self._set_status(error, "error")
-            self.failed.emit("Could not make covers", error)
+            self.failed.emit(tr("Could not make covers"), error)
             return
         self._save_groups(res)
         self._stopped = bool(res["cancelled"])
@@ -401,7 +403,7 @@ class Make(QObject):
                 done = {a for g in snap["repaint"] for a in g["games"]} & made
                 groups.save(self._covers, groups.drop_games(groups.load(self._covers), done))
         except OSError as e:
-            self.failed.emit("Could not save your groups", "The covers are made, but your groups could not be saved: %s" % e)
+            self.failed.emit(tr("Could not save your groups"), tr("The covers are made, but your groups could not be saved: %s") % e)
         self._ticks.clear()
         self._ticks.refresh()
 
@@ -409,12 +411,12 @@ class Make(QObject):
     def cancel(self):
         if self._making and not self._cancel.is_set():
             self._cancel.set()
-            self._set_status("Stopping…", "wait")
+            self._set_status(tr("Stopping…"), "wait")
 
     @Slot()
     def openFolder(self):
         folder = os.path.abspath(self._covers)
         os.makedirs(folder, exist_ok=True)
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(folder)):
-            self._set_status("Could not open the folder. It is here: %s" % folder, "error")
-            self.failed.emit("Covers folder", "Could not open the folder. It is here:\n\n%s" % folder)
+            self._set_status(tr("Could not open the folder. It is here: %s") % folder, "error")
+            self.failed.emit(tr("Covers folder"), tr("Could not open the folder. It is here:\n\n%s") % folder)

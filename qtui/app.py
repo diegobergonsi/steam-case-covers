@@ -11,6 +11,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 import steamcase as sc
+from qtui import i18n
 from qtui.preview import PreviewProvider
 from qtui.system import CUSTOM_ART_HELP, PAGE_HELP, SAVE_KEY
 
@@ -30,6 +31,7 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     if not _styled:                                    # Qt allows this once, before the first QML is loaded
         QQuickStyle.setStyle("Basic")                  # never the desktop's own style (a KDE style once made the window fail to load)
         _styled = True
+    i18n.set_language(i18n.language())                 # the translator of the QML text, English included (it also picks the plural forms)
     qml_dir = qml_dir or os.path.join(HERE, "qml")
     assets_dir = assets_dir if assets_dir is not None else os.path.join(sc.HERE, "assets")
     icon = os.path.join(assets_dir, "icon.png")
@@ -42,13 +44,19 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     ctx = engine.rootContext()
     ctx.setContextProperty("shell", shell)
     ctx.setContextProperty("saveKey", SAVE_KEY)
-    ctx.setContextProperty("familyHelp", sc.FAMILY_HELP)
-    ctx.setContextProperty("autoArtHelp", sc.AUTO_ART_HELP)
-    ctx.setContextProperty("customArtHelp", CUSTOM_ART_HELP)
-    ctx.setContextProperty("pageHelp", PAGE_HELP)
+    def help_texts():                                  # the long help of the little "i" tips, in the language in use
+        ctx.setContextProperty("familyHelp", i18n.tr(sc.FAMILY_HELP))
+        ctx.setContextProperty("autoArtHelp", i18n.tr(sc.AUTO_ART_HELP))
+        ctx.setContextProperty("customArtHelp", i18n.tr(CUSTOM_ART_HELP))
+        ctx.setContextProperty("pageHelp", i18n.tr(PAGE_HELP))
+    help_texts()
+    shell.languageChanged.connect(help_texts)
     ctx.setContextProperty("discordIcon", _asset_url(assets_dir, "discord.png"))
     ctx.setContextProperty("kofiIcon", _asset_url(assets_dir, "kofi.png"))
     ctx.setContextProperty("updateIcon", _asset_url(assets_dir, "update.png"))
+    ctx.setContextProperty("usFlag", _asset_url(assets_dir, "flag_us.png"))
+    ctx.setContextProperty("brFlag", _asset_url(assets_dir, "flag_br.png"))
+    shell.languageChanged.connect(engine.retranslate)          # the qsTr text is read again; the words that come from Python follow (see i18n.announce_change)
     engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
     if problems or not engine.rootObjects():
         raise RuntimeError("The window could not be built:\n" + "\n".join(problems or ["Main.qml produced no window"]))

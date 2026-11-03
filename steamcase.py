@@ -108,6 +108,14 @@ def default_covers_dir():
     return os.path.join(base, "steamcase", "covers")
 
 
+translate = lambda text: text           # the window puts its own tr() here, so the messages it shows are in its language; the command line stays English
+
+
+def _t(text):
+    """A message a person reads: translated when the window set `translate`. Mark with _t(...) only the text with its %s, never the finished sentence."""
+    return translate(text)
+
+
 class SteamcaseError(Exception):
     """A problem the user can understand (no Steam found, bad file...). The message is meant to be shown."""
 
@@ -173,7 +181,7 @@ def _require_https(url):
         return
     if ALLOW_LOCAL_HTTP and parts.scheme == "http" and parts.hostname in ("127.0.0.1", "localhost"):
         return
-    raise SteamcaseError("Refusing to open an address that is not https: %s" % url[:80])
+    raise SteamcaseError(_t("Refusing to open an address that is not https: %s") % url[:80])
 
 
 def _get_opener():
@@ -186,10 +194,10 @@ def _get_opener():
 def _read_capped(resp):
     size = resp.headers.get("Content-Length")
     if size and size.isdigit() and int(size) > MAX_DOWNLOAD:
-        raise SteamcaseError("A download was unexpectedly large (%s bytes); refusing it." % size)
+        raise SteamcaseError(_t("A download was unexpectedly large (%s bytes); refusing it.") % size)
     data = resp.read(MAX_DOWNLOAD + 1)
     if len(data) > MAX_DOWNLOAD:
-        raise SteamcaseError("A download was unexpectedly large; refusing it.")
+        raise SteamcaseError(_t("A download was unexpectedly large; refusing it."))
     return data
 
 
@@ -247,9 +255,9 @@ def check_for_update(current=None):
     except SteamcaseError:
         raise
     except (ValueError, RecursionError, MemoryError, UnicodeError):
-        raise SteamcaseError("GitHub's answer was not understood. Try again later.")
+        raise SteamcaseError(_t("GitHub's answer was not understood. Try again later."))
     except Exception as e:
-        raise SteamcaseError("Could not reach GitHub: %s" % explain_error(e))
+        raise SteamcaseError(_t("Could not reach GitHub: %s") % explain_error(e))
     best = None
     for r in data if isinstance(data, list) else []:
         tag = r.get("tag_name") if isinstance(r, dict) and not r.get("draft") else None
@@ -257,7 +265,7 @@ def check_for_update(current=None):
         if v and (best is None or v > best[0]):
             best = (v, tag)
     if not best:
-        raise SteamcaseError("No releases found on GitHub.")
+        raise SteamcaseError(_t("No releases found on GitHub."))
     mine = version_tuple(current)
     return {"current": current, "latest": best[1], "newer": None if mine is None else best[0] > mine,
             "url": "https://github.com/%s/releases/tag/%s" % (REPO, best[1])}
@@ -314,7 +322,7 @@ def steam_dir(override=None):
     if override:
         path = os.path.expanduser(override)
         if not os.path.isdir(path):
-            raise SteamcaseError("Steam folder not found: %s" % path)
+            raise SteamcaseError(_t("Steam folder not found: %s") % path)
         return path
     home = os.path.expanduser("~")
     cands = []
@@ -341,7 +349,7 @@ def steam_dir(override=None):
     for c in cands:
         if os.path.isdir(os.path.join(c, "steamapps")) or os.path.isdir(os.path.join(c, "userdata")):
             return os.path.realpath(c)
-    raise SteamcaseError("Could not find Steam. Is it installed? (CLI: pass its folder with --steam-dir.)")
+    raise SteamcaseError(_t("Could not find Steam. Is it installed? (CLI: pass its folder with --steam-dir.)"))
 
 
 def library_paths(steam):
@@ -377,33 +385,33 @@ def _load_library_json(json_path):
     try:
         return json.loads(safefile.read_small_file(path, MAX_LIBRARY_FILE, follow_links=True).decode("utf-8-sig"))
     except safefile.FileTooBig:
-        raise SteamcaseError("That file is far too big to be your game list (over %d MB)." % (MAX_LIBRARY_FILE >> 20))
+        raise SteamcaseError(_t("That file is far too big to be your game list (over %d MB).") % (MAX_LIBRARY_FILE >> 20))
     except safefile.NotRegularFile:
-        raise SteamcaseError("Could not read %s as a game list (not a regular file)." % name)
+        raise SteamcaseError(_t("Could not read %s as a game list (not a regular file).") % name)
     except (OSError, ValueError, RecursionError, MemoryError, UnicodeError) as e:
-        raise SteamcaseError("Could not read %s as a game list (%s)." % (name, type(e).__name__))
+        raise SteamcaseError(_t("Could not read %s as a game list (%s).") % (name, type(e).__name__))
 
 
 def owned_ids(json_path):
     d = _load_library_json(json_path)
     ids = d.get("rgOwnedApps") if isinstance(d, dict) else None
     if isinstance(ids, list) and not ids and "rgOwnedPackages" in d:
-        raise SteamcaseError("That file has no games in it. This usually means you were not logged in to Steam in your browser when you saved it. "
+        raise SteamcaseError(_t("That file has no games in it. This usually means you were not logged in to Steam in your browser when you saved it. "
                              "Click “Download your userdata.json” again, log in when Steam asks, then save the page. "
-                             "If the page you see shows no games even though you are logged in, refresh it (F5, or Cmd+R on a Mac) before saving.")
+                             "If the page you see shows no games even though you are logged in, refresh it (F5, or Cmd+R on a Mac) before saving."))
     if not isinstance(ids, list):
-        raise SteamcaseError("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam." % LIBRARY_JSON_URL)
+        raise SteamcaseError(_t("That file has no game list ('rgOwnedApps'). Save %s while logged in to Steam.") % LIBRARY_JSON_URL)
     if not ids:
-        raise SteamcaseError("The game list in that file is empty. Save %s while logged in to Steam." % LIBRARY_JSON_URL)
+        raise SteamcaseError(_t("The game list in that file is empty. Save %s while logged in to Steam.") % LIBRARY_JSON_URL)
     if len(ids) > MAX_APPS:
-        raise SteamcaseError("That game list has %d entries; a real library has far fewer. Refusing it." % len(ids))
+        raise SteamcaseError(_t("That game list has %d entries; a real library has far fewer. Refusing it.") % len(ids))
     try:
         out = [int(i) for i in ids]
     except (TypeError, ValueError):
-        raise SteamcaseError("The game list in that file is damaged. Save %s again." % LIBRARY_JSON_URL)
+        raise SteamcaseError(_t("The game list in that file is damaged. Save %s again.") % LIBRARY_JSON_URL)
     out = [i for i in out if 0 < i < 2 ** 32]                    # real Steam app IDs only
     if not out:
-        raise SteamcaseError("The game list in that file is empty. Save %s while logged in to Steam." % LIBRARY_JSON_URL)
+        raise SteamcaseError(_t("The game list in that file is empty. Save %s while logged in to Steam.") % LIBRARY_JSON_URL)
     return out
 
 
@@ -527,10 +535,10 @@ def pick_account(steam, forced=None):
     accs = [d for d in os.listdir(base) if re.fullmatch(r"[0-9]+", d) and d != "0"] if os.path.isdir(base) else []
     if forced:
         if not re.fullmatch(r"[0-9]+", str(forced)):
-            raise SteamcaseError("The account must be the numeric folder name inside userdata/, e.g. 12345678")
+            raise SteamcaseError(_t("The account must be the numeric folder name inside userdata/, e.g. 12345678"))
         return str(forced)
     if not accs:
-        raise SteamcaseError("No account folders in %s. Log in to Steam once, then retry." % base)
+        raise SteamcaseError(_t("No account folders in %s. Log in to Steam once, then retry.") % base)
     if len(accs) == 1:
         return accs[0]
     recent = None
@@ -629,9 +637,9 @@ def close_steam(steam, timeout=60):
         elif cmd:
             subprocess.Popen(cmd + ["-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            raise SteamcaseError("Could not work out how to close Steam. Please close it yourself.")
+            raise SteamcaseError(_t("Could not work out how to close Steam. Please close it yourself."))
     except OSError as e:
-        raise SteamcaseError("Could not close Steam: %s" % e)
+        raise SteamcaseError(_t("Could not close Steam: %s") % e)
     end = time.time() + timeout
     while time.time() < end:
         if not steam_running():
@@ -644,12 +652,12 @@ def close_steam(steam, timeout=60):
 def start_steam(steam):
     cmd = _steam_launcher(steam)
     if not cmd:
-        raise SteamcaseError("Could not work out how to start Steam. Please start it yourself.")
+        raise SteamcaseError(_t("Could not work out how to start Steam. Please start it yourself."))
     try:
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                          start_new_session=not sys.platform.startswith("win"))
     except OSError as e:
-        raise SteamcaseError("Could not start Steam: %s" % e)
+        raise SteamcaseError(_t("Could not start Steam: %s") % e)
 
 
 # ---------- store data ----------
@@ -762,7 +770,7 @@ def _check_cases(data):
     """SteamcaseError (one sentence naming the platform and the problem) unless `data`, the parsed cases.json, describes every case sensibly:
     "window" four whole numbers inside the 600 x 900 picture and at least MIN_WINDOW each way; "overlay", if given, four whole numbers inside it."""
     def fail(where, what):
-        raise SteamcaseError("cases.json: %s: %s" % (where, what))
+        raise SteamcaseError(_t("cases.json: %s: %s") % (where, what))
 
     def whole(value):
         return isinstance(value, int) and not isinstance(value, bool)
@@ -796,7 +804,7 @@ def _case_windows():
         with open(os.path.join(CASES_DIR, "cases.json"), encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError) as e:
-        raise SteamcaseError("cases.json: cannot be read (%s)" % e)
+        raise SteamcaseError(_t("cases.json: cannot be read (%s)") % e)
     _check_cases(data)
     return data
 
@@ -1244,7 +1252,7 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
     only no treatment or the "ribbon" and "rosette" marks go with it (ValueError otherwise, as for a theme).
     `group` (the id of a group, see groups.py) marks the cover as made by hand: it gets the group note and the usual flow leaves it alone."""
     if Image is None:
-        raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
+        raise SteamcaseError(_t("Pillow is missing. Install it with:  python -m pip install pillow"))
     if theme is not None and theme not in THEMES:
         raise ValueError("unknown theme: %r" % (theme,))
     if platform is not None:
@@ -1253,7 +1261,7 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
         raise ValueError("a group id is 1 to 12 lower-case letters and digits: %r" % (group,))
     with Image.open(portrait_path, formats=["PNG", "JPEG", "WEBP"]) as im:        # never let Pillow guess (EPS, TIFF, ... have a worse track record)
         if im.width * im.height > MAX_PIXELS:                  # header check only; nothing is decoded yet
-            raise SteamcaseError("Image is too large to be a game portrait (%dx%d)." % im.size)
+            raise SteamcaseError(_t("Image is too large to be a game portrait (%dx%d).") % im.size)
         art = im.convert("RGBA")
     cover = finish_treatment(apply_theme(_compose(art, frame, platform_window(platform) if platform else WINDOW), theme), treatment,
                              *((platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)) if platform else steam_marks()))
@@ -1340,7 +1348,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     group note) alone, force or not, except those whose appid is in `repaint`: they are made again as normal covers.
     """
     if Image is None:
-        raise SteamcaseError("Pillow is missing. Install it with:  python -m pip install pillow")
+        raise SteamcaseError(_t("Pillow is missing. Install it with:  python -m pip install pillow"))
     _check_hand(tones, groups, repaint, treatment, theme)
     if treatment is not None and treatment not in TREATMENTS:
         raise ValueError("unknown treatment: %r" % (treatment,))        # a note nobody can read back would have the cover rebuilt on every run
@@ -1392,7 +1400,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     info = store_items(ids, log, cancelled, errs)
     if ids and not info and not (cancelled and cancelled()):
         why = explain_error(errs[-1]) if errs else "no answer, check your internet connection"
-        raise SteamcaseError("Could not reach Steam's servers: %s." % why.rstrip("."))
+        raise SteamcaseError(_t("Could not reach Steam's servers: %s.") % why.rstrip("."))
     res = {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0}
     todo = []                                   # only items that can become a cover count towards the progress
     for appid in ids:
@@ -1627,10 +1635,10 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     grid = grid_dir(steam, user)
     covers = list(files) if files else find_covers(covers_dir)
     if not covers:
-        raise SteamcaseError("No covers found in %s. Make them first." % covers_dir)
+        raise SteamcaseError(_t("No covers found in %s. Make them first.") % covers_dir)
     gone = [f for f in covers if not os.path.exists(f)]
     if gone:
-        raise SteamcaseError("%d cover files are missing (deleted since they were made). Click “Make covers” again. Nothing was changed." % len(gone))
+        raise SteamcaseError(_t("%d cover files are missing (deleted since they were made). Click “Make covers” again. Nothing was changed.") % len(gone))
     os.makedirs(grid, exist_ok=True)
     with _Lock(os.path.dirname(grid)):
         _remove_leftovers(grid)
@@ -1677,10 +1685,10 @@ def apply_covers(steam, covers_dir, user=None, files=None):
             try:
                 _undo(grid, backup, {"added": added, "replaced": replaced, "moved": moved})     # leave Steam's art exactly as it was (we already hold the lock)
             except Exception:
-                raise SteamcaseError("Could not write to Steam's artwork folder (%s), and the old artwork could not be put back. "
-                                     "It is safe in the backup folder %s (use Restore, or copy the files back by hand)." % (e, backup))
+                raise SteamcaseError(_t("Could not write to Steam's artwork folder (%s), and the old artwork could not be put back. "
+                                     "It is safe in the backup folder %s (use Restore, or copy the files back by hand).") % (e, backup))
             shutil.rmtree(backup, ignore_errors=True)                           # a failed run must not leave a backup behind
-            raise SteamcaseError("Could not write to Steam's artwork folder (%s). Nothing was changed." % e)
+            raise SteamcaseError(_t("Could not write to Steam's artwork folder (%s). Nothing was changed.") % e)
         return dict(info, applied=len(work), unchanged=len(covers) - len(work), replaced=len(replaced), jpg_moved=len(moved), backup=backup)
 
 
@@ -1742,8 +1750,8 @@ class _Lock:
                 if stale:
                     shutil.rmtree(self.path, ignore_errors=True)
                     continue
-                raise SteamcaseError("Another steamcase window is changing Steam's artwork right now. Wait for it to finish, then try again.")
-        raise SteamcaseError("Could not get exclusive access to Steam's artwork folder. Please try again.")
+                raise SteamcaseError(_t("Another steamcase window is changing Steam's artwork right now. Wait for it to finish, then try again."))
+        raise SteamcaseError(_t("Could not get exclusive access to Steam's artwork folder. Please try again."))
 
     def __exit__(self, *exc):
         shutil.rmtree(self.path, ignore_errors=True)
@@ -1980,7 +1988,7 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
                 except OSError:
                     pass
             shutil.rmtree(backup, ignore_errors=True)
-            raise SteamcaseError("Could not remove the covers (%s). Nothing was changed." % e)
+            raise SteamcaseError(_t("Could not remove the covers (%s). Nothing was changed.") % e)
         return dict(info, removed=len(moved), backup=backup)
 
 
@@ -2054,19 +2062,19 @@ def restore_backup(steam, backup_dir, user=None, keep=False, originals=None):
     cfg = os.path.realpath(os.path.dirname(grid))
     real = os.path.realpath(backup_dir)
     if os.path.dirname(real) != cfg or not os.path.basename(real).startswith(BACKUP_PREFIX):
-        raise SteamcaseError("That is not a steamcase backup of this Steam account.")
+        raise SteamcaseError(_t("That is not a steamcase backup of this Steam account."))
     mf = os.path.join(real, "manifest.json")
     if not os.path.exists(mf):
-        raise SteamcaseError("That folder is not a steamcase backup: %s" % backup_dir)
+        raise SteamcaseError(_t("That folder is not a steamcase backup: %s") % backup_dir)
     try:
         with open(mf) as fh:
             m = json.load(fh)
         names = [str(x) for x in m.get("replaced", []) + m.get("added", [])]
         jpgs = [str(x) for x in m.get("moved", [])]
     except (OSError, ValueError, AttributeError, TypeError, RecursionError, MemoryError, UnicodeError):
-        raise SteamcaseError("The backup's manifest is damaged.")
+        raise SteamcaseError(_t("The backup's manifest is damaged."))
     if not all(_COVER_NAME.match(n) for n in names) or not all(_JPG_NAME.match(n) for n in jpgs):
-        raise SteamcaseError("The backup's manifest lists unexpected files; refusing to use it.")
+        raise SteamcaseError(_t("The backup's manifest lists unexpected files; refusing to use it."))
     with _Lock(cfg):
         _remove_leftovers(grid)
         n = _undo(grid, real, m)
@@ -2214,8 +2222,8 @@ def _completion_args(args, theme=None):
         return None, None
     style = args.completed_style or "ribbon"
     if theme is not None and args.completed_marks == "full" and style != "none":
-        raise SteamcaseError("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
-                             "To use the full marks, make the classic case instead (--theme classic)." % theme.capitalize())
+        raise SteamcaseError(_t("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
+                             "To use the full marks, make the classic case instead (--theme classic).") % theme.capitalize())
     treatment = None if style == "none" else compose_treatment(style, args.completed_marks or ("rosette" if theme else "full"))
     if args.games_page is None or treatment is None:        # "none" needs no page: a bad one must not stop you removing the highlights
         return set(), treatment
@@ -2263,21 +2271,21 @@ def cmd_make(args):
 
 def cmd_apply(args):
     if mixed_cover_colours(args.covers):                    # first: before Steam is closed
-        raise SteamcaseError("The covers in %s are in more than one colour (a colour change was probably interrupted). Nothing was changed. "
-                             "Run make again with the colour you want (--hue, --saturation, --brightness) to finish it, then apply." % args.covers)
+        raise SteamcaseError(_t("The covers in %s are in more than one colour (a colour change was probably interrupted). Nothing was changed. "
+                             "Run make again with the colour you want (--hue, --saturation, --brightness) to finish it, then apply.") % args.covers)
     if mixed_cover_themes(args.covers):
-        raise SteamcaseError("The covers in %s are in more than one theme (a theme change was probably interrupted). Nothing was changed. "
-                             "Run make again with the theme you want (--theme classic or --theme halloween) to finish it, then apply." % args.covers)
+        raise SteamcaseError(_t("The covers in %s are in more than one theme (a theme change was probably interrupted). Nothing was changed. "
+                             "Run make again with the theme you want (--theme classic or --theme halloween) to finish it, then apply.") % args.covers)
     steam = steam_dir(args.steam_dir)
     if steam_running() and not args.yes:
         if args.close_steam:
             print("Closing Steam...")
             if not close_steam(steam):
-                raise SteamcaseError("Steam did not close. Close it yourself and retry.")
+                raise SteamcaseError(_t("Steam did not close. Close it yourself and retry."))
         else:
             print("Steam seems to be running. Close it first (Steam > Exit), or pass --close-steam.")
             if input("Copy anyway? [y/N] ").strip().lower() != "y":
-                raise SteamcaseError("Cancelled.")
+                raise SteamcaseError(_t("Cancelled."))
     r = apply_covers(steam, args.covers, args.user)
     print("Steam account:", r["account_name"], "(folder %s)" % r["account"], "\nGrid folder:", r["grid"])
     if r["applied"]:
@@ -2316,13 +2324,13 @@ def cmd_reset(args):
         if args.close_steam:
             print("Closing Steam...")
             if not close_steam(steam):
-                raise SteamcaseError("Steam did not close. Close it yourself and retry.")
+                raise SteamcaseError(_t("Steam did not close. Close it yourself and retry."))
         else:
             print("Steam seems to be running. Close it first, or pass --close-steam.")
             if input("Continue anyway? [y/N] ").strip().lower() != "y":
-                raise SteamcaseError("Cancelled.")
+                raise SteamcaseError(_t("Cancelled."))
     elif not args.yes and input("Remove them? [y/N] ").strip().lower() != "y":
-        raise SteamcaseError("Cancelled.")
+        raise SteamcaseError(_t("Cancelled."))
     r = reset_to_default(steam, args.user, names, args.everything)
     print("Removed %d covers. Backup: %s\nTo bring them back: python steamcase.py restore" % (r["removed"], r["backup"]))
 
@@ -2331,14 +2339,14 @@ def cmd_restore(args):
     steam = steam_dir(args.steam_dir)
     backups = list_backups(steam, args.user)
     if not backups:
-        raise SteamcaseError("No backups found.")
+        raise SteamcaseError(_t("No backups found."))
     if args.backup and os.path.basename(args.backup) != args.backup:
-        raise SteamcaseError("--backup takes just the folder name (like grid_backup_20260101_120000), not a path.")
+        raise SteamcaseError(_t("--backup takes just the folder name (like grid_backup_20260101_120000), not a path."))
     target = os.path.join(os.path.dirname(backups[0]), args.backup) if args.backup else backups[0]
     if steam_running() and not args.yes:
         print("Steam seems to be running. Close it first so it picks the files up on next start.")
         if input("Restore anyway? [y/N] ").strip().lower() != "y":
-            raise SteamcaseError("Cancelled.")
+            raise SteamcaseError(_t("Cancelled."))
     n = restore_backup(steam, target, args.user)
     left = len(list_backups(steam, args.user))
     print("Restored from %s (%d files). %d older backup%s left; run restore again to go one step further back." % (target, n, left, "" if left == 1 else "s"))

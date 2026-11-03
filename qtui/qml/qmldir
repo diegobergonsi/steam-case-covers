@@ -26,3 +26,4 @@ NavLink 1.0 NavLink.qml
 HomeScreen 1.0 HomeScreen.qml
 GamesScreen 1.0 GamesScreen.qml
 CasesScreen 1.0 CasesScreen.qml
+LanguageFlag 1.0 LanguageFlag.qml

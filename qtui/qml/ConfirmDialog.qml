@@ -11,7 +11,7 @@ FocusScope {
     property string title: ""
     property var paragraphs: []
     property string confirmText: "OK"
-    property string cancelText: "Cancel"
+    property string cancelText: qsTr("Cancel")
     property var returnTo: null                         // the item that had the focus before, so the keyboard comes back to it
     property Item focusBack: null                       // set by the screen: the button the keyboard goes back to (it may be greyed out while the question is open)
     signal confirmed()

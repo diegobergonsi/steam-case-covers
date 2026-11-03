@@ -11,9 +11,10 @@ import steamcase as sc
 from qtui.filepicker import pick_file
 from qtui.system import SAVE_KEY
 from qtui.watcher import DownloadWatcher
+from qtui.i18n import N_, tr
 
-WAITING = "Waiting for userdata.json…"
-INSTALLED_ONLY = "Using installed games only."
+WAITING = N_("Waiting for userdata.json…")
+INSTALLED_ONLY = N_("Using installed games only.")
 
 
 class Library(QObject):
@@ -86,11 +87,11 @@ class Library(QObject):
 
     def _show_default_status(self):
         if self._installed:
-            self._set_status(INSTALLED_ONLY, "ok")
+            self._set_status(tr(INSTALLED_ONLY), "ok")
         elif self._path:
-            self._set_status("Got it: %s (%d items in your library)." % (os.path.basename(self._path), self._count), "ok")
+            self._set_status(tr("Got it: %s (%d items in your library).") % (os.path.basename(self._path), self._count), "ok")
         else:
-            self._set_status(WAITING, "wait")
+            self._set_status(tr(WAITING), "wait")
 
     def _after_change(self):
         self._show_default_status()
@@ -122,11 +123,11 @@ class Library(QObject):
         count, why = self._check(path)
         self._why = why
         if why:
-            text = "That file doesn't look right: %s" % why
+            text = tr("That file doesn't look right: %s") % why
             if self._path:                                      # say what is still in use: the old pop-up left that text on screen
-                text += " Still using %s." % os.path.basename(self._path)
+                text += tr(" Still using %s.") % os.path.basename(self._path)
             elif self._installed:
-                text += " Still using installed games only."
+                text += tr(" Still using installed games only.")
             self._set_status(text, "error")
             return False
         self._accept(path, count)
@@ -141,7 +142,7 @@ class Library(QObject):
         """A file the user picked (Browse, or Qt's dialog): a bad one gets a box as well as the status line. The watcher uses useFile and stays quiet."""
         ok = self.useFile(path)
         if not ok:
-            self.failed.emit("That file doesn't look right", self._why)
+            self.failed.emit(tr("That file doesn't look right"), self._why)
         return ok
 
     @Slot()
@@ -164,13 +165,13 @@ class Library(QObject):
     def openDownloadPage(self):
         QDesktopServices.openUrl(QUrl(sc.library_login_url()))
         # Qt cannot tell whether a browser really opened, so always show the way out
-        self._set_status("Opening your browser\u2026 Log in to Steam if it asks. You'll then see a page of plain text: save it as userdata.json (%s) and I'll pick it up. "
-                         "Nothing opened? Click \u201cCopy link\u201d and paste it into your browser." % SAVE_KEY, "wait")
+        self._set_status(tr("Opening your browser\u2026 Log in to Steam if it asks. You'll then see a page of plain text: save it as userdata.json (%s) and I'll pick it up. "
+                         "Nothing opened? Click \u201cCopy link\u201d and paste it into your browser.") % SAVE_KEY, "wait")
 
     @Slot()
     def copyLink(self):
         QGuiApplication.clipboard().setText(sc.library_login_url())
-        self._set_status("Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (%s)." % SAVE_KEY, "ok")
+        self._set_status(tr("Link copied. Paste it into your browser, log in if asked, then save the page as userdata.json (%s).") % SAVE_KEY, "ok")
 
     @Slot()
     def browse(self):
@@ -181,7 +182,7 @@ class Library(QObject):
 
         def ask():
             try:
-                path = pick_file("Choose your userdata.json", self._downloads)
+                path = pick_file(tr("Choose your userdata.json"), self._downloads)
             except Exception:
                 path = None                                     # no chooser worked: Qt's own dialog
             self._picked.emit(path)

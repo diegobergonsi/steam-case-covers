@@ -5,9 +5,10 @@ import os
 import shutil
 import subprocess
 import sys
+from qtui.i18n import tr
 
 
-def pick_file(title, start_dir, kind=("JSON files", "*.json")):
+def pick_file(title, start_dir, kind=(tr("JSON files"), "*.json")):
     """The path the user chose; "" when they cancelled; None when no desktop chooser worked, so the caller shows the Qt dialog.
     `kind` is (description, patterns separated by spaces) of the files to show first."""
     if not sys.platform.startswith("linux"):

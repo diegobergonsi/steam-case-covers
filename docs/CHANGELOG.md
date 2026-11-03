@@ -7,6 +7,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 ## [1.6.0] - 2026-11-02
 
 ### ✨ New
+- The app speaks Brazilian Portuguese too. It starts in your system's language, and two small flags under the name (United States and Brazil) switch it at any time. The choice is remembered. The command line, the README and the release notes stay in English.
 - A brand new window, with your steps on the left and a live preview beside every choice. Home shows your progress, and there is soft motion ("Reduce effects" turns it off). Every option of the old window is still there, and the app now remembers your switches.
 - Pick games by hand and give them a console case. From Home, tick the games you want and choose: PlayStation 3, 4 or 5, Xbox 360, Xbox One, Xbox Series X|S, Nintendo Switch or Switch 2 (or the Steam case). Make and Add to Steam then work only on those games, and the usual way leaves them alone.
 - Groups remember the games you picked by hand. They are saved in named groups: a console case, or the Steam case in a colour you choose. Add games to a group later, or delete it. On Make and Reset you can tick a group to repaint or reset it.
@@ -17,7 +18,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - The rosette of a 100% game is now at the top left of every case and the green family corner at the top right, so neither hides a logo. The "100% Complete" ribbon is the same width everywhere. Covers made before are still recognised.
 - Tall game art is squeezed a little and cropped a little, instead of losing 10% at the top and bottom, so titles are not cut. This applies to covers you make from now on.
 - To run from the code, use `python -m qtui` (it was `python gui.py`). It needs Python 3.10 or newer and PySide6.
-- The Linux download is about 70 MB instead of 26 MB, because the new window carries Qt. The window also can't be made quite as short as before (500 px instead of 460).
+- The Linux download is about 70 MB instead of 26 MB, because the new window carries Qt. The window also can't be made quite as short as before (528 px instead of 460), to fit the language flags.
 
 ### 🛠 Fixed
 - After a crash in the middle of "Add to Steam", Restore works right away instead of waiting ten minutes, and the half-copied file the crash left in Steam's folder is cleaned up.
