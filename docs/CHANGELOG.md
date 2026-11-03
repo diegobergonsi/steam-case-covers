@@ -4,7 +4,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
-## [1.6.0] - 2026-11-02
+## [1.6.0] - 2026-11-03
 
 ### ✨ New
 - The app speaks Brazilian Portuguese too. It starts in your system's language, and two small flags under the name (United States and Brazil) switch it at any time. The choice is remembered. The command line, the README and the release notes stay in English.
@@ -16,6 +16,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ### 🔧 Changed
 - The rosette of a 100% game is now at the top left of every case and the green family corner at the top right, so neither hides a logo. The "100% Complete" ribbon is the same width everywhere. Covers made before are still recognised.
+- The Discord, Ko-fi and update links are now at the bottom of the list on the left. The list reads Home, then five numbered steps.
 - Tall game art is squeezed a little and cropped a little, instead of losing 10% at the top and bottom, so titles are not cut. This applies to covers you make from now on.
 - To run from the code, use `python -m qtui` (it was `python gui.py`). It needs Python 3.10 or newer and PySide6.
 - The Linux download is about 70 MB instead of 26 MB, because the new window carries Qt. The window also can't be made quite as short as before (528 px instead of 460), to fit the language flags.
@@ -31,7 +32,8 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ### 🧰 Behind the scenes
 - Release pages now show these notes, and new releases are announced on the project's Discord.
-- Documentation: the README screenshots show the new window.
+- Documentation: the README, its screenshots and the credits describe the new window, the console cases and the Ko-fi icon.
+- Every change is now also checked by the Qt window tests on Windows, macOS and Linux.
 
 ## [1.5.0] - 2026-10-29
 - New: a Halloween case theme. Under the colour swatches, "Case theme" offers "Classic" (as before) and "Halloween": a cobweb with a spider, a pumpkin and a spider hanging from the top, drawn on the case in whatever colour you picked. The Halloween case goes with the rosette-only marks for 100% games, so choosing it switches that choice to "Rosette only" and greys it out; going back to Classic restores your choice. Switching the theme asks before it replaces covers you already made, and "Remove only ours" still finds themed covers. On the command line: `--theme {classic,halloween}`; without it the covers already in the folder keep their theme. The artwork is original (see `docs/THIRD_PARTY.md`). Covers made before are untouched.
