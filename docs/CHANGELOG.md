@@ -4,6 +4,8 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+- Documentation: the README is also in Brazilian Portuguese (`README.pt-BR.md`), with screenshots of the program in Portuguese. Both READMEs start with two flags that switch between them.
+
 ## [1.6.0] - 2026-11-03
 
 ### ✨ New

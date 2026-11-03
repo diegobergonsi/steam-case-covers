@@ -2740,6 +2740,58 @@ class MakeTreated(StoreMocks):
 
 
 
+class ReadmeLanguages(unittest.TestCase):
+    """README.md (English, the default) and README.pt-BR.md say the same things; each has the two flags that lead to the other."""
+    def read(self, name):
+        with open(os.path.join(sc.HERE, name), encoding="utf-8") as f:
+            return f.read()
+
+    def test_each_readme_has_both_flags_and_they_lead_to_the_two_files(self):
+        for name in ("README.md", "README.pt-BR.md"):
+            text = self.read(name)
+            self.assertRegex(text, r'<a href="README\.md"><img src="assets/flag_us\.png"')
+            self.assertRegex(text, r'<a href="README\.pt-BR\.md"><img src="assets/flag_br\.png"')
+        for flag in ("flag_us.png", "flag_br.png"):
+            self.assertTrue(os.path.isfile(os.path.join(sc.HERE, "assets", flag)))
+
+    def test_every_image_and_file_link_in_both_exists(self):
+        for name in ("README.md", "README.pt-BR.md"):
+            text = self.read(name)
+            for target in re.findall(r'(?:src|srcset|href)="((?:assets|docs)/[^"#]+)', text) + re.findall(r"\]\(((?:assets|docs)/[^)#]+)\)", text):
+                self.assertTrue(os.path.exists(os.path.join(sc.HERE, target)), "%s links to a missing file: %s" % (name, target))
+
+    def test_the_portuguese_one_has_the_same_sections_anchors_and_code(self):
+        en, pt = self.read("README.md"), self.read("README.pt-BR.md")
+        for pattern in (r'<a id="([a-z-]+)"', r'<details( id="[a-z-]+")?>', r"^## ", r"^### ", r"^```", r"^> \[!"):
+            self.assertEqual(len(re.findall(pattern, en, re.M)), len(re.findall(pattern, pt, re.M)), pattern)
+        self.assertEqual(re.findall(r'<a id="([a-z-]+)"', en), re.findall(r'<a id="([a-z-]+)"', pt))
+        self.assertEqual(re.findall(r"^python steamcase\.py [^#\n]*", en, re.M), re.findall(r"^python steamcase\.py [^#\n]*", pt, re.M))   # the commands are the same
+
+    def test_the_portuguese_one_shows_the_program_in_portuguese(self):
+        en, pt = self.read("README.md"), self.read("README.pt-BR.md")
+        for name in ("home", "look", "100"):
+            self.assertIn("assets/screenshot-%s.png" % name, en)
+            self.assertIn("assets/screenshot-%s-pt.png" % name, pt)
+            self.assertNotIn("assets/screenshot-%s.png" % name, pt)
+            self.assertTrue(os.path.isfile(os.path.join(sc.HERE, "assets", "screenshot-%s-pt.png" % name)))
+
+    def test_the_words_the_project_keeps_out_of_public_files_are_in_neither(self):
+        for name in ("README.md", "README.pt-BR.md"):
+            self.assertNotRegex(self.read(name), r"(?i)flatpak|flathub|\baur\b")
+
+    def test_the_buttons_the_portuguese_readme_names_are_the_ones_the_program_shows(self):
+        pt = self.read("README.pt-BR.md")
+        try:
+            from qtui.i18n_pt_br import PT_BR
+        except ImportError:
+            self.skipTest("PySide6 missing")
+        for english in ("Open the page in my browser", "Copy link", "Make covers", "Apply to Steam", "Restore previous artwork", "Reset to Steam's default art",
+                        "Remove all", "Pick games by hand", "Open my games page", "Browse…", "Use my own custom art where I have it", "Skip blurry covers",
+                        "Open covers folder", "Rosette and ribbon", "Rosette only", "Gold case", "Gold border", "Normal case", "No special case",
+                        "Mark family games with a green corner", "Remove only ours"):
+            self.assertIn("**%s**" % PT_BR[english].rstrip("."), pt, english)
+
+
 class DiscordButton(unittest.TestCase):
     """The Discord icon in the window's navigation: one link, one bundled image, credited."""
     PNG = os.path.join(sc.HERE, "assets", "discord.png")
@@ -3072,7 +3124,7 @@ class ReleaseMessage(unittest.TestCase):
             text = f.read()
         self.assertIn("Halloween", self.rm.section(text, "v1.5.0"))
 
-    def test_the_changelog_has_the_1_6_0_notes_and_nothing_waits_under_unreleased(self):
+    def test_the_changelog_has_the_1_6_0_notes(self):
         with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
             text = f.read()
         notes = self.rm.section(text, "v1.6.0")
@@ -3081,7 +3133,6 @@ class ReleaseMessage(unittest.TestCase):
         self.assertRegex(text, r"## \[1\.6\.0\] - 2026-11-03")
         for word in ("bottom of the list on the left", "README", "Qt window tests"):
             self.assertIn(word, notes)
-        self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # everything that was waiting is in 1.6.0
         description = self.rm.announcement(text, "v1.6.0", "https://example.test/r")["embeds"][0]["description"]
         self.assertNotIn("Documentation", description)
         self.assertLess(len(description), 1700)
