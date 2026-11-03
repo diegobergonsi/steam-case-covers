@@ -31,11 +31,18 @@
   <a href="#support-the-project">Apoio</a>
 </p>
 
+<table align="center">
+  <tr>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home-pt.png"><img src="assets/screenshot-home-pt.png" width="380" alt="Início: os passos à esquerda com as bandeiras de idioma, Escolher jogos à mão e a seção Desfazer"></a><br><sub>Início</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look-pt.png"><img src="assets/screenshot-look-pt.png" width="380" alt="O passo Visual: uma prévia da case e as opções de cor"></a><br><sub>1. Escolha o visual</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100-pt.png"><img src="assets/screenshot-100-pt.png" width="380" alt="O passo Jogos 100%: uma case dourada com roseta e faixa, e as opções para marcar esses jogos"></a><br><sub>2. Destaque os seus jogos com 100%</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases-pt.png"><img src="assets/screenshot-cases-pt.png" width="380" alt="Escolha uma case: a case da Steam e as de PlayStation, Xbox e Nintendo, cada uma com o seu visual"></a><br><sub>3. Ou escolha uma case de console à mão</sub></td>
+  </tr>
+</table>
+
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home-pt.png"><img src="assets/screenshot-home-pt.png" width="280" alt="Início: os passos à esquerda com as bandeiras de idioma, Escolher jogos à mão e a seção Desfazer"></a>
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look-pt.png"><img src="assets/screenshot-look-pt.png" width="280" alt="O passo Visual: uma prévia da case e as opções de cor"></a>
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100-pt.png"><img src="assets/screenshot-100-pt.png" width="280" alt="O passo Jogos 100%: uma case dourada com roseta e faixa, e as opções para marcar esses jogos"></a>
-  <br>
   <em>O programa inteiro: Início e depois cinco passos curtos, sem terminal. A prévia acompanha cada escolha.</em>
 </p>
 
