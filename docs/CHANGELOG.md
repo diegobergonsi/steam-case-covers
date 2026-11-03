@@ -8,6 +8,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ### 🛠 Fixed
 - Covers of your 100% games made by an older version are now made again, so the rosette is on the right side. Before, the app kept the old ones, even after Reset. The app asks first. Covers of games from your family library get the same treatment, and plain covers are left alone.
+- When you pick games by hand, "Continue" and "Pick games by hand" now open the screen where you pick games. Before, once every step was done they opened the game list, which looks just like the step by step way.
 
 ### 🔧 Changed
 - In Brazilian Portuguese, the program now says "case" instead of "caixa".
