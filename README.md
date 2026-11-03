@@ -60,9 +60,9 @@ Steam shows your library as tall portrait cards. This tool puts each game's own 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="A Steam library of blue cases with two games at 100% inside a gold border, and Leaf it Alone with a green family corner"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="A Steam library with Steam cases, PlayStation 5 and Xbox One cases, games at 100% with a rosette and a gold border, and Leaf it Alone with a green family corner"></a>
   <br>
-  <em>How the covers look inside Steam. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge). Coral Island and V Rising are at 100%, here with the gold border option.</em>
+  <em>How the covers look inside Steam: the Steam case, console cases (God of War, Horizon Zero Dawn and The Last of Us in PlayStation 5 cases, Hellblade and State of Decay 2 in Xbox One cases) and games at 100% with a rosette, some with the gold border option. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge).</em>
 </p>
 
 <a id="install"></a>

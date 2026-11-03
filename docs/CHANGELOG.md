@@ -15,7 +15,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - In Brazilian Portuguese, the program now says "case" instead of "caixa".
 
 ### 📝 Behind the scenes
-- Documentation: the README is also in Brazilian Portuguese (`README.pt-BR.md`), with screenshots of the program in Portuguese and a new one of the console cases. Both READMEs start with two flags that switch between them, and show the screenshots in a grid.
+- Documentation: the README is also in Brazilian Portuguese (`README.pt-BR.md`), with screenshots of the program in Portuguese and a new one of the console cases. Both READMEs start with two flags that switch between them, and show the screenshots in a grid. The picture of a Steam library now shows console cases too.
 
 ## [1.6.0] - 2026-11-03
 
