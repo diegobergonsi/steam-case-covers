@@ -11,7 +11,7 @@ Flow {
     signal chosen(int step)
     spacing: Theme.s8
     Accessible.role: Accessible.Grouping
-    Accessible.name: "Your choices"
+    Accessible.name: qsTr("Your choices")
 
     Repeater {
         model: summary.model
@@ -25,7 +25,7 @@ Flow {
             Behavior on color { ColorAnimation { duration: Theme.dur(120) } }
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
-            Accessible.name: modelData.label + ": " + modelData.value + ". Change"
+            Accessible.name: modelData.label + ": " + modelData.value + qsTr(". Change")
             Accessible.onPressAction: summary.chosen(modelData.step)
             Rectangle {                                   // keyboard focus ring
                 anchors.fill: parent

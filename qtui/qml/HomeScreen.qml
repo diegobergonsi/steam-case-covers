@@ -8,23 +8,23 @@ ScreenFrame {
     id: screen
     objectName: "home_screen"
     readonly property var apply: shell.apply
-    readonly property var stateText: ({"done": "Done", "active": "Next", "open": "Open", "locked": "Locked"})
-    title: shell.returning ? "Welcome back" : "Cases for your games"
-    subtitle: shell.returning ? "Pick up where you left off." : "Give every game in your Steam library a case, in about five minutes."
+    readonly property var stateText: ({"done": qsTr("Done"), "active": qsTr("Next"), "open": qsTr("Open"), "locked": qsTr("Locked")})
+    title: shell.returning ? qsTr("Welcome back") : qsTr("Cases for your games")
+    subtitle: shell.returning ? qsTr("Pick up where you left off.") : qsTr("Give every game in your Steam library a case, in about five minutes.")
 
     Component.onCompleted: { apply.refresh(); apply.watching = true; apply.groupTicks.refresh() }
     Component.onDestruction: apply.watching = false
 
     Section {
         objectName: "home_section_main"
-        heading: shell.returning ? "Your progress" : "Step by step"
+        heading: shell.returning ? qsTr("Your progress") : qsTr("Step by step")
         Text {
             visible: !shell.returning
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: "Five short steps, nothing to install or run: get your game list, choose the look, optionally highlight your 100% games, make the covers, and add them to Steam."
+            text: qsTr("Five short steps, nothing to install or run: get your game list, choose the look, optionally highlight your 100% games, make the covers, and add them to Steam.")
         }
         Column {
             visible: shell.returning
@@ -81,23 +81,23 @@ ScreenFrame {
     }
     Section {
         objectName: "home_section_manual"
-        heading: "Pick games by hand"
+        heading: qsTr("Pick games by hand")
         Text {
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: shell.flow === "manual" ? "You are choosing games and cases by hand. Go back to the step by step way to give every game the same case."
-                                          : "Choose games and put them in PlayStation, Xbox or Nintendo cases."
+            text: shell.flow === "manual" ? qsTr("You are choosing games and cases by hand. Go back to the step by step way to give every game the same case.")
+                                          : qsTr("Choose games and put them in PlayStation, Xbox or Nintendo cases.")
         }
         ButtonRow {
-            QuietButton { objectName: "home_manual"; visible: shell.flow !== "manual"; text: "Pick games by hand"; onClicked: shell.startManual() }
-            QuietButton { objectName: "home_natural"; visible: shell.flow === "manual"; text: "Back to step by step"; onClicked: shell.startNatural() }
+            QuietButton { objectName: "home_manual"; visible: shell.flow !== "manual"; text: qsTr("Pick games by hand"); onClicked: shell.startManual() }
+            QuietButton { objectName: "home_natural"; visible: shell.flow === "manual"; text: qsTr("Back to step by step"); onClicked: shell.startNatural() }
         }
     }
     Section {
         objectName: "home_section_undo"
-        heading: "Undo"
+        heading: qsTr("Undo")
         StatusLine {
             objectName: "home_note"
             text: screen.apply.note
@@ -117,7 +117,7 @@ ScreenFrame {
         }
         ChoiceChips {                                 // only with two or more Steam accounts; Restore and Reset change the account chosen here
             objectName: "home_accounts"
-            groupName: "Steam account"
+            groupName: qsTr("Steam account")
             width: parent.width
             visible: screen.apply.canChoose
             enabled: !screen.apply.busy && !shell.make.running
@@ -126,13 +126,13 @@ ScreenFrame {
             onChosen: (key) => screen.apply.chooseAccount(key)
         }
         ButtonRow {
-            QuietButton { objectName: "home_restore"; text: "Restore previous artwork"; enabled: screen.apply.canRestore; onClicked: screen.apply.restore() }
-            QuietButton { objectName: "home_reset"; text: "Reset to Steam's default art"; enabled: screen.apply.canReset; onClicked: screen.apply.reset() }
+            QuietButton { objectName: "home_restore"; text: qsTr("Restore previous artwork"); enabled: screen.apply.canRestore; onClicked: screen.apply.restore() }
+            QuietButton { objectName: "home_reset"; text: qsTr("Reset to Steam's default art"); enabled: screen.apply.canReset; onClicked: screen.apply.reset() }
         }
         SwitchRow {
             objectName: "home_restart"
             enabled: screen.apply.canRestore || screen.apply.canReset
-            label: "Start Steam again when finished"
+            label: qsTr("Start Steam again when finished")
             checked: screen.apply.restart
             onToggled: (value) => screen.apply.restart = value
         }
@@ -154,14 +154,14 @@ ScreenFrame {
 
     Section {
         objectName: "home_section_groups"
-        heading: "Your groups"
+        heading: qsTr("Your groups")
         visible: screen.apply.groupTicks.choices.length > 0
         Text {
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: "Reset leaves the covers of these groups on Steam. Tick a group to reset it too. That deletes the group."
+            text: qsTr("Reset leaves the covers of these groups on Steam. Tick a group to reset it too. That deletes the group.")
         }
         Repeater {
             model: screen.apply.groupTicks.choices
@@ -178,7 +178,7 @@ ScreenFrame {
     footer: [
         PrimaryButton {
             objectName: "home_main"
-            text: shell.returning ? "Continue \u2192" : "Start \u2192"
+            text: shell.returning ? qsTr("Continue \u2192") : qsTr("Start \u2192")
             onClicked: shell.go(shell.returning ? shell.resume : 1)
         }
     ]

@@ -11,6 +11,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 import steamcase as sc
+from qtui import i18n
 from qtui.preview import PreviewProvider
 from qtui.system import CUSTOM_ART_HELP, PAGE_HELP, SAVE_KEY
 
@@ -30,6 +31,7 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     if not _styled:                                    # Qt allows this once, before the first QML is loaded
         QQuickStyle.setStyle("Basic")                  # never the desktop's own style (a KDE style once made the window fail to load)
         _styled = True
+    i18n.set_language(i18n.language())                 # the translator of the QML text, English included (it also picks the plural forms)
     qml_dir = qml_dir or os.path.join(HERE, "qml")
     assets_dir = assets_dir if assets_dir is not None else os.path.join(sc.HERE, "assets")
     icon = os.path.join(assets_dir, "icon.png")

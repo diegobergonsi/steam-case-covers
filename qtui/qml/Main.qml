@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: Theme.windowMinWidth
     minimumHeight: Theme.windowMinHeight
     visible: true
-    title: "Steam Case Covers"
+    title: qsTr("Steam Case Covers")
     color: Theme.bg
 
     readonly property int screenMs: Theme.dur(260)          // read by the tests
@@ -23,8 +23,8 @@ ApplicationWindow {
     onClosing: (close) => {                                       // never while Steam's artwork is being changed: it could be left half-done
         if (shell.apply.busy) {
             close.accepted = false
-            if (!win.queued("Please wait"))
-                win.show(messages, ["Please wait", [{"text": "Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window.", "kind": "main"}], "OK", "", true])
+            if (!win.queued(qsTr("Please wait")))
+                win.show(messages, [qsTr("Please wait"), [{"text": qsTr("Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window."), "kind": "main"}], "OK", "", true])
         }
     }
     Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.poll() }       // notices the saved game list and games page
@@ -52,7 +52,7 @@ ApplicationWindow {
             width: nav.width - 2 * Theme.s24              // a wide font wraps the name onto a second line instead of running out of the menu
             wrapMode: Text.WordWrap
             maximumLineCount: 2
-            text: "Steam Case Covers"
+            text: qsTr("Steam Case Covers")
             color: Theme.text
             font.pixelSize: Theme.sectionSize
             font.bold: true
@@ -77,8 +77,8 @@ ApplicationWindow {
             objectName: "footer_discord"
             y: nav.height - 3 * Theme.navRowHeight - Theme.s8
             width: nav.width
-            text: "Join our Discord"
-            description: "Join our Discord server: ask for help, share ideas and report bugs. Opens in your web browser."
+            text: qsTr("Join our Discord")
+            description: qsTr("Join our Discord server: ask for help, share ideas and report bugs. Opens in your web browser.")
             icon: discordIcon
             onActivated: shell.updates.openDiscord()
         }
@@ -86,8 +86,8 @@ ApplicationWindow {
             objectName: "footer_kofi"
             y: nav.height - 2 * Theme.navRowHeight - Theme.s8
             width: nav.width
-            text: "Support on Ko-fi"
-            description: "Support the author on Ko-fi with a small donation. Optional, the app is free. Opens in your web browser."
+            text: qsTr("Support on Ko-fi")
+            description: qsTr("Support the author on Ko-fi with a small donation. Optional, the app is free. Opens in your web browser.")
             icon: kofiIcon
             onActivated: shell.updates.openKofi()
         }
@@ -95,7 +95,7 @@ ApplicationWindow {
             objectName: "footer_updates"
             y: nav.height - Theme.navRowHeight - Theme.s8
             width: nav.width
-            text: shell.updates.checking ? "Checking\u2026" : "Check for updates"
+            text: shell.updates.checking ? qsTr("Checking\u2026") : qsTr("Check for updates")
             icon: updateIcon
             onActivated: shell.updates.check()
         }
@@ -135,7 +135,7 @@ ApplicationWindow {
         entry.dialog.ask.apply(entry.dialog, entry.args)
     }
     function show(dialog, args, link, cancel) {
-        var entry = {"dialog": dialog, "args": args, "link": link ? link : "", "cancel": cancel ? cancel : "Cancel"}
+        var entry = {"dialog": dialog, "args": args, "link": link ? link : "", "cancel": cancel ? cancel : qsTr("Cancel")}
         if (applyDialog.visible || messages.visible) waiting.push(entry); else present(entry)
     }
     function queued(title) {
@@ -167,7 +167,7 @@ ApplicationWindow {
     Connections {
         target: shell.apply
         function onConfirmNeeded(title, paragraphs, go, alt) { win.show(applyDialog, [title, paragraphs, go, alt]) }
-        function onFailed(text) { win.show(messages, ["Could not finish", [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(text) { win.show(messages, [qsTr("Could not finish"), [{"text": text, "kind": "main"}], "OK", "", true]) }
     }
     Connections {
         target: shell.library
@@ -180,7 +180,7 @@ ApplicationWindow {
     Connections {
         target: shell.updates
         function onMessage(title, paragraphs, ok, cancel, link) {
-            win.show(messages, [title, paragraphs, ok, "", cancel === ""], link, cancel !== "" ? cancel : "Cancel")
+            win.show(messages, [title, paragraphs, ok, "", cancel === ""], link, cancel !== "" ? cancel : qsTr("Cancel"))
         }
     }
 }

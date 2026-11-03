@@ -7,7 +7,7 @@ import "."
 Item {
     id: bar
     property real value: 0
-    property string label: "Progress"
+    property string label: qsTr("Progress")
     width: parent ? parent.width : 0
     implicitHeight: Theme.progressHeight
     height: implicitHeight

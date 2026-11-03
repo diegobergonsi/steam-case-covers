@@ -9,15 +9,15 @@ ScreenFrame {
     objectName: "add_screen"
     readonly property var apply: shell.apply
     readonly property var make: shell.make
-    title: "Add them to Steam"
-    subtitle: "Your covers are copied into your Steam account. A backup is made first."
+    title: qsTr("Add them to Steam")
+    subtitle: qsTr("Your covers are copied into your Steam account. A backup is made first.")
 
     Component.onCompleted: { apply.refresh(); apply.watching = true }       // the screen asks whether Steam runs only while it is shown
     Component.onDestruction: apply.watching = false
 
     Section {
         objectName: "add_section_before"
-        heading: "Before you apply"
+        heading: qsTr("Before you apply")
         StatusLine {
             objectName: "add_note"
             text: screen.apply.note
@@ -37,7 +37,7 @@ ScreenFrame {
         }
         ChoiceChips {
             objectName: "add_accounts"
-            groupName: "Steam account"
+            groupName: qsTr("Steam account")
             width: parent.width
             visible: screen.apply.canChoose
             enabled: !screen.apply.busy && !screen.make.running
@@ -48,14 +48,14 @@ ScreenFrame {
         SwitchRow {
             objectName: "add_restart"
             enabled: screen.apply.canApply
-            label: "Start Steam again when finished"
+            label: qsTr("Start Steam again when finished")
             checked: screen.apply.restart
             onToggled: (value) => screen.apply.restart = value
         }
     }
     Section {
         objectName: "add_section_result"
-        heading: "Result"
+        heading: qsTr("Result")
         StatusLine {
             objectName: "add_status"
             text: screen.apply.status !== "" ? screen.apply.status : screen.apply.readyText
@@ -66,7 +66,7 @@ ScreenFrame {
     footer: [
         PrimaryButton {                               // one button for the whole step, so the keyboard focus stays: Apply, then the way home
             objectName: "add_main"
-            text: screen.apply.busy ? "Applying\u2026" : screen.apply.applied ? "Go to Home \u2192" : "Apply to Steam"
+            text: screen.apply.busy ? qsTr("Applying\u2026") : screen.apply.applied ? qsTr("Go to Home \u2192") : qsTr("Apply to Steam")
             enabled: screen.apply.applied || screen.apply.canApply
             onClicked: screen.apply.applied ? shell.go(0) : screen.apply.apply()
         }

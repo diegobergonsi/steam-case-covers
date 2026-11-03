@@ -15,7 +15,7 @@ Item {
     height: Theme.infoSize
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
-    Accessible.name: "More information"
+    Accessible.name: qsTr("More information")
     Accessible.description: text
     Accessible.onPressAction: pinned = !pinned
 

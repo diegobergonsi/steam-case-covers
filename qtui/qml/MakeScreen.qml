@@ -9,8 +9,8 @@ ScreenFrame {
     objectName: "make_screen"
     readonly property var make: shell.make
     readonly property var look: shell.look
-    title: "Make your covers"
-    subtitle: "Downloads each game's artwork from Steam and builds the covers on your computer."
+    title: qsTr("Make your covers")
+    subtitle: qsTr("Downloads each game's artwork from Steam and builds the covers on your computer.")
 
     Item {
         id: layout
@@ -34,7 +34,7 @@ ScreenFrame {
 
             Section {
                 objectName: "make_section_choices"
-                heading: "Your choices"
+                heading: qsTr("Your choices")
                 ChoiceSummary {
                     objectName: "make_choices"
                     width: parent.width
@@ -44,14 +44,14 @@ ScreenFrame {
             }
             Section {
                 objectName: "make_section_groups"
-                heading: "Your groups"
+                heading: qsTr("Your groups")
                 visible: shell.flow === "natural" && screen.make.groupTicks.choices.length > 0
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
                     color: Theme.muted
                     font.pixelSize: Theme.bodySize
-                    text: "These groups of covers were made by hand, so they are left as they are. Tick a group to repaint its covers with the look above. That deletes the group."
+                    text: qsTr("These groups of covers were made by hand, so they are left as they are. Tick a group to repaint its covers with the look above. That deletes the group.")
                 }
                 Repeater {
                     model: screen.make.groupTicks.choices
@@ -66,8 +66,8 @@ ScreenFrame {
             }
             Section {
                 objectName: "make_section_progress"
-                heading: "Progress"
-                ProgressBar { objectName: "make_progress"; label: "Making the covers"; value: screen.make.progress }
+                heading: qsTr("Progress")
+                ProgressBar { objectName: "make_progress"; label: qsTr("Making the covers"); value: screen.make.progress }
                 StatusLine { objectName: "make_status"; text: screen.make.status; kind: screen.make.statusKind }
                 Flow {                                    // what was built: the first covers of the run
                     objectName: "make_thumbs"
@@ -86,12 +86,12 @@ ScreenFrame {
                             asynchronous: true
                             cache: false                          // a cover made again under the same name must show the new picture
                             Accessible.role: Accessible.Graphic
-                            Accessible.name: "Cover " + (index + 1)
+                            Accessible.name: qsTr("Cover %1").arg(index + 1)
                         }
                     }
                 }
                 ButtonRow {
-                    QuietButton { objectName: "make_folder"; text: "Open covers folder"; enabled: screen.make.done; onClicked: screen.make.openFolder() }
+                    QuietButton { objectName: "make_folder"; text: qsTr("Open covers folder"); enabled: screen.make.done; onClicked: screen.make.openFolder() }
                 }
             }
         }
@@ -100,7 +100,7 @@ ScreenFrame {
     footer: [
         QuietButton {                                 // after a run: make them again (the same question is asked if covers would be replaced)
             objectName: "make_again"
-            text: "Make again"
+            text: qsTr("Make again")
             visible: screen.make.done && !screen.make.running
             enabled: screen.make.canMake
             onClicked: screen.make.start()
@@ -108,7 +108,7 @@ ScreenFrame {
         PrimaryButton {                               // one button for the whole job, so the keyboard focus stays: Make covers, Cancel, Next
             id: mainButton
             objectName: "make_main"
-            text: screen.make.running ? "Cancel" : screen.make.done ? screen.make.nextText : "Make covers"
+            text: screen.make.running ? qsTr("Cancel") : screen.make.done ? screen.make.nextText : qsTr("Make covers")
             quiet: screen.make.running
             enabled: screen.make.running ? screen.make.canCancel : screen.make.done || screen.make.canMake
             onClicked: screen.make.running ? screen.make.cancel() : screen.make.done ? shell.next() : screen.make.start()
@@ -124,7 +124,7 @@ ScreenFrame {
     }
     function openQuestion() {
         dialog.ask(make.questionTitle, [{"text": make.questionText, "kind": "main"},
-                                        {"text": "Steam keeps showing your current art until you add the new covers in step 5.", "kind": "muted"}], "Replace them")
+                                        {"text": qsTr("Steam keeps showing your current art until you add the new covers in step 5."), "kind": "muted"}], qsTr("Replace them"))
     }
     Component.onCompleted: {
         make.groupTicks.refresh()                       // the manual way may have changed them since this screen was last shown
