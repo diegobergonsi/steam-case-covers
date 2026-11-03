@@ -3078,7 +3078,9 @@ class ReleaseMessage(unittest.TestCase):
         notes = self.rm.section(text, "v1.6.0")
         for word in ("Qt", "Ko-fi", "console", "Groups", "custom art", "Good to know", "Steam Deck", "named pipe"):
             self.assertIn(word, notes)
-        self.assertRegex(text, r"## \[1\.6\.0\] - 2026-11-02")
+        self.assertRegex(text, r"## \[1\.6\.0\] - 2026-11-03")
+        for word in ("bottom of the list on the left", "README", "Qt window tests"):
+            self.assertIn(word, notes)
         self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # everything that was waiting is in 1.6.0
         description = self.rm.announcement(text, "v1.6.0", "https://example.test/r")["embeds"][0]["description"]
         self.assertNotIn("Documentation", description)
