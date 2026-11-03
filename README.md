@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="280" alt="Home: a welcome, the list of steps on the left and the Undo section"></a>
+  <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="280" alt="Home: the steps on the left with the language flags, Pick games by hand, and the Undo section"></a>
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look.png"><img src="assets/screenshot-look.png" width="280" alt="The Look step: a preview of the case and the colour choices"></a>
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100.png"><img src="assets/screenshot-100.png" width="280" alt="The 100% games step: a gold case with a rosette and ribbon, and the choices to mark those games"></a>
   <br>
@@ -199,6 +199,7 @@ Good to know:
 
 **The app itself**
 - Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's
+- English and Brazilian Portuguese: the app starts in your system's language, and two small flags under the name switch it at any time (the command line and this README stay in English)
 - A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 - Free software: no ads, no account, no telemetry
 
