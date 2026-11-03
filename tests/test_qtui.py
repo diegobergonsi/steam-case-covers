@@ -6444,6 +6444,22 @@ class FlowTests(PickerBase):
         self.shell.startManual()                                              # installed-only is on: the game list is ready
         self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")
 
+    def test_the_manual_flow_opens_at_the_games_to_pick_even_when_every_step_is_done(self):
+        self.shell.startManual()
+        for fact in ("picked", "assigned", "hundred_done", "covers_made", "applied"):
+            self.shell.setFact(fact, True)
+        self.assertEqual([s["state"] for s in self.shell.steps[1:]], ["done"] * 6)
+        self.shell.go(0)                                                      # Home
+        self.assertEqual(self.shell.steps[self.shell.resume]["key"], "pick")  # Continue leads to the screen where games are picked, not to the game list
+        self.shell.startNatural()
+        self.shell.startManual()
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")  # and so does choosing "Pick games by hand" again
+
+    def test_the_natural_flow_still_opens_at_the_game_list_when_every_step_is_done(self):
+        for fact in ("look_done", "hundred_done", "covers_made", "applied"):
+            self.shell.setFact(fact, True)
+        self.assertEqual(self.shell.steps[self.shell.resume]["key"], "game_list")
+
     def test_the_game_list_serves_both_flows(self):
         self.assertEqual(self.shell.steps[1]["state"], "done")
         self.shell.startManual()
