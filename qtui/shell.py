@@ -46,6 +46,7 @@ class Shell(QObject):
         self._apply = Apply(self, self._make, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
         self._updates = Updates(self)
+        self._library.restore()                 # the game list of the last run, if it is still there
         self._picker.selectionChanged.connect(lambda: self.setFact("picked", self._picker.selectedCount > 0))
         self._cases.assignmentsChanged.connect(lambda: self.setFact("assigned", self._cases.assignedCount > 0))
 
@@ -111,6 +112,10 @@ class Shell(QObject):
         self._steps = self._build()
         i18n.announce_change(self)
         self.languageChanged.emit()
+
+    @property
+    def settingsPath(self):
+        return self._path
 
     @Property(bool, notify=stepsChanged)
     def returning(self):
