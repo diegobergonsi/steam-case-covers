@@ -222,6 +222,12 @@ class EngineSelfCheck(unittest.TestCase):
 
 class SystemHelpers(unittest.TestCase):
 
+    def test_the_window_opens_bigger_on_a_big_screen_and_never_smaller_than_before(self):
+        self.assertEqual(system.start_size(3840, 2160), (1280, 900))        # capped: a huge screen does not get a huge window
+        self.assertEqual(system.start_size(1920, 1080), (1280, 810))        # width capped at 1280, height 75%
+        self.assertEqual(system.start_size(1280, 800), (900, 600))          # a Steam Deck
+        self.assertEqual(system.start_size(800, 600), (900, 560))           # a small or unknown screen keeps the old size
+
     def test_a_packaged_linux_app_gives_its_children_the_systems_libraries_again(self):
         from unittest import mock
         with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "platform", "linux"):

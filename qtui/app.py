@@ -13,7 +13,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 import steamcase as sc
 from qtui import i18n
 from qtui.preview import PreviewProvider
-from qtui.system import CUSTOM_ART_HELP, SAVE_KEY, page_help
+from qtui.system import CUSTOM_ART_HELP, SAVE_KEY, page_help, start_size
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _styled = False
@@ -60,6 +60,13 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
     if problems or not engine.rootObjects():
         raise RuntimeError("The window could not be built:\n" + "\n".join(problems or ["Main.qml produced no window"]))
+    screen = QGuiApplication.primaryScreen()
+    if screen is not None:                             # a screen that reports nothing keeps the size in Main.qml
+        free = screen.availableGeometry()
+        root = engine.rootObjects()[0]
+        width, height = start_size(free.width(), free.height())
+        root.setWidth(width)
+        root.setHeight(height)
     return engine
 
 
