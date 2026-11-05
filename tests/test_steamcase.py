@@ -4680,3 +4680,92 @@ class ListGames(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CustomCase(Base):
+    """The user's own case: one 600 x 900 PNG with a see-through art window, checked, kept in the covers folder and measured like a console case."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.addCleanup(sc.use_custom_case, None)
+
+    def case_file(self, name="mine.png", size=sc.SIZE, window=(20, 100, 580, 880), tab=None, colour=(30, 60, 200, 255)):
+        im = sc.Image.new("RGBA", size, colour)
+        if window:
+            im.paste((0, 0, 0, 0), window)
+        if tab:
+            im.paste((255, 0, 0, 255), tab)
+        path = os.path.join(self.tmp, name)
+        im.save(path, format="PNG")
+        return path
+
+    def test_a_good_file_gives_its_window_and_tab(self):
+        info = sc.check_case_file(self.case_file(tab=(30, 110, 70, 150)))
+        self.assertEqual(info, {"window": [20, 100, 580, 880], "overlay": [30, 110, 70, 150]})
+        self.assertEqual(sc.check_case_file(self.case_file("b.png")), {"window": [20, 100, 580, 880]})
+
+    def test_refused_files(self):
+        big = os.path.join(self.tmp, "big.png")
+        with open(big, "wb") as f:
+            f.write(b"\0" * (sc.MAX_CASE_FILE + 1))
+        text = os.path.join(self.tmp, "text.png")
+        with open(text, "w") as f:
+            f.write("not a picture")
+        good = self.case_file("good.png")
+        with open(good, "rb") as f:
+            cut = os.path.join(self.tmp, "cut.png")
+            with open(cut, "wb") as g:
+                g.write(f.read()[:200])
+        link = os.path.join(self.tmp, "link.png")
+        os.symlink(good, link)
+        for name, path, word in (("no window", self.case_file("a.png", window=None), "window"),
+                                 ("wrong size", self.case_file("b.png", size=(601, 900)), "600 x 900"),
+                                 ("double size", self.case_file("c.png", size=(1200, 1800)), "600 x 900"),
+                                 ("small window", self.case_file("d.png", window=(20, 100, 320, 880)), "400"),
+                                 ("a link", link, "link"), ("too big", big, "big"), ("text", text, "PNG"), ("cut short", cut, "PNG"),
+                                 ("missing", os.path.join(self.tmp, "none.png"), "PNG")):
+            with self.subTest(name):
+                with self.assertRaises(sc.SteamcaseError) as ctx:
+                    sc.check_case_file(path)
+                self.assertIn(word, str(ctx.exception))
+
+    def test_save_keeps_a_copy_and_replacing_changes_the_digest(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        self.assertRegex(first, r"[0-9a-f]{16}")
+        self.assertEqual(sc.custom_case_digest(), first)
+        self.assertTrue(os.path.isfile(os.path.join(self.covers, sc.CUSTOM_FILE)))
+        second = sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertNotEqual(first, second)
+        self.assertEqual(sc.custom_case_digest(), second)
+
+    def test_a_refused_pick_keeps_the_old_slot(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        with self.assertRaises(sc.SteamcaseError):
+            sc.save_custom_case(self.case_file("bad.png", window=None), self.covers)
+        self.assertEqual(sc.custom_case_digest(), first)
+        sc.use_custom_case(None)
+        self.assertEqual(sc.use_custom_case(self.covers), first)                       # the kept copy is the old, good one
+
+    def test_use_custom_case_without_a_copy_is_none_and_a_broken_copy_is_a_sentence(self):
+        self.assertIsNone(sc.use_custom_case(self.covers))
+        with open(os.path.join(self.covers, sc.CUSTOM_FILE), "w") as f:
+            f.write("junk")
+        with self.assertRaises(sc.SteamcaseError):
+            sc.use_custom_case(self.covers)
+        self.assertIsNone(sc.custom_case_digest())
+
+    def test_platform_functions_accept_custom_only_when_active(self):
+        for call in (sc.platform_window, sc.platform_overlay, sc.load_platform_frame):
+            with self.subTest(call=call.__name__), self.assertRaises(ValueError):
+                call(sc.CUSTOM)
+        sc.save_custom_case(self.case_file(tab=(30, 110, 70, 150)), self.covers)
+        self.assertEqual(sc.platform_window(sc.CUSTOM), (20, 100, 580, 880))
+        self.assertEqual(sc.platform_overlay(sc.CUSTOM), (30, 110, 70, 150))
+        self.assertEqual(sc.load_platform_frame(sc.CUSTOM).size, sc.SIZE)
+        self.assertEqual(sc.load_platform_frame(sc.CUSTOM, True).size, sc.SIZE)
+        self.assertEqual(len(sc.platform_ribbon(sc.CUSTOM)), 3)
+        self.assertIsInstance(sc.platform_marks_dy(sc.CUSTOM), int)
+        self.assertNotIn(sc.CUSTOM, sc.PLATFORMS)
+

@@ -811,17 +811,110 @@ def _case_windows():
     return data
 
 
-def platform_window(platform):
-    """The art window (x0, y0, x1, y1) inside the frame of a console case. ValueError for a platform that is not one of PLATFORMS."""
+CUSTOM = "custom"                          # the key of the user's own case: accepted where a console platform key is, but not one of PLATFORMS (it has no frame in assets)
+CUSTOM_FILE = "custom_case.png"            # the checked copy of that case, kept in the covers folder
+MAX_CASE_FILE = 8 * 1024 * 1024            # a case is a 600 x 900 picture; anything bigger is not one
+_custom = None                             # shortcut: one slot (frame, info, digest) for the whole process, upgrade when several custom cases are wanted
+
+
+def check_case_file(path):
+    """{"window": [x0, y0, x1, y1]} and, if the case itself covers part of it, "overlay": [..] (as tools/measure_cases.py measures a console case) for a case
+    the user made: a plain PNG, exactly SIZE, with a see-through art window of at least MIN_WINDOW each way. SteamcaseError (one sentence) for anything else."""
+    if Image is None:
+        raise SteamcaseError(_t("Pillow is needed to read a case file."))
+    if os.path.islink(path):
+        raise SteamcaseError(_t("That file is a link, not a picture. Pick the picture itself."))
+    if not os.path.isfile(path):
+        raise SteamcaseError(_t("That is not a PNG picture I can read."))
+    if os.path.getsize(path) > MAX_CASE_FILE:
+        raise SteamcaseError(_t("That file is far too big to be a case (over %d MB).") % (MAX_CASE_FILE >> 20))
+    try:
+        with Image.open(path, formats=["PNG"]) as im:
+            if im.size != SIZE:
+                raise SteamcaseError(_t("A case must be a PNG of exactly %d x %d pixels; this one is %d x %d.") % (SIZE + im.size))
+            alpha = im.convert("RGBA").getchannel("A")
+    except SteamcaseError:
+        raise
+    except Exception:
+        raise SteamcaseError(_t("That is not a PNG picture I can read."))
+    window = alpha.point(lambda a: 255 if a == 0 else 0).getbbox()
+    if window is None:
+        raise SteamcaseError(_t("The art window is missing: the part where the cover goes must be fully see-through."))
+    if window[2] - window[0] < MIN_WINDOW or window[3] - window[1] < MIN_WINDOW:
+        raise SteamcaseError(_t("The art window is too small: it must be at least %d x %d pixels.") % (MIN_WINDOW, MIN_WINDOW))
+    info = {"window": list(window)}
+    tab = alpha.crop(window).point(lambda a: 255 if a else 0).getbbox()
+    if tab:
+        info["overlay"] = [tab[0] + window[0], tab[1] + window[1], tab[2] + window[0], tab[3] + window[1]]
+    return info
+
+
+def _activate_custom(path):
+    """Check the case at `path` and make it the active custom case; the digest of its bytes. The slot is untouched when the check fails."""
+    global _custom
+    info = check_case_file(path)
+    with open(path, "rb") as f:
+        digest = hashlib.sha256(f.read()).hexdigest()[:16]
+    with Image.open(path, formats=["PNG"]) as im:
+        _custom = {"frame": im.convert("RGBA"), "info": info, "digest": digest}
+    return digest
+
+
+def save_custom_case(path, covers_dir):
+    """Check the case file `path`, keep a re-encoded copy as CUSTOM_FILE in `covers_dir`, make it the active custom case and return its digest.
+    SteamcaseError (one sentence) when the file is no good; the kept copy and the active case stay as they were."""
+    check_case_file(path)
+    os.makedirs(covers_dir, exist_ok=True)
+    dest = os.path.join(covers_dir, CUSTOM_FILE)
+    tmp = _tmp(dest)
+    try:
+        with Image.open(path, formats=["PNG"]) as im:
+            im.convert("RGBA").save(tmp, format="PNG")
+        digest = _activate_custom(tmp)
+        _replace(tmp, dest)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return digest
+
+
+def use_custom_case(covers_dir):
+    """Make the case kept in `covers_dir` the active custom case: its digest, or None when there is none (and for covers_dir None, which clears the slot).
+    SteamcaseError when the kept copy is no good."""
+    global _custom
+    path = os.path.join(covers_dir, CUSTOM_FILE) if covers_dir else None
+    if path is None or not (os.path.isfile(path) or os.path.islink(path)):
+        _custom = None
+        return None
+    try:
+        return _activate_custom(path)
+    except SteamcaseError:
+        _custom = None
+        raise
+
+
+def custom_case_digest():
+    """The digest of the active custom case, or None."""
+    return _custom["digest"] if _custom else None
+
+
+def _case_info(platform):
+    """The measured window (and overlay) of a console case, or of the active custom case. ValueError for any other key."""
+    if platform == CUSTOM and _custom:
+        return _custom["info"]
     if platform not in PLATFORMS:
         raise ValueError("unknown platform: %r" % (platform,))
-    return tuple(_case_windows()[platform]["window"])
+    return _case_windows()[platform]
+
+
+def platform_window(platform):
+    """The art window (x0, y0, x1, y1) inside the frame of a console case (or of the custom case). ValueError for a platform that is not one of PLATFORMS."""
+    return tuple(_case_info(platform)["window"])
 
 
 def platform_overlay(platform):
     """The part (x0, y0, x1, y1) of the art window that the frame itself covers (the Switch's red tab), or None."""
-    platform_window(platform)
-    box = _case_windows()[platform].get("overlay")
+    box = _case_info(platform).get("overlay")
     return tuple(box) if box else None
 
 
@@ -864,7 +957,7 @@ def load_platform_frame(platform, family=False):
     over it at the top right, where it covers only the end of the banner and never the logo, and kept inside the case's own outline. ValueError for a platform that
     is not one of PLATFORMS."""
     x0, y0, x1, y1 = platform_window(platform)
-    frame = Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
+    frame = _custom["frame"].copy() if platform == CUSTOM else Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
     if family:
         outline = frame.getchannel("A").copy()
         outline.paste(255, (x0, y0, x1, y1))                      # the case's silhouette: its frame and the art window
