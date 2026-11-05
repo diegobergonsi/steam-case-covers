@@ -12,7 +12,7 @@ MARKERS = {"tr", "trn", "N_", "_t"}
 
 def python_keys():
     keys = {}
-    for path in sorted(glob.glob(os.path.join(ROOT, "qtui", "*.py")) + [os.path.join(ROOT, "steamcase.py"), os.path.join(ROOT, "completion.py")]):
+    for path in sorted(glob.glob(os.path.join(ROOT, "qtui", "*.py")) + [os.path.join(ROOT, "steamcase.py"), os.path.join(ROOT, "completion.py"), os.path.join(ROOT, "caseframe.py")]):
         tree = ast.parse(open(path, encoding="utf-8").read())
         for n in ast.walk(tree):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in MARKERS and n.args:

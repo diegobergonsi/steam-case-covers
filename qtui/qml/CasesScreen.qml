@@ -46,8 +46,19 @@ ScreenFrame {
                         width: Theme.caseWidth
                         height: Theme.caseHeight
                         sourceSize: Qt.size(2 * Theme.caseWidth, 2 * Theme.caseHeight)
-                        source: "image://preview/platform/" + modelData.key + "/1"
+                        source: modelData.source
                         smooth: true
+                    }
+                    Text {                                    // no case file picked yet: the card says what a click does
+                        objectName: "case_custom_ask"
+                        visible: modelData.ask
+                        anchors.centerIn: art
+                        width: art.width - 2 * Theme.s8
+                        text: qsTr("Choose a file…")
+                        color: Theme.muted
+                        font.pixelSize: Theme.bodySize
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
                     }
                     Text {
                         id: label
@@ -76,6 +87,20 @@ ScreenFrame {
                 }
             }
         }
+    }
+    Text {
+        objectName: "case_own_hint"
+        width: parent.width
+        wrapMode: Text.WordWrap
+        color: Theme.muted
+        font.pixelSize: Theme.smallSize
+        text: qsTr("My own case: a PNG of 600 x 900 pixels that is see-through where the art goes (at least 400 x 400). Picking a file replaces your last one.")
+    }
+    StatusLine {
+        objectName: "case_own_error"
+        visible: shell.owncase.error !== ""
+        text: shell.owncase.error
+        kind: "error"
     }
     Section {
         objectName: "case_section_groups"

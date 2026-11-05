@@ -154,6 +154,13 @@ class Edit(unittest.TestCase):
         gr.assign([], "Edge", {"tone": [359, 0, 100]}, [1])
         gr.assign([], "Gold", {"tone": [sc.GOLD_HUE, 100, 100]}, [1])
 
+    def test_the_custom_case_is_a_valid_group_case(self):
+        groups, gid = gr.assign([], "Mine", {"platform": sc.CUSTOM}, [1, 2])
+        self.assertEqual(groups[0]["case"], {"platform": "custom"})
+        with tempfile.TemporaryDirectory() as d:
+            gr.save(d, groups)
+            self.assertEqual(gr.load(d), groups)
+
     def test_assign_does_not_change_the_list_it_was_given(self):
         groups, _ = gr.assign([], "A", RED, [1])
         before = json.dumps(groups)

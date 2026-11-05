@@ -22,6 +22,7 @@ class Look(QObject):
     treatmentChanged = Signal()
     artChanged = Signal()
     previewSourceChanged = Signal()
+    ownCaseChanged = Signal()
 
     def __init__(self, shell, covers_dir, parent=None):
         super().__init__(parent)
@@ -30,6 +31,7 @@ class Look(QObject):
         self._theme = "classic"
         self._treatment = "none"            # set by Hundred: the look of a 100% game in the preview ("none" or an sc.TREATMENTS name)
         self._serial = 0
+        self._own = False                   # "My own case" for every game (the Look step of the step-by-step way); the file itself is kept by shell.owncase
         try:                                # reopening the window shows the colour and theme of the covers already made
             found = sc.existing_cover_colour(covers_dir)
             if found:
@@ -48,6 +50,8 @@ class Look(QObject):
     # ----- the preview -----
     def _make_source(self):
         self._serial += 1
+        if self._own:
+            return "image://preview/platform/%s/%d" % (sc.CUSTOM, self._serial)      # the case keeps its own colours: tone, theme and marks mean nothing in it
         hue, sat, val = self._tone
         return "image://preview/%d/%d/%d/%s/%s/%d" % (hue, sat, val, self._theme, self._treatment, self._serial)
 
@@ -194,6 +198,29 @@ class Look(QObject):
             self._schedule()
 
     treatment = Property(str, _get_treatment, _set_treatment, notify=treatmentChanged)
+
+    # ----- my own case -----
+    def _get_own(self):
+        return self._own
+
+    def _set_own(self, value):
+        value = bool(value) and self._shell.owncase.available
+        if value != self._own:
+            self._own = value
+            self.ownCaseChanged.emit()
+            self._schedule()
+
+    ownCase = Property(bool, _get_own, _set_own, notify=ownCaseChanged)
+
+    @Slot()
+    def chooseOwnCase(self):
+        """Ask for a case file; once it is accepted every game is made in it."""
+        self._shell.owncase.ask(self._use_own)
+
+    def _use_own(self):
+        self._own = True
+        self.ownCaseChanged.emit()
+        self._schedule()                        # a new file is a new picture even when the switch was already on
 
     # ----- the art switches (saved through the shell) -----
     def _get_skip(self):

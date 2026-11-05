@@ -27,7 +27,8 @@ def _parse(ident):
     A console case is asked for as platform/<key>/<serial> (key: "steam" or one of PLATFORMS) and answered as ("platform", key or None)."""
     parts = ident.split("/")
     if parts[0] == "platform":
-        return ("platform", None if parts[1] == "steam" else parts[1]) if len(parts) == 3 and (parts[1] == "steam" or parts[1] in sc.PLATFORMS) else None
+        return ("platform", None if parts[1] == "steam" else parts[1]) if len(parts) == 3 and (parts[1] == "steam" or parts[1] in sc.PLATFORMS
+                                                                                              or (parts[1] == sc.CUSTOM and sc.custom_case_digest())) else None
     if len(parts) != 6:
         return None
     try:
@@ -58,7 +59,7 @@ class PreviewProvider(QQuickImageProvider):
         request = _parse(ident)
         if request is None:
             return _placeholder(want)
-        key = request + (want.width(), want.height())
+        key = request + (want.width(), want.height()) + ((sc.custom_case_digest(),) if request == ("platform", sc.CUSTOM) else ())      # a new case file is a new picture
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)

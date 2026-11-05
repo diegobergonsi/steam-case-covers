@@ -103,11 +103,13 @@ def announce_change(*roots):
 
 
 def use_in_engine():
-    """The messages of the engine (steamcase.py, completion.py) that the window shows are translated with tr(); the command line never calls this."""
+    """The messages of the engine (steamcase.py, completion.py, caseframe.py) that the window shows are translated with tr(); the command line never calls this."""
+    import caseframe
     import completion
     import steamcase
     steamcase.translate = tr
     completion._t = tr
+    caseframe._t = tr
 
 
 def N_(text):

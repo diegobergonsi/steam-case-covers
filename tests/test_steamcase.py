@@ -2060,7 +2060,7 @@ class CompletionCli(StoreMocks):
         import contextlib, io
         with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
-            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None, theme="classic"))
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None, theme="classic", case_file=None))
         self.assertEqual(caught.exception.code, 2)
 
     def test_a_tilde_in_the_page_path_is_expanded(self):
@@ -4588,7 +4588,7 @@ class CasesJsonIsChecked(Base):
         real = sc.build_cover
         with mock.patch.object(sc, "build_cover", lambda *a, **kw: calls.append(kw.get("platform")) or real(*a, **kw)):
             self.assertEqual(selfcheck.engine_problems(), [])
-        self.assertEqual(sorted({p for p in calls if p}), sorted(sc.PLATFORMS))                  # every case at least once (the group check builds one more)
+        self.assertEqual(sorted({p for p in calls if p}), sorted(sc.PLATFORMS + (sc.CUSTOM,)))      # every case at least once, and the user's own (the group check builds one more)
 
 
 class SelfCheckConsoleCases(Base):
@@ -4680,3 +4680,318 @@ class ListGames(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CustomCase(Base):
+    """The user's own case: one 600 x 900 PNG with a see-through art window, checked, kept in the covers folder and measured like a console case."""
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        self.addCleanup(sc.use_custom_case, None)
+
+    def case_file(self, name="mine.png", size=sc.SIZE, window=(20, 100, 580, 880), tab=None, colour=(30, 60, 200, 255)):
+        im = sc.Image.new("RGBA", size, colour)
+        if window:
+            im.paste((0, 0, 0, 0), window)
+        if tab:
+            im.paste((255, 0, 0, 255), tab)
+        path = os.path.join(self.tmp, name)
+        im.save(path, format="PNG")
+        return path
+
+    def test_a_good_file_gives_its_window_and_tab(self):
+        info = sc.check_case_file(self.case_file(tab=(30, 110, 70, 150)))
+        self.assertEqual(info, {"window": [20, 100, 580, 880], "overlay": [30, 110, 70, 150]})
+        self.assertEqual(sc.check_case_file(self.case_file("b.png")), {"window": [20, 100, 580, 880]})
+
+    def test_transparent_corners_and_margins_outside_the_case_are_not_the_window(self):
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        im.paste((0, 0, 0, 0), (40, 120, 560, 860))
+        for box in ((0, 0, 30, 30), (570, 0, 600, 30), (0, 870, 30, 900), (570, 870, 600, 900), (0, 300, 8, 600)):     # rounded outer corners and a see-through margin
+            im.paste((0, 0, 0, 0), box)
+        path = os.path.join(self.tmp, "round.png")
+        im.save(path)
+        self.assertEqual(sc.check_case_file(path), {"window": [40, 120, 560, 860]})
+
+    def test_a_rounded_window_has_no_tab(self):
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        sc.ImageDraw.Draw(im).rounded_rectangle((20, 100, 579, 879), radius=120, fill=(0, 0, 0, 0))
+        path = os.path.join(self.tmp, "roundwin.png")
+        im.save(path)
+        info = sc.check_case_file(path)
+        self.assertEqual(info["window"], [20, 100, 580, 880])
+        self.assertNotIn("overlay", info)
+
+    def test_a_shadow_inside_the_window_is_not_a_tab(self):
+        path = self.case_file(tab=None)
+        im = sc.Image.open(path).convert("RGBA")
+        im.paste((0, 0, 0, 40), (20, 100, 580, 108))                         # a faint strip along the top edge
+        im.paste((0, 0, 0, 40), (20, 100, 28, 880))                          # and along the left edge: an L, mostly empty
+        im.save(path)
+        self.assertNotIn("overlay", sc.check_case_file(path))
+
+    def test_the_measure_agrees_with_every_console_case(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                self.assertEqual(sc.check_case_file(os.path.join(sc.CASES_DIR, p + ".png")), sc._case_windows()[p])
+
+    def test_a_case_with_no_frame_is_refused(self):
+        for name, window in (("all.png", (0, 0, 600, 900)), ("thin.png", (3, 3, 597, 897))):
+            with self.subTest(name):
+                with self.assertRaises(sc.SteamcaseError) as ctx:
+                    sc.check_case_file(self.case_file(name, window=window))
+                self.assertIn("frame", str(ctx.exception))
+
+    def test_a_picture_without_transparency_is_refused_in_one_sentence(self):
+        path = os.path.join(self.tmp, "grey.png")
+        sc.Image.new("I;16", sc.SIZE, 3000).save(path)
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc.check_case_file(path)
+        self.assertIn("window", str(ctx.exception))
+
+    def test_a_folder_that_cannot_be_written_is_one_sentence_and_keeps_the_slot(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        blocker = os.path.join(self.tmp, "blocker")
+        with open(blocker, "w") as f:
+            f.write("a file where a folder should be")
+        with self.assertRaises(sc.SteamcaseError):
+            sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), os.path.join(blocker, "covers"))
+        with mock.patch.object(sc, "_replace", side_effect=PermissionError("busy")), self.assertRaises(sc.SteamcaseError):
+            sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertEqual(sc.custom_case_digest(), first)                        # the slot only changes once the copy is on disk
+        with open(os.path.join(self.covers, sc.CUSTOM_FILE), "rb") as f:
+            self.assertEqual(sc.hashlib.sha256(f.read()).hexdigest()[:16], first)
+        self.assertEqual([n for n in os.listdir(self.covers) if n != sc.CUSTOM_FILE], [])       # no temp file left behind
+
+    def test_refused_files(self):
+        big = os.path.join(self.tmp, "big.png")
+        with open(big, "wb") as f:
+            f.write(b"\0" * (sc.caseframe.MAX_FILE + 1))
+        text = os.path.join(self.tmp, "text.png")
+        with open(text, "w") as f:
+            f.write("not a picture")
+        good = self.case_file("good.png")
+        with open(good, "rb") as f:
+            cut = os.path.join(self.tmp, "cut.png")
+            with open(cut, "wb") as g:
+                g.write(f.read()[:200])
+        link = os.path.join(self.tmp, "link.png")
+        os.symlink(good, link)
+        for name, path, word in (("no window", self.case_file("a.png", window=None), "window"),
+                                 ("wrong size", self.case_file("b.png", size=(601, 900)), "600 x 900"),
+                                 ("double size", self.case_file("c.png", size=(1200, 1800)), "600 x 900"),
+                                 ("small window", self.case_file("d.png", window=(20, 100, 320, 880)), "400"),
+                                 ("a link", link, "link"), ("too big", big, "big"), ("text", text, "PNG"), ("cut short", cut, "PNG"),
+                                 ("missing", os.path.join(self.tmp, "none.png"), "PNG")):
+            with self.subTest(name):
+                with self.assertRaises(sc.SteamcaseError) as ctx:
+                    sc.check_case_file(path)
+                self.assertIn(word, str(ctx.exception))
+
+    def test_save_keeps_a_copy_and_replacing_changes_the_digest(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        self.assertRegex(first, r"[0-9a-f]{16}")
+        self.assertEqual(sc.custom_case_digest(), first)
+        self.assertTrue(os.path.isfile(os.path.join(self.covers, sc.CUSTOM_FILE)))
+        second = sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertNotEqual(first, second)
+        self.assertEqual(sc.custom_case_digest(), second)
+
+    def test_a_refused_pick_keeps_the_old_slot(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        with self.assertRaises(sc.SteamcaseError):
+            sc.save_custom_case(self.case_file("bad.png", window=None), self.covers)
+        self.assertEqual(sc.custom_case_digest(), first)
+        sc.use_custom_case(None)
+        self.assertEqual(sc.use_custom_case(self.covers), first)                       # the kept copy is the old, good one
+
+    def test_use_custom_case_without_a_copy_is_none_and_a_broken_copy_is_a_sentence(self):
+        self.assertIsNone(sc.use_custom_case(self.covers))
+        with open(os.path.join(self.covers, sc.CUSTOM_FILE), "w") as f:
+            f.write("junk")
+        with self.assertRaises(sc.SteamcaseError):
+            sc.use_custom_case(self.covers)
+        self.assertIsNone(sc.custom_case_digest())
+
+    def test_platform_functions_accept_custom_only_when_active(self):
+        for call in (sc.platform_window, sc.platform_overlay, sc.load_platform_frame):
+            with self.subTest(call=call.__name__), self.assertRaises(ValueError):
+                call(sc.CUSTOM)
+        sc.save_custom_case(self.case_file(tab=(30, 110, 70, 150)), self.covers)
+        self.assertEqual(sc.platform_window(sc.CUSTOM), (20, 100, 580, 880))
+        self.assertEqual(sc.platform_overlay(sc.CUSTOM), (30, 110, 70, 150))
+        self.assertEqual(sc.load_platform_frame(sc.CUSTOM).size, sc.SIZE)
+        self.assertEqual(sc.load_platform_frame(sc.CUSTOM, True).size, sc.SIZE)
+        self.assertEqual(len(sc.platform_ribbon(sc.CUSTOM)), 3)
+        self.assertIsInstance(sc.platform_marks_dy(sc.CUSTOM), int)
+        self.assertNotIn(sc.CUSTOM, sc.PLATFORMS)
+
+
+class CustomCaseCovers(StoreMocks):
+    """make_covers(platforms={appid: CUSTOM}): covers in the user's own case carry its digest, and a new file rebuilds them."""
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(sc.use_custom_case, None)
+
+    def case_file(self, name="mine.png", colour=(30, 60, 200, 255)):
+        im = sc.Image.new("RGBA", sc.SIZE, colour)
+        im.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        path = os.path.join(self.tmp, name)
+        im.save(path, format="PNG")
+        return path
+
+    def cv(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_a_custom_cover_has_both_notes(self):
+        digest = sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        notes = sc.read_notes(self.cv(1))
+        self.assertEqual((notes.platform, notes.case, notes.theme, notes.art), (sc.CUSTOM, digest, None, None))
+        with sc.Image.open(self.cv(1)) as im:
+            self.assertNotIn(sc.HUE_CHUNK, im.info)
+        self.assertEqual(sc.cover_platform(self.cv(1)), sc.CUSTOM)
+
+    def test_a_cover_in_a_console_case_has_no_case_note(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        self.assertIsNone(sc.read_notes(self.cv(1)).case)
+
+    def test_same_file_keeps_covers_and_a_new_file_rebuilds_only_those(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        plan = {1: sc.CUSTOM, 2: "ps5"}
+        sc.make_covers({1: None, 2: None}, self.covers, platforms=plan)
+        self.assertEqual(sc.covers_in_other_case(self.covers, plan), 0)
+        sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertEqual(sc.covers_in_other_case(self.covers, plan), 1)
+        seen = {}
+        sc.make_covers({1: None, 2: None}, self.covers, platforms=plan, progress=lambda d, t, a, n, st: seen.update({a: st}))
+        self.assertEqual(seen[2], "exists")
+        self.assertNotEqual(seen[1], "exists")
+        self.assertEqual(sc.read_notes(self.cv(1)).case, sc.custom_case_digest())
+
+    def test_covers_in_own_case_are_those_made_for_all_games_not_in_a_group(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: sc.CUSTOM, 2: sc.CUSTOM, 3: "ps5"}, groups={2: "gabc12345"})
+        self.assertEqual(sc.covers_in_own_case(self.covers), {1})
+
+    def test_make_without_a_case_says_so(self):
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        self.assertIn("case", str(ctx.exception))
+        self.assertEqual(os.listdir(self.covers), [])
+
+    def test_a_garbled_case_note_counts_as_damaged(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        bad = self.resave(self.cv(1), **{sc.CASE_CHUNK: "not-a-digest"})
+        notes = sc.read_notes(bad)
+        self.assertIs(notes.case, False)
+        self.assertIs(sc.by_hand(notes), False)
+
+    def test_is_steamcase_cover_keeps_knowing_covers_of_an_older_file(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        self.assertTrue(sc.is_steamcase_cover(self.cv(1)))
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps5"})))              # a console note on a custom picture
+        sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertTrue(sc.is_steamcase_cover(self.cv(1)))                           # made with the old file: Reset must still find it
+        sc.use_custom_case(None)
+        self.assertTrue(sc.is_steamcase_cover(self.cv(1)))                           # and with no case loaded at all (the command line, a new process)
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.CASE_CHUNK: None})))               # a custom note needs its digest
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.CASE_CHUNK: "zz"})))
+
+    def test_a_cover_with_the_active_digest_must_also_match_its_pixels(self):
+        digest = sc.save_custom_case(self.case_file(), self.covers)
+        portrait = os.path.join(self.tmp, "portrait.jpg")
+        sc.Image.new("RGB", (300, 450), (30, 220, 30)).save(portrait, format="JPEG")
+        out = os.path.join(self.tmp, "fake.png")
+        sc.build_cover(portrait, out, sc.load_platform_frame("ps5"), platform="ps5")           # a PS5 picture ...
+        self.assertFalse(sc.is_steamcase_cover(self.resave(out, **{sc.PLATFORM_CHUNK: sc.CUSTOM, sc.CASE_CHUNK: digest})))    # ... wearing our custom notes
+
+    def test_the_case_changing_during_a_run_stops_it_and_never_mixes_two_files(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        other = self.case_file("other.png", colour=(200, 30, 30, 255))
+        swapped = []
+
+        def progress(done, total, appid, name, status):
+            if not swapped:
+                swapped.append(sc.save_custom_case(other, self.covers))
+
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: sc.CUSTOM, 2: sc.CUSTOM, 3: sc.CUSTOM}, progress=progress)
+        self.assertIn("changed", str(ctx.exception))
+        for appid in (1, 2, 3):
+            if os.path.exists(self.cv(appid)):
+                self.assertEqual(sc.read_notes(self.cv(appid)).case, first)             # whatever was finished was built with the file it says
+        self.assertFalse(os.path.exists(self.cv(3)))
+
+    def test_marks_and_family_corner_use_the_measured_window(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        fam = sc.build_cover
+        plain = os.path.join(self.tmp, "p.png")
+        marked = os.path.join(self.tmp, "m.png")
+        portrait = os.path.join(self.tmp, "portrait.jpg")
+        sc.Image.new("RGB", (300, 450), (30, 220, 30)).save(portrait, format="JPEG", quality=100)
+        fam(portrait, plain, sc.load_platform_frame(sc.CUSTOM), platform=sc.CUSTOM)
+        fam(portrait, marked, sc.load_platform_frame(sc.CUSTOM, True), platform=sc.CUSTOM, treatment="rosette")
+        diff = sc.ImageChops.difference(sc.Image.open(plain).convert("RGB"), sc.Image.open(marked).convert("RGB")).convert("L").point(lambda v: 255 if v > 8 else 0)
+        box = diff.getbbox()
+        self.assertTrue(box[0] >= 20 and box[3] <= 880, box)                           # the rosette sits at the left of the window, below the banner, and the corner is top right
+
+
+class CustomCaseCli(StoreMocks):
+    """make --case-file FILE: every game of the run goes in the user's own case (the same as the window's "My own case" on the Look step)."""
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(sc.use_custom_case, None)
+        self.lib = self.fake_library(False)
+        self.out = os.path.join(self.tmp, "out")
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        im.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        self.file = os.path.join(self.tmp, "mine.png")
+        im.save(self.file, format="PNG")
+
+    def make(self, *extra):
+        return self.run_cli("make", "--steam-dir", self.steam, "--library", self.lib, "--out", self.out, *extra)
+
+    def test_make_with_a_case_file_puts_every_game_in_it(self):
+        text = self.make("--case-file", self.file)
+        cover = os.path.join(self.out, "Game_1_1.png")
+        self.assertEqual((sc.cover_platform(cover), sc.read_notes(cover).case), (sc.CUSTOM, sc.custom_case_digest()))
+        self.assertIn("in your own case", text)
+        self.assertTrue(os.path.isfile(os.path.join(self.out, sc.CUSTOM_FILE)))
+
+    def test_the_case_options_that_mean_nothing_with_it_are_refused(self):
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "games_page.html")
+        for extra in (["--hue", "10"], ["--saturation", "10"], ["--brightness", "10"], ["--theme", "halloween"],
+                      ["--games-page", page, "--completed-style", "gold-case"], ["--games-page", page, "--completed-style", "gold-border"]):
+            with self.subTest(extra=extra), self.assertRaises(SystemExit) as ctx:
+                self.make("--case-file", self.file, *extra)
+            self.assertIn("--case-file", str(ctx.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "Game_1_1.png")))
+
+    def test_the_marks_work_with_it(self):
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "games_page.html")
+        self.make("--case-file", self.file, "--games-page", page, "--completed-style", "ribbon")        # must not raise
+
+    def test_a_bad_case_file_is_one_sentence_and_makes_nothing(self):
+        bad = os.path.join(self.tmp, "bad.png")
+        sc.Image.new("RGBA", sc.SIZE, (1, 2, 3, 255)).save(bad)
+        with self.assertRaises(SystemExit) as ctx:
+            self.make("--case-file", bad)
+        self.assertIn("window", str(ctx.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "Game_1_1.png")))
+
+    def test_the_kept_case_file_is_not_a_cover(self):
+        self.make("--case-file", self.file)
+        self.assertEqual([os.path.basename(p) for _, p in sc.scan_covers(self.out)], ["Game_1_1.png"])
+        args = sc.argparse.Namespace(covers=self.out, steam_dir=self.steam, user=None, yes=True, close_steam=False)
+        import contextlib, io
+        with mock.patch.object(sc, "steam_running", return_value=False), contextlib.redirect_stdout(io.StringIO()):
+            sc.cmd_apply(args)
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png"])

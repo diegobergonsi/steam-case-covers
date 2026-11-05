@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, completion, filecmp, functools, hashlib, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, caseframe, completion, filecmp, functools, hashlib, io, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from typing import NamedTuple
 
 try:
@@ -55,6 +55,7 @@ GROUP_CHUNK = "steamcase-group"            # PNG note naming the group (groups.p
 GROUP_ID = re.compile(r"[a-z0-9]{1,12}")
 LAYOUT_CHUNK = "steamcase-layout"           # PNG note naming how a cover was drawn (LAYOUT); covers made before v1.6.0 carry none
 LAYOUT = "2"                                # v1.6.0: the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round)
+CASE_CHUNK = "steamcase-case"               # PNG note with the digest of the user's own case file, on covers whose platform note is "custom"
 PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
 CASES_DIR = os.path.join(HERE, "assets", "cases")    # one <platform>.png per case (transparent art window) and cases.json (the window of each)
 KEEP = "keep"                             # in place of a theme: each existing cover keeps the theme it has
@@ -811,17 +812,111 @@ def _case_windows():
     return data
 
 
-def platform_window(platform):
-    """The art window (x0, y0, x1, y1) inside the frame of a console case. ValueError for a platform that is not one of PLATFORMS."""
+CUSTOM = "custom"                          # the key of the user's own case: accepted where a console platform key is, but not one of PLATFORMS (it has no frame in assets)
+CUSTOM_FILE = "custom_case.png"            # the checked copy of that case, kept in the covers folder
+
+
+class _CaseSlot(NamedTuple):
+    """The user's own case as the process uses it: the picture, its measured window (and tab), and the digest of its file."""
+    frame: object
+    info: dict
+    digest: str
+
+
+_custom = None                             # shortcut: one _CaseSlot for the whole process, upgrade when several custom cases are wanted
+
+
+class _CaseChanged(SteamcaseError):
+    """The custom case was replaced while covers were being made with it."""
+
+
+def _measure(path):
+    """({"window", "overlay"?}, the case as RGBA, the bytes of the file) of a case file the user chose. SteamcaseError (one sentence) when it is not a usable case."""
+    if Image is None:
+        raise SteamcaseError(_t("Pillow is needed to read a case file."))
+    try:
+        data = caseframe.read(path)
+        return caseframe.measure(data, SIZE, MIN_WINDOW) + (data,)
+    except caseframe.CaseFileError as e:
+        raise SteamcaseError(str(e))
+
+
+def check_case_file(path):
+    """{"window": [x0, y0, x1, y1]} and, if a tab of the case covers part of it, "overlay": [..] (as tools/measure_cases.py measures a console case) for a case the
+    user made: a plain PNG, exactly SIZE, with a see-through art window of at least MIN_WINDOW each way and a visible frame. SteamcaseError (one sentence) for
+    anything else."""
+    return _measure(path)[0]
+
+
+def save_custom_case(path, covers_dir):
+    """Check the case file `path`, keep a re-encoded copy as CUSTOM_FILE in `covers_dir`, make it the active custom case and return its digest.
+    SteamcaseError (one sentence) when the file is no good or the copy cannot be written; the kept copy and the active case stay as they were (the case
+    only becomes the active one once its copy is on disk)."""
+    global _custom
+    info, frame, _ = _measure(path)
+    buf = io.BytesIO()
+    frame.save(buf, format="PNG")
+    copy = buf.getvalue()
+    dest = os.path.join(covers_dir, CUSTOM_FILE)
+    tmp = _tmp(dest)
+    try:
+        os.makedirs(covers_dir, exist_ok=True)
+        with open(tmp, "wb") as f:
+            f.write(copy)
+        _replace(tmp, dest)
+    except OSError as e:
+        raise SteamcaseError(_t("Your case could not be saved in %s (%s).") % (covers_dir, e.strerror or e))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    _custom = _CaseSlot(frame, info, hashlib.sha256(copy).hexdigest()[:16])
+    return _custom.digest
+
+
+def use_custom_case(covers_dir):
+    """Make the case kept in `covers_dir` the active custom case: its digest, or None when there is none (and for covers_dir None, which clears the slot).
+    SteamcaseError when the kept copy is no good."""
+    global _custom
+    path = os.path.join(covers_dir, CUSTOM_FILE) if covers_dir else None
+    if path is None or not (os.path.isfile(path) or os.path.islink(path)):
+        _custom = None
+        return None
+    try:
+        info, frame, data = _measure(path)
+    except SteamcaseError:
+        _custom = None
+        raise
+    _custom = _CaseSlot(frame, info, hashlib.sha256(data).hexdigest()[:16])
+    return _custom.digest
+
+
+def custom_case_digest():
+    """The digest of the active custom case, or None."""
+    return _custom.digest if _custom else None
+
+
+def _case_digest(platform):
+    """What tells one custom case from another in a cover's notes and in caches: the digest of its file. None for a console case (and when no custom case is loaded)."""
+    return custom_case_digest() if platform == CUSTOM else None
+
+
+def _case_info(platform):
+    """The measured window (and overlay) of a console case, or of the active custom case. ValueError for any other key."""
+    if platform == CUSTOM and _custom:
+        return _custom.info
     if platform not in PLATFORMS:
         raise ValueError("unknown platform: %r" % (platform,))
-    return tuple(_case_windows()[platform]["window"])
+    return _case_windows()[platform]
+
+
+def platform_window(platform):
+    """The art window (x0, y0, x1, y1) inside the frame of a console case (or of the custom case). ValueError for a platform that is not one of PLATFORMS."""
+    return tuple(_case_info(platform)["window"])
 
 
 def platform_overlay(platform):
     """The part (x0, y0, x1, y1) of the art window that the frame itself covers (the Switch's red tab), or None."""
-    platform_window(platform)
-    box = _case_windows()[platform].get("overlay")
+    box = _case_info(platform).get("overlay")
     return tuple(box) if box else None
 
 
@@ -864,7 +959,7 @@ def load_platform_frame(platform, family=False):
     over it at the top right, where it covers only the end of the banner and never the logo, and kept inside the case's own outline. ValueError for a platform that
     is not one of PLATFORMS."""
     x0, y0, x1, y1 = platform_window(platform)
-    frame = Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
+    frame = _custom.frame.copy() if platform == CUSTOM else Image.open(os.path.join(CASES_DIR, platform + ".png")).convert("RGBA")
     if family:
         outline = frame.getchannel("A").copy()
         outline.paste(255, (x0, y0, x1, y1))                      # the case's silhouette: its frame and the art window
@@ -908,7 +1003,9 @@ def _compose(art, frame, window=WINDOW):
 
 def _check_platform(platform, treatment, theme):
     """ValueError unless `platform` is one of PLATFORMS and goes with this `treatment` (none, "ribbon" or "rosette": no gold) and `theme` (none)."""
-    if platform not in PLATFORMS:
+    if platform == CUSTOM and not _custom:
+        raise SteamcaseError(_t("Your own case is missing. Pick the case file again."))
+    if platform not in PLATFORMS and platform != CUSTOM:
         raise ValueError("unknown platform: %r" % (platform,))
     if theme is not None:
         raise ValueError("a console case has no theme: %r" % (theme,))
@@ -1084,6 +1181,7 @@ class CoverNotes(NamedTuple):
     group: object           # the id of the group a cover by hand was made in, or None
     art: object             # "custom <hash>" for a cover built from the user's own art (see art_note), or None for Steam's portrait
     layout: object = None   # LAYOUT for a cover drawn the way this version draws it, None for a cover of an earlier version (no note), False for another note
+    case: object = None     # the digest of the user's own case file for a cover in CUSTOM, None for any other cover, False for a note we do not write
 
 
 def _noted(value, valid):
@@ -1095,10 +1193,11 @@ def notes_of(info):
     return CoverNotes(_noted_colour(info),
                       _noted(info.get(DONE_CHUNK), lambda v: v in TREATMENTS),
                       _noted(info.get(THEME_CHUNK), lambda v: v in THEMES),
-                      _noted(info.get(PLATFORM_CHUNK), lambda v: v in PLATFORMS),
+                      _noted(info.get(PLATFORM_CHUNK), lambda v: v in PLATFORMS or v == CUSTOM),
                       _noted(info.get(GROUP_CHUNK), lambda v: bool(GROUP_ID.fullmatch(v))),
                       _noted(info.get(ART_CHUNK), lambda v: bool(re.fullmatch(r"custom [0-9a-f]{16}", v))),
-                      _noted(info.get(LAYOUT_CHUNK), lambda v: v == LAYOUT))
+                      _noted(info.get(LAYOUT_CHUNK), lambda v: v == LAYOUT),
+                      _noted(info.get(CASE_CHUNK), lambda v: bool(re.fullmatch(r"[0-9a-f]{16}", v))))
 
 
 def read_notes(path):
@@ -1110,7 +1209,7 @@ def read_notes(path):
 def by_hand(notes):
     """True for a cover made by hand (a console case or a group's Steam case): the usual flow leaves it alone. None for a usual cover. False if the file is not a
     readable PNG or one of those notes is not one we write: the cover is then rebuilt."""
-    if notes is None or notes.platform is False or notes.group is False:
+    if notes is None or notes.platform is False or notes.group is False or notes.case is False:
         return False
     return True if notes.platform or notes.group else None
 
@@ -1143,6 +1242,7 @@ class CoverSpec(NamedTuple):
     platform: object = KEEP         # None: the Steam case
     group: object = KEEP
     layout: object = KEEP           # LAYOUT for a cover with marks or a family corner: those were drawn in other places before v1.6.0, so an older cover is not kept
+    case: object = KEEP             # the digest of the active custom case, for a cover in CUSTOM
 
 
 def matches(notes, spec):
@@ -1151,7 +1251,7 @@ def matches(notes, spec):
     if notes is None or (spec.colour != KEEP and not same_colour(notes.colour, spec.colour)):
         return False
     return all(want == KEEP or have == want for have, want in ((notes.treatment, spec.treatment), (notes.theme, spec.theme), (notes.art, spec.art),
-                                                                (notes.platform, spec.platform), (notes.group, spec.group), (notes.layout, spec.layout)))
+                                                                (notes.platform, spec.platform), (notes.group, spec.group), (notes.layout, spec.layout), (notes.case, spec.case)))
 
 
 def _drawing_for(treatment, family=False):
@@ -1163,7 +1263,7 @@ def _spec_for(platform, colour, treatment, theme, art, group):
     """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour, theme or art to compare, and an earlier gold
     look keeps only its marks there."""
     if platform:
-        return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group)
+        return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group, case=_case_digest(platform))
     return CoverSpec(colour, treatment, theme, art, None, group, _drawing_for(treatment))
 
 
@@ -1279,6 +1379,8 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
     note = PngInfo()
     if platform is not None:
         note.add_text(PLATFORM_CHUNK, platform)                # a console cover has no colour, tone or theme: the case is fixed
+        if platform == CUSTOM:
+            note.add_text(CASE_CHUNK, custom_case_digest())     # a new case file rebuilds the covers made with the old one
     else:
         note.add_text(HUE_CHUNK, str(hue % 360))               # lets make_covers tell what colour an existing cover is without decoding it
         note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
@@ -1369,15 +1471,18 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         raise ValueError("the %s theme only goes with the rosette-only marks, not %r" % (theme, treatment))      # the ribbon would hide the decorations
     tones, groups, repaint = tones or {}, groups or {}, repaint or set()
     wanted_platforms = set((platforms or {}).values()) - {None}
-    if wanted_platforms - set(PLATFORMS):
-        raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS), key=str)[0],))
+    if wanted_platforms - set(PLATFORMS) - {CUSTOM}:
+        raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS) - {CUSTOM}, key=str)[0],))
     if wanted_platforms:
         _check_platform(sorted(wanted_platforms)[0], treatment, theme)
+    if CUSTOM in wanted_platforms:
+        _check_platform(CUSTOM, treatment, theme)           # the run stops here, before any download, when the case file is gone
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
     family = set(family or ())
     custom_art = custom_art or {}
+    slot = _custom if CUSTOM in wanted_platforms else None      # the case the run is made with: if it is replaced meanwhile the run stops, never a cover from two files
     frames = {}                                 # (look of the colour, family?) -> frame: each one is made once per run
 
     def frame_for(colour, is_family):
@@ -1469,7 +1574,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
-            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g)
+            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g, case=_case_digest(want_p))
         else:
             spec = CoverSpec(colour, target, theme, wanted_art, None, want_g, _drawing_for(target, appid in family))
         if not force and matches(notes, spec):
@@ -1500,16 +1605,23 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["failed" if neterr else "missing"].append((appid, name))        # failed = connection problem, worth a retry
             report(n, appid, name, "failed" if neterr else "noart")
             continue
+        if want_p == CUSTOM and _custom is not slot:
+            raise _CaseChanged(_t("Your own case changed while the covers were being made. Make them again."))
         try:
             is_family = appid in family
             build_cover(custom_art[appid] if got and wanted_art else tmp, dest, console_frame_for(want_p, is_family) if want_p else frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2],
                         treatment=target, theme=theme, from_art=wanted_art, platform=want_p, group=want_g)
+            if want_p == CUSTOM and _custom is not slot:
+                os.remove(dest)                                     # built while the case was being replaced: not trusted
+                raise _CaseChanged(_t("Your own case changed while the covers were being made. Make them again."))
             res["ok"] += 1
             res["platforms"] += bool(want_p)
             res["family"] += is_family
             res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "ok")
+        except _CaseChanged:
+            raise
         except Exception as e:
             res["failed"].append((appid, name))
             if log:
@@ -1539,6 +1651,12 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
         if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art, layout=_drawing_for(target) if drawing else KEEP)):
             return True
     return False
+
+
+def covers_in_own_case(covers_dir):
+    """{appid} of the covers in the folder made in the user's own case for all games (no group): the ones the usual flow leaves alone as made by hand, and
+    that the Look step's "My own case" switch gives back to the Steam case when it is turned off."""
+    return {appid for appid, path in scan_covers(covers_dir) for notes in [read_notes(path)] if notes and notes.platform == CUSTOM and not notes.group}
 
 
 def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None, tones=None, groups=None):
@@ -1867,9 +1985,10 @@ def _same_treated(im, key, family, legacy=False):
 
 
 @functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry
-def _platform_reference(key, family):
+def _platform_reference(key, family, digest=None):
     """(expected, mask) for a console cover: key is (platform, treatment), the treatment None or "ribbon" or "rosette". Made like _treated_reference
-    (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0."""
+    (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0.
+    `digest` (of the custom case, for CUSTOM) is only part of the cache key: a new case file must not be compared with the old one's reference."""
     platform, treatment = key
     frame, window = load_platform_frame(platform, family), platform_window(platform)
     dy, dx, ribbon = platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)
@@ -1882,7 +2001,8 @@ def _same_platform(im, key, family):
     """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. The PS3 and PS4 inserts are only a banner (about 8% of
     the canvas); the mask of every case must cover at least 6% (a test checks every case: over 30,000 pixels that must match), or too little is left to tell
     our covers from others."""
-    return _same_masked(im, *_platform_reference(key, family), 0.06)
+    digest = _case_digest(key[0])                                      # a custom cover's notes carry a digest as well, so a smaller mask is enough to tell it from art of someone else's
+    return _same_masked(im, *_platform_reference(key, family, digest), 0.06 if digest is None else 0.002)
 
 
 def is_steamcase_cover(path):
@@ -1906,13 +2026,18 @@ def is_steamcase_cover(path):
                 return False
             toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
             platform, strange = im.info.get(PLATFORM_CHUNK), any(k in im.info for k in (HUE_CHUNK, TONE_CHUNK, THEME_CHUNK, ART_CHUNK))
+            case = im.info.get(CASE_CHUNK)
             group, own_art = im.info.get(GROUP_CHUNK), ART_CHUNK in im.info
             im = im.convert("RGBA")
         if group is not None and (not GROUP_ID.fullmatch(group) or theme is not None or own_art):
             return False                                            # a cover by hand has a group note we wrote, no theme and no art of the user's
         if platform is not None:                                    # a console cover: its case and marks decide, never a colour, tone, theme or art note
-            if platform not in PLATFORMS or strange or done not in (None, "ribbon", "rosette"):
+            if platform not in PLATFORMS and platform != CUSTOM or strange or done not in (None, "ribbon", "rosette"):
                 return False
+            if (platform == CUSTOM) != (case is not None) or (case is not None and not re.fullmatch(r"[0-9a-f]{16}", case)):
+                return False                                        # a cover in the user's own case carries the digest of its file, and only such a cover does
+            if case is not None and case != custom_case_digest():
+                return True                                         # made with another case file than the one loaded now (a new pick, a new process): we cannot redraw it, but we wrote its notes
             return any(_same_platform(im, (platform, done), family) for family in (False, True))
         if done is not None or theme is not None:
             if (done is not None and done not in TREATMENTS) or (theme is not None and theme not in THEMES) or colour is None:
@@ -2251,7 +2376,18 @@ def _completion_args(args, theme=None):
     return completed, treatment
 
 
+def _refuse_with_case_file(args):
+    """SteamcaseError (one sentence) for an option that means nothing next to --case-file: your own case has its own colours and no gold look."""
+    for flag, given in (("--hue", args.hue is not None), ("--saturation", args.saturation is not None), ("--brightness", args.brightness is not None),
+                        ("--theme", args.theme is not None), ("--completed-style gold-case or gold-border", args.completed_style in ("gold-case", "gold-border"))):
+        if given:
+            raise SteamcaseError(_t("--case-file cannot be used with %s: your own case keeps its own colours.") % flag)
+
+
 def cmd_make(args):
+    if args.case_file:
+        _refuse_with_case_file(args)
+        save_custom_case(args.case_file, os.path.abspath(args.out))     # first: a bad file fails before the library is loaded or anything is downloaded
     theme = _chosen_theme(args)
     completed, treatment = _completion_args(args, theme)    # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
@@ -2269,13 +2405,15 @@ def cmd_make(args):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art,
+                     platforms={appid: CUSTOM for appid in games} if args.case_file else None)
     own_art = sum(1 for f in res["files"] if cover_art(f))
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
           + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")
           + (" | with the %s theme" % theme.capitalize() if theme else "")
+          + (" | in your own case" if args.case_file else "")
           + (" | %d from your own art" % own_art if own_art else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
@@ -2406,6 +2544,9 @@ def main():
                        help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
                             "gold-case is always gold and ignores --hue, --saturation and --brightness. "
                             "Needs --games-page, except none. Without either option the covers are left as they are")
+        p.add_argument("--case-file", metavar="PNG", default=None,
+                       help="put every game of this run in a case of your own: a 600 x 900 PNG that is see-through where the art goes (at least 400 x 400). A checked copy is kept "
+                            "in --out. Covers made without it are not changed back by later runs without it; use another --out, or delete them")
         p.add_argument("--theme", choices=("classic", "halloween"), default=None,
                        help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
                             "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")

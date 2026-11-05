@@ -7,10 +7,10 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import groups
 import steamcase as sc
 from qtui import tones
-from qtui.i18n import tr
+from qtui.i18n import N_, tr
 
-ORDER = ("steam", "ps5", "ps4", "ps3", "xboxseries", "xboxone", "xbox360", "switch2", "switch")       # the Steam case first, then newest to oldest
-LABELS = dict(sc.PLATFORM_LABELS, steam="Steam")
+ORDER = ("steam", "ps5", "ps4", "ps3", "xboxseries", "xboxone", "xbox360", "switch2", "switch", sc.CUSTOM)       # the Steam case first, then newest to oldest, then the user's own
+LABELS = dict(sc.PLATFORM_LABELS, steam="Steam", custom=N_("My own case"))      # shown through tr(): the brand names have no translation and stay as they are
 
 
 def _colour_choices():
@@ -31,7 +31,7 @@ def group_caption(name, label, count):
 def case_label(case):
     """How a group's case is named: a console's name, or "Steam case, red" for the Steam case in a colour (a group's "case" as groups.py keeps it)."""
     if "platform" in case:
-        return LABELS.get(case["platform"], "")
+        return tr(LABELS.get(case["platform"], ""))
     tone = tuple(case["tone"])
     found = next((c["label"] for c in _colour_choices() if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*tone)), tr("custom colour"))
     return tr("Steam case, ") + found.lower()
@@ -46,6 +46,7 @@ class Cases(QObject):
     groupNameChanged = Signal()
     colourChanged = Signal()
     errorChanged = Signal()
+    choicesChanged = Signal()
 
     def __init__(self, shell, parent=None, covers_dir=None):
         super().__init__(parent)
@@ -61,13 +62,17 @@ class Cases(QObject):
         self._tone = (0, 100, 100)
         self._name, self._typed, self._error = "", False, ""
         self._family = False
+        shell.owncase.changed.connect(self.choicesChanged)         # the card of the user's own case shows the case, or asks for a file
         shell.picker.selectionChanged.connect(self.selectedKeyChanged)           # canAssign follows the ticks too
         shell.library.pathChanged.connect(self._library_changed)
         shell.library.installedOnlyChanged.connect(self._library_changed)
 
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=choicesChanged)
     def choices(self):
-        return [{"key": k, "label": LABELS[k]} for k in ORDER]
+        """The cards of the Case step: {"key", "label", "source" (the picture of the case), "ask" (true for "My own case" while there is no file to show)}."""
+        own = self._shell.owncase
+        return [{"key": k, "label": tr(LABELS[k]), "ask": k == sc.CUSTOM and not own.available,
+                 "source": "image://preview/platform/%s/%d" % (k, own.serial if k == sc.CUSTOM else 1)} for k in ORDER]
 
     @Property(str, notify=selectedKeyChanged)
     def selectedKey(self):
@@ -76,10 +81,18 @@ class Cases(QObject):
     @Slot(str)
     def pick(self, key):
         """Pick a case for a new group."""
+        if key == sc.CUSTOM:                # always asks for the file: picking again replaces the case
+            self._shell.owncase.ask(self._pick_custom)
+            return
         if key in ORDER and (key != self._key or self._gid):
             self._key, self._gid = key, ""
             self._follow_case()
             self.selectedKeyChanged.emit()
+
+    def _pick_custom(self):
+        self._key, self._gid = sc.CUSTOM, ""
+        self._follow_case()
+        self.selectedKeyChanged.emit()
 
     # ----- the colour of the Steam case, the name and the groups -----
     @Property("QVariantList", constant=True)
@@ -252,13 +265,13 @@ class Cases(QObject):
     def summary(self):
         """{"label", "count"} for every case in use, in the order of the choices."""
         used = [None if v is None else v for v in self._assigned.values()]
-        return [{"label": LABELS[k], "count": used.count(None if k == "steam" else k)} for k in ORDER if (None if k == "steam" else k) in used]
+        return [{"label": tr(LABELS[k]), "count": used.count(None if k == "steam" else k)} for k in ORDER if (None if k == "steam" else k) in used]
 
     @Property(str, notify=assignmentsChanged)
     def previewKey(self):
         """The case most games are in (the first one on a tie): the sample shown on the Make screen."""
         top = max(self.summary, key=lambda s: s["count"], default=None)
-        return next((k for k in ORDER if top and LABELS[k] == top["label"]), "")
+        return next((k for k in ORDER if top and tr(LABELS[k]) == top["label"]), "")
 
     def _get_family(self):
         return self._family

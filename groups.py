@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Groups of covers made by hand: a name, a case and the games in it, kept in groups.json in the covers folder.
-A group is {"id", "name", "case", "games"}: "case" is {"platform": one of steamcase.PLATFORMS} (a console case) or {"tone": [hue, sat, val]} (the Steam case
+A group is {"id", "name", "case", "games"}: "case" is {"platform": one of steamcase.PLATFORMS, or steamcase.CUSTOM} (a console case, or the user's own) or {"tone": [hue, sat, val]} (the Steam case
 in that colour; gold is the tone of steamcase.GOLD_HUE). A game is in one group only. The file may be damaged or edited: load() never raises, it keeps what is good."""
 import json, os, re, uuid
 
@@ -34,7 +34,7 @@ def _case(value):
     if not isinstance(value, dict) or len(value) != 1:
         return None
     if "platform" in value:
-        return {"platform": value["platform"]} if value["platform"] in sc.PLATFORMS else None
+        return {"platform": value["platform"]} if value["platform"] in sc.PLATFORMS or value["platform"] == sc.CUSTOM else None
     tone = value.get("tone")
     if isinstance(tone, (list, tuple)) and len(tone) == 3 and all(_whole(v) for v in tone) and 0 <= tone[0] < 360 and 0 <= tone[1] <= 100 and 0 <= tone[2] <= 100:
         return {"tone": list(tone)}

@@ -3,6 +3,7 @@
 // The window: a left navigation and one screen at a time (docs/ui-guide.md). The screens here are placeholders; the real ones come in the next plans.
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import "."
 
 ApplicationWindow {
@@ -196,6 +197,17 @@ ApplicationWindow {
     Connections {
         target: shell.make
         function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+    }
+    Connections {
+        target: shell.owncase
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onNeedDialog(folder) { ownCaseDialog.currentFolder = shell.owncase.downloadsUrl; ownCaseDialog.open() }
+    }
+    FileDialog {                                                  // only when the desktop has no chooser of its own (see OwnCase.browse)
+        id: ownCaseDialog
+        title: qsTr("Choose your case file")
+        nameFilters: [qsTr("PNG pictures (*.png)"), qsTr("All files (*)")]
+        onAccepted: shell.owncase.useFileUrl(selectedFile.toString())
     }
     Connections {
         target: shell.updates
