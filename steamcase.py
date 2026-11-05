@@ -40,7 +40,10 @@ COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    #
 HALLOWEEN_OVERLAY = os.path.join(HERE, "assets", "halloween_overlay.png")    # web, spiders and a pumpkin, laid over the case for the Halloween theme
 CASES = ("ribbon", "gold-case", "gold-border")           # the case of a 100% cover: the marks only, the marks on a gold case, the marks inside a gold border
 MARKS = ("full", "rosette", "none")                      # the marks: the rosette and the ribbon, the rosette alone, or neither (only the gold case or border says it)
-TREATMENTS = ("ribbon", "gold-case", "gold-border", "rosette", "gold-case-rosette", "gold-border-rosette", "gold-case-plain", "gold-border-plain")    # how a 100% cover looks: a case and its marks (see compose_treatment)
+_PARTS = {"ribbon": ("ribbon", "full"), "rosette": ("ribbon", "rosette"),            # every treatment and the (case, marks) it is made of: how a 100% cover looks
+          **{case + suffix: (case, marks) for case in CASES[1:] for suffix, marks in (("", "full"), ("-rosette", "rosette"), ("-plain", "none"))}}
+_NAMES = {parts: name for name, parts in _PARTS.items()}
+TREATMENTS = tuple(_PARTS)
 ROSETTE_ROWS = 450                                       # the rosette-only marks are the overlay above this row; the ribbon sits below it
 GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
@@ -1028,15 +1031,13 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, them
         return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks())
 
 
-_PARTS = {"ribbon": ("ribbon", "full"), "rosette": ("ribbon", "rosette"), **{c + suffix: (c, m) for c in ("gold-case", "gold-border") for suffix, m in (("", "full"), ("-rosette", "rosette"), ("-plain", "none"))}}
-
 
 def compose_treatment(case, marks):
     """The treatment (one of TREATMENTS) for a `case` (one of CASES) and its `marks` (one of MARKS). Full marks keep the plain name of the case. The normal case
     with no marks is no treatment at all: None, the same as "No special case"."""
     if case not in CASES or marks not in MARKS:
         raise ValueError("unknown case or marks: %r, %r" % (case, marks))
-    return next((name for name, parts in _PARTS.items() if parts == (case, marks)), None)
+    return _NAMES.get((case, marks))
 
 
 def split_treatment(treatment):
@@ -1123,8 +1124,18 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
     if treatment is None:
         return cover
     case, kind = split_treatment(treatment)
-    marks = None if kind == "none" else (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
-    if marks is not None and (dy or dx or ribbon):                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
+    done = cover if kind == "none" else _with_marks(cover, kind, dy, dx, ribbon)
+    if case == "gold-border":
+        plate = _gold_border().copy()
+        plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
+        done = plate
+    return done
+
+
+def _with_marks(cover, kind, dy, dx, ribbon):
+    """`cover` with the rosette (`kind` "rosette") or the rosette and the ribbon (`kind` "full") laid over it, moved and sized as finish_treatment says."""
+    marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
+    if dy or dx or ribbon:                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
         moved = Image.new("RGBA", marks.size, (0, 0, 0, 0))
         moved.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (dx, dy))
         below = marks.crop((0, ROSETTE_ROWS, marks.width, marks.height))
@@ -1136,15 +1147,8 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
         else:
             moved.paste(below, (0, ROSETTE_ROWS))
         marks = moved
-    done = cover
-    if marks is not None:
-        marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
-        done = Image.alpha_composite(cover, marks)
-    if case == "gold-border":
-        plate = _gold_border().copy()
-        plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
-        done = plate
-    return done
+    marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
+    return Image.alpha_composite(cover, marks)
 
 
 def _noted_colour(info):
@@ -1713,14 +1717,9 @@ def mixed_cover_colours(covers_dir):
     return len({tone_key(*notes.colour) for _, _, notes in usual_covers(covers_dir) if notes.colour is not None and not is_gold_case(notes.treatment)}) > 1
 
 
-def covers_with_no_marks(covers_dir):
-    """True if the covers folder holds a 100% cover with no marks (the gold case or border alone): what a theme turns into the rosette."""
-    return any(notes.treatment and split_treatment(notes.treatment)[1] == "none" for _, _, notes in usual_covers(covers_dir))
-
-
-def covers_with_full_marks(covers_dir):
-    """True if the covers folder holds a 100% cover with the full marks (the rosette and the ribbon): what a theme turns into the rosette alone."""
-    return any(notes.treatment and split_treatment(notes.treatment)[1] == "full" for _, _, notes in usual_covers(covers_dir))
+def covers_with_marks(covers_dir, marks):
+    """True if the covers folder holds a 100% cover with these `marks` (one of MARKS): a theme turns "full" into the rosette alone and "none" into the rosette."""
+    return any(notes.treatment and split_treatment(notes.treatment)[1] == marks for _, _, notes in usual_covers(covers_dir))
 
 
 def mixed_cover_themes(covers_dir):

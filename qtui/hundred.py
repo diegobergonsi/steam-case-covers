@@ -48,8 +48,8 @@ class Hundred(QObject):
         self._picked.connect(self._on_picked)
         self._read.connect(self._on_read)
         self._look.themeChanged.connect(self._theme_changed)
-        self._look.ownCaseChanged.connect(self._flow_changed)
-        shell.flowChanged.connect(self._flow_changed)
+        self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case or in the manual flow (no gold there)
+        shell.flowChanged.connect(self._sync)
         self._theme_changed()               # the folder may hold Halloween covers already
 
     # ----- properties -----
@@ -100,10 +100,6 @@ class Hundred(QObject):
         """True where there is no gold case to go with "No marks": the manual flow (console cases) and your own case. There "Highlight them" with no marks would be plain."""
         return self._shell.flow == "manual" or self._look.ownCase
 
-    def _flow_changed(self):
-        self.choicesChanged.emit()
-        self._sync()
-
     @Property("QVariantList", notify=choicesChanged)
     def markChoices(self):
         return [{"key": k, "label": tr(v)} for k, v in MARKS if k != "none" or not self._no_gold()]
@@ -134,7 +130,7 @@ class Hundred(QObject):
     style = Property(str, _get_style, _set_style, notify=styleChanged)
 
     def _get_marks(self):
-        return self._marks
+        return "full" if self._marks == "none" and self._no_gold() else self._marks       # what was chosen before counts as the full marks where "No marks" is not offered
 
     def _set_marks(self, value):
         if value in sc.MARKS and value != self._marks and self._look.theme == "classic" and (value != "none" or not self._no_gold()):      # under Halloween the choice is greyed and fixed
@@ -150,8 +146,7 @@ class Hundred(QObject):
         "No special case" (or the normal case with no marks): (empty set, None), the 100% covers become normal covers. Otherwise the 100% ids and the chosen style."""
         if self._completed is None:
             return None, None
-        marks = "full" if self._marks == "none" and self._no_gold() else self._marks                         # "No marks" is not offered there
-        treatment = sc.compose_treatment(self._style, marks) if self._style in sc.CASES else None       # the normal case with no marks is no treatment either
+        treatment = sc.compose_treatment(self._style, self.marks) if self._style in sc.CASES else None       # the normal case with no marks is no treatment either
         return (set(self._completed) if treatment else set()), treatment
 
     def _sync(self):

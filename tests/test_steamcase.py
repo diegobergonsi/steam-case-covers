@@ -1840,14 +1840,14 @@ class ReplaceReason(StoreMocks):
         self.made()
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
 
-    def test_covers_with_full_marks_are_found(self):
-        self.assertFalse(sc.covers_with_full_marks(os.path.join(self.tmp, "nowhere")))
+    def test_covers_with_marks_are_found(self):
+        self.assertFalse(sc.covers_with_marks(os.path.join(self.tmp, "nowhere"), "full"))
         self.made()
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.made(completed={1}, treatment="gold-border-rosette")
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.made(completed={1}, treatment="gold-border")
-        self.assertTrue(sc.covers_with_full_marks(self.covers))
+        self.assertTrue(sc.covers_with_marks(self.covers, "full"))
 
     def test_a_theme_with_a_colour_or_a_look_change_stays_readable(self):
         self.made()
@@ -4081,7 +4081,7 @@ class PlatformCases(Base):
 
     def test_full_marks_and_art_checks_ignore_console_covers(self):
         self.folder(A=("ps5", "ribbon"))
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.assertFalse(sc.covers_with_other_art(self.covers, {1: self.noise()}))
         self.assertEqual(sc.covers_with_art(self.covers), set())
 
@@ -4407,7 +4407,7 @@ class HandMadeCovers(Base):
         self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
         self.assertFalse(sc.covers_in_other_colour(self.covers, 0))
         self.assertFalse(sc.covers_in_other_look(self.covers, 0))
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.assertFalse(sc.covers_with_other_art(self.covers, {}))                                   # the art of a cover by hand is not in question
         self.assertEqual(sc.covers_with_art(self.covers), set())
 
@@ -5088,11 +5088,11 @@ class PlainGold(StoreMocks):
 
     def test_covers_with_no_marks_are_counted(self):
         sc.make_covers({1: None, 2: None}, self.covers, completed={1}, treatment="gold-case-plain")
-        self.assertTrue(sc.covers_with_no_marks(self.covers))
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertTrue(sc.covers_with_marks(self.covers, "none"))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         folder = os.path.join(self.tmp, "other")
         sc.make_covers({1: None}, folder, completed={1}, treatment="gold-case")
-        self.assertFalse(sc.covers_with_no_marks(folder))
+        self.assertFalse(sc.covers_with_marks(folder, "none"))
 
     def test_no_marks_under_a_theme_says_so_and_not_the_ribbon(self):
         import contextlib, io

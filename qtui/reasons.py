@@ -7,7 +7,7 @@ import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
 STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("ribbon", N_("Normal case")), ("none", N_("No special case"))]    # values: sc.CASES, or "none"
-MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only")), ("none", N_("No marks"))]                                                            # values: sc.MARKS
+MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only")), ("none", N_("No marks"))]                    # values: sc.MARKS
 
 
 def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None):
@@ -68,12 +68,12 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     if not sc.covers_in_other_look(covers_dir, *tone, completed=completed, treatment=treatment, theme=theme):
         return None
     colour = sc.covers_in_other_colour(covers_dir, *tone)
-    ribbon = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
-    if theme and completed is None and sc.covers_with_full_marks(covers_dir):
-        ribbon = (tr(" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
+    marks_note = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
+    if theme and completed is None and sc.covers_with_marks(covers_dir, "full"):
+        marks_note = (tr(" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
                   "load your games page and pick “Rosette and ribbon”.") % theme.capitalize())
-    if theme and completed is None and sc.covers_with_no_marks(covers_dir):          # and to the ones with no marks: the theme gives them its rosette
-        ribbon += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme.capitalize()
+    if theme and completed is None and sc.covers_with_marks(covers_dir, "none"):          # and to the ones with no marks: the theme gives them its rosette
+        marks_note += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme.capitalize()
     tail = ""                                            # the theme every cover is made in, when it changes
     if sc.covers_in_other_theme(covers_dir, theme):
         tail = tr("the %s theme") % theme.capitalize() if theme else tr("the Classic case")
@@ -85,8 +85,8 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
             changed = changed or have != (treatment if appid in completed else None)
     if tail and not changed:
         if colour:
-            return tr("Change your covers?"), tr("This replaces the covers you already made in another colour or theme.%s") % ribbon
-        return tr("Change the theme of your covers?"), tr("This replaces the covers you already made with new ones in %s.%s") % (tail, ribbon)
+            return tr("Change your covers?"), tr("This replaces the covers you already made in another colour or theme.%s") % marks_note
+        return tr("Change the theme of your covers?"), tr("This replaces the covers you already made with new ones in %s.%s") % (tail, marks_note)
     if colour and not changed:
         return tr("Change the colour of your covers?"), tr("This replaces the covers you already made in another colour.")
     styles &= set(sc.TREATMENTS)
