@@ -2060,7 +2060,7 @@ class CompletionCli(StoreMocks):
         import contextlib, io
         with mock.patch.object(sc, "_collect", side_effect=AssertionError("loaded the library")), \
                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
-            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None, theme="classic"))
+            sc.cmd_make(sc.argparse.Namespace(games_page=os.path.join(self.tmp, "missing.html"), completed_style=None, completed_marks=None, theme="classic", case_file=None))
         self.assertEqual(caught.exception.code, 2)
 
     def test_a_tilde_in_the_page_path_is_expanded(self):
@@ -4851,3 +4851,56 @@ class CustomCaseCovers(StoreMocks):
         box = diff.getbbox()
         self.assertTrue(box[0] >= 20 and box[3] <= 880, box)                           # the rosette sits at the left of the window, below the banner, and the corner is top right
 
+
+class CustomCaseCli(StoreMocks):
+    """make --case-file FILE: every game of the run goes in the user's own case (the same as the window's "My own case" on the Look step)."""
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(sc.use_custom_case, None)
+        self.lib = self.fake_library(False)
+        self.out = os.path.join(self.tmp, "out")
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        im.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        self.file = os.path.join(self.tmp, "mine.png")
+        im.save(self.file, format="PNG")
+
+    def make(self, *extra):
+        return self.run_cli("make", "--steam-dir", self.steam, "--library", self.lib, "--out", self.out, *extra)
+
+    def test_make_with_a_case_file_puts_every_game_in_it(self):
+        text = self.make("--case-file", self.file)
+        cover = os.path.join(self.out, "Game_1_1.png")
+        self.assertEqual((sc.cover_platform(cover), sc.read_notes(cover).case), (sc.CUSTOM, sc.custom_case_digest()))
+        self.assertIn("in your own case", text)
+        self.assertTrue(os.path.isfile(os.path.join(self.out, sc.CUSTOM_FILE)))
+
+    def test_the_case_options_that_mean_nothing_with_it_are_refused(self):
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "games_page.html")
+        for extra in (["--hue", "10"], ["--saturation", "10"], ["--brightness", "10"], ["--theme", "halloween"],
+                      ["--games-page", page, "--completed-style", "gold-case"], ["--games-page", page, "--completed-style", "gold-border"]):
+            with self.subTest(extra=extra), self.assertRaises(SystemExit) as ctx:
+                self.make("--case-file", self.file, *extra)
+            self.assertIn("--case-file", str(ctx.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "Game_1_1.png")))
+
+    def test_the_marks_work_with_it(self):
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "games_page.html")
+        self.make("--case-file", self.file, "--games-page", page, "--completed-style", "ribbon")        # must not raise
+
+    def test_a_bad_case_file_is_one_sentence_and_makes_nothing(self):
+        bad = os.path.join(self.tmp, "bad.png")
+        sc.Image.new("RGBA", sc.SIZE, (1, 2, 3, 255)).save(bad)
+        with self.assertRaises(SystemExit) as ctx:
+            self.make("--case-file", bad)
+        self.assertIn("window", str(ctx.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "Game_1_1.png")))
+
+    def test_the_kept_case_file_is_not_a_cover(self):
+        self.make("--case-file", self.file)
+        self.assertEqual([os.path.basename(p) for _, p in sc.scan_covers(self.out)], ["Game_1_1.png"])
+        args = sc.argparse.Namespace(covers=self.out, steam_dir=self.steam, user=None, yes=True, close_steam=False)
+        import contextlib, io
+        with mock.patch.object(sc, "steam_running", return_value=False), contextlib.redirect_stdout(io.StringIO()):
+            sc.cmd_apply(args)
+        self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png"])

@@ -284,6 +284,7 @@ PT_BR = {
     "That is not a PNG picture I can read.": "Isso não é uma imagem PNG que eu consiga ler.",
     "The art window is missing: the part where the cover goes must be fully see-through.": "Falta a janela da arte: a parte onde a capa vai precisa ser totalmente transparente.",
     "Your own case is missing. Pick the case file again.": "A sua case não foi encontrada. Escolha o arquivo da case de novo.",
+    "--case-file cannot be used with %s: your own case keeps its own colours.": "--case-file não pode ser usado com %s: a sua case mantém as próprias cores.",
     "The art window is too small: it must be at least %d x %d pixels.": "A janela da arte é pequena demais: precisa ter pelo menos %d x %d pixels.",
     "Image is too large to be a game portrait (%dx%d).": "A imagem é grande demais para ser a capa de um jogo (%dx%d).",
     "Steam did not close. Close it yourself and retry.": "A Steam não fechou. Feche-a você mesmo e tente de novo.",

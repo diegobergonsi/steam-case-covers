@@ -2358,7 +2358,18 @@ def _completion_args(args, theme=None):
     return completed, treatment
 
 
+def _refuse_with_case_file(args):
+    """SteamcaseError (one sentence) for an option that means nothing next to --case-file: your own case has its own colours and no gold look."""
+    for flag, given in (("--hue", args.hue is not None), ("--saturation", args.saturation is not None), ("--brightness", args.brightness is not None),
+                        ("--theme", args.theme is not None), ("--completed-style gold-case or gold-border", args.completed_style in ("gold-case", "gold-border"))):
+        if given:
+            raise SteamcaseError(_t("--case-file cannot be used with %s: your own case keeps its own colours.") % flag)
+
+
 def cmd_make(args):
+    if args.case_file:
+        _refuse_with_case_file(args)
+        save_custom_case(args.case_file, os.path.abspath(args.out))     # first: a bad file fails before the library is loaded or anything is downloaded
     theme = _chosen_theme(args)
     completed, treatment = _completion_args(args, theme)    # first: a bad page fails before the library is loaded
     steam, games, family = _collect(args)
@@ -2376,13 +2387,15 @@ def cmd_make(args):
         if status == "ok":
             print("ok  ", appid, name)
 
-    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art)
+    res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art,
+                     platforms={appid: CUSTOM for appid in games} if args.case_file else None)
     own_art = sum(1 for f in res["files"] if cover_art(f))
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
           + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")
           + (" | with the %s theme" % theme.capitalize() if theme else "")
+          + (" | in your own case" if args.case_file else "")
           + (" | %d from your own art" % own_art if own_art else ""))
     for appid, name in res["missing"]:
         print("  no art:", appid, name)
@@ -2513,6 +2526,9 @@ def main():
                        help="how 100%% games look: ribbon (a rosette and a ribbon, the default with --games-page), gold-case, gold-border, or none (plain covers again). "
                             "gold-case is always gold and ignores --hue, --saturation and --brightness. "
                             "Needs --games-page, except none. Without either option the covers are left as they are")
+        p.add_argument("--case-file", metavar="PNG", default=None,
+                       help="put every game of this run in a case of your own: a 600 x 900 PNG that is see-through where the art goes (at least 400 x 400). A checked copy is kept "
+                            "in --out. Covers made without it are not changed back by later runs without it; use another --out, or delete them")
         p.add_argument("--theme", choices=("classic", "halloween"), default=None,
                        help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
                             "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
