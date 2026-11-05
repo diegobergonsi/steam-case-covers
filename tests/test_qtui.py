@@ -2107,6 +2107,28 @@ class PreviewImages(QtCase):
         self.assertNotEqual(bytes(plain.constBits()), bytes(themed.constBits()))
         self.assertNotEqual(bytes(plain.constBits()), bytes(marked.constBits()))
 
+    def test_my_own_case_is_asked_for_only_while_there_is_one(self):
+        import steamcase as sc
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self.addCleanup(sc.use_custom_case, None)
+        nothing = self.get("platform/custom/1")
+        self.assertEqual(nothing.pixelColor(100, 150).alpha(), 0)
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        im.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        path = os.path.join(tmp, "m.png")
+        im.save(path)
+        sc.save_custom_case(path, tmp)
+        first = self.get("platform/custom/2")
+        self.assertGreater(first.pixelColor(3, 150).alpha(), 0)
+        im2 = sc.Image.new("RGBA", sc.SIZE, (200, 30, 30, 255))
+        im2.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        path2 = os.path.join(tmp, "m2.png")
+        im2.save(path2)
+        sc.save_custom_case(path2, tmp)
+        second = self.get("platform/custom/2")                                  # the same request: a new file must not show the old picture
+        self.assertNotEqual(first.pixelColor(3, 150).name(), second.pixelColor(3, 150).name())
+
     def test_a_bad_request_gives_a_transparent_picture_of_the_asked_size(self):
         for ident in ("", "x", "1/2/3", "a/b/c/classic/none/1", "0/100/100/pumpkin/none/1", "0/100/100/classic/nonsense/1", "0/100/100/classic/none", "0/100/100/classic/none/1/extra",
                       "../../etc/passwd", "999999999999/100/100/classic/none/1"):
@@ -5077,9 +5099,74 @@ class MakeState(QtCase, FakeStore):
             time.sleep(0.02)
         self.app.processEvents()
 
+    def own_file(self):
+        im = self.sc.Image.new("RGBA", self.sc.SIZE, (30, 60, 200, 255))
+        im.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        path = os.path.join(self.tmp, "mine.png")
+        im.save(path, format="PNG")
+        return path
+
+    def choose_own(self):
+        from unittest import mock
+        self.addCleanup(self.sc.use_custom_case, None)
+        with mock.patch("qtui.owncase.pick_file", return_value=self.own_file()):
+            self.shell.look.chooseOwnCase()
+            self.wait_for(lambda: not self.shell.owncase.choosing)
+
     def run_it(self):
         self.make.start()
         self.wait_for(lambda: not self.make.running and not self.make.asking)
+
+    def test_look_own_case_makes_every_game_custom(self):
+        self.choose_own()
+        self.assertTrue(self.shell.look.ownCase)
+        self.run_it()
+        self.assertEqual(self.calls[-1]["platforms"], {1: "custom", 2: "custom"})
+        self.assertEqual((self.calls[-1]["theme"], self.make.statusKind), (None, "ok"))
+        self.assertEqual([self.sc.cover_platform(os.path.join(self.covers, n)) for n in sorted(os.listdir(self.covers)) if n.endswith(".png") and n != self.sc.CUSTOM_FILE], ["custom", "custom"])
+
+    def test_the_look_preview_shows_the_case_and_a_theme_does_not_hide_it(self):
+        look = self.shell.look
+        before = look.previewSource
+        self.choose_own()
+        self.wait_for(lambda: "platform/custom/" in look.previewSource)
+        self.assertIn("platform/custom/", look.previewSource)
+        self.assertNotEqual(look.previewSource, before)
+        look.theme = "halloween"
+        self.run_it()
+        self.assertEqual((self.calls[-1]["theme"], self.make.statusKind), (None, "ok"))      # a theme means nothing in your own case
+
+    def test_turning_it_off_asks_and_gives_the_steam_case_back(self):
+        self.choose_own()
+        self.run_it()
+        self.shell.look.ownCase = False
+        self.wait_for(lambda: "platform/custom/" not in self.shell.look.previewSource)
+        self.assertNotIn("platform/custom/", self.shell.look.previewSource)
+        self.make.start()
+        self.wait_for(lambda: self.make.asking)
+        self.assertTrue(self.make.asking)
+        self.make.confirm()
+        self.wait_for(lambda: not self.make.running)
+        self.assertEqual({self.sc.cover_platform(os.path.join(self.covers, n)) for n in os.listdir(self.covers) if n.endswith(".png") and n != self.sc.CUSTOM_FILE}, {None})
+
+    def test_a_new_file_asks_before_drawing_the_covers_again(self):
+        self.choose_own()
+        self.run_it()
+        im = self.sc.Image.new("RGBA", self.sc.SIZE, (200, 30, 30, 255))
+        im.paste((0, 0, 0, 0), (30, 120, 570, 860))
+        other = os.path.join(self.tmp, "other.png")
+        im.save(other)
+        from unittest import mock
+        with mock.patch("qtui.owncase.pick_file", return_value=other):
+            self.shell.look.chooseOwnCase()
+            self.wait_for(lambda: not self.shell.owncase.choosing)
+        self.make.start()
+        self.wait_for(lambda: self.make.asking)
+        self.assertTrue(self.make.asking)
+
+    def test_it_is_off_until_a_file_is_picked(self):
+        self.shell.look.ownCase = True
+        self.assertFalse(self.shell.look.ownCase)
 
     def test_it_starts_idle_and_ready(self):
         m = self.make
@@ -6377,7 +6464,7 @@ class CasesTests(PickerBase):
         got = [(c["key"], c["label"]) for c in self.cases.choices]
         self.assertEqual(got, [("steam", "Steam"), ("ps5", "PlayStation 5"), ("ps4", "PlayStation 4"), ("ps3", "PlayStation 3"),
                                ("xboxseries", "Xbox Series X|S"), ("xboxone", "Xbox One"), ("xbox360", "Xbox 360"),
-                               ("switch2", "Nintendo Switch 2"), ("switch", "Nintendo Switch")])
+                               ("switch2", "Nintendo Switch 2"), ("switch", "Nintendo Switch"), ("custom", "My own case")])
         self.assertEqual(self.cases.selectedKey, "")
 
     def test_pick_then_assign_moves_the_selection_to_the_assignments(self):
@@ -6398,6 +6485,73 @@ class CasesTests(PickerBase):
         self.picker.clearAll()
         self.cases.assign()
         self.assertEqual(self.cases.assignedCount, 0)                          # no game ticked
+
+    def own_file(self, name="mine.png", window=(20, 100, 580, 880)):
+        im = self.sc.Image.new("RGBA", self.sc.SIZE, (30, 60, 200, 255))
+        if window:
+            im.paste((0, 0, 0, 0), window)
+        path = os.path.join(self.tmp, name)
+        im.save(path, format="PNG")
+        return path
+
+    def pick_own(self, path):
+        from unittest import mock
+        self.addCleanup(self.sc.use_custom_case, None)
+        with mock.patch("qtui.owncase.pick_file", return_value=path):
+            self.cases.pick("custom")
+            self.wait_for(lambda: not self.shell.owncase.choosing)
+
+    def test_my_own_case_asks_for_a_file_then_is_picked_and_assigned(self):
+        self.picker.toggle(1)
+        self.pick_own(self.own_file())
+        self.assertEqual((self.cases.selectedKey, self.shell.owncase.available, self.shell.owncase.error), ("custom", True, ""))
+        self.cases.assign()
+        self.assertEqual(self.cases.assigned(), {1: "custom"})
+        self.assertEqual(self.cases.summary, [{"label": "My own case", "count": 1}])
+
+    def test_picking_another_file_replaces_the_case(self):
+        self.pick_own(self.own_file())
+        first = self.sc.custom_case_digest()
+        self.pick_own(self.own_file("other.png", window=(30, 120, 570, 860)))
+        self.assertNotEqual(self.sc.custom_case_digest(), first)
+
+    def test_a_bad_file_gives_the_sentence_and_keeps_the_old_case(self):
+        seen = []
+        self.shell.owncase.failed.connect(lambda title, text: seen.append(text))
+        self.pick_own(self.own_file())
+        good = self.sc.custom_case_digest()
+        self.cases.pick("ps5")
+        self.pick_own(self.own_file("bad.png", window=None))
+        self.assertEqual(self.sc.custom_case_digest(), good)
+        self.assertIn("window", self.shell.owncase.error)
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(self.cases.selectedKey, "ps5")                      # a failed pick changes nothing
+
+    def test_cancelling_the_chooser_changes_nothing(self):
+        self.pick_own("")
+        self.assertEqual((self.cases.selectedKey, self.shell.owncase.available, self.shell.owncase.error), ("", False, ""))
+
+    def test_a_saved_case_comes_back_with_the_window(self):
+        from qtui.shell import Shell
+        self.pick_own(self.own_file())
+        self.sc.use_custom_case(None)
+        Shell(os.path.join(self.tmp, "settings2.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+        self.assertIsNotNone(self.sc.custom_case_digest())
+
+    def test_a_group_in_my_own_case_whose_file_is_gone_asks_to_pick_again(self):
+        import groups
+        groups.save(self.covers, groups.assign([], "Mine", {"platform": "custom"}, [1])[0])
+        self.cases.reloadGroups()
+        self.shell.startManual()
+        self.picker.toggle(1)
+        self.cases.pickGroup(self.cases.groupList[0]["id"])
+        self.cases.assign()
+        self.shell.setFact("ready", True)
+        self.shell.make.start()
+        self.wait_for(lambda: not self.shell.make.running)
+        self.assertEqual(self.shell.make.statusKind, "error")
+        self.assertIn("case", self.shell.make.status)
+        self.assertEqual(os.listdir(self.covers), ["groups.json"] if os.path.exists(os.path.join(self.covers, "groups.json")) else [])
 
     def test_an_unknown_case_is_ignored(self):
         self.cases.pick("ps9")
@@ -6455,6 +6609,8 @@ class CasesTests(PickerBase):
         from qtui.preview import PreviewProvider
         provider = PreviewProvider()
         for c in self.cases.choices:
+            if c["key"] == "custom":
+                continue                                                         # only once a file is picked: tested in PreviewImages
             with self.subTest(case=c["key"]):
                 image = provider.requestImage("platform/%s/1" % c["key"], QSize(), QSize(120, 180))
                 self.assertEqual((image.width(), image.height()), (120, 180))

@@ -86,4 +86,22 @@ def engine_problems():
                     problems.append("%s (a group) is not recognised as ours" % label)
     except Exception as e:
         problems.append("a group cover could not be built: %s" % e)
+    try:
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            src, case = os.path.join(d, "p.png"), os.path.join(d, "case.png")
+            Image.new("RGB", (600, 900), (200, 60, 60)).save(src)
+            frame = Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+            frame.paste((0, 0, 0, 0), (20, 100, 580, 880))
+            frame.save(case)
+            try:                                                             # the user's own case: checked, kept, drawn and recognised
+                sc.save_custom_case(case, os.path.join(d, "covers"))
+                out = os.path.join(d, "own.png")
+                sc.build_cover(src, out, sc.load_platform_frame(sc.CUSTOM, True), platform=sc.CUSTOM, treatment="ribbon")
+                if sc.cover_platform(out) != sc.CUSTOM or not sc.is_steamcase_cover(out):
+                    problems.append("a cover in your own case is not recognised as ours")
+            finally:
+                sc.use_custom_case(None)
+    except Exception as e:
+        problems.append("a cover in your own case could not be built: %s" % e)
     return problems

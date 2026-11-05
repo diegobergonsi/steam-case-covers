@@ -20,6 +20,17 @@ def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, t
                                                     "This replaces %n covers you already made with new ones in the cases you picked.", n)
 
 
+def own_case_reason(covers_dir, own, treatment=None, completed=None):
+    """(title, sentence) for the question of the Look step's "My own case" switch, or None when no cover already made would be rebuilt. `own`: the switch is on."""
+    if own:
+        n = sc.covers_in_other_case(covers_dir, {appid: sc.CUSTOM for appid, _ in sc.scan_covers(covers_dir)}, treatment=treatment, completed=completed)
+        return None if not n else (tr("Draw your covers again?"), trn("This replaces %n cover you already made with a new one in your own case.|"
+                                                                    "This replaces %n covers you already made with new ones in your own case.", n))
+    n = len(sc.covers_in_own_case(covers_dir))
+    return None if not n else (tr("Go back to the Steam case?"), trn("This replaces %n cover in your own case with a new one in the Steam case.|"
+                                                                   "This replaces %n covers in your own case with new ones in the Steam case.", n))
+
+
 def group_repaint_reason(groups):
     """(title, sentence) for the groups ticked to be repainted (a list of {"name", "games": [appids]}), one line each, or None when there are none."""
     if not groups:

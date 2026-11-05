@@ -4588,7 +4588,7 @@ class CasesJsonIsChecked(Base):
         real = sc.build_cover
         with mock.patch.object(sc, "build_cover", lambda *a, **kw: calls.append(kw.get("platform")) or real(*a, **kw)):
             self.assertEqual(selfcheck.engine_problems(), [])
-        self.assertEqual(sorted({p for p in calls if p}), sorted(sc.PLATFORMS))                  # every case at least once (the group check builds one more)
+        self.assertEqual(sorted({p for p in calls if p}), sorted(sc.PLATFORMS + (sc.CUSTOM,)))      # every case at least once, and the user's own (the group check builds one more)
 
 
 class SelfCheckConsoleCases(Base):
@@ -4813,6 +4813,11 @@ class CustomCaseCovers(StoreMocks):
         self.assertEqual(seen[2], "exists")
         self.assertNotEqual(seen[1], "exists")
         self.assertEqual(sc.read_notes(self.cv(1)).case, sc.custom_case_digest())
+
+    def test_covers_in_own_case_are_those_made_for_all_games_not_in_a_group(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: sc.CUSTOM, 2: sc.CUSTOM, 3: "ps5"}, groups={2: "gabc12345"})
+        self.assertEqual(sc.covers_in_own_case(self.covers), {1})
 
     def test_make_without_a_case_says_so(self):
         with self.assertRaises(sc.SteamcaseError) as ctx:

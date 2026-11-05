@@ -1644,6 +1644,12 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
     return False
 
 
+def covers_in_own_case(covers_dir):
+    """{appid} of the covers in the folder made in the user's own case for all games (no group): the ones the usual flow leaves alone as made by hand, and
+    that the Look step's "My own case" switch gives back to the Steam case when it is turned off."""
+    return {appid for appid, path in scan_covers(covers_dir) for notes in [read_notes(path)] if notes and notes.platform == CUSTOM and not notes.group}
+
+
 def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None, tones=None, groups=None):
     """How many covers already in the folder `make_covers(platforms=platforms, ...)` would rebuild: of the games in `platforms` ({appid: platform or None for the
     Steam case}) those with a cover in another case (another console, or the Steam case instead), with other marks (`treatment` for the apps in `completed`, as in

@@ -242,6 +242,9 @@ class Make(QObject):
         else:
             self._ticks.refresh()
             snap["repaint"] = self._ticks.ticked()
+            snap["own_case"] = look.ownCase
+            if snap["own_case"]:                    # your own case has its own colours and no gold look: only the marks count, as for a console case
+                snap.update(theme=None, treatment=sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None)
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1
@@ -284,13 +287,15 @@ class Make(QObject):
 
     def _begin(self, snap, custom_art, games, problems):
         """The rest of start() once the art is known: ask before replacing covers, then make them."""
-        if snap.get("manual"):
+        if snap.get("own_case"):
+            why = reasons.own_case_reason(self._covers, True, snap["treatment"], snap["completed"])
+        elif snap.get("manual"):
             why = reasons.platform_replace_reason(self._covers, snap["platforms"], snap["tone"], snap["treatment"], snap["completed"], snap["tones"], snap["groups"])
         else:
             why = reasons.replace_reason(self._covers, snap["tone"], snap["completed"], snap["treatment"], snap["theme"], custom_art, games)
-            again = reasons.group_repaint_reason(snap["repaint"])
-            if again:
-                why = again if why is None else (why[0], why[1] + " " + again[1])
+            for more in (reasons.group_repaint_reason(snap["repaint"]), reasons.own_case_reason(self._covers, False)):
+                if more:
+                    why = more if why is None else (why[0], why[1] + " " + more[1])
         if why:
             self._pending = (snap, custom_art, list(problems))
             self._question = why
@@ -341,8 +346,10 @@ class Make(QObject):
                 raise sc.SteamcaseError(tr("No games found. Install a game first, or load your userdata.json."))
             manual = snap.get("manual")
             extra = {"platforms": snap["platforms"], "tones": snap["tones"], "groups": snap["groups"]} if manual else {}
-            if snap.get("repaint"):
-                extra["repaint"] = {a for g in snap["repaint"] for a in g["games"]}
+            if snap.get("own_case"):
+                extra["platforms"] = {appid: sc.CUSTOM for appid in games}          # every game, in the case the user gave
+            elif not manual:                        # covers made in your own case for every game go back to the Steam case now that it is off
+                extra["repaint"] = {a for g in snap.get("repaint") or () for a in g["games"]} | sc.covers_in_own_case(self._covers)
             res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], family=family if not manual or snap["family"] else set(), hue=hue, sat=sat, val=val,
                                  progress=lambda done, total, appid, name, status: self._tell(req, done, total, name),
                                  cancelled=self._cancel.is_set, completed=snap["completed"], treatment=snap["treatment"],

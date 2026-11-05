@@ -42,6 +42,8 @@ ScreenFrame {
 
             Section {
                 objectName: "look_section_colour"
+                enabled: !screen.look.ownCase
+                opacity: enabled ? 1 : Theme.disabledOpacity
                 heading: qsTr("Case colour")
                 note: screen.look.toneName
                 Column {
@@ -84,6 +86,8 @@ ScreenFrame {
             }
             Section {
                 objectName: "look_section_theme"
+                enabled: !screen.look.ownCase
+                opacity: enabled ? 1 : Theme.disabledOpacity
                 heading: qsTr("Theme")
                 ChoiceChips {
                     objectName: "look_theme"
@@ -91,6 +95,23 @@ ScreenFrame {
                     model: screen.look.themes
                     current: screen.look.theme
                     onChosen: (key) => screen.look.theme = key
+                }
+            }
+            Section {
+                objectName: "look_section_own"
+                heading: qsTr("My own case")
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    color: Theme.muted
+                    font.pixelSize: Theme.bodySize
+                    text: qsTr("Use a case you made: a PNG of 600 x 900 pixels that is see-through where the art goes (at least 400 x 400). Every game is made in it.")
+                }
+                SwitchRow { objectName: "look_own_case"; label: qsTr("Use my own case for every game"); enabled: shell.owncase.available
+                    checked: screen.look.ownCase; onToggled: (v) => screen.look.ownCase = v }
+                ButtonRow {
+                    PrimaryButton { objectName: "look_own_choose"; quiet: true; text: shell.owncase.available ? qsTr("Choose another file…") : qsTr("Choose file…")
+                        onClicked: screen.look.chooseOwnCase() }
                 }
             }
             Section {
