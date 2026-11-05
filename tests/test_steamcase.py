@@ -4769,3 +4769,85 @@ class CustomCase(Base):
         self.assertIsInstance(sc.platform_marks_dy(sc.CUSTOM), int)
         self.assertNotIn(sc.CUSTOM, sc.PLATFORMS)
 
+
+class CustomCaseCovers(StoreMocks):
+    """make_covers(platforms={appid: CUSTOM}): covers in the user's own case carry its digest, and a new file rebuilds them."""
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(sc.use_custom_case, None)
+
+    def case_file(self, name="mine.png", colour=(30, 60, 200, 255)):
+        im = sc.Image.new("RGBA", sc.SIZE, colour)
+        im.paste((0, 0, 0, 0), (20, 100, 580, 880))
+        path = os.path.join(self.tmp, name)
+        im.save(path, format="PNG")
+        return path
+
+    def cv(self, appid):
+        return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_a_custom_cover_has_both_notes(self):
+        digest = sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        notes = sc.read_notes(self.cv(1))
+        self.assertEqual((notes.platform, notes.case, notes.theme, notes.art), (sc.CUSTOM, digest, None, None))
+        with sc.Image.open(self.cv(1)) as im:
+            self.assertNotIn(sc.HUE_CHUNK, im.info)
+        self.assertEqual(sc.cover_platform(self.cv(1)), sc.CUSTOM)
+
+    def test_a_cover_in_a_console_case_has_no_case_note(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"})
+        self.assertIsNone(sc.read_notes(self.cv(1)).case)
+
+    def test_same_file_keeps_covers_and_a_new_file_rebuilds_only_those(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        plan = {1: sc.CUSTOM, 2: "ps5"}
+        sc.make_covers({1: None, 2: None}, self.covers, platforms=plan)
+        self.assertEqual(sc.covers_in_other_case(self.covers, plan), 0)
+        sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertEqual(sc.covers_in_other_case(self.covers, plan), 1)
+        seen = {}
+        sc.make_covers({1: None, 2: None}, self.covers, platforms=plan, progress=lambda d, t, a, n, st: seen.update({a: st}))
+        self.assertEqual(seen[2], "exists")
+        self.assertNotEqual(seen[1], "exists")
+        self.assertEqual(sc.read_notes(self.cv(1)).case, sc.custom_case_digest())
+
+    def test_make_without_a_case_says_so(self):
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        self.assertIn("case", str(ctx.exception))
+        self.assertEqual(os.listdir(self.covers), [])
+
+    def test_a_garbled_case_note_counts_as_damaged(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        bad = self.resave(self.cv(1), **{sc.CASE_CHUNK: "not-a-digest"})
+        notes = sc.read_notes(bad)
+        self.assertIs(notes.case, False)
+        self.assertIs(sc.by_hand(notes), False)
+
+    def test_is_steamcase_cover_knows_covers_of_the_active_case_only(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
+        self.assertTrue(sc.is_steamcase_cover(self.cv(1)))
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps5"})))
+        sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertFalse(sc.is_steamcase_cover(self.cv(1)))                           # made with the old file: not ours any more, never taken for ours
+        sc.use_custom_case(None)
+        self.assertFalse(sc.is_steamcase_cover(self.cv(1)))                           # nothing to compare with
+
+    def test_marks_and_family_corner_use_the_measured_window(self):
+        sc.save_custom_case(self.case_file(), self.covers)
+        fam = sc.build_cover
+        plain = os.path.join(self.tmp, "p.png")
+        marked = os.path.join(self.tmp, "m.png")
+        portrait = os.path.join(self.tmp, "portrait.jpg")
+        sc.Image.new("RGB", (300, 450), (30, 220, 30)).save(portrait, format="JPEG", quality=100)
+        fam(portrait, plain, sc.load_platform_frame(sc.CUSTOM), platform=sc.CUSTOM)
+        fam(portrait, marked, sc.load_platform_frame(sc.CUSTOM, True), platform=sc.CUSTOM, treatment="rosette")
+        diff = sc.ImageChops.difference(sc.Image.open(plain).convert("RGB"), sc.Image.open(marked).convert("RGB")).convert("L").point(lambda v: 255 if v > 8 else 0)
+        box = diff.getbbox()
+        self.assertTrue(box[0] >= 20 and box[3] <= 880, box)                           # the rosette sits at the left of the window, below the banner, and the corner is top right
+

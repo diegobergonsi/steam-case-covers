@@ -55,6 +55,7 @@ GROUP_CHUNK = "steamcase-group"            # PNG note naming the group (groups.p
 GROUP_ID = re.compile(r"[a-z0-9]{1,12}")
 LAYOUT_CHUNK = "steamcase-layout"           # PNG note naming how a cover was drawn (LAYOUT); covers made before v1.6.0 carry none
 LAYOUT = "2"                                # v1.6.0: the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round)
+CASE_CHUNK = "steamcase-case"               # PNG note with the digest of the user's own case file, on covers whose platform note is "custom"
 PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
 CASES_DIR = os.path.join(HERE, "assets", "cases")    # one <platform>.png per case (transparent art window) and cases.json (the window of each)
 KEEP = "keep"                             # in place of a theme: each existing cover keeps the theme it has
@@ -1001,7 +1002,9 @@ def _compose(art, frame, window=WINDOW):
 
 def _check_platform(platform, treatment, theme):
     """ValueError unless `platform` is one of PLATFORMS and goes with this `treatment` (none, "ribbon" or "rosette": no gold) and `theme` (none)."""
-    if platform not in PLATFORMS:
+    if platform == CUSTOM and not _custom:
+        raise SteamcaseError(_t("Your own case is missing. Pick the case file again."))
+    if platform not in PLATFORMS and platform != CUSTOM:
         raise ValueError("unknown platform: %r" % (platform,))
     if theme is not None:
         raise ValueError("a console case has no theme: %r" % (theme,))
@@ -1177,6 +1180,7 @@ class CoverNotes(NamedTuple):
     group: object           # the id of the group a cover by hand was made in, or None
     art: object             # "custom <hash>" for a cover built from the user's own art (see art_note), or None for Steam's portrait
     layout: object = None   # LAYOUT for a cover drawn the way this version draws it, None for a cover of an earlier version (no note), False for another note
+    case: object = None     # the digest of the user's own case file for a cover in CUSTOM, None for any other cover, False for a note we do not write
 
 
 def _noted(value, valid):
@@ -1188,10 +1192,11 @@ def notes_of(info):
     return CoverNotes(_noted_colour(info),
                       _noted(info.get(DONE_CHUNK), lambda v: v in TREATMENTS),
                       _noted(info.get(THEME_CHUNK), lambda v: v in THEMES),
-                      _noted(info.get(PLATFORM_CHUNK), lambda v: v in PLATFORMS),
+                      _noted(info.get(PLATFORM_CHUNK), lambda v: v in PLATFORMS or v == CUSTOM),
                       _noted(info.get(GROUP_CHUNK), lambda v: bool(GROUP_ID.fullmatch(v))),
                       _noted(info.get(ART_CHUNK), lambda v: bool(re.fullmatch(r"custom [0-9a-f]{16}", v))),
-                      _noted(info.get(LAYOUT_CHUNK), lambda v: v == LAYOUT))
+                      _noted(info.get(LAYOUT_CHUNK), lambda v: v == LAYOUT),
+                      _noted(info.get(CASE_CHUNK), lambda v: bool(re.fullmatch(r"[0-9a-f]{16}", v))))
 
 
 def read_notes(path):
@@ -1203,7 +1208,7 @@ def read_notes(path):
 def by_hand(notes):
     """True for a cover made by hand (a console case or a group's Steam case): the usual flow leaves it alone. None for a usual cover. False if the file is not a
     readable PNG or one of those notes is not one we write: the cover is then rebuilt."""
-    if notes is None or notes.platform is False or notes.group is False:
+    if notes is None or notes.platform is False or notes.group is False or notes.case is False:
         return False
     return True if notes.platform or notes.group else None
 
@@ -1236,6 +1241,7 @@ class CoverSpec(NamedTuple):
     platform: object = KEEP         # None: the Steam case
     group: object = KEEP
     layout: object = KEEP           # LAYOUT for a cover with marks or a family corner: those were drawn in other places before v1.6.0, so an older cover is not kept
+    case: object = KEEP             # the digest of the active custom case, for a cover in CUSTOM
 
 
 def matches(notes, spec):
@@ -1244,7 +1250,7 @@ def matches(notes, spec):
     if notes is None or (spec.colour != KEEP and not same_colour(notes.colour, spec.colour)):
         return False
     return all(want == KEEP or have == want for have, want in ((notes.treatment, spec.treatment), (notes.theme, spec.theme), (notes.art, spec.art),
-                                                                (notes.platform, spec.platform), (notes.group, spec.group), (notes.layout, spec.layout)))
+                                                                (notes.platform, spec.platform), (notes.group, spec.group), (notes.layout, spec.layout), (notes.case, spec.case)))
 
 
 def _drawing_for(treatment, family=False):
@@ -1256,7 +1262,7 @@ def _spec_for(platform, colour, treatment, theme, art, group):
     """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour, theme or art to compare, and an earlier gold
     look keeps only its marks there."""
     if platform:
-        return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group)
+        return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group, case=custom_case_digest() if platform == CUSTOM else None)
     return CoverSpec(colour, treatment, theme, art, None, group, _drawing_for(treatment))
 
 
@@ -1372,6 +1378,8 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
     note = PngInfo()
     if platform is not None:
         note.add_text(PLATFORM_CHUNK, platform)                # a console cover has no colour, tone or theme: the case is fixed
+        if platform == CUSTOM:
+            note.add_text(CASE_CHUNK, custom_case_digest())     # a new case file rebuilds the covers made with the old one
     else:
         note.add_text(HUE_CHUNK, str(hue % 360))               # lets make_covers tell what colour an existing cover is without decoding it
         note.add_text(TONE_CHUNK, "%d %d" % (min(max(sat, 0), 100), min(max(val, 0), 100)))
@@ -1462,10 +1470,12 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         raise ValueError("the %s theme only goes with the rosette-only marks, not %r" % (theme, treatment))      # the ribbon would hide the decorations
     tones, groups, repaint = tones or {}, groups or {}, repaint or set()
     wanted_platforms = set((platforms or {}).values()) - {None}
-    if wanted_platforms - set(PLATFORMS):
-        raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS), key=str)[0],))
+    if wanted_platforms - set(PLATFORMS) - {CUSTOM}:
+        raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS) - {CUSTOM}, key=str)[0],))
     if wanted_platforms:
         _check_platform(sorted(wanted_platforms)[0], treatment, theme)
+    if CUSTOM in wanted_platforms:
+        _check_platform(CUSTOM, treatment, theme)           # the run stops here, before any download, when the case file is gone
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -1562,7 +1572,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
-            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g)
+            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g, case=custom_case_digest() if want_p == CUSTOM else None)
         else:
             spec = CoverSpec(colour, target, theme, wanted_art, None, want_g, _drawing_for(target, appid in family))
         if not force and matches(notes, spec):
@@ -1960,9 +1970,10 @@ def _same_treated(im, key, family, legacy=False):
 
 
 @functools.lru_cache(maxsize=16)                                    # about 2.7 MB an entry
-def _platform_reference(key, family):
+def _platform_reference(key, family, digest=None):
     """(expected, mask) for a console cover: key is (platform, treatment), the treatment None or "ribbon" or "rosette". Made like _treated_reference
-    (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0."""
+    (from flat black and flat white art, through the same steps as build_cover); the art window is where the mask is 0.
+    `digest` (of the custom case, for CUSTOM) is only part of the cache key: a new case file must not be compared with the old one's reference."""
     platform, treatment = key
     frame, window = load_platform_frame(platform, family), platform_window(platform)
     dy, dx, ribbon = platform_marks_dy(platform), platform_marks_dx(platform), platform_ribbon(platform)
@@ -1975,7 +1986,7 @@ def _same_platform(im, key, family):
     """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. The PS3 and PS4 inserts are only a banner (about 8% of
     the canvas); the mask of every case must cover at least 6% (a test checks every case: over 30,000 pixels that must match), or too little is left to tell
     our covers from others."""
-    return _same_masked(im, *_platform_reference(key, family), 0.06)
+    return _same_masked(im, *_platform_reference(key, family, custom_case_digest() if key[0] == CUSTOM else None), 0.06)
 
 
 def is_steamcase_cover(path):
@@ -1999,13 +2010,16 @@ def is_steamcase_cover(path):
                 return False
             toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
             platform, strange = im.info.get(PLATFORM_CHUNK), any(k in im.info for k in (HUE_CHUNK, TONE_CHUNK, THEME_CHUNK, ART_CHUNK))
+            case = im.info.get(CASE_CHUNK)
             group, own_art = im.info.get(GROUP_CHUNK), ART_CHUNK in im.info
             im = im.convert("RGBA")
         if group is not None and (not GROUP_ID.fullmatch(group) or theme is not None or own_art):
             return False                                            # a cover by hand has a group note we wrote, no theme and no art of the user's
         if platform is not None:                                    # a console cover: its case and marks decide, never a colour, tone, theme or art note
-            if platform not in PLATFORMS or strange or done not in (None, "ribbon", "rosette"):
+            if platform not in PLATFORMS and platform != CUSTOM or strange or done not in (None, "ribbon", "rosette"):
                 return False
+            if (platform == CUSTOM) != (case is not None) or (platform == CUSTOM and case != custom_case_digest()):
+                return False                                        # a cover in the user's own case is ours only while that case file is the active one
             return any(_same_platform(im, (platform, done), family) for family in (False, True))
         if done is not None or theme is not None:
             if (done is not None and done not in TREATMENTS) or (theme is not None and theme not in THEMES) or colour is None:
