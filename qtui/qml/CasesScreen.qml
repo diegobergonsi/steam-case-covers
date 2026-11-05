@@ -46,12 +46,12 @@ ScreenFrame {
                         width: Theme.caseWidth
                         height: Theme.caseHeight
                         sourceSize: Qt.size(2 * Theme.caseWidth, 2 * Theme.caseHeight)
-                        source: modelData.key === "custom" ? "image://preview/platform/custom/" + shell.owncase.serial : "image://preview/platform/" + modelData.key + "/1"
+                        source: modelData.source
                         smooth: true
                     }
                     Text {                                    // no case file picked yet: the card says what a click does
                         objectName: "case_custom_ask"
-                        visible: modelData.key === "custom" && !shell.owncase.available
+                        visible: modelData.ask
                         anchors.centerIn: art
                         width: art.width - 2 * Theme.s8
                         text: qsTr("Choose a file…")

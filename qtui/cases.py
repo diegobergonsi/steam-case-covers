@@ -46,6 +46,7 @@ class Cases(QObject):
     groupNameChanged = Signal()
     colourChanged = Signal()
     errorChanged = Signal()
+    choicesChanged = Signal()
 
     def __init__(self, shell, parent=None, covers_dir=None):
         super().__init__(parent)
@@ -61,15 +62,17 @@ class Cases(QObject):
         self._tone = (0, 100, 100)
         self._name, self._typed, self._error = "", False, ""
         self._family = False
-        self._awaiting = False              # a click on "My own case" is waiting for the file
-        shell.owncase.finished.connect(self._own_finished)
+        shell.owncase.changed.connect(self.choicesChanged)         # the card of the user's own case shows the case, or asks for a file
         shell.picker.selectionChanged.connect(self.selectedKeyChanged)           # canAssign follows the ticks too
         shell.library.pathChanged.connect(self._library_changed)
         shell.library.installedOnlyChanged.connect(self._library_changed)
 
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=choicesChanged)
     def choices(self):
-        return [{"key": k, "label": tr(LABELS[k])} for k in ORDER]
+        """The cards of the Case step: {"key", "label", "source" (the picture of the case), "ask" (true for "My own case" while there is no file to show)}."""
+        own = self._shell.owncase
+        return [{"key": k, "label": tr(LABELS[k]), "ask": k == sc.CUSTOM and not own.available,
+                 "source": "image://preview/platform/%s/%d" % (k, own.serial if k == sc.CUSTOM else 1)} for k in ORDER]
 
     @Property(str, notify=selectedKeyChanged)
     def selectedKey(self):
@@ -79,21 +82,17 @@ class Cases(QObject):
     def pick(self, key):
         """Pick a case for a new group."""
         if key == sc.CUSTOM:                # always asks for the file: picking again replaces the case
-            self._awaiting = True
-            self._shell.owncase.browse()
+            self._shell.owncase.ask(self._pick_custom)
             return
         if key in ORDER and (key != self._key or self._gid):
             self._key, self._gid = key, ""
             self._follow_case()
             self.selectedKeyChanged.emit()
 
-    def _own_finished(self, ok):
-        if self._awaiting:
-            self._awaiting = False
-            if ok:
-                self._key, self._gid = sc.CUSTOM, ""
-                self._follow_case()
-                self.selectedKeyChanged.emit()
+    def _pick_custom(self):
+        self._key, self._gid = sc.CUSTOM, ""
+        self._follow_case()
+        self.selectedKeyChanged.emit()
 
     # ----- the colour of the Steam case, the name and the groups -----
     @Property("QVariantList", constant=True)

@@ -32,8 +32,6 @@ class Look(QObject):
         self._treatment = "none"            # set by Hundred: the look of a 100% game in the preview ("none" or an sc.TREATMENTS name)
         self._serial = 0
         self._own = False                   # "My own case" for every game (the Look step of the step-by-step way); the file itself is kept by shell.owncase
-        self._choosing = False              # a click on "Choose file" is waiting for the file
-        shell.owncase.finished.connect(self._own_finished)
         try:                                # reopening the window shows the colour and theme of the covers already made
             found = sc.existing_cover_colour(covers_dir)
             if found:
@@ -217,16 +215,12 @@ class Look(QObject):
     @Slot()
     def chooseOwnCase(self):
         """Ask for a case file; once it is accepted every game is made in it."""
-        self._choosing = True
-        self._shell.owncase.browse()
+        self._shell.owncase.ask(self._use_own)
 
-    def _own_finished(self, ok):
-        if self._choosing:
-            self._choosing = False
-            if ok:
-                self._own = True
-                self.ownCaseChanged.emit()
-                self._schedule()                # a new file is a new picture even when the switch was already on
+    def _use_own(self):
+        self._own = True
+        self.ownCaseChanged.emit()
+        self._schedule()                        # a new file is a new picture even when the switch was already on
 
     # ----- the art switches (saved through the shell) -----
     def _get_skip(self):

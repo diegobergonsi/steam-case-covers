@@ -4768,7 +4768,7 @@ class CustomCase(Base):
     def test_refused_files(self):
         big = os.path.join(self.tmp, "big.png")
         with open(big, "wb") as f:
-            f.write(b"\0" * (sc.MAX_CASE_FILE + 1))
+            f.write(b"\0" * (sc.caseframe.MAX_FILE + 1))
         text = os.path.join(self.tmp, "text.png")
         with open(text, "w") as f:
             f.write("not a picture")

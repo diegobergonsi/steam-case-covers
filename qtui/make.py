@@ -47,6 +47,11 @@ def result_text(res, problems):
     return text, "ok" if n and not bad else "wait"
 
 
+def _marks_only(treatment):
+    """The treatment a console case or your own case can have: the marks of `treatment` on the plain case, no gold (None stays None)."""
+    return sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None
+
+
 class Make(QObject):
     runningChanged = Signal()               # running, searching, asking and canMake
     doneChanged = Signal()
@@ -238,13 +243,13 @@ class Make(QObject):
                 return
             snap.update(manual=True, platforms=shell.cases.assigned(), tones=shell.cases.tones(), groups=shell.cases.groupIds(), save=shell.cases.groupsToSave(),
                         released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, custom=False,
-                        treatment=sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None)    # console cases have no gold: only the marks count
+                        treatment=_marks_only(treatment))
         else:
             self._ticks.refresh()
             snap["repaint"] = self._ticks.ticked()
             snap["own_case"] = look.ownCase
             if snap["own_case"]:                    # your own case has its own colours and no gold look: only the marks count, as for a console case
-                snap.update(theme=None, treatment=sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None)
+                snap.update(theme=None, treatment=_marks_only(treatment))
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1

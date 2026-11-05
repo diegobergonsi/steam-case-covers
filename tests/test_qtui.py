@@ -6501,6 +6501,13 @@ class CasesTests(PickerBase):
             self.cases.pick("custom")
             self.wait_for(lambda: not self.shell.owncase.choosing)
 
+    def test_the_card_shows_the_case_once_there_is_one(self):
+        card = lambda: next(c for c in self.cases.choices if c["key"] == "custom")
+        self.assertEqual((card()["ask"], card()["source"]), (True, "image://preview/platform/custom/0"))
+        self.assertTrue(all(c["ask"] is False and c["source"].endswith("/1") for c in self.cases.choices if c["key"] != "custom"))
+        self.pick_own(self.own_file())
+        self.assertEqual((card()["ask"], card()["source"]), (False, "image://preview/platform/custom/1"))
+
     def test_my_own_case_asks_for_a_file_then_is_picked_and_assigned(self):
         self.picker.toggle(1)
         self.pick_own(self.own_file())
@@ -6529,12 +6536,11 @@ class CasesTests(PickerBase):
 
     def test_an_error_while_saving_is_a_box_and_never_leaves_the_window_waiting(self):
         from unittest import mock
-        seen, ends = [], []
+        seen = []
         self.shell.owncase.failed.connect(lambda title, text: seen.append(text))
-        self.shell.owncase.finished.connect(ends.append)
         with mock.patch.object(self.sc, "save_custom_case", side_effect=OSError("disk full")):
             self.pick_own(self.own_file())
-        self.assertEqual((len(seen), ends, self.cases._awaiting), (1, [False], False))
+        self.assertEqual((len(seen), self.cases.selectedKey, self.shell.owncase.choosing), (1, "", False))
         self.assertIn("disk full", seen[0])
         self.cases.pick("ps5")                                               # the Case step still answers
         self.assertEqual(self.cases.selectedKey, "ps5")
@@ -6548,7 +6554,9 @@ class CasesTests(PickerBase):
             self.cases.pick("custom")
             self.wait_for(lambda: bool(seen))
         chooser.assert_not_called()
-        self.assertEqual((len(seen), self.cases.selectedKey, self.cases._awaiting), (1, "", False))
+        self.assertEqual((len(seen), self.cases.selectedKey), (1, ""))
+        self.cases.pick("ps5")
+        self.assertEqual(self.cases.selectedKey, "ps5")                      # nothing is left waiting for the file
         self.shell.make._running = False
 
     def test_a_broken_kept_copy_is_reported_at_start(self):
