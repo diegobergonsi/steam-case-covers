@@ -137,12 +137,11 @@ class Hundred(QObject):
     # ----- what Make gets -----
     def values(self):
         """(completed, treatment) for make_covers. No page loaded: (None, None), every cover keeps its look.
-        "No special case": (empty set, None), the 100% covers become normal covers. Otherwise the 100% ids and the chosen style."""
+        "No special case" (or the normal case with no marks): (empty set, None), the 100% covers become normal covers. Otherwise the 100% ids and the chosen style."""
         if self._completed is None:
             return None, None
-        if self._style not in sc.CASES:
-            return set(), None
-        return set(self._completed), sc.compose_treatment(self._style, self._marks)
+        treatment = sc.compose_treatment(self._style, self._marks) if self._style in sc.CASES else None       # the normal case with no marks is no treatment either
+        return (set(self._completed) if treatment else set()), treatment
 
     def _sync(self):
         """The preview shows a 100% cover in the chosen style, only when a page is loaded."""
