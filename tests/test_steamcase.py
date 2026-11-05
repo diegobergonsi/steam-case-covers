@@ -4706,6 +4706,65 @@ class CustomCase(Base):
         self.assertEqual(info, {"window": [20, 100, 580, 880], "overlay": [30, 110, 70, 150]})
         self.assertEqual(sc.check_case_file(self.case_file("b.png")), {"window": [20, 100, 580, 880]})
 
+    def test_transparent_corners_and_margins_outside_the_case_are_not_the_window(self):
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        im.paste((0, 0, 0, 0), (40, 120, 560, 860))
+        for box in ((0, 0, 30, 30), (570, 0, 600, 30), (0, 870, 30, 900), (570, 870, 600, 900), (0, 300, 8, 600)):     # rounded outer corners and a see-through margin
+            im.paste((0, 0, 0, 0), box)
+        path = os.path.join(self.tmp, "round.png")
+        im.save(path)
+        self.assertEqual(sc.check_case_file(path), {"window": [40, 120, 560, 860]})
+
+    def test_a_rounded_window_has_no_tab(self):
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        sc.ImageDraw.Draw(im).rounded_rectangle((20, 100, 579, 879), radius=120, fill=(0, 0, 0, 0))
+        path = os.path.join(self.tmp, "roundwin.png")
+        im.save(path)
+        info = sc.check_case_file(path)
+        self.assertEqual(info["window"], [20, 100, 580, 880])
+        self.assertNotIn("overlay", info)
+
+    def test_a_shadow_inside_the_window_is_not_a_tab(self):
+        path = self.case_file(tab=None)
+        im = sc.Image.open(path).convert("RGBA")
+        im.paste((0, 0, 0, 40), (20, 100, 580, 108))                         # a faint strip along the top edge
+        im.paste((0, 0, 0, 40), (20, 100, 28, 880))                          # and along the left edge: an L, mostly empty
+        im.save(path)
+        self.assertNotIn("overlay", sc.check_case_file(path))
+
+    def test_the_measure_agrees_with_every_console_case(self):
+        for p in sc.PLATFORMS:
+            with self.subTest(platform=p):
+                self.assertEqual(sc.check_case_file(os.path.join(sc.CASES_DIR, p + ".png")), sc._case_windows()[p])
+
+    def test_a_case_with_no_frame_is_refused(self):
+        for name, window in (("all.png", (0, 0, 600, 900)), ("thin.png", (3, 3, 597, 897))):
+            with self.subTest(name):
+                with self.assertRaises(sc.SteamcaseError) as ctx:
+                    sc.check_case_file(self.case_file(name, window=window))
+                self.assertIn("frame", str(ctx.exception))
+
+    def test_a_picture_without_transparency_is_refused_in_one_sentence(self):
+        path = os.path.join(self.tmp, "grey.png")
+        sc.Image.new("I;16", sc.SIZE, 3000).save(path)
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc.check_case_file(path)
+        self.assertIn("window", str(ctx.exception))
+
+    def test_a_folder_that_cannot_be_written_is_one_sentence_and_keeps_the_slot(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        blocker = os.path.join(self.tmp, "blocker")
+        with open(blocker, "w") as f:
+            f.write("a file where a folder should be")
+        with self.assertRaises(sc.SteamcaseError):
+            sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), os.path.join(blocker, "covers"))
+        with mock.patch.object(sc, "_replace", side_effect=PermissionError("busy")), self.assertRaises(sc.SteamcaseError):
+            sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
+        self.assertEqual(sc.custom_case_digest(), first)                        # the slot only changes once the copy is on disk
+        with open(os.path.join(self.covers, sc.CUSTOM_FILE), "rb") as f:
+            self.assertEqual(sc.hashlib.sha256(f.read()).hexdigest()[:16], first)
+        self.assertEqual([n for n in os.listdir(self.covers) if n != sc.CUSTOM_FILE], [])       # no temp file left behind
+
     def test_refused_files(self):
         big = os.path.join(self.tmp, "big.png")
         with open(big, "wb") as f:
@@ -4833,15 +4892,42 @@ class CustomCaseCovers(StoreMocks):
         self.assertIs(notes.case, False)
         self.assertIs(sc.by_hand(notes), False)
 
-    def test_is_steamcase_cover_knows_covers_of_the_active_case_only(self):
+    def test_is_steamcase_cover_keeps_knowing_covers_of_an_older_file(self):
         sc.save_custom_case(self.case_file(), self.covers)
         sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM})
         self.assertTrue(sc.is_steamcase_cover(self.cv(1)))
-        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps5"})))
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.PLATFORM_CHUNK: "ps5"})))              # a console note on a custom picture
         sc.save_custom_case(self.case_file("other.png", colour=(200, 30, 30, 255)), self.covers)
-        self.assertFalse(sc.is_steamcase_cover(self.cv(1)))                           # made with the old file: not ours any more, never taken for ours
+        self.assertTrue(sc.is_steamcase_cover(self.cv(1)))                           # made with the old file: Reset must still find it
         sc.use_custom_case(None)
-        self.assertFalse(sc.is_steamcase_cover(self.cv(1)))                           # nothing to compare with
+        self.assertTrue(sc.is_steamcase_cover(self.cv(1)))                           # and with no case loaded at all (the command line, a new process)
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.CASE_CHUNK: None})))               # a custom note needs its digest
+        self.assertFalse(sc.is_steamcase_cover(self.resave(self.cv(1), **{sc.CASE_CHUNK: "zz"})))
+
+    def test_a_cover_with_the_active_digest_must_also_match_its_pixels(self):
+        digest = sc.save_custom_case(self.case_file(), self.covers)
+        portrait = os.path.join(self.tmp, "portrait.jpg")
+        sc.Image.new("RGB", (300, 450), (30, 220, 30)).save(portrait, format="JPEG")
+        out = os.path.join(self.tmp, "fake.png")
+        sc.build_cover(portrait, out, sc.load_platform_frame("ps5"), platform="ps5")           # a PS5 picture ...
+        self.assertFalse(sc.is_steamcase_cover(self.resave(out, **{sc.PLATFORM_CHUNK: sc.CUSTOM, sc.CASE_CHUNK: digest})))    # ... wearing our custom notes
+
+    def test_the_case_changing_during_a_run_stops_it_and_never_mixes_two_files(self):
+        first = sc.save_custom_case(self.case_file(), self.covers)
+        other = self.case_file("other.png", colour=(200, 30, 30, 255))
+        swapped = []
+
+        def progress(done, total, appid, name, status):
+            if not swapped:
+                swapped.append(sc.save_custom_case(other, self.covers))
+
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc.make_covers({1: None, 2: None, 3: None}, self.covers, platforms={1: sc.CUSTOM, 2: sc.CUSTOM, 3: sc.CUSTOM}, progress=progress)
+        self.assertIn("changed", str(ctx.exception))
+        for appid in (1, 2, 3):
+            if os.path.exists(self.cv(appid)):
+                self.assertEqual(sc.read_notes(self.cv(appid)).case, first)             # whatever was finished was built with the file it says
+        self.assertFalse(os.path.exists(self.cv(3)))
 
     def test_marks_and_family_corner_use_the_measured_window(self):
         sc.save_custom_case(self.case_file(), self.covers)

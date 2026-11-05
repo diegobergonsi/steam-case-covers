@@ -18,9 +18,9 @@ class OwnCase(QObject):
     finished = Signal(bool)                 # a pick ended: True when a case file was accepted, False when it was cancelled or refused
     _picked = Signal(object)                # the answer of the file chooser, which runs on another thread
 
-    def __init__(self, covers_dir, downloads, parent=None):
+    def __init__(self, covers_dir, downloads, parent=None, busy=lambda: False):
         super().__init__(parent)
-        self._covers, self._downloads = covers_dir, downloads
+        self._covers, self._downloads, self._busy = covers_dir, downloads, busy      # busy(): covers are being made, and the case must not change under them
         self._choosing, self._error, self._serial = False, "", 0
         self._picked.connect(self._on_picked)
         try:                                # the copy kept by an earlier run is the case again
@@ -54,6 +54,10 @@ class OwnCase(QObject):
         """Open the desktop's file chooser on another thread, so the window keeps painting while it is open."""
         if self._choosing:
             return
+        if self._busy():
+            self.failed.emit(tr("Wait for the covers"), tr("Your case cannot be changed while covers are being made. Try again when they are done."))
+            self.finished.emit(False)
+            return
         self._choosing = True
         self.changed.emit()
 
@@ -83,8 +87,10 @@ class OwnCase(QObject):
     def use(self, path):
         """Check the file and keep it as the case. A bad one leaves the old case as it was and gets a box as well as `error`."""
         try:
+            if self._busy():                                    # the Qt dialog may have been open while a run began
+                raise sc.SteamcaseError(tr("Your case cannot be changed while covers are being made. Try again when they are done."))
             sc.save_custom_case(path, self._covers)
-        except sc.SteamcaseError as e:
+        except Exception as e:                                  # a SteamcaseError says what is wrong; anything else must not leave the window waiting for an answer
             self._error = str(e)
             self.changed.emit()
             self.failed.emit(tr("That file can't be used as a case"), self._error)

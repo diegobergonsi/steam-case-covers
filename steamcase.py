@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, completion, filecmp, functools, hashlib, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import argparse, completion, filecmp, functools, hashlib, io, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from typing import NamedTuple
 
 try:
@@ -818,11 +818,13 @@ MAX_CASE_FILE = 8 * 1024 * 1024            # a case is a 600 x 900 picture; anyt
 _custom = None                             # shortcut: one slot (frame, info, digest) for the whole process, upgrade when several custom cases are wanted
 
 
-def check_case_file(path):
-    """{"window": [x0, y0, x1, y1]} and, if the case itself covers part of it, "overlay": [..] (as tools/measure_cases.py measures a console case) for a case
-    the user made: a plain PNG, exactly SIZE, with a see-through art window of at least MIN_WINDOW each way. SteamcaseError (one sentence) for anything else."""
-    if Image is None:
-        raise SteamcaseError(_t("Pillow is needed to read a case file."))
+CASE_CELL = 6                              # the see-through map of a case is read in cells of this many pixels: fast, then the edges are made exact
+MIN_FRAME = 0.02                           # a case shows at least this much opaque frame (of the whole picture), or there is no case to speak of
+TAB_FILL = 0.5                             # a part of the frame inside the window is a tab (like the Switch's) only if it fills this much of its own box: rounded corners and shadows do not
+
+
+def _read_case(path):
+    """The bytes of a case file the user chose. SteamcaseError (one sentence) for a link, something that is not a plain file, or a file that is too big."""
     if os.path.islink(path):
         raise SteamcaseError(_t("That file is a link, not a picture. Pick the picture itself."))
     if not os.path.isfile(path):
@@ -830,52 +832,115 @@ def check_case_file(path):
     if os.path.getsize(path) > MAX_CASE_FILE:
         raise SteamcaseError(_t("That file is far too big to be a case (over %d MB).") % (MAX_CASE_FILE >> 20))
     try:
-        with Image.open(path, formats=["PNG"]) as im:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError:
+        raise SteamcaseError(_t("That is not a PNG picture I can read."))
+
+
+def _cells(mask, full=False):
+    """(columns, rows, set of the (x, y) cells of CASE_CELL pixels that hold a lit pixel of `mask` (an "L" picture of 0 and 255), or with `full` only the cells
+    that are lit all over)."""
+    small = mask.reduce(CASE_CELL)
+    cols, rows = small.size
+    return cols, rows, {(i % cols, i // cols) for i, v in enumerate(small.getdata()) if v == 255 or (v and not full)}
+
+
+def _component(cells, start):
+    """The cells joined to `start` (up, down, left, right) inside `cells`."""
+    seen, todo = {start}, [start]
+    while todo:
+        x, y = todo.pop()
+        for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if n in cells and n not in seen:
+                seen.add(n)
+                todo.append(n)
+    return seen
+
+
+def _measure_case(data):
+    """({"window": [x0, y0, x1, y1], "overlay": [..]?}, the picture as RGBA) of the bytes of a case PNG: the window is the see-through part joined to the middle of the
+    picture (transparent corners and margins outside the case are not the window); the overlay is the box of the tabs of the frame inside it (a part that fills at
+    least TAB_FILL of its own box: the Switch's tab, not rounded corners or a shadow). SteamcaseError (one sentence) for anything that is not a usable case."""
+    if Image is None:
+        raise SteamcaseError(_t("Pillow is needed to read a case file."))
+    no_window = SteamcaseError(_t("The art window is missing: the part where the cover goes must be fully see-through (a PNG with transparency)."))
+    try:
+        with Image.open(io.BytesIO(data), formats=["PNG"]) as im:
             if im.size != SIZE:
                 raise SteamcaseError(_t("A case must be a PNG of exactly %d x %d pixels; this one is %d x %d.") % (SIZE + im.size))
-            alpha = im.convert("RGBA").getchannel("A")
+            if "A" not in im.getbands() and "transparency" not in im.info:
+                raise no_window
+            frame = im.convert("RGBA")
     except SteamcaseError:
         raise
     except Exception:
         raise SteamcaseError(_t("That is not a PNG picture I can read."))
-    window = alpha.point(lambda a: 255 if a == 0 else 0).getbbox()
-    if window is None:
-        raise SteamcaseError(_t("The art window is missing: the part where the cover goes must be fully see-through."))
+    alpha = frame.getchannel("A")
+    if sum(alpha.histogram()[253:]) < MIN_FRAME * SIZE[0] * SIZE[1]:
+        raise SteamcaseError(_t("The case is almost all see-through: it needs a visible frame around the art window."))
+    clear = alpha.point(lambda a: 255 if a == 0 else 0)
+    cols, rows, empty = _cells(clear, full=True)
+    if not empty:
+        raise no_window
+    middle = (cols // 2, rows // 2)
+    start = min(empty, key=lambda c: (c[0] - middle[0]) ** 2 + (c[1] - middle[1]) ** 2)
+    ImageDraw.floodfill(clear, (start[0] * CASE_CELL + CASE_CELL // 2, start[1] * CASE_CELL + CASE_CELL // 2), 128)
+    window = clear.point(lambda v: 255 if v == 128 else 0).getbbox()
     if window[2] - window[0] < MIN_WINDOW or window[3] - window[1] < MIN_WINDOW:
         raise SteamcaseError(_t("The art window is too small: it must be at least %d x %d pixels.") % (MIN_WINDOW, MIN_WINDOW))
     info = {"window": list(window)}
-    tab = alpha.crop(window).point(lambda a: 255 if a else 0).getbbox()
-    if tab:
-        info["overlay"] = [tab[0] + window[0], tab[1] + window[1], tab[2] + window[0], tab[3] + window[1]]
-    return info
+    covered = alpha.crop(window).point(lambda a: 255 if a else 0)
+    ccols, crows, cells = _cells(covered)
+    box = None
+    while cells:
+        part = _component(cells, next(iter(cells)))
+        cells -= part
+        xs, ys = [c[0] for c in part], [c[1] for c in part]
+        size = (max(xs) - min(xs) + 1) * (max(ys) - min(ys) + 1)
+        if len(part) >= 4 and len(part) >= TAB_FILL * size:
+            box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1) if box is None else (min(box[0], min(xs)), min(box[1], min(ys)), max(box[2], max(xs) + 1), max(box[3], max(ys) + 1))
+    if box:
+        tab = covered.crop((box[0] * CASE_CELL, box[1] * CASE_CELL, box[2] * CASE_CELL, box[3] * CASE_CELL)).getbbox()
+        if tab:
+            info["overlay"] = [tab[0] + box[0] * CASE_CELL + window[0], tab[1] + box[1] * CASE_CELL + window[1], tab[2] + box[0] * CASE_CELL + window[0], tab[3] + box[1] * CASE_CELL + window[1]]
+    return info, frame
 
 
-def _activate_custom(path):
-    """Check the case at `path` and make it the active custom case; the digest of its bytes. The slot is untouched when the check fails."""
-    global _custom
-    info = check_case_file(path)
-    with open(path, "rb") as f:
-        digest = hashlib.sha256(f.read()).hexdigest()[:16]
-    with Image.open(path, formats=["PNG"]) as im:
-        _custom = {"frame": im.convert("RGBA"), "info": info, "digest": digest}
-    return digest
+class _CaseChanged(SteamcaseError):
+    """The custom case was replaced while covers were being made with it."""
+
+
+def check_case_file(path):
+    """{"window": [x0, y0, x1, y1]} and, if the case itself covers part of it, "overlay": [..] (as tools/measure_cases.py measures a console case) for a case
+    the user made: a plain PNG, exactly SIZE, with a see-through art window of at least MIN_WINDOW each way and a visible frame. SteamcaseError (one sentence)
+    for anything else."""
+    return _measure_case(_read_case(path))[0]
 
 
 def save_custom_case(path, covers_dir):
     """Check the case file `path`, keep a re-encoded copy as CUSTOM_FILE in `covers_dir`, make it the active custom case and return its digest.
-    SteamcaseError (one sentence) when the file is no good; the kept copy and the active case stay as they were."""
-    check_case_file(path)
-    os.makedirs(covers_dir, exist_ok=True)
+    SteamcaseError (one sentence) when the file is no good or the copy cannot be written; the kept copy and the active case stay as they were (the case
+    only becomes the active one once its copy is on disk)."""
+    global _custom
+    info, frame = _measure_case(_read_case(path))
+    buf = io.BytesIO()
+    frame.save(buf, format="PNG")
+    copy = buf.getvalue()
     dest = os.path.join(covers_dir, CUSTOM_FILE)
     tmp = _tmp(dest)
     try:
-        with Image.open(path, formats=["PNG"]) as im:
-            im.convert("RGBA").save(tmp, format="PNG")
-        digest = _activate_custom(tmp)
+        os.makedirs(covers_dir, exist_ok=True)
+        with open(tmp, "wb") as f:
+            f.write(copy)
         _replace(tmp, dest)
+    except OSError as e:
+        raise SteamcaseError(_t("Your case could not be saved in %s (%s).") % (covers_dir, e.strerror or e))
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
+    digest = hashlib.sha256(copy).hexdigest()[:16]
+    _custom = {"frame": frame, "info": info, "digest": digest}
     return digest
 
 
@@ -888,10 +953,13 @@ def use_custom_case(covers_dir):
         _custom = None
         return None
     try:
-        return _activate_custom(path)
+        data = _read_case(path)
+        info, frame = _measure_case(data)
     except SteamcaseError:
         _custom = None
         raise
+    _custom = {"frame": frame, "info": info, "digest": hashlib.sha256(data).hexdigest()[:16]}
+    return _custom["digest"]
 
 
 def custom_case_digest():
@@ -1481,6 +1549,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
     family = set(family or ())
     custom_art = custom_art or {}
+    slot = _custom if CUSTOM in wanted_platforms else None      # the case the run is made with: if it is replaced meanwhile the run stops, never a cover from two files
     frames = {}                                 # (look of the colour, family?) -> frame: each one is made once per run
 
     def frame_for(colour, is_family):
@@ -1603,16 +1672,23 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             res["failed" if neterr else "missing"].append((appid, name))        # failed = connection problem, worth a retry
             report(n, appid, name, "failed" if neterr else "noart")
             continue
+        if want_p == CUSTOM and _custom is not slot:
+            raise _CaseChanged(_t("Your own case changed while the covers were being made. Make them again."))
         try:
             is_family = appid in family
             build_cover(custom_art[appid] if got and wanted_art else tmp, dest, console_frame_for(want_p, is_family) if want_p else frame_for(colour, is_family), colour[0], sat=colour[1], val=colour[2],
                         treatment=target, theme=theme, from_art=wanted_art, platform=want_p, group=want_g)
+            if want_p == CUSTOM and _custom is not slot:
+                os.remove(dest)                                     # built while the case was being replaced: not trusted
+                raise _CaseChanged(_t("Your own case changed while the covers were being made. Make them again."))
             res["ok"] += 1
             res["platforms"] += bool(want_p)
             res["family"] += is_family
             res["completed"] += target is not None
             res["files"].append(dest)
             report(n, appid, name, "ok")
+        except _CaseChanged:
+            raise
         except Exception as e:
             res["failed"].append((appid, name))
             if log:
@@ -1992,7 +2068,8 @@ def _same_platform(im, key, family):
     """True if `im` matches the console cover for `key` within 2 levels on every pixel the art does not reach. The PS3 and PS4 inserts are only a banner (about 8% of
     the canvas); the mask of every case must cover at least 6% (a test checks every case: over 30,000 pixels that must match), or too little is left to tell
     our covers from others."""
-    return _same_masked(im, *_platform_reference(key, family, custom_case_digest() if key[0] == CUSTOM else None), 0.06)
+    custom = key[0] == CUSTOM                                          # its notes carry a digest as well, so a smaller mask is enough to tell it from art of someone else's
+    return _same_masked(im, *_platform_reference(key, family, custom_case_digest() if custom else None), 0.002 if custom else 0.06)
 
 
 def is_steamcase_cover(path):
@@ -2024,8 +2101,10 @@ def is_steamcase_cover(path):
         if platform is not None:                                    # a console cover: its case and marks decide, never a colour, tone, theme or art note
             if platform not in PLATFORMS and platform != CUSTOM or strange or done not in (None, "ribbon", "rosette"):
                 return False
-            if (platform == CUSTOM) != (case is not None) or (platform == CUSTOM and case != custom_case_digest()):
-                return False                                        # a cover in the user's own case is ours only while that case file is the active one
+            if (platform == CUSTOM) != (case is not None) or (case is not None and not re.fullmatch(r"[0-9a-f]{16}", case)):
+                return False                                        # a cover in the user's own case carries the digest of its file, and only such a cover does
+            if case is not None and case != custom_case_digest():
+                return True                                         # made with another case file than the one loaded now (a new pick, a new process): we cannot redraw it, but we wrote its notes
             return any(_same_platform(im, (platform, done), family) for family in (False, True))
         if done is not None or theme is not None:
             if (done is not None and done not in TREATMENTS) or (theme is not None and theme not in THEMES) or colour is None:

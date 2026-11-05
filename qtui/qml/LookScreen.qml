@@ -109,6 +109,7 @@ ScreenFrame {
                 }
                 SwitchRow { objectName: "look_own_case"; label: qsTr("Use my own case for every game"); enabled: shell.owncase.available
                     checked: screen.look.ownCase; onToggled: (v) => screen.look.ownCase = v }
+                StatusLine { objectName: "look_own_error"; visible: shell.owncase.error !== ""; text: shell.owncase.error; kind: "error" }
                 ButtonRow {
                     PrimaryButton { objectName: "look_own_choose"; quiet: true; text: shell.owncase.available ? qsTr("Choose another file…") : qsTr("Choose file…")
                         onClicked: screen.look.chooseOwnCase() }

@@ -38,7 +38,7 @@ class Shell(QObject):
         self._steps = self._build()
         self._had_covers = bool(sc.find_covers(covers_dir or sc.default_covers_dir()))       # covers made in an earlier session
         self._library = Library(self, downloads or system.downloads_dir(), self)
-        self._owncase = OwnCase(covers_dir or sc.default_covers_dir(), downloads or system.downloads_dir(), self)
+        self._owncase = OwnCase(covers_dir or sc.default_covers_dir(), downloads or system.downloads_dir(), self, busy=lambda: self._make.running)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
         self._picker = Picker(self, self)

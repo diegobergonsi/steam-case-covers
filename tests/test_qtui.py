@@ -6527,6 +6527,43 @@ class CasesTests(PickerBase):
         self.assertEqual(len(seen), 1)
         self.assertEqual(self.cases.selectedKey, "ps5")                      # a failed pick changes nothing
 
+    def test_an_error_while_saving_is_a_box_and_never_leaves_the_window_waiting(self):
+        from unittest import mock
+        seen, ends = [], []
+        self.shell.owncase.failed.connect(lambda title, text: seen.append(text))
+        self.shell.owncase.finished.connect(ends.append)
+        with mock.patch.object(self.sc, "save_custom_case", side_effect=OSError("disk full")):
+            self.pick_own(self.own_file())
+        self.assertEqual((len(seen), ends, self.cases._awaiting), (1, [False], False))
+        self.assertIn("disk full", seen[0])
+        self.cases.pick("ps5")                                               # the Case step still answers
+        self.assertEqual(self.cases.selectedKey, "ps5")
+
+    def test_the_file_cannot_be_changed_while_covers_are_being_made(self):
+        from unittest import mock
+        seen = []
+        self.shell.owncase.failed.connect(lambda title, text: seen.append(text))
+        self.shell.make._running = True
+        with mock.patch("qtui.owncase.pick_file") as chooser:
+            self.cases.pick("custom")
+            self.wait_for(lambda: bool(seen))
+        chooser.assert_not_called()
+        self.assertEqual((len(seen), self.cases.selectedKey, self.cases._awaiting), (1, "", False))
+        self.shell.make._running = False
+
+    def test_a_broken_kept_copy_is_reported_at_start(self):
+        from qtui.shell import Shell
+        os.makedirs(self.covers, exist_ok=True)
+        with open(os.path.join(self.covers, self.sc.CUSTOM_FILE), "w") as f:
+            f.write("junk")
+        self.addCleanup(self.sc.use_custom_case, None)
+        shell = Shell(os.path.join(self.tmp, "settings3.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
+        self.assertNotEqual(shell.owncase.error, "")
+        self.assertFalse(shell.owncase.available)
+        for name in ("LookScreen.qml", "CasesScreen.qml"):                   # and the screens show it
+            with open(os.path.join(QML_DIR, name)) as f:
+                self.assertIn("shell.owncase.error", f.read(), name)
+
     def test_cancelling_the_chooser_changes_nothing(self):
         self.pick_own("")
         self.assertEqual((self.cases.selectedKey, self.shell.owncase.available, self.shell.owncase.error), ("", False, ""))

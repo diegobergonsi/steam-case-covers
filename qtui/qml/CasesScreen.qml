@@ -96,6 +96,12 @@ ScreenFrame {
         font.pixelSize: Theme.smallSize
         text: qsTr("My own case: a PNG of 600 x 900 pixels that is see-through where the art goes (at least 400 x 400). Picking a file replaces your last one.")
     }
+    StatusLine {
+        objectName: "case_own_error"
+        visible: shell.owncase.error !== ""
+        text: shell.owncase.error
+        kind: "error"
+    }
     Section {
         objectName: "case_section_groups"
         heading: qsTr("Your groups")
