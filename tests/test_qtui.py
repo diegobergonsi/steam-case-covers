@@ -2583,6 +2583,24 @@ class HundredState(QtCase):
         self.assertEqual(self.shell.look.treatment, "none")
         self.assertTrue(h.marksEnabled)
 
+    def test_no_marks_is_not_offered_where_there_is_no_gold(self):
+        h, look = self.h, self.shell.look
+        self.load(self.page({1: (1, 1)}))
+        keys = lambda: [c["key"] for c in h.markChoices]
+        h.style, h.marks = "gold-case", "none"
+        self.assertEqual(keys(), ["full", "rosette", "none"])
+        self.shell.startManual()                                     # console cases have no gold: "Highlight them" with no marks would be plain, so it is not offered
+        self.assertEqual(keys(), ["full", "rosette"])
+        self.assertEqual(h.values()[1], "gold-case")                 # what was chosen before counts as the full marks there
+        self.shell.startNatural()
+        self.assertEqual(keys(), ["full", "rosette", "none"])
+        self.assertEqual(h.values()[1], "gold-case-plain")
+        h.marks = "rosette"
+        self.shell.startManual()
+        h.marks = "none"                                             # not offered, so not accepted
+        self.assertEqual(h.marks, "rosette")
+        self.shell.startNatural()
+
     def test_halloween_still_forces_the_rosette_when_no_marks_was_chosen(self):
         h, look = self.h, self.shell.look
         self.load(self.page({1: (1, 1)}))
@@ -7912,4 +7930,11 @@ class NoMarks(QtCase, FakeStore):
         self.assertIsNone(_marks_only("gold-border-plain"))
         self.assertEqual(_marks_only("gold-border-rosette"), "rosette")
         self.assertEqual(_marks_only("gold-case"), "ribbon")
+
+    def test_a_theme_over_plain_gold_covers_says_they_get_the_rosette(self):
+        from qtui import reasons
+        self.made(completed={1}, treatment="gold-case-plain")
+        title, text = reasons.replace_reason(self.covers, (0, 100, 100), None, None, "halloween")
+        self.assertIn("with no marks get the rosette", text)
+        self.assertNotIn("lose their ribbon", text)
 

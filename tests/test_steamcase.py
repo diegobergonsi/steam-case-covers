@@ -5076,3 +5076,29 @@ class PlainGold(StoreMocks):
         self.assertIsNone(sc._console_marks("gold-case-plain"))
         self.assertEqual(sc._console_marks("gold-case-rosette"), "rosette")
 
+    def test_a_theme_turns_kept_plain_gold_into_the_rosette_twin(self):
+        for name, twin in (("gold-case-plain", "gold-case-rosette"), ("gold-border-plain", "gold-border-rosette")):
+            with self.subTest(name):
+                folder = os.path.join(self.tmp, name)
+                sc.make_covers({1: None}, folder, completed={1}, treatment=name)
+                sc.make_covers({1: None}, folder, theme="halloween")                  # no page: the cover keeps its look, under the theme
+                cover = os.path.join(folder, "Game_1_1.png")
+                self.assertEqual((sc.cover_treatment(cover), sc.cover_theme(cover)), (twin, "halloween"))
+                self.assertTrue(sc.is_steamcase_cover(cover))
+
+    def test_covers_with_no_marks_are_counted(self):
+        sc.make_covers({1: None, 2: None}, self.covers, completed={1}, treatment="gold-case-plain")
+        self.assertTrue(sc.covers_with_no_marks(self.covers))
+        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        folder = os.path.join(self.tmp, "other")
+        sc.make_covers({1: None}, folder, completed={1}, treatment="gold-case")
+        self.assertFalse(sc.covers_with_no_marks(folder))
+
+    def test_no_marks_under_a_theme_says_so_and_not_the_ribbon(self):
+        import contextlib, io
+        args = sc.argparse.Namespace(games_page=None, completed_style="gold-case", completed_marks="none")
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc._completion_args(args, "halloween")
+        self.assertIn("no marks", str(ctx.exception))
+        self.assertNotIn("ribbon", str(ctx.exception))
+

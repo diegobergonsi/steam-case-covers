@@ -174,7 +174,7 @@ O passo 3, **Destaque os seus jogos com 100%**, é opcional. Os jogos em que voc
 
 1. Clique em **Abrir a minha página de jogos** (ou **Copiar link**). O navegador abre a sua página de jogos da Steam, ordenada por conquistas. Entre na sua conta se pedir e espere os seus jogos carregarem.
 2. Salve ela (Ctrl+S, ou Cmd+S no Mac) como **"Página da Web, completa"** no Chrome ou no Firefox, com o nome `games.html`. O navegador também salva uma pasta ao lado. O programa percebe o arquivo na sua pasta Downloads sozinho, ou você pode clicar em **Procurar…** e escolhê-lo.
-3. Escolha o que esses jogos ganham: **Roseta e faixa** (a roseta no canto superior esquerdo e a faixa "100% Complete" embaixo; é o padrão) **Só a roseta** (só a roseta, sem faixa sobre a arte) ou **Sem marcas** (nada na capa: escolha junto com **Case dourada** ou **Borda dourada** e só o dourado mostra que o jogo está em 100%).
+3. Escolha o que esses jogos ganham: **Roseta e faixa** (a roseta no canto superior esquerdo e a faixa "100% Complete" embaixo; é o padrão), **Só a roseta** (só a roseta, sem faixa sobre a arte) ou **Sem marcas** (nada na capa: escolha junto com **Case dourada** ou **Borda dourada** e só o dourado mostra que o jogo está em 100%).
 4. Escolha como esses jogos ficam: **Case dourada** (a case inteira fica dourada), **Borda dourada** (uma borda dourada por fora da case, que fica cerca de 5% menor), **Case normal** (a sua case continua como está; é o padrão depois que uma página é carregada) ou **Sem case especial** (nenhum destaque, então as marcas não se aplicam). As opções só podem ser escolhidas depois que uma página é carregada. Depois clique em **Criar capas**.
 
 > [!NOTE]

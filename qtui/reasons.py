@@ -72,6 +72,8 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     if theme and completed is None and sc.covers_with_full_marks(covers_dir):
         ribbon = (tr(" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
                   "load your games page and pick “Rosette and ribbon”.") % theme.capitalize())
+    if theme and completed is None and sc.covers_with_no_marks(covers_dir):          # and to the ones with no marks: the theme gives them its rosette
+        ribbon += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme.capitalize()
     tail = ""                                            # the theme every cover is made in, when it changes
     if sc.covers_in_other_theme(covers_dir, theme):
         tail = tr("the %s theme") % theme.capitalize() if theme else tr("the Classic case")
@@ -91,7 +93,7 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     label = look_label(treatment) if treatment else None
     if treatment is None:
         what = tr("the covers of your 100% games are made again as normal covers")
-        title, one = tr("Remove the 100% highlight?"), tr("You chose “No special case”: ") + what + "."
+        title, one = tr("Remove the 100% highlight?"), tr("You chose no highlight for your 100% games (“No special case”, or “No marks” on the normal case): ") + what + "."
     elif not completed:
         what = tr("the covers with a highlight lose it, as no game on your page is at 100%")
         title, one = tr("Remove the 100% highlight?"), tr("No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers.")

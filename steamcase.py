@@ -1403,12 +1403,12 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
 def _wanted_look(appid, notes, colour, completed, treatment, theme=None):
     """(treatment, case colour) the cover of `appid`, whose notes are `notes` (None if it is missing or unreadable), should have (see make_covers). Without a page
     (`completed` None) a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain.
-    With a theme (not None or KEEP) the marks are the rosette alone: a full-marks treatment kept from before becomes its rosette-only twin."""
+    With a theme (not None or KEEP) the marks are the rosette alone: a treatment kept from before with full marks, or with none, becomes its rosette-only twin."""
     if completed is not None:
         target = treatment if appid in completed else None
     else:
         target = (notes.treatment if notes else None) or None
-    if theme not in (None, KEEP) and target is not None and split_treatment(target)[1] == "full":
+    if theme not in (None, KEEP) and target is not None and split_treatment(target)[1] != "rosette":
         target = compose_treatment(split_treatment(target)[0], "rosette")
     return target, treatment_colour(target, colour)
 
@@ -1711,6 +1711,11 @@ def mixed_cover_colours(covers_dir):
     """True if the covers folder holds covers in more than one case colour (what an interrupted colour change leaves behind).
     "gold-case" covers are skipped (they are always gold, see existing_cover_colour) and so are covers whose notes are unreadable."""
     return len({tone_key(*notes.colour) for _, _, notes in usual_covers(covers_dir) if notes.colour is not None and not is_gold_case(notes.treatment)}) > 1
+
+
+def covers_with_no_marks(covers_dir):
+    """True if the covers folder holds a 100% cover with no marks (the gold case or border alone): what a theme turns into the rosette."""
+    return any(notes.treatment and split_treatment(notes.treatment)[1] == "none" for _, _, notes in usual_covers(covers_dir))
 
 
 def covers_with_full_marks(covers_dir):
@@ -2364,7 +2369,10 @@ def _completion_args(args, theme=None):
     if args.games_page is None and args.completed_style is None and args.completed_marks is None:
         return None, None
     style = args.completed_style or "ribbon"
-    if theme is not None and style != "none" and (args.completed_marks == "full" or (args.completed_marks == "none" and style != "ribbon")):
+    if theme is not None and style in ("gold-case", "gold-border") and args.completed_marks == "none":
+        raise SteamcaseError(_t("The %s theme only goes with the rosette-only marks (--completed-marks rosette), not with no marks: its decorations need the rosette. "
+                             "To use no marks, make the classic case instead (--theme classic).") % theme.capitalize())
+    if theme is not None and args.completed_marks == "full" and style != "none":
         raise SteamcaseError(_t("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
                              "To use the full marks, make the classic case instead (--theme classic).") % theme.capitalize())
     treatment = None if style == "none" else compose_treatment(style, args.completed_marks or ("rosette" if theme else "full"))
