@@ -39,8 +39,11 @@ FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green tri
 COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    # rosette and "100% Complete" ribbon, laid over the covers of games with every achievement
 HALLOWEEN_OVERLAY = os.path.join(HERE, "assets", "halloween_overlay.png")    # web, spiders and a pumpkin, laid over the case for the Halloween theme
 CASES = ("ribbon", "gold-case", "gold-border")           # the case of a 100% cover: the marks only, the marks on a gold case, the marks inside a gold border
-MARKS = ("full", "rosette")                              # the marks: the rosette and the ribbon, or the rosette alone
-TREATMENTS = ("ribbon", "gold-case", "gold-border", "rosette", "gold-case-rosette", "gold-border-rosette")    # how a 100% cover looks: a case and its marks (see compose_treatment)
+MARKS = ("full", "rosette", "none")                      # the marks: the rosette and the ribbon, the rosette alone, or neither (only the gold case or border says it)
+_PARTS = {"ribbon": ("ribbon", "full"), "rosette": ("ribbon", "rosette"),            # every treatment and the (case, marks) it is made of: how a 100% cover looks
+          **{case + suffix: (case, marks) for case in CASES[1:] for suffix, marks in (("", "full"), ("-rosette", "rosette"), ("-plain", "none"))}}
+_NAMES = {parts: name for name, parts in _PARTS.items()}
+TREATMENTS = tuple(_PARTS)
 ROSETTE_ROWS = 450                                       # the rosette-only marks are the overlay above this row; the ribbon sits below it
 GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
@@ -1028,22 +1031,20 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, them
         return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks())
 
 
+
 def compose_treatment(case, marks):
-    """The treatment (one of TREATMENTS) for a `case` (one of CASES) and its `marks` (one of MARKS). Full marks keep the plain name of the case."""
+    """The treatment (one of TREATMENTS) for a `case` (one of CASES) and its `marks` (one of MARKS). Full marks keep the plain name of the case. The normal case
+    with no marks is no treatment at all: None, the same as "No special case"."""
     if case not in CASES or marks not in MARKS:
         raise ValueError("unknown case or marks: %r, %r" % (case, marks))
-    if marks == "full":
-        return case
-    return "rosette" if case == "ribbon" else case + "-rosette"
+    return _NAMES.get((case, marks))
 
 
 def split_treatment(treatment):
     """(case, marks) of a treatment, the inverse of compose_treatment. ValueError for anything that is not one of TREATMENTS."""
-    for case in CASES:
-        for marks in MARKS:
-            if treatment == compose_treatment(case, marks):
-                return case, marks
-    raise ValueError("unknown treatment: %r" % (treatment,))
+    if treatment not in _PARTS:
+        raise ValueError("unknown treatment: %r" % (treatment,))
+    return _PARTS[treatment]
 
 
 def is_gold_case(treatment):
@@ -1123,6 +1124,16 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
     if treatment is None:
         return cover
     case, kind = split_treatment(treatment)
+    done = cover if kind == "none" else _with_marks(cover, kind, dy, dx, ribbon)
+    if case == "gold-border":
+        plate = _gold_border().copy()
+        plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
+        done = plate
+    return done
+
+
+def _with_marks(cover, kind, dy, dx, ribbon):
+    """`cover` with the rosette (`kind` "rosette") or the rosette and the ribbon (`kind` "full") laid over it, moved and sized as finish_treatment says."""
     marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
     if dy or dx or ribbon:                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
         moved = Image.new("RGBA", marks.size, (0, 0, 0, 0))
@@ -1137,12 +1148,7 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
             moved.paste(below, (0, ROSETTE_ROWS))
         marks = moved
     marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
-    done = Image.alpha_composite(cover, marks)
-    if case == "gold-border":
-        plate = _gold_border().copy()
-        plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
-        done = plate
-    return done
+    return Image.alpha_composite(cover, marks)
 
 
 def _noted_colour(info):
@@ -1401,12 +1407,12 @@ def build_cover(portrait_path, out_path, frame, hue=0, *, sat=100, val=100, trea
 def _wanted_look(appid, notes, colour, completed, treatment, theme=None):
     """(treatment, case colour) the cover of `appid`, whose notes are `notes` (None if it is missing or unreadable), should have (see make_covers). Without a page
     (`completed` None) a cover keeps the treatment it was made with; a garbled note counts as none, so the cover is rebuilt plain.
-    With a theme (not None or KEEP) the marks are the rosette alone: a full-marks treatment kept from before becomes its rosette-only twin."""
+    With a theme (not None or KEEP) the marks are the rosette alone: a treatment kept from before with full marks, or with none, becomes its rosette-only twin."""
     if completed is not None:
         target = treatment if appid in completed else None
     else:
         target = (notes.treatment if notes else None) or None
-    if theme not in (None, KEEP) and target is not None and split_treatment(target)[1] == "full":
+    if theme not in (None, KEEP) and target is not None and split_treatment(target)[1] != "rosette":
         target = compose_treatment(split_treatment(target)[0], "rosette")
     return target, treatment_colour(target, colour)
 
@@ -1711,9 +1717,9 @@ def mixed_cover_colours(covers_dir):
     return len({tone_key(*notes.colour) for _, _, notes in usual_covers(covers_dir) if notes.colour is not None and not is_gold_case(notes.treatment)}) > 1
 
 
-def covers_with_full_marks(covers_dir):
-    """True if the covers folder holds a 100% cover with the full marks (the rosette and the ribbon): what a theme turns into the rosette alone."""
-    return any(notes.treatment and split_treatment(notes.treatment)[1] == "full" for _, _, notes in usual_covers(covers_dir))
+def covers_with_marks(covers_dir, marks):
+    """True if the covers folder holds a 100% cover with these `marks` (one of MARKS): a theme turns "full" into the rosette alone and "none" into the rosette."""
+    return any(notes.treatment and split_treatment(notes.treatment)[1] == marks for _, _, notes in usual_covers(covers_dir))
 
 
 def mixed_cover_themes(covers_dir):
@@ -2358,10 +2364,13 @@ def _chosen_theme(args):
 def _completion_args(args, theme=None):
     """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
     With a `theme` the marks default to the rosette alone, and asking for the full marks is refused (the ribbon would hide the decorations).
-    A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks or the rosette alone, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
+    A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks, the rosette alone or no marks, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
     if args.games_page is None and args.completed_style is None and args.completed_marks is None:
         return None, None
     style = args.completed_style or "ribbon"
+    if theme is not None and style in ("gold-case", "gold-border") and args.completed_marks == "none":
+        raise SteamcaseError(_t("The %s theme only goes with the rosette-only marks (--completed-marks rosette), not with no marks: its decorations need the rosette. "
+                             "To use no marks, make the classic case instead (--theme classic).") % theme.capitalize())
     if theme is not None and args.completed_marks == "full" and style != "none":
         raise SteamcaseError(_t("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
                              "To use the full marks, make the classic case instead (--theme classic).") % theme.capitalize())
@@ -2551,7 +2560,7 @@ def main():
                        help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
                             "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
-                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) or rosette (the rosette alone). "
+                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) rosette (the rosette alone) or none (no marks: the gold case or border alone; with the normal case it is the same as --completed-style none). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         art = p.add_mutually_exclusive_group()

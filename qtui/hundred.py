@@ -48,6 +48,8 @@ class Hundred(QObject):
         self._picked.connect(self._on_picked)
         self._read.connect(self._on_read)
         self._look.themeChanged.connect(self._theme_changed)
+        self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case or in the manual flow (no gold there)
+        shell.flowChanged.connect(self._sync)
         self._theme_changed()               # the folder may hold Halloween covers already
 
     # ----- properties -----
@@ -94,9 +96,13 @@ class Hundred(QObject):
         """What the manual flow offers: console cases have no gold, so a 100% game is either highlighted or left plain."""
         return [{"key": "ribbon", "label": tr("Highlight them")}, {"key": "none", "label": tr("Leave them plain")}]
 
-    @Property("QVariantList", constant=True)
+    def _no_gold(self):
+        """True where there is no gold case to go with "No marks": the manual flow (console cases) and your own case. There "Highlight them" with no marks would be plain."""
+        return self._shell.flow == "manual" or self._look.ownCase
+
+    @Property("QVariantList", notify=choicesChanged)
     def markChoices(self):
-        return [{"key": k, "label": tr(v)} for k, v in MARKS]
+        return [{"key": k, "label": tr(v)} for k, v in MARKS if k != "none" or not self._no_gold()]
 
     @Property(bool, notify=choicesChanged)
     def styleEnabled(self):
@@ -124,10 +130,10 @@ class Hundred(QObject):
     style = Property(str, _get_style, _set_style, notify=styleChanged)
 
     def _get_marks(self):
-        return self._marks
+        return "full" if self._marks == "none" and self._no_gold() else self._marks       # what was chosen before counts as the full marks where "No marks" is not offered
 
     def _set_marks(self, value):
-        if value in sc.MARKS and value != self._marks and self._look.theme == "classic":      # under Halloween the choice is greyed and fixed
+        if value in sc.MARKS and value != self._marks and self._look.theme == "classic" and (value != "none" or not self._no_gold()):      # under Halloween the choice is greyed and fixed
             self._marks = value
             self.marksChanged.emit()
             self._sync()
@@ -137,12 +143,11 @@ class Hundred(QObject):
     # ----- what Make gets -----
     def values(self):
         """(completed, treatment) for make_covers. No page loaded: (None, None), every cover keeps its look.
-        "No special case": (empty set, None), the 100% covers become normal covers. Otherwise the 100% ids and the chosen style."""
+        "No special case" (or the normal case with no marks): (empty set, None), the 100% covers become normal covers. Otherwise the 100% ids and the chosen style."""
         if self._completed is None:
             return None, None
-        if self._style not in sc.CASES:
-            return set(), None
-        return set(self._completed), sc.compose_treatment(self._style, self._marks)
+        treatment = sc.compose_treatment(self._style, self.marks) if self._style in sc.CASES else None       # the normal case with no marks is no treatment either
+        return (set(self._completed) if treatment else set()), treatment
 
     def _sync(self):
         """The preview shows a 100% cover in the chosen style, only when a page is loaded."""

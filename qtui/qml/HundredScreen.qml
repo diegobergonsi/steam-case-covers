@@ -64,7 +64,7 @@ ScreenFrame {
                         wrapMode: Text.WordWrap
                         color: Theme.muted
                         font.pixelSize: Theme.bodySize
-                        text: qsTr("Games where you unlocked every achievement can get a rosette and a ribbon (or the rosette alone), and a gold case or border if you like. Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. The app notices the file by itself.")
+                        text: qsTr("Games where you unlocked every achievement can get a rosette and a ribbon (or the rosette alone, or no marks), and a gold case or border if you like. Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. The app notices the file by itself.")
                     }
                     InfoTip { id: tip; objectName: "hundred_tip"; x: parent.width - width; text: pageHelp }
                 }

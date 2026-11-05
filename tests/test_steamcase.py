@@ -1840,14 +1840,14 @@ class ReplaceReason(StoreMocks):
         self.made()
         self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
 
-    def test_covers_with_full_marks_are_found(self):
-        self.assertFalse(sc.covers_with_full_marks(os.path.join(self.tmp, "nowhere")))
+    def test_covers_with_marks_are_found(self):
+        self.assertFalse(sc.covers_with_marks(os.path.join(self.tmp, "nowhere"), "full"))
         self.made()
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.made(completed={1}, treatment="gold-border-rosette")
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.made(completed={1}, treatment="gold-border")
-        self.assertTrue(sc.covers_with_full_marks(self.covers))
+        self.assertTrue(sc.covers_with_marks(self.covers, "full"))
 
     def test_a_theme_with_a_colour_or_a_look_change_stays_readable(self):
         self.made()
@@ -1915,6 +1915,27 @@ class CompletionCli(StoreMocks):
             self.assertEqual(self.treatment(out, 1), style)
             self.assertIsNone(self.treatment(out, 2))
             self.assertIn("1 of them are 100% complete", text)
+
+    def test_completed_marks_none_gives_gold_without_marks(self):
+        page = self.page({1: (10, 10), 2: (1, 9)})
+        for style in ("gold-case", "gold-border"):
+            with self.subTest(style):
+                out = os.path.join(self.tmp, "out_plain_" + style)
+                self.make(out, "--games-page", page, "--completed-style", style, "--completed-marks", "none")
+                self.assertEqual(self.treatment(out, 1), style + "-plain")
+                self.assertIsNone(self.treatment(out, 2))
+
+    def test_the_normal_case_without_marks_is_no_special_case(self):
+        out = os.path.join(self.tmp, "out_normal_none")
+        self.make(out, "--games-page", self.page({1: (10, 10), 2: (1, 9)}), "--completed-style", "ribbon", "--completed-marks", "none")
+        self.assertEqual((self.treatment(out, 1), self.treatment(out, 2)), (None, None))
+
+    def test_no_marks_with_a_theme_is_refused_in_one_sentence(self):
+        out = os.path.join(self.tmp, "out_theme_none")
+        with self.assertRaises(SystemExit) as ctx:
+            self.make(out, "--theme", "halloween", "--games-page", self.page({1: (10, 10)}), "--completed-style", "gold-case", "--completed-marks", "none")
+        self.assertIn("rosette", str(ctx.exception))
+        self.assertFalse(os.path.exists(os.path.join(out, "Game_1_1.png")))
 
     def theme(self, out, appid):
         return sc.cover_theme(os.path.join(out, "Game_%d_%d.png" % (appid, appid)))
@@ -2557,12 +2578,13 @@ class Treatments(unittest.TestCase):
     def test_compose_and_split_round_trip(self):
         for style in sc.CASES:
             for marks in sc.MARKS:
-                self.assertEqual(sc.split_treatment(sc.compose_treatment(style, marks)), (style, marks))
+                if (style, marks) != ("ribbon", "none"):                             # the normal case with no marks is no treatment: see PlainGold
+                    self.assertEqual(sc.split_treatment(sc.compose_treatment(style, marks)), (style, marks))
         self.assertEqual(sc.compose_treatment("ribbon", "full"), "ribbon")
         self.assertEqual(sc.compose_treatment("ribbon", "rosette"), "rosette")
         self.assertEqual(sc.compose_treatment("gold-case", "rosette"), "gold-case-rosette")
         self.assertEqual(sc.compose_treatment("gold-border", "full"), "gold-border")
-        self.assertEqual(len(sc.TREATMENTS), 6)
+        self.assertEqual(len(sc.TREATMENTS), 8)
         for bad in ("ribbon-rosette", "rosette-rosette", "", None, False, "RIBBON"):
             with self.assertRaises(ValueError):
                 sc.split_treatment(bad)
@@ -4059,7 +4081,7 @@ class PlatformCases(Base):
 
     def test_full_marks_and_art_checks_ignore_console_covers(self):
         self.folder(A=("ps5", "ribbon"))
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.assertFalse(sc.covers_with_other_art(self.covers, {1: self.noise()}))
         self.assertEqual(sc.covers_with_art(self.covers), set())
 
@@ -4385,7 +4407,7 @@ class HandMadeCovers(Base):
         self.assertFalse(sc.covers_in_other_theme(self.covers, "halloween"))
         self.assertFalse(sc.covers_in_other_colour(self.covers, 0))
         self.assertFalse(sc.covers_in_other_look(self.covers, 0))
-        self.assertFalse(sc.covers_with_full_marks(self.covers))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
         self.assertFalse(sc.covers_with_other_art(self.covers, {}))                                   # the art of a cover by hand is not in question
         self.assertEqual(sc.covers_with_art(self.covers), set())
 
@@ -4995,3 +5017,88 @@ class CustomCaseCli(StoreMocks):
         with mock.patch.object(sc, "steam_running", return_value=False), contextlib.redirect_stdout(io.StringIO()):
             sc.cmd_apply(args)
         self.assertEqual(sorted(os.listdir(self.grid)), ["1p.png"])
+
+
+class PlainGold(StoreMocks):
+    """The gold case and the gold border with no marks: marks "none"."""
+
+    def flat(self):
+        return sc._compose(sc.Image.new("RGBA", sc.SIZE, (10, 10, 10, 255)), sc.load_frame(sc.GOLD_HUE))
+
+    def test_compose_and_split_round_trip(self):
+        for name in sc.TREATMENTS:
+            with self.subTest(name):
+                self.assertEqual(sc.compose_treatment(*sc.split_treatment(name)), name)
+        self.assertEqual(sc.MARKS, ("full", "rosette", "none"))
+        self.assertEqual((sc.compose_treatment("gold-case", "none"), sc.compose_treatment("gold-border", "none")), ("gold-case-plain", "gold-border-plain"))
+        self.assertIsNone(sc.compose_treatment("ribbon", "none"))               # the normal case with no marks is "No special case"
+        self.assertEqual(sc.split_treatment("gold-border-plain"), ("gold-border", "none"))
+
+    def test_gold_case_plain_has_no_marks(self):
+        cover = self.flat()
+        self.assertEqual(sc.finish_treatment(cover, "gold-case-plain", *sc.steam_marks()).tobytes(), cover.tobytes())
+        self.assertNotEqual(sc.finish_treatment(cover, "gold-case-rosette", *sc.steam_marks()).tobytes(), cover.tobytes())
+
+    def test_gold_border_plain_has_the_border_and_no_marks(self):
+        cover = self.flat()
+        plate = sc._gold_border().copy()
+        plate.alpha_composite(cover.resize((sc.SIZE[0] - 2 * sc.BORDER, sc.SIZE[1] - 2 * sc.BORDER), sc.Image.LANCZOS), (sc.BORDER, sc.BORDER))
+        self.assertEqual(sc.finish_treatment(cover, "gold-border-plain", *sc.steam_marks()).tobytes(), plate.tobytes())
+
+    def test_make_covers_writes_the_plain_note_in_gold(self):
+        for name in ("gold-case-plain", "gold-border-plain"):
+            with self.subTest(name):
+                folder = os.path.join(self.tmp, name)
+                sc.make_covers({1: None, 2: None}, folder, completed={1}, treatment=name)
+                one, two = (os.path.join(folder, "Game_%d_%d.png" % (a, a)) for a in (1, 2))
+                self.assertEqual((sc.cover_treatment(one), sc.cover_treatment(two)), (name, None))
+                self.assertEqual(sc.cover_colour(one), (sc.GOLD_HUE, 100, 100) if name == "gold-case-plain" else (0, 100, 100))
+                self.assertEqual(sc.cover_colour(two), (0, 100, 100))
+
+    def test_plain_gold_covers_are_ours(self):
+        for name in ("gold-case-plain", "gold-border-plain"):
+            with self.subTest(name):
+                folder = os.path.join(self.tmp, name)
+                sc.make_covers({1: None}, folder, completed={1}, treatment=name)
+                self.assertTrue(sc.is_steamcase_cover(os.path.join(folder, "Game_1_1.png")))
+
+    def test_changing_the_marks_to_none_rebuilds_only_the_100_covers(self):
+        sc.make_covers({1: None, 2: None}, self.covers, completed={1}, treatment="gold-case-rosette")
+        seen = {}
+        sc.make_covers({1: None, 2: None}, self.covers, completed={1}, treatment="gold-case-plain", progress=lambda d, t, a, n, st: seen.update({a: st}))
+        self.assertEqual((seen[2], seen[1] != "exists"), ("exists", True))
+
+    def test_a_theme_only_goes_with_the_rosette(self):
+        with self.assertRaises(ValueError):
+            sc.make_covers({1: None}, self.covers, completed={1}, treatment="gold-case-plain", theme="halloween")
+
+    def test_console_and_own_case_covers_never_get_a_plain_gold_treatment(self):
+        self.assertIsNone(sc._console_marks("gold-case-plain"))
+        self.assertEqual(sc._console_marks("gold-case-rosette"), "rosette")
+
+    def test_a_theme_turns_kept_plain_gold_into_the_rosette_twin(self):
+        for name, twin in (("gold-case-plain", "gold-case-rosette"), ("gold-border-plain", "gold-border-rosette")):
+            with self.subTest(name):
+                folder = os.path.join(self.tmp, name)
+                sc.make_covers({1: None}, folder, completed={1}, treatment=name)
+                sc.make_covers({1: None}, folder, theme="halloween")                  # no page: the cover keeps its look, under the theme
+                cover = os.path.join(folder, "Game_1_1.png")
+                self.assertEqual((sc.cover_treatment(cover), sc.cover_theme(cover)), (twin, "halloween"))
+                self.assertTrue(sc.is_steamcase_cover(cover))
+
+    def test_covers_with_no_marks_are_counted(self):
+        sc.make_covers({1: None, 2: None}, self.covers, completed={1}, treatment="gold-case-plain")
+        self.assertTrue(sc.covers_with_marks(self.covers, "none"))
+        self.assertFalse(sc.covers_with_marks(self.covers, "full"))
+        folder = os.path.join(self.tmp, "other")
+        sc.make_covers({1: None}, folder, completed={1}, treatment="gold-case")
+        self.assertFalse(sc.covers_with_marks(folder, "none"))
+
+    def test_no_marks_under_a_theme_says_so_and_not_the_ribbon(self):
+        import contextlib, io
+        args = sc.argparse.Namespace(games_page=None, completed_style="gold-case", completed_marks="none")
+        with self.assertRaises(sc.SteamcaseError) as ctx:
+            sc._completion_args(args, "halloween")
+        self.assertIn("no marks", str(ctx.exception))
+        self.assertNotIn("ribbon", str(ctx.exception))
+
