@@ -7,7 +7,7 @@ import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
 STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("ribbon", N_("Normal case")), ("none", N_("No special case"))]    # values: sc.CASES, or "none"
-MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only"))]                                                            # values: sc.MARKS
+MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only")), ("none", N_("No marks"))]                                                            # values: sc.MARKS
 
 
 def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None):

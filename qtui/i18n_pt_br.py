@@ -152,6 +152,7 @@ PT_BR = {
     "Replace the covers you made?": "Substituir as capas que você fez?",
     "This replaces %n cover you already made with a new one in the case you picked.|This replaces %n covers you already made with new ones in the cases you picked.": "Isso substitui %n capa que você já fez por uma nova na case que você escolheu.|Isso substitui %n capas que você já fez por novas nas cases que você escolheu.",
     "Repaint your groups?": "Repintar os seus grupos?",
+    "No marks": "Sem marcas",
     "Choose a file…": "Escolha um arquivo…",
     "Choose another file…": "Escolher outro arquivo…",
     "Choose file…": "Escolher arquivo…",

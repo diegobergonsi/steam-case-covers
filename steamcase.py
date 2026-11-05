@@ -39,8 +39,8 @@ FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green tri
 COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    # rosette and "100% Complete" ribbon, laid over the covers of games with every achievement
 HALLOWEEN_OVERLAY = os.path.join(HERE, "assets", "halloween_overlay.png")    # web, spiders and a pumpkin, laid over the case for the Halloween theme
 CASES = ("ribbon", "gold-case", "gold-border")           # the case of a 100% cover: the marks only, the marks on a gold case, the marks inside a gold border
-MARKS = ("full", "rosette")                              # the marks: the rosette and the ribbon, or the rosette alone
-TREATMENTS = ("ribbon", "gold-case", "gold-border", "rosette", "gold-case-rosette", "gold-border-rosette")    # how a 100% cover looks: a case and its marks (see compose_treatment)
+MARKS = ("full", "rosette", "none")                      # the marks: the rosette and the ribbon, the rosette alone, or neither (only the gold case or border says it)
+TREATMENTS = ("ribbon", "gold-case", "gold-border", "rosette", "gold-case-rosette", "gold-border-rosette", "gold-case-plain", "gold-border-plain")    # how a 100% cover looks: a case and its marks (see compose_treatment)
 ROSETTE_ROWS = 450                                       # the rosette-only marks are the overlay above this row; the ribbon sits below it
 GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
@@ -1028,22 +1028,22 @@ def preview_cover(hue=0, family=False, *, sat=100, val=100, treatment=None, them
         return finish_treatment(apply_theme(_compose(im.convert("RGBA"), load_frame(hue, family, sat=sat, val=val)), theme), treatment, *steam_marks())
 
 
+_PARTS = {"ribbon": ("ribbon", "full"), "rosette": ("ribbon", "rosette"), **{c + suffix: (c, m) for c in ("gold-case", "gold-border") for suffix, m in (("", "full"), ("-rosette", "rosette"), ("-plain", "none"))}}
+
+
 def compose_treatment(case, marks):
-    """The treatment (one of TREATMENTS) for a `case` (one of CASES) and its `marks` (one of MARKS). Full marks keep the plain name of the case."""
+    """The treatment (one of TREATMENTS) for a `case` (one of CASES) and its `marks` (one of MARKS). Full marks keep the plain name of the case. The normal case
+    with no marks is no treatment at all: None, the same as "No special case"."""
     if case not in CASES or marks not in MARKS:
         raise ValueError("unknown case or marks: %r, %r" % (case, marks))
-    if marks == "full":
-        return case
-    return "rosette" if case == "ribbon" else case + "-rosette"
+    return next((name for name, parts in _PARTS.items() if parts == (case, marks)), None)
 
 
 def split_treatment(treatment):
     """(case, marks) of a treatment, the inverse of compose_treatment. ValueError for anything that is not one of TREATMENTS."""
-    for case in CASES:
-        for marks in MARKS:
-            if treatment == compose_treatment(case, marks):
-                return case, marks
-    raise ValueError("unknown treatment: %r" % (treatment,))
+    if treatment not in _PARTS:
+        raise ValueError("unknown treatment: %r" % (treatment,))
+    return _PARTS[treatment]
 
 
 def is_gold_case(treatment):
@@ -1123,8 +1123,8 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
     if treatment is None:
         return cover
     case, kind = split_treatment(treatment)
-    marks = (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
-    if dy or dx or ribbon:                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
+    marks = None if kind == "none" else (_rosette_overlay() if kind == "rosette" else _completion_overlay()).copy()
+    if marks is not None and (dy or dx or ribbon):                                              # the rosette moves to the left, below the banner; the ribbon stays at the bottom, in its width
         moved = Image.new("RGBA", marks.size, (0, 0, 0, 0))
         moved.paste(marks.crop((0, 0, marks.width, ROSETTE_ROWS)), (dx, dy))
         below = marks.crop((0, ROSETTE_ROWS, marks.width, marks.height))
@@ -1136,8 +1136,10 @@ def finish_treatment(cover, treatment, dy=0, dx=0, ribbon=None):
         else:
             moved.paste(below, (0, ROSETTE_ROWS))
         marks = moved
-    marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
-    done = Image.alpha_composite(cover, marks)
+    done = cover
+    if marks is not None:
+        marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
+        done = Image.alpha_composite(cover, marks)
     if case == "gold-border":
         plate = _gold_border().copy()
         plate.alpha_composite(done.resize((SIZE[0] - 2 * BORDER, SIZE[1] - 2 * BORDER), Image.LANCZOS), (BORDER, BORDER))
@@ -2358,11 +2360,11 @@ def _chosen_theme(args):
 def _completion_args(args, theme=None):
     """(completed, treatment) for make_covers from --games-page and --completed-style: (None, None) when neither is given (covers stay as they are).
     With a `theme` the marks default to the rosette alone, and asking for the full marks is refused (the ribbon would hide the decorations).
-    A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks or the rosette alone, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
+    A page alone means the ribbon (the plain case with the full marks); --completed-marks chooses the full marks, the rosette alone or no marks, and means nothing with "none"; "none" removes the treatments, with a page or without, and does not read the page. Exits with status 2 and the reason if the page cannot be used."""
     if args.games_page is None and args.completed_style is None and args.completed_marks is None:
         return None, None
     style = args.completed_style or "ribbon"
-    if theme is not None and args.completed_marks == "full" and style != "none":
+    if theme is not None and style != "none" and (args.completed_marks == "full" or (args.completed_marks == "none" and style != "ribbon")):
         raise SteamcaseError(_t("The %s theme only goes with the rosette-only marks (--completed-marks rosette): the ribbon would hide the decorations. "
                              "To use the full marks, make the classic case instead (--theme classic).") % theme.capitalize())
     treatment = None if style == "none" else compose_treatment(style, args.completed_marks or ("rosette" if theme else "full"))
@@ -2551,7 +2553,7 @@ def main():
                        help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
                             "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
-                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) or rosette (the rosette alone). "
+                       help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) rosette (the rosette alone) or none (no marks: the gold case or border alone; with the normal case it is the same as --completed-style none). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         art = p.add_mutually_exclusive_group()
