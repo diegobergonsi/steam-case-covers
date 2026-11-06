@@ -133,12 +133,13 @@ ScreenFrame {
                     width: parent.width
                     spacing: Theme.s8
                     GroupCard {
+                        id: newCard
                         objectName: "case_card_new"
                         width: Math.min(Theme.groupCardWidth, parent.width)
                         title: qsTr("New group")
                         subtitle: screen.cases.selectedGroup === "" && screen.cases.selectedLabel !== "" ? screen.cases.selectedLabel : qsTr("Pick a case above")
                         chosen: screen.cases.selectedGroup === ""
-                        onPicked: screen.cases.pick(screen.cases.selectedKey)
+                        onPicked: screen.cases.newGroup()
                     }
                     Repeater {
                         model: screen.cases.groupList
@@ -260,7 +261,10 @@ ScreenFrame {
         objectName: "case_delete_dialog"
         prefix: "case_delete_dlg"
         focusBack: deleteButton
-        onConfirmed: screen.cases.deleteGroup(screen.cases.selectedGroup)
+        onConfirmed: {
+            screen.cases.deleteGroup(screen.cases.selectedGroup)
+            Qt.callLater(function() { newCard.forceActiveFocus() })              // the delete button is gone: the keyboard goes to the card that is chosen now
+        }
     }
 
     footer: [

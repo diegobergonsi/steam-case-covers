@@ -14,6 +14,7 @@ Item {
     property bool frozen: false                       // the controls are greyed and inert (the page still scrolls): the choices must not change while covers are made
     default property alias content: body.data
     property alias footer: footerRow.data
+    readonly property real footerTop: footerRow.y     // where the footer buttons start: a message may sit above it
 
     Text {
         id: heading

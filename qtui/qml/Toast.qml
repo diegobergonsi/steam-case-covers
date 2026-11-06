@@ -9,6 +9,7 @@ Rectangle {
     id: toast
     property string message: ""
     property int showMs: Theme.toastMs
+    property int maxWidth: Theme.tipMaxWidth             // the parent narrows it on a small window
     readonly property bool active: timer.running
     function show(text) {
         message = text
@@ -31,7 +32,7 @@ Rectangle {
         objectName: toast.objectName + "_text"
         x: Theme.s16
         y: Theme.s12
-        width: Math.min(implicitWidth, Theme.tipMaxWidth - Theme.s32)
+        width: Math.min(implicitWidth, toast.maxWidth - Theme.s32)
         wrapMode: Text.WordWrap
         text: toast.message
         color: Theme.text

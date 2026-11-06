@@ -68,6 +68,7 @@ class Picker(QObject):
         self._rows = []
         self._model = RowsModel(self)
         self._loaded.connect(self._on_loaded)
+        self._library_seen = self._library_key()
         shell.library.pathChanged.connect(self._library_changed)
         shell.library.installedOnlyChanged.connect(self._library_changed)
 
@@ -131,6 +132,9 @@ class Picker(QObject):
 
     def _library_changed(self):
         """The game list changed: what was ticked belongs to the old one, and an answer still on its way is for the old one too."""
+        if self._library_key() == self._library_seen:   # told again (a change of language does that to every property): the list is the same
+            return
+        self._library_seen = self._library_key()
         if self._key is None and not self._loading and not self._all and not self._selected:
             return
         self._req += 1                                  # the worker's answer is now stale and will be dropped

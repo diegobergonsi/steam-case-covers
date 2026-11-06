@@ -33,6 +33,16 @@ class QtCase(unittest.TestCase):
         import gc
         gc.collect()
         super().tearDown()
+
+    def wait_for(self, condition, seconds=3):
+        """Let Qt work until `condition()` is true or the time is up (layouts and images settle over several passes, slower on Windows); assert after it."""
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
 os.environ.setdefault("STEAMCASE_LANG", "en")
 QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
 
@@ -857,14 +867,6 @@ class LibraryActions(QtCase):
         patch.start()
         self.addCleanup(patch.stop)
 
-    def wait_for(self, condition, seconds=3):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
-
     def test_a_bad_file_chosen_with_browse_also_gets_a_box_but_a_noticed_one_does_not(self):
         failures = []
         self.lib.failed.connect(lambda title, text: failures.append((title, text)))
@@ -1440,14 +1442,6 @@ class HundredFlow(QtCase):
             self.app.processEvents()
         self.click = click
 
-    def wait_for(self, condition, seconds=3):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
-
     def test_from_a_page_being_saved_to_make(self):
         self.start()
         h, look = self.shell.hundred, self.shell.look
@@ -1551,14 +1545,6 @@ class Components(QtCase):
         got = find_item(self.root, name)
         self.assertIsNotNone(got, name)
         return got
-
-    def wait_for(self, condition, seconds=3):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
 
     def mouse(self, kind, x, y):
         from PySide6.QtCore import QPoint, Qt
@@ -2513,14 +2499,6 @@ class HundredState(QtCase):
     def page(self, progress, name="games.html", folder=None):
         return write_games_page(folder or self.tmp, progress, name)
 
-    def wait_for(self, condition, seconds=3):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
-
     def load(self, path):
         self.h.loadPage(path)
         self.wait_for(lambda: not self.h.busy)
@@ -2914,14 +2892,6 @@ class HundredScreen(QtCase):
     reveal = LookScreen.reveal
     click = LookScreen.click
     pos = LookScreen.pos
-
-    def wait_for(self, condition, seconds=3):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
 
     def load_page(self, progress=None, name="games.html"):
         self.h.loadPage(write_games_page(self.tmp, progress or {1: (3, 3), 2: (1, 4)}, name))
@@ -6527,14 +6497,6 @@ class PickerBase(QtCase, FakeStore):
         self.shell.library.installedOnly = True
         self.picker = self.shell.picker
 
-    def wait_for(self, condition, seconds=3):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
-
     def load(self):
         self.picker.load()
         self.wait_for(lambda: not self.picker.loading)
@@ -6924,7 +6886,7 @@ class CasesTests(PickerBase):
         self.assertEqual((self.cases.selectedKey, self.shell.owncase.available, self.shell.owncase.error), ("custom", True, ""))
         self.cases.assign()
         self.assertEqual(self.cases.assigned(), {1: "custom"})
-        self.assertEqual(self.cases.summary, [{"label": "My own case", "count": 1}])
+        self.assertEqual(self.cases.summary, [{"key": "custom", "label": "My own case", "count": 1}])
 
     def test_picking_another_file_replaces_the_case(self):
         self.pick_own(self.own_file())
@@ -7032,7 +6994,7 @@ class CasesTests(PickerBase):
             self.picker.toggle(appid)
             self.cases.pick(key)
             self.cases.assign()
-        self.assertEqual(self.cases.summary, [{"label": "PlayStation 5", "count": 2}, {"label": "Xbox 360", "count": 1}])
+        self.assertEqual(self.cases.summary, [{"key": "ps5", "label": "PlayStation 5", "count": 2}, {"key": "xbox360", "label": "Xbox 360", "count": 1}])
 
     def test_the_family_switch_is_off_by_default_and_needs_a_game_list(self):
         self.assertFalse(self.cases.family)
@@ -7246,7 +7208,66 @@ class CasesState(PickerBase):
         self.saved_group(games=(7, 8, 9))
         entry = self.shell.cases.groupList[0]
         self.assertEqual(entry["subtitle"], case_label({"tone": [134, 100, 100]}) + " \u00b7 3 games")
-        self.assertIn("caption", entry)                                          # Home and Make still use it
+
+    def test_a_change_of_language_keeps_the_choices_and_the_ticks(self):
+        """Changing the language tells every property to be read again; that must not look like a new game list."""
+        from qtui import i18n
+        self.load()
+        self.assign("ps5", 1, 2)
+        self.picker.toggle(3)
+        i18n.announce_change(self.shell)
+        self.assertEqual((self.shell.cases.assignedCount, self.picker.selectedCount, len(self.picker.rows)), (2, 1, 3))
+        self.assertEqual(self.shell.cases.soFar, "So far: PlayStation 5 \u00b7 2 games")
+
+    def test_a_new_game_list_still_clears_the_choices(self):
+        self.load()
+        self.assign("ps5", 1)
+        self.picker.toggle(2)
+        self.shell.library.installedOnly = False                 # a different list: the games ticked and given a case belong to the old one
+        self.assertEqual((self.shell.cases.assignedCount, self.picker.selectedCount), (0, 0))
+
+    def test_picking_the_case_already_chosen_by_a_saved_group_changes_nothing(self):
+        self.load()
+        cases, said = self.shell.cases, []
+        self.shell.toast.connect(said.append)
+        gid = self.saved_group()
+        cases.pickGroup(gid)
+        cases.pick("steam")                                      # the case of that group, already highlighted
+        self.assertEqual((cases.selectedGroup, said), (gid, []))
+
+    def test_the_new_group_card_leaves_a_saved_group_without_a_word(self):
+        self.load()
+        cases, said = self.shell.cases, []
+        self.shell.toast.connect(said.append)
+        gid = self.saved_group()
+        cases.newGroup()                                         # nothing chosen: nothing happens
+        self.assertEqual((cases.selectedKey, cases.selectedGroup), ("", ""))
+        cases.pickGroup(gid)
+        cases.newGroup()
+        self.assertEqual((cases.selectedKey, cases.selectedGroup, said), ("steam", "", []))      # its case stays, as a new group
+
+    def test_the_new_group_card_never_asks_for_the_own_case_file(self):
+        import groups
+        from unittest import mock
+        self.load()
+        saved, gid = groups.assign([], "Mine", {"platform": "custom"}, [9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.shell.cases.pickGroup(gid)
+        with mock.patch.object(self.shell.owncase, "ask") as ask:
+            self.shell.cases.newGroup()
+        ask.assert_not_called()
+        self.assertEqual((self.shell.cases.selectedKey, self.shell.cases.selectedGroup), ("custom", ""))
+
+    def test_a_group_list_entry_has_only_what_the_screen_reads(self):
+        self.load()
+        self.saved_group()
+        self.assertEqual(sorted(self.shell.cases.groupList[0]), ["count", "id", "name", "subtitle"])
+
+    def test_the_summary_carries_the_key_of_each_case(self):
+        self.load()
+        self.assign("ps5", 1)
+        self.assertEqual(self.shell.cases.summary, [{"key": "ps5", "label": "PlayStation 5", "count": 1}])
 
     def test_picking_a_case_while_a_saved_group_is_chosen_says_so_once(self):
         self.load()
@@ -7531,6 +7552,12 @@ class ManualWindow(PickerBase):
         self.open_case_screen(1, 2, 3)
         for name in ("case_section_grid", "case_section_group", "case_section_options"):
             self.assertTrue(self.has(name), name)
+        def walk(item):
+            for child in item.childItems():
+                yield child
+                yield from walk(child)
+        sections = [i for i in walk(self.item("case_screen")) if i.metaObject().className().startswith("Section_QMLTYPE")]
+        self.assertEqual(len(sections), 3)                                                    # a fourth section would break the guide's rule 3
         for gone in ("case_section_games", "case_section_new_group", "case_section_groups", "case_assign", "case_next"):
             self.assertFalse(self.has(gone), gone)
         self.assertEqual(self.item("case_section_grid").property("heading"), "Choose a case")
@@ -7548,6 +7575,70 @@ class ManualWindow(PickerBase):
         self.click("case_ps5")
         self.click("case_main")
         self.assertEqual(self.item("case_section_group").property("heading"), "Add games to a group")
+
+    def test_the_case_screen_follows_a_change_of_language_and_keeps_the_choices(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        gid = self.saved_red()
+        self.open_case_screen(1, 2, 3)
+        self.shell.cases.reloadGroups()
+        self.click("case_ps5")
+        self.click("case_main")                                                               # 3 games have a case
+        self.picker.toggle(1)
+        self.picker.toggle(2)
+        self.click("case_card_" + gid)
+        self.click("language_pt")
+        self.app.processEvents()
+        self.assertEqual(self.shell.cases.assignedCount, 3)
+        self.assertEqual(self.picker.selectedCount, 2)
+        self.assertEqual(self.item("case_section_grid").property("heading"), "Escolha uma case")
+        self.assertEqual(self.item("case_section_group").property("heading"), "Adicionar 2 jogos a um grupo")
+        self.assertEqual(self.text("case_so_far"), "At\u00e9 agora: PlayStation 5 \u00b7 3 jogos")
+        self.assertTrue(self.text("case_card_%s_subtitle" % gid).endswith("1 jogo"))
+        self.assertEqual(self.text("case_card_new_title"), "Novo grupo")
+        self.click("case_delete")
+        self.wait_for(lambda: self.item("case_delete_dlg_card").property("visible"))
+        self.assertEqual(self.text("case_delete_dlg_title"), "Excluir o grupo \u201cRed Steam Cases\u201d?")
+
+    def test_the_new_group_card_leaves_a_saved_group_without_a_toast(self):
+        gid = self.saved_red()
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.click("case_card_" + gid)
+        self.click("case_card_new")
+        self.assertEqual(self.shell.cases.selectedGroup, "")
+        self.assertEqual((self.item("case_card_new").property("chosen"), self.item("case_card_" + gid).property("chosen")), (True, False))
+        self.assertFalse(self.item("toast").property("visible"))
+        self.click("case_steam")                                                                # the case of that group
+        self.assertEqual(self.shell.cases.selectedKey, "steam")
+
+    def test_the_toast_stays_clear_of_the_navigation_and_the_footer_button(self):
+        from PySide6.QtCore import QPointF
+        gid = self.saved_red()
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.click("case_card_" + gid)
+        self.click("case_ps5")
+        toast, button = self.item("toast"), self.item("case_main")
+        at = lambda it, x=0, y=0: it.mapToScene(QPointF(x, y))
+        self.wait_for(lambda: toast.property("visible") and at(toast).x() >= self.root.property("navWidth") + 32)
+        self.assertTrue(toast.property("visible"))
+        self.assertGreaterEqual(at(toast).x(), self.root.property("navWidth") + 32)
+        self.assertLessEqual(at(toast, toast.width()).x(), self.root.property("width"))
+        self.assertLessEqual(at(toast, 0, toast.height()).y(), at(button).y())                 # above the button, not on it
+
+    def test_after_deleting_the_chosen_group_the_keyboard_lands_on_the_new_group_card(self):
+        gid = self.saved_red()
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.root.requestActivate()
+        self.click("case_card_" + gid)
+        self.click("case_delete")
+        self.wait_for(lambda: self.item("case_delete_dlg_card").property("visible"))
+        self.click("case_delete_dlg_confirm")
+        self.wait_for(lambda: self.root.property("activeFocusItem") is not None and self.root.property("activeFocusItem").property("objectName") == "case_card_new")
+        self.assertEqual(self.root.property("activeFocusItem").property("objectName"), "case_card_new")
 
     def test_a_case_without_ticked_games_never_blocks_next(self):
         self.open_case_screen(1)

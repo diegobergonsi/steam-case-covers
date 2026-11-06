@@ -157,6 +157,7 @@ ApplicationWindow {
             NumberAnimation { target: screen; property: "x"; from: win.navWidth + Theme.s32 + Theme.slideOffset; to: win.navWidth + Theme.s32; duration: Theme.dur(260); easing.type: Easing.OutCubic }
         }
         Loader {
+            id: page
             anchors.fill: parent
             // the choices of the earlier steps are frozen while the covers are made, as in the old window (the run has its own copy of them)
             onLoaded: {
@@ -165,14 +166,15 @@ ApplicationWindow {
             }
             source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "pick" ? "GamesScreen.qml" : screen.key === "case" ? "CasesScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
         }
+        Toast {                                                   // a short message from the shell, above the footer buttons of the screen
+            id: toast
+            objectName: "toast"
+            maxWidth: Math.min(Theme.tipMaxWidth, screen.width)
+            x: (screen.width - width) / 2
+            y: (page.item ? page.item.footerTop : screen.height) - Theme.s16 - height
+        }
     }
 
-    Toast {                                                       // a short message from the shell, above the footer line of the screen
-        id: toast
-        objectName: "toast"
-        x: win.navWidth + Theme.s32 + (win.width - win.navWidth - 2 * Theme.s32 - width) / 2
-        y: win.height - Theme.s32 - Theme.controlHeight - Theme.s16 - height
-    }
     Connections {
         target: shell
         function onToast(text) { toast.show(text) }
