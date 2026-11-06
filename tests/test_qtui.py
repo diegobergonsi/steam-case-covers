@@ -4874,6 +4874,152 @@ class HomeScreen(AddWindow):
             card = self.item(name)
             self.assertEqual(card.height(), card.property("implicitHeight"), name)
 
+    def test_a_row_of_the_dashboard_opens_its_step_unless_it_is_locked(self):
+        self.open_home(covers=True)
+        self.click("home_row_game_list")
+        self.assertEqual(self.shell.current, 1)
+        self.shell.go(0)
+        self.app.processEvents()
+        self.click("home_row_make")                                     # locked: nothing happens
+        self.assertEqual(self.shell.current, 0)
+
+    def test_the_undo_section_has_its_buttons_greyed_until_there_is_something_to_undo(self):
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
+        self.assertTrue(self.text("home_hint").startswith("Nothing to undo yet"))
+        self.undo_ready()
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [True, True])
+        self.assertEqual(self.text("home_hint"), "")
+        self.assertFalse(self.item("home_restore").property("filled"))      # the only filled button is Start / Continue
+
+    def test_restore_asks_and_then_says_what_was_done(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.click("home_restore")
+        QTest.qWait(60)
+        self.assertTrue(self.item("apply_dialog").isVisible())
+        self.assertEqual(self.text("apply_dlg_title"), "Restore previous artwork")
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertTrue(self.text("home_status").startswith("Restored your previous artwork (5 files)."))
+        self.assertIn(("restore", "b1"), self.log)
+
+    def test_reset_with_art_from_elsewhere_shows_three_buttons(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.ours, self.other = ["a"], ["y"]
+        self.click("home_reset")
+        self.wait_for(lambda: self.ap.asking)
+        QTest.qWait(60)
+        self.assertEqual([self.text(n) for n in ("apply_dlg_cancel", "apply_dlg_alternate", "apply_dlg_confirm")], ["Cancel", "Remove all", "Remove only ours"])
+        self.click("apply_dlg_alternate")
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(self.log[0], ("reset", None, ["a"], True))
+
+    def test_the_home_screen_watches_steam_only_while_it_is_shown(self):
+        self.open_home()
+        self.assertTrue(self.ap.watching)
+        self.shell.go(1)
+        self.app.processEvents()
+        self.assertFalse(self.ap.watching)
+
+    def test_the_restart_switch_on_home_follows_whether_there_is_anything_to_undo(self):
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertFalse(self.item("home_restart").property("enabled"))
+        self.undo_ready()
+        self.assertTrue(self.item("home_restart").property("enabled"))
+
+    def test_the_steam_note_and_the_restart_switch_are_here_too(self):
+        self.running = True
+        self.open_home()
+        self.wait_for(lambda: self.ap.steamOpen)
+        self.assertTrue(self.text("home_note").startswith("Steam is open."))
+        self.assertTrue(self.item("home_restart").property("checked"))
+
+    def test_nothing_is_wider_than_its_card_when_narrow(self):
+        from PySide6.QtCore import QPointF
+        self.accounts = [("111", "A" * 40)]
+        self.open_home(covers=True)
+        self.undo_ready()
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+        for sec, names in (("home_section_paths", ("home_card_natural", "home_card_manual")), ("home_section_progress", ("home_row_look", "home_state_look")), ("home_section_undo", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
+            card = self.item(sec)
+            right = card.mapToScene(QPointF(card.width(), 0)).x()
+            for n in names:
+                it = self.item(n)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
+
+    def test_the_account_can_be_chosen_here_for_restore_and_reset(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.assertTrue(self.item("home_accounts").property("visible"))
+        self.click("home_accounts_chip_222")
+        self.assertEqual((self.ap.accountId, self.text("home_account")), ("222", "Steam account: Bob"))
+        self.undo_ready()
+        self.ask_and_go = None
+        self.click("home_restore")
+        self.settle()
+        self.assertEqual(self.text("apply_dlg_p0"), "Your artwork from before the last Apply will be put back on the Steam account \u201c" + "Bob" + "\u201d.")
+
+    def test_one_account_is_not_offered_as_a_choice_on_home(self):
+        self.open_home()
+        self.assertFalse(self.item("home_accounts").property("visible"))
+
+    def test_discord_in_the_navigation_opens_the_invite(self):
+        from unittest import mock
+        import steamcase as sc
+        self.open_home()
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("footer_discord")
+        self.assertEqual(opened.call_args[0][0].toString(), sc.DISCORD_URL)
+
+    def test_kofi_in_the_navigation_sits_under_discord_and_opens_the_page(self):
+        from unittest import mock
+        from PySide6.QtCore import QPointF
+        import steamcase as sc
+        self.open_home()
+        with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
+            self.click("footer_kofi")
+        self.assertEqual(opened.call_args[0][0].toString(), sc.KOFI_URL)
+        y = lambda n: self.item(n).mapToScene(QPointF(0, 0)).y()
+        self.assertLess(y("footer_discord"), y("footer_kofi"))
+        self.assertLess(y("footer_kofi"), y("footer_updates"))
+
+    def test_the_words_of_the_three_navigation_links_start_at_the_same_place(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        def label(it):
+            for c in it.childItems():
+                found = c if c.objectName() == "label" else label(c)
+                if found is not None:
+                    return found
+        xs = {n: label(self.item(n)).mapToScene(QPointF(0, 0)).x() for n in ("footer_discord", "footer_kofi", "footer_updates")}
+        self.assertEqual(len(set(xs.values())), 1, xs)
+
+    def test_the_navigation_title_is_the_whole_name_of_the_app(self):
+        self.open_home()
+        title = self.item("nav_title")
+        self.assertEqual(title.property("text"), "Steam Case Covers")
+        nav = self.item("nav").property("width")
+        # a wider font (Windows) must wrap the name onto a second line, never run out of the menu or into the steps
+        self.assertLessEqual(title.property("x") + title.property("width"), nav - title.property("x"))
+        from PySide6.QtGui import QFont
+        font = title.property("font")                                                  # spread the letters until the name is 1.5 times as wide as the room it has,
+        spread = (1.5 * title.property("width") - title.property("implicitWidth")) / len(title.property("text"))      # as a wide font (Windows) makes it
+        font.setLetterSpacing(QFont.AbsoluteSpacing, spread)
+        title.setProperty("font", font)
+        self.app.processEvents()
+        self.assertEqual(title.property("lineCount"), 2)
+        self.assertLessEqual(title.property("contentWidth"), title.property("width"))
+        self.assertLessEqual(title.property("y") + title.property("height"), 68)       # Theme.navFlagsY: where the language flags start
+        self.assertFalse(title.property("truncated"))
+
     def test_the_navigation_names_the_way_in_use_under_home(self):
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QAccessible

@@ -51,7 +51,7 @@ Rectangle {
                 id: tagText
                 objectName: card.objectName + "_tag"
                 x: Theme.s8
-                y: Theme.s4 / 2
+                anchors.verticalCenter: parent.verticalCenter
                 width: Math.min(implicitWidth, info.width - 2 * Theme.s8)          // a long translation wraps instead of leaving the card
                 wrapMode: Text.WordWrap
                 text: card.tag
