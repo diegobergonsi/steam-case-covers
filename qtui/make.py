@@ -226,6 +226,15 @@ class Make(QObject):
             self._can = self.canMake
             self.runningChanged.emit()
 
+    def start_over(self):
+        """Forget the covers made in this run (the files stay in the covers folder) and the group ticks. The shell does not call this while covers are made."""
+        self._files, self._stopped, self._problems = [], False, []
+        self._finished = self._total = 0
+        self._ticks.clear()
+        self.doneChanged.emit()
+        self.progressChanged.emit()
+        self._set_status(tr(STATUS_IDLE), "wait")
+
     # ----- Make covers -----
     @Slot()
     def start(self):

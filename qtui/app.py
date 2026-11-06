@@ -43,7 +43,9 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     if os.path.isfile(icon):                           # the title bar and the task bar; a missing file just leaves the default
         QGuiApplication.setWindowIcon(QIcon(icon))
     engine = QQmlApplicationEngine()
-    engine.addImageProvider("preview", PreviewProvider())        # the engine owns it
+    provider = PreviewProvider()
+    shell.startedOver.connect(provider.clear)
+    engine.addImageProvider("preview", provider)                 # the engine owns it
     problems = []
     engine.warnings.connect(lambda errors: problems.extend(e.toString() for e in errors))
     ctx = engine.rootContext()

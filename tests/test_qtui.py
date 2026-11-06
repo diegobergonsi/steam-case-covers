@@ -8866,3 +8866,175 @@ class NoMarks(QtCase, FakeStore):
         self.assertIn("with no marks get the rosette", text)
         self.assertNotIn("lose their ribbon", text)
 
+
+
+@need_qt
+class StartOver(WindowCase):
+    """The Start over button of Home: the window goes back to what a fresh start shows, and nothing that was saved is touched."""
+    installed_only = False
+    autostart = False
+    TOAST = "Everything was reset to the starting point. Your saved cases, covers and groups were not changed."
+
+    def game_list(self):
+        path = os.path.join(self.tmp, "userdata.json")
+        with open(path, "w") as f:
+            json.dump({"rgOwnedApps": [1, 2, 3]}, f)
+        self.assertTrue(self.shell.library.useFile(path))
+        return path
+
+    def test_the_game_list_and_the_note_of_its_path_are_forgotten_but_the_file_stays(self):
+        path = self.game_list()
+        self.assertTrue(os.path.isfile(st.library_path(self.shell.settingsPath)))
+        self.shell.startOver()
+        self.assertEqual(self.shell.library.path, "")
+        self.assertFalse(self.shell.library.ready)
+        self.assertFalse(os.path.exists(st.library_path(self.shell.settingsPath)))
+        self.assertTrue(os.path.isfile(path))
+        self.assertEqual(st.load_library(self.shell.settingsPath), "")
+
+    def test_the_five_switches_go_back_to_their_defaults_and_stay_there(self):
+        for key in st.SETTING_KEYS:
+            self.shell.setSwitch(key, not st.DEFAULTS[key])
+        self.shell.library.installedOnly = True
+        self.shell.startOver()
+        self.assertEqual(st.load_settings(self.shell.settingsPath), st.DEFAULTS)
+        self.assertEqual([self.shell.switchValue(k) for k in st.SETTING_KEYS], [st.DEFAULTS[k] for k in st.SETTING_KEYS])
+        self.assertEqual((self.shell.reduceEffects, self.shell.library.installedOnly, self.shell.look.skipAutoArt, self.shell.look.useCustomArt, self.shell.apply.restart),
+                         (False, False, False, False, True))
+
+    def test_the_look_goes_back(self):
+        self.shell.look.setTone(120, 50, 50)
+        self.shell.look.theme = "halloween"
+        self.shell.look._use_own()
+        self.shell.startOver()
+        look = self.shell.look
+        self.assertEqual(((look.hue, look.sat, look.val), look.theme, look.ownCase, look.treatment), (tones.ORIGINAL, "classic", False, "none"))
+
+    def test_the_games_page_is_forgotten(self):
+        self.shell.setSwitch("installed_only", True)
+        page = write_games_page(self.downloads, {1: (5, 5), 2: (1, 5)})
+        self.shell.hundred.loadPage(page)
+        self.wait_for(lambda: self.shell.hundred.loaded)
+        self.shell.hundred.style, self.shell.hundred.marks = "none", "rosette"
+        self.shell.startOver()
+        h = self.shell.hundred
+        self.assertEqual((h.loaded, h.path, h.style, h.marks, h.statusKind, h.note), (False, "", "ribbon", "full", "wait", ""))
+        self.assertTrue(os.path.isfile(page))
+
+    def test_the_way_and_the_steps_start_again(self):
+        self.shell.startPath("manual")
+        self.shell.setFact("look_done", True)
+        self.shell.setFact("picked", True)
+        self.shell.startOver()
+        self.assertEqual((self.shell.flow, self.shell.current, self.shell.returning), ("natural", 0, False))
+        fresh = sp.step_states(**{k: False for k in ("ready", "look_done", "hundred_done", "covers_made", "applied")})
+        self.assertEqual([s["state"] for s in self.shell.steps], [fresh[s["key"]] for s in self.shell.steps])
+
+    def test_cases_given_but_not_made_are_forgotten_and_saved_groups_stay(self):
+        from engine import groups
+        covers = os.path.join(self.tmp, "covers")
+        os.makedirs(covers, exist_ok=True)
+        groups.save(covers, groups.assign([], "Mine", {"platform": "custom"}, [7])[0])
+        before = open(os.path.join(covers, groups.FILE), "rb").read()
+        self.game_list()
+        self.shell.startPath("manual")
+        self.shell.picker.toggle(1)
+        self.shell.cases.pick("ps5")
+        self.shell.cases.assign()
+        self.assertEqual(self.shell.cases.assignedCount, 1)
+        self.shell.startOver()
+        self.assertEqual((self.shell.cases.assignedCount, self.shell.picker.selectedCount, self.shell.cases.selectedKey), (0, 0, ""))
+        self.assertEqual([g["name"] for g in groups.load(covers)], ["Mine"])
+        self.assertEqual(open(os.path.join(covers, groups.FILE), "rb").read(), before)
+
+    def test_the_covers_made_in_this_run_and_the_result_of_the_last_apply_are_forgotten(self):
+        self.shell.make._files = ["Game_1_1.png"]
+        self.shell.apply._set_result({"kind": "done"})
+        self.shell.apply._set_applied(True)
+        self.shell.startOver()
+        self.assertEqual((self.shell.make.done, self.shell.apply.hasResult), (False, False))
+        self.assertEqual(self.shell.make.status, "Not started.")
+
+    def test_no_cover_file_is_touched(self):
+        covers = os.path.join(self.tmp, "covers")
+        os.makedirs(covers, exist_ok=True)
+        names = ["Game_1_1.png", "Game_2_1.png", "own_case.png"]
+        for n in names:
+            with open(os.path.join(covers, n), "wb") as f:
+                f.write(n.encode())
+        self.shell.startOver()
+        self.assertEqual(sorted(os.listdir(covers)), sorted(names))
+        self.assertEqual([open(os.path.join(covers, n), "rb").read() for n in names], [n.encode() for n in names])
+
+    def test_the_language_is_kept(self):
+        self.shell.setLanguage("pt-BR")
+        self.shell.startOver()
+        self.assertEqual(self.shell.language, "pt-BR")
+        self.assertEqual(st.load_language(self.shell.settingsPath), "pt-BR")
+
+    def test_a_file_already_in_downloads_is_not_picked_up_again(self):
+        path = os.path.join(self.downloads, "userdata.json")
+        with open(path, "w") as f:
+            json.dump({"rgOwnedApps": [1]}, f)
+        self.shell.poll()
+        self.shell.poll()
+        self.assertEqual(self.shell.library.path, path)
+        self.shell.startOver()
+        self.shell.poll()
+        self.shell.poll()
+        self.assertEqual(self.shell.library.path, "")
+
+    def test_it_says_what_was_and_was_not_touched_in_a_toast(self):
+        said = []
+        self.shell.toast.connect(said.append)
+        self.shell.startOver()
+        self.assertEqual(said, [self.TOAST])
+
+    def test_nothing_happens_while_covers_are_made(self):
+        said = []
+        self.shell.toast.connect(said.append)
+        self.shell.startPath("manual")
+        self.shell.make._set_state(running=True)
+        self.shell.startOver()
+        self.assertEqual((self.shell.flow, said), ("manual", []))
+
+    def test_the_preview_pictures_in_memory_are_dropped(self):
+        from qtui.preview import PreviewProvider
+        p = PreviewProvider()
+        p._cache["x"] = object()
+        p.clear()
+        self.assertEqual(len(p._cache), 0)
+
+    def test_the_window_clears_its_preview_pictures_when_the_user_starts_over(self):
+        self.start_window()
+        self.assertGreater(self.shell.receivers("2startedOver()"), 0)
+
+    def test_home_has_the_section_and_the_button_asks_first(self):
+        from PySide6.QtTest import QTest
+        self.start_window()
+        self.shell.go(0)
+        self.assertEqual(self.item("home_section_start_over").property("heading"), "Start over")
+        self.assertEqual(self.item("home_start_over").property("text"), "Start over")
+        self.assertTrue(self.item("home_start_over").property("enabled"))
+        self.shell.startPath("manual")
+        self.shell.go(0)
+        self.click("home_start_over")
+        QTest.qWait(60)
+        self.assertEqual([self.text("start_over_dlg_title"), self.text("start_over_dlg_cancel"), self.text("start_over_dlg_confirm")], ["Start over?", "Cancel", "Start over"])
+        self.click("start_over_dlg_cancel")
+        self.assertEqual(self.shell.flow, "manual")                       # declined: nothing changed
+        self.click("home_start_over")
+        QTest.qWait(60)
+        self.click("start_over_dlg_confirm")
+        self.assertEqual((self.shell.flow, self.shell.current), ("natural", 0))
+        self.assertEqual(self.item("toast_text").property("text"), self.TOAST)
+
+    def test_the_button_is_greyed_out_while_covers_are_made(self):
+        self.start_window()
+        self.shell.go(0)
+        self.shell.make._set_state(running=True)
+        self.app.processEvents()
+        self.assertFalse(self.item("home_start_over").property("enabled"))
+
+    def text(self, name):
+        return self.item(name).property("text")

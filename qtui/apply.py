@@ -277,6 +277,14 @@ class Apply(QObject):
             self.appliedChanged.emit()
             self._shell.setFact("applied", value)
 
+    def start_over(self):
+        """Forget what was said about the last Apply and the groups ticked for a reset. The account chosen stays: it is Steam's, not a step."""
+        self._set_applied(False)
+        self._set_status("", "wait")
+        self._set_result(None)
+        self._ticks.clear()
+        self.restartChanged.emit()
+
     def _make_changed(self):
         self.canApplyChanged.emit()
         self.undoChanged.emit()

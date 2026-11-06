@@ -196,4 +196,33 @@ ScreenFrame {
             }
         }
     }
+    Section {
+        objectName: "home_section_start_over"
+        heading: qsTr("Start over")
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.bodySize
+            text: qsTr("Go back to the starting point. Your saved cases, covers and groups are not changed.")
+        }
+        ButtonRow {
+            QuietButton {
+                id: startOver
+                objectName: "home_start_over"
+                text: qsTr("Start over")
+                enabled: shell.canSwitch                  // not while covers are made or added to Steam
+                onClicked: startOverDialog.ask(qsTr("Start over?"), [
+                    {text: qsTr("The way you chose, your progress, the game list, your look and the switches go back to the start."), kind: "main"},
+                    {text: qsTr("Your saved cases, covers and groups are not changed."), kind: "muted"}], qsTr("Start over"))
+            }
+        }
+    }
+    ConfirmDialog {                                       // the safe button (Cancel) has the focus
+        id: startOverDialog
+        objectName: "start_over_dialog"
+        prefix: "start_over_dlg"
+        focusBack: startOver
+        onConfirmed: shell.startOver()
+    }
 }

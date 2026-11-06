@@ -16,6 +16,7 @@ from qtui.owncase import OwnCase
 from qtui.picker import Picker
 from qtui.updates import Updates
 
+START_OVER_DONE = N_("Everything was reset to the starting point. Your saved cases, covers and groups were not changed.")
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
 MANUAL_FACTS = ("picked", "assigned")           # only the manual flow reads these
 
@@ -29,6 +30,7 @@ class Shell(QObject):
     toast = Signal(str)                         # a short message for the window to show for a moment
     flowNameChanged = Signal()                  # the way in use, or the language its name is in
     languageChanged = Signal()
+    startedOver = Signal()                      # the window went back to its starting point (the preview pictures in memory go too)
 
     def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
         super().__init__(parent)
@@ -93,6 +95,34 @@ class Shell(QObject):
     def canSwitch(self):
         """The other way can be chosen: not while covers are made or added to Steam."""
         return not (self._make.running or self._apply.busy)
+
+    @Slot()
+    def startOver(self):
+        """Put the window back to what a fresh start shows: the way, the steps, the game list (and the note of its path), the look, the games page, the cases not
+        made yet, what Make and Apply remember, the five switches. Nothing saved is touched: groups, covers, the case file, Steam and the language stay.
+        Not while covers are made or added to Steam."""
+        if not self.canSwitch:
+            return
+        self._values = dict(settings.DEFAULTS)
+        self._save()
+        settings.forget_library(self._path)
+        self._flow = "natural"
+        self._facts = {k: False for k in FACTS + MANUAL_FACTS}
+        self._steps = self._build()
+        self._current = 0
+        self._library.start_over()                  # also puts the facts of the list right
+        self._picker.start_over()
+        self._look.start_over()
+        self._hundred.start_over()
+        self._cases.reset()
+        self._make.start_over()
+        self._apply.start_over()
+        self.reduceEffectsChanged.emit()
+        self.flowChanged.emit()
+        self.stepsChanged.emit()
+        self.currentChanged.emit()
+        self.startedOver.emit()
+        self.toast.emit(tr(START_OVER_DONE))
 
     @Slot(str, result=int)
     def stepCount(self, flow):
