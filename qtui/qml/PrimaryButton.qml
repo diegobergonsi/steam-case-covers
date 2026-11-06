@@ -12,9 +12,9 @@ Rectangle {
 
     implicitWidth: Math.ceil(label.implicitWidth) + Theme.s32            // whole pixels: a button on a half pixel draws its text soft
     // never wider than the content area of a screen (what a section can hold): a longer text is cut with an ellipsis. System fonts differ a lot between computers.
-    property real maxWidth: Math.max(Theme.controlHeight, Window.width - Theme.chromeWidth)
+    property real maxWidth: Math.max(Theme.touchMin, Window.width - Theme.chromeWidth)
     width: Math.min(implicitWidth, maxWidth)
-    implicitHeight: Theme.controlHeight
+    implicitHeight: Theme.touchMin
     radius: height / 2
     color: quiet ? (area.containsMouse ? Theme.raised : "transparent") : !enabled ? Theme.raised : area.containsMouse ? Qt.lighter(Theme.accent, Theme.hoverLift) : Theme.accent
     border.width: quiet ? Theme.hairline : 0

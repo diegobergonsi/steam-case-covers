@@ -16,9 +16,10 @@ Confirmed by the owner:
 
 The planner's calls (the owner can change them):
 - List rows, choice buttons, colour squares, slider knobs, buttons, on/off switch rows, the menu rows and the links at the bottom of the menu are 44 px (`controlHeight`, `fieldRowHeight`, `navRowHeight`).
-- The small "i" circle and the language flags keep their drawn size (24 px circle, 32 x 24 flag) inside a 44 x 44 tap box. The circle is `Theme.infoDot` (24).
+- The small "i" circle and the language flags keep their drawn size (24 px circle, 32 x 24 flag, `Theme.infoSize`, `Theme.flagWidth`, `Theme.flagHeight`). Their tap area is 44 x 44, made by one small component, `TapArea`, placed inside them, so no screen has to adjust for a bigger box (changed after the review: the first build made the box itself 44 px and each screen had to undo it).
 - The switch keeps its drawn size (38 x 22). Its whole row is the tap area and is 44 px tall.
-- The language flags sit at y = 60 (so a two-line title does not reach them) and the menu starts at y = 104 so the 44 px flag boxes touch neither the title (one or two lines) nor the first row.
+- The language flags sit at y = 70 and the menu starts at y = 104, so the flags' 44 px tap areas touch neither the title (one or two lines) nor the first row. The two flags are 12 px apart (were 8) so their tap areas do not overlap. `navTop` and the shortest window (596) are worked out from these sizes in `Theme.qml`.
+- `controlHeight` and `fieldRowHeight` are gone: `Theme.touchMin` is used directly.
 - `docs/DESIGN.md` is updated (buttons and choice buttons at 44, one line about touch) and so are the changelog and `docs/ui-guide.md`.
 
 ## Not in this spec

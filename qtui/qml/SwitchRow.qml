@@ -12,7 +12,7 @@ Item {
     signal toggled(bool value)
 
     width: parent ? parent.width : 0
-    implicitHeight: Math.max(Theme.fieldRowHeight, caption.contentHeight + 2 * Theme.s4)
+    implicitHeight: Math.max(Theme.touchMin, caption.contentHeight + 2 * Theme.s4)
     height: implicitHeight
     activeFocusOnTab: enabled
     opacity: enabled ? 1 : Theme.disabledOpacity
@@ -55,7 +55,7 @@ Item {
         objectName: row.objectName + "_label"
         x: track.x + track.width + Theme.s12
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - x - (tipItem.visible ? Theme.infoDot + Theme.s12 : 0)
+        width: parent.width - x - (tipItem.visible ? tipItem.width + Theme.s12 : 0)
         text: row.label
         color: Theme.text
         font.pixelSize: Theme.bodySize
@@ -74,7 +74,6 @@ Item {
         visible: row.tip !== ""
         text: row.tip
         anchors.right: parent.right
-        anchors.rightMargin: -Theme.infoInset         // the drawn circle stays where it was, only its tap box is bigger
         anchors.verticalCenter: parent.verticalCenter
     }
     Keys.onPressed: (event) => {

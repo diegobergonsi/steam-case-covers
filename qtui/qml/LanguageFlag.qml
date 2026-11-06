@@ -12,8 +12,8 @@ Item {
     property bool current: false
     signal activated()
 
-    width: Theme.touchMin
-    height: Theme.touchMin
+    width: Theme.flagWidth
+    height: Theme.flagHeight
     activeFocusOnTab: true
     Accessible.role: Accessible.RadioButton
     Accessible.name: name
@@ -21,9 +21,7 @@ Item {
     Accessible.onPressAction: activated()
 
     Rectangle {                                   // the ring: the language in use, and the keyboard focus
-        anchors.centerIn: parent
-        width: Theme.s32
-        height: Theme.s24
+        anchors.fill: parent
         radius: Theme.radiusField
         color: "transparent"
         border.width: flag.activeFocus || flag.current ? Theme.focusRing : 0
@@ -37,9 +35,8 @@ Item {
         fillMode: Image.PreserveAspectFit
         opacity: flag.current || area.containsMouse ? 1 : Theme.disabledOpacity
     }
-    MouseArea {
+    TapArea {
         id: area
-        anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: flag.activated()

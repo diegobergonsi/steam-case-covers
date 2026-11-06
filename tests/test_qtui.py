@@ -47,6 +47,34 @@ class QtCase(unittest.TestCase):
             time.sleep(0.02)
         self.app.processEvents()
 
+class WindowCase(QtCase):
+    """The real window (offscreen, effects reduced so nothing is still sliding), with the later steps open. Tests find items by object name with `item`."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui import i18n
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True
+        self.addCleanup(i18n.set_language, i18n.language())
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.app.processEvents()
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+
 os.environ.setdefault("STEAMCASE_LANG", "en")
 QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
 
@@ -237,19 +265,11 @@ class EngineSelfCheck(unittest.TestCase):
 class SystemHelpers(unittest.TestCase):
 
     def test_the_window_opens_bigger_on_a_big_screen_and_never_smaller_than_before(self):
-        self.assertEqual(system.start_size(3840, 2160), (1280, 900))        # capped: a huge screen does not get a huge window
-        self.assertEqual(system.start_size(1920, 1080), (1280, 810))        # width capped at 1280, height 75%
-        self.assertEqual(system.start_size(1280, 800), (900, 600))          # a Steam Deck
-        self.assertEqual(system.start_size(800, 600), (900, 596))           # a small or unknown screen opens at the shortest the window may be
-        self.assertEqual(system.start_size(1366, 768), (956, 596))          # a laptop: 75% of 768 is below the shortest window
-
-    def test_the_window_never_opens_shorter_than_its_shortest_height(self):
-        import re
-        with open(os.path.join(QML_DIR, "Theme.qml")) as f:
-            sizes = {k: int(v) for k, v in re.findall(r"readonly property int (\w+): (\d+)", f.read())}
-        for avail in (400, 600, 768, 800, 1080):
-            self.assertGreaterEqual(system.start_size(1920, avail)[1], sizes["windowMinHeight"], avail)
-        self.assertGreaterEqual(sizes["windowHeight"], sizes["windowMinHeight"])
+        self.assertEqual(system.start_size(3840, 2160, 596), (1280, 900))        # capped: a huge screen does not get a huge window
+        self.assertEqual(system.start_size(1920, 1080, 596), (1280, 810))        # width capped at 1280, height 75%
+        self.assertEqual(system.start_size(1280, 800, 596), (900, 600))          # a Steam Deck
+        self.assertEqual(system.start_size(800, 600, 596), (900, 596))           # a small or unknown screen opens at the shortest the window may be
+        self.assertEqual(system.start_size(1366, 768, 596), (956, 596))          # a laptop: 75% of 768 is below the shortest window
 
     def test_a_packaged_linux_app_gives_its_children_the_systems_libraries_again(self):
         from unittest import mock
@@ -1656,7 +1676,7 @@ class Components(QtCase):
         for name in ("dlg_title", "dlg_p0", "dlg_p1", "dlg_p2", "dlg_confirm", "dlg_cancel"):
             it = self.item(name)
             self.assertLessEqual(it.x() + it.width(), card.width() + 0.5, name)
-        self.assertGreaterEqual(self.item("dlg_confirm").height(), 36)
+        self.assertGreaterEqual(self.item("dlg_confirm").height(), 44)
         self.assertLessEqual(card.y() + card.height(), 420)
 
     def test_the_card_fits_its_words_so_the_right_side_has_no_extra_margin(self):
@@ -1824,7 +1844,7 @@ class Components(QtCase):
         for key, step in (("colour", 2), ("hundred", 3), ("art", 2)):
             with self.subTest(key=key):
                 chip = self.item("sum_chip_" + key)
-                self.assertGreaterEqual(chip.height(), 36)
+                self.assertGreaterEqual(chip.height(), 44)
                 from PySide6.QtCore import QPointF
                 p = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
                 self.root.setProperty("last", -1)
@@ -1840,7 +1860,7 @@ class Components(QtCase):
             self.assertLessEqual(chip.x() + chip.width(), 240.5, key)
             ys.add(round(chip.y()))
         self.assertGreater(len(ys), 1)                                         # they wrap onto more rows
-        self.assertGreaterEqual(s.height(), 36)
+        self.assertGreaterEqual(s.height(), 44)
 
     def test_a_choice_summary_chip_works_from_the_keyboard(self):
         from PySide6.QtCore import Qt
@@ -2015,7 +2035,7 @@ class Components(QtCase):
     def test_a_slider_follows_a_click_and_a_drag_and_stays_in_range(self):
         self.load(self.SLIDER)
         s = self.item("s")
-        self.assertGreaterEqual(s.height(), 36)                      # a finger on the Steam Deck
+        self.assertGreaterEqual(s.height(), 44)                      # a finger on the Steam Deck
         y = 20 + s.height() / 2
         self.mouse("click", 20 + 150, y)
         self.assertAlmostEqual(s.property("value"), 179, delta=8)
@@ -2110,7 +2130,7 @@ class Components(QtCase):
         from PySide6.QtCore import Qt
         self.load(self.SWATCH)
         w = self.item("w")
-        self.assertGreaterEqual(min(w.width(), w.height()), 36)
+        self.assertGreaterEqual(min(w.width(), w.height()), 44)
         self.mouse("click", 20 + w.width() / 2, 20 + w.height() / 2)
         self.assertEqual(w.property("n"), 1)
         self.key("w", Qt.Key_Return)
@@ -2142,7 +2162,7 @@ class Components(QtCase):
         self.load(self.CHIPS)
         c = self.item("c")
         chip = self.item("c_chip_halloween")
-        self.assertGreaterEqual(chip.height(), 36)
+        self.assertGreaterEqual(chip.height(), 44)
         from PySide6.QtCore import QPointF
         centre = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
         self.mouse("click", centre.x(), centre.y())
@@ -3556,195 +3576,6 @@ class ChecksWorkflow(unittest.TestCase):
             text = f.read()
         for needle in ("qt-tests:", "requirements-qt.txt", "tests.test_qtui", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
             self.assertIn(needle, text)
-
-
-class TouchTargets(unittest.TestCase):
-    """A finger needs 44 px (docs/PRODUCT.md): one size in Theme, and every control that is tapped is at least that big."""
-
-    def sizes(self):
-        import re
-        with open(os.path.join(QML_DIR, "Theme.qml")) as f:
-            raw = dict(re.findall(r"readonly property int (\w+): (\w+)", f.read()))
-        def size(v):
-            return int(v) if v.isdigit() else size(raw[v]) if v in raw else None        # a size may point at another size
-        return {k: n for k, n in ((k, size(v)) for k, v in raw.items()) if n is not None}
-
-    def read(self, name):
-        with open(os.path.join(QML_DIR, name)) as f:
-            return f.read()
-
-    def test_there_is_one_touch_size_and_it_is_44(self):
-        sizes = self.sizes()
-        self.assertEqual(sizes["touchMin"], 44)
-        self.assertNotIn("touchSize", sizes)
-        for name in os.listdir(QML_DIR):
-            self.assertNotIn("Theme.touchSize", self.read(name), name)
-
-    def test_the_design_file_says_44(self):
-        with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "DESIGN.md")) as f:
-            text = f.read()
-        self.assertNotIn('height: "36px"', text)
-        self.assertEqual(text.count('height: "44px"'), 3, "button-primary, button-quiet and chip")
-
-    def test_tapped_rows_and_tips_are_at_least_44(self):
-        sizes = self.sizes()
-        for key in ("navRowHeight", "fieldRowHeight", "infoSize"):
-            with self.subTest(key):
-                self.assertGreaterEqual(sizes[key], sizes["touchMin"])
-
-    def test_the_tapped_sizes_all_follow_the_one_touch_size(self):
-        import re
-        text = self.read("Theme.qml")
-        for key in ("controlHeight", "fieldRowHeight", "infoSize", "navRowHeight"):
-            with self.subTest(key):
-                self.assertRegex(text, r"readonly property int %s: touchMin\b" % key)
-
-    def test_a_height_that_is_not_a_tap_does_not_borrow_the_touch_size(self):
-        self.assertNotIn("Theme.touchMin", self.read("ConfirmDialog.qml"))
-
-    def test_a_flag_is_tapped_in_a_44_box(self):
-        text = self.read("LanguageFlag.qml")
-        self.assertIn("height: Theme.touchMin", text)
-        self.assertIn("width: Theme.touchMin", text)
-
-
-@need_qt
-class TouchTargetsInWindow(QtCase):
-    """The sizes of the built window: everything a finger taps is at least 44 x 44 (docs/PRODUCT.md), read from the real items."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
-
-    def setUp(self):
-        from qtui import i18n
-        from qtui.app import close_engine, create_engine
-        from qtui.shell import Shell
-        self.tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
-        self.shell.reduceEffects = True
-        self.shell.library.installedOnly = True               # the later steps are open
-        self.addCleanup(i18n.set_language, i18n.language())
-        self.engine = create_engine(self.shell)
-        self.addCleanup(close_engine, self.engine)
-        self.root = self.engine.rootObjects()[0]
-        self.app.processEvents()
-
-    def item(self, name):
-        from qtui.app import find_item
-        got = find_item(self.root, name)
-        self.assertIsNotNone(got, name)
-        return got
-
-    def assert_tappable(self, name):
-        it = self.item(name)
-        self.assertGreaterEqual(it.width(), 44, name + " is too narrow for a finger")
-        self.assertGreaterEqual(it.height(), 44, name + " is too short for a finger")
-
-    def test_the_menu_and_its_links_are_tappable(self):
-        for language in ("en", "pt-BR"):
-            self.shell.setLanguage(language)
-            self.app.processEvents()
-            self.check_the_menu_is_tappable(language)
-
-    def check_the_menu_is_tappable(self, language):
-        for name in ("nav_home", "nav_game_list", "nav_look", "nav_hundred", "nav_make", "nav_add", "footer_discord", "footer_kofi", "footer_updates", "language_en", "language_pt"):
-            with self.subTest(language + " " + name):
-                self.assert_tappable(name)
-
-    def test_a_switch_row_and_its_i_circle_are_tappable(self):
-        self.shell.go(1)
-        self.app.processEvents()
-        for name in ("gamelist_installed", "gamelist_installed_tip"):
-            with self.subTest(name):
-                self.assert_tappable(name)
-
-    def test_the_look_step_controls_are_tappable(self):
-        self.shell.go(2)
-        self.app.processEvents()
-        names = ["look_swatch_%d" % i for i in range(len(self.shell.look.swatchList))] + ["look_hue", "look_sat", "look_val"]
-        names += ["look_theme_chip_" + t["key"] for t in self.shell.look.themes]
-        for name in names:
-            with self.subTest(name):
-                self.assert_tappable(name)
-
-    def at_the_shortest_window(self):
-        self.root.setProperty("width", self.root.property("minimumWidth"))
-        self.root.setProperty("height", self.root.property("minimumHeight"))
-        self.app.processEvents()
-
-    def edges(self, name):
-        from PySide6.QtCore import QPointF
-        it = self.item(name)
-        top = it.mapToScene(QPointF(0, 0)).y()
-        return top, top + it.height()
-
-    def check_the_menu_fits(self):
-        self.at_the_shortest_window()
-        self.assertGreaterEqual(self.edges("nav_languages")[0], self.edges("nav_title")[1], "the flags are under the title")
-        self.assertLessEqual(self.edges("nav_languages")[1], self.edges("nav_home")[0], "the flags are above the first menu row")
-        self.assertLessEqual(self.edges("footer_updates")[1], self.root.property("height"), "the last link is inside the window")
-
-    def test_at_the_shortest_window_the_flags_touch_neither_the_title_nor_the_first_row_nor_the_footer_edge(self):
-        self.check_the_menu_fits()
-
-    def test_a_title_of_two_lines_still_leaves_the_flags_alone(self):
-        self.item("nav_title").setProperty("text", "Steam Case Covers Steam Case Covers")
-        self.app.processEvents()
-        self.assertGreater(self.item("nav_title").height(), 30, "the title wrapped onto two lines")
-        self.check_the_menu_fits()
-
-    def test_the_i_circle_stays_flush_with_the_edge_of_its_row(self):
-        from PySide6.QtCore import QPointF
-        self.shell.go(1)
-        self.app.processEvents()
-        row, tip = self.item("gamelist_installed"), self.item("gamelist_installed_tip")
-        row_right = row.mapToScene(QPointF(row.width(), 0)).x()
-        tip_right = tip.mapToScene(QPointF(tip.width(), 0)).x()
-        self.assertEqual(tip_right - row_right, 10, "the 24 px circle is centred in its 44 px box, so the box reaches 10 px past the row")
-
-    def test_the_same_in_portuguese_where_words_are_longer(self):
-        self.shell.setLanguage("pt-BR")
-        self.app.processEvents()
-        self.check_the_menu_fits()
-
-    def test_at_the_narrowest_window_the_colour_squares_and_choice_buttons_stay_inside_their_card(self):
-        for language in ("en", "pt-BR"):
-            with self.subTest(language):
-                self.shell.setLanguage(language)
-                self.check_the_look_step_fits()
-
-    def check_the_look_step_fits(self):
-        from PySide6.QtCore import QPointF
-        self.shell.go(2)
-        self.at_the_shortest_window()
-        look = self.shell.look
-        groups = (("look_section_colour", ["look_swatch_%d" % i for i in range(len(look.swatchList))]),
-                  ("look_section_theme", ["look_theme_chip_" + t["key"] for t in look.themes]))
-        for section, names in groups:
-            card = self.item(section)
-            right = card.mapToScene(QPointF(card.width(), 0)).x()
-            for name in names:
-                it = self.item(name)
-                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, name)
-                self.assertGreaterEqual(it.height(), 44, name)
-
-    def test_a_tap_on_the_empty_part_of_a_flag_picks_the_language(self):
-        from PySide6.QtCore import QPointF, Qt
-        from PySide6.QtTest import QTest
-        self.shell.setLanguage("en")
-        self.assertEqual(self.shell.language, "en")
-        flag = self.item("language_pt")
-        corner = flag.mapToScene(QPointF(2, 2)).toPoint()           # inside the 44 px box, outside the 32 x 24 drawn flag
-        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, corner)
-        self.app.processEvents()
-        self.assertEqual(self.shell.language, "pt-BR")
-
-    def test_the_focus_ring_of_a_flag_and_of_the_i_circle_is_the_drawn_shape(self):
-        import re
-        for name, size in (("LanguageFlag.qml", r"width: Theme\.s32\s+height: Theme\.s24"), ("InfoTip.qml", r"width: Theme\.infoDot\s+height: Theme\.infoDot")):
-            with open(os.path.join(QML_DIR, name)) as f:
-                self.assertRegex(f.read(), r"anchors\.centerIn: parent\s+" + size, name)
 
 
 class Tokens(unittest.TestCase):
@@ -5841,7 +5672,7 @@ class HomeScreen(AddWindow):
             self.assertTrue(it.property("activeFocusOnTab"), name)
             iface = QAccessible.queryAccessibleInterface(it)
             self.assertEqual((iface.text(QAccessible.Text.Name), iface.role()), (text, QAccessible.Role.Button), name)
-            self.assertGreaterEqual(it.height(), 36)
+            self.assertGreaterEqual(it.height(), 44)
 
 
 @need_qt

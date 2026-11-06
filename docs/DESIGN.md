@@ -153,6 +153,7 @@ Press and hover 90 to 120ms, the navigation highlight and switches 200ms, a scre
 - **Preview layout:** `PreviewLayout` (the preview beside the sections, above them on a narrow window; one rule for Look, 100% games, Case and Make).
 - **Groups and messages:** `GroupCard` (a saved group as a two-line selectable card: its name, then its case and games, muted) and `Toast` (a short message above the footer line, 4 seconds plus 50 ms for each character (12 at most), fades in and out).
 - **Ways:** `PathCard` (one of the two ways to make covers on Home: title, line, number of steps, and a "Start" or "Continue" cue; the whole card is the button; the leading card has a sky-blue edge and a tag, the other the control-edge outline on the card colour).
+- **Tapping:** `TapArea` (the part of a small control that reacts to a tap, at least 44px wide and high, centred on the control; the "i" and the language flags use it).
 - **Information:** `StatusLine`, `InfoTip`, `ProgressBar`.
 - **Navigation:** a heading under Home with the name of the way in use and its steps ("Same case · 5 steps"), `NavItem` (a name, a small grey note after it such as "(optional)", a tick or a padlock) and `NavLink` (Discord, Check for updates).
 - **Questions:** `ConfirmDialog`, which dims the window, puts the safe button in focus and keeps Tab inside.

@@ -18,7 +18,7 @@ ScreenFrame {
         TextField {
             objectName: "games_search"
             width: parent.width
-            height: Theme.controlHeight
+            height: Theme.touchMin
             placeholderText: qsTr("Search by name…")
             placeholderTextColor: Theme.faint
             color: Theme.text

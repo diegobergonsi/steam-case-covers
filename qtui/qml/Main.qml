@@ -63,7 +63,7 @@ ApplicationWindow {
             objectName: "nav_languages"
             x: Theme.s24
             y: Theme.navFlagsY
-            spacing: Theme.s8
+            spacing: Theme.s12                          // so the tap areas of the two flags do not overlap
             LanguageFlag {
                 objectName: "language_en"
                 source: usFlag

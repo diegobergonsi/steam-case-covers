@@ -25,18 +25,15 @@ Item {
     onPinnedChanged: refresh()                        // with keyboard focus the tip is 'wanted' all the time: pinning must still reopen it after Escape
 
     Rectangle {
-        anchors.centerIn: parent
-        width: Theme.infoDot
-        height: Theme.infoDot
+        anchors.fill: parent
         radius: width / 2
         color: "transparent"
         border.width: tip.activeFocus ? Theme.focusRing : Theme.hairline
         border.color: tip.activeFocus ? Theme.text : Theme.accent
         Text { anchors.centerIn: parent; text: "i"; color: Theme.accent; font.pixelSize: Theme.smallSize; font.bold: true }
     }
-    MouseArea {
+    TapArea {
         id: area
-        anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: tip.pinned = !tip.pinned
