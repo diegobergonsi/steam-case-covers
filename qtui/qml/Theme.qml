@@ -39,20 +39,20 @@ QtObject {
 
     // sizes of the window and of the controls (docs/ui-guide.md)
     readonly property int windowWidth: 900
-    readonly property int windowHeight: 560
+    readonly property int windowHeight: 600
     readonly property int windowMinWidth: 640
     readonly property int windowMinHeight: 596               // the name and the flags, the heading of the way, seven steps in the navigation and the three links under them
     readonly property int navWidth: 230
-    readonly property int navFlagsY: 58                    // the language flags sit under the name, which may take two lines
+    readonly property int navFlagsY: 60                    // the language flags sit under the name, which may take two lines
     readonly property int navTop: 104
-    readonly property int navRowHeight: 44
+    readonly property int navRowHeight: touchMin
     readonly property int navHeadingHeight: 24              // the line under Home that names the way in use
     readonly property int navHighlightInset: 3
     readonly property int chromeWidth: navWidth + 2 * s32 + s8 + 2 * s16          // the window width that is not inside a section: the nav, the margins, the shadow room and the card padding
     readonly property int navHighlightHeight: navRowHeight - 2 * navHighlightInset
-    readonly property int controlHeight: 44
-    readonly property int fieldRowHeight: 44
-    readonly property int infoSize: 44
+    readonly property int controlHeight: touchMin
+    readonly property int fieldRowHeight: touchMin
+    readonly property int infoSize: touchMin
     readonly property int infoDot: 24                    // the drawn circle of the "i", inside its 44 box
     readonly property int iconSize: 20
     readonly property int iconPixels: 40
@@ -67,7 +67,9 @@ QtObject {
     readonly property int previewHeight: 300
     readonly property int sectionMinWidth: 300          // below this the sections no longer fit beside the preview
     readonly property int groupCardWidth: 200            // a saved group on the Case step
-    readonly property int touchMin: 44                   // a finger needs at least this (PRODUCT.md); new controls use it
+    readonly property int touchMin: 44                   // a finger needs at least this (PRODUCT.md): every size of something tapped follows it
+    readonly property int infoInset: (infoSize - infoDot) / 2   // how far the drawn "i" circle sits inside its tap box
+    readonly property int dialogTextMin: 36             // the least height of the scrolling text of a question
     readonly property int toastMs: 4000                  // how long a toast stays
     readonly property int toastCharMs: 50                // a toast stays this much longer for each character, so a long sentence can be read
     readonly property int toastMaxMs: 12000              // but never longer than this

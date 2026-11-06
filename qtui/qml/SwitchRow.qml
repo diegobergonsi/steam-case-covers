@@ -55,7 +55,7 @@ Item {
         objectName: row.objectName + "_label"
         x: track.x + track.width + Theme.s12
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - x - (tipItem.visible ? tipItem.width + Theme.s12 : 0)
+        width: parent.width - x - (tipItem.visible ? Theme.infoDot + Theme.s12 : 0)
         text: row.label
         color: Theme.text
         font.pixelSize: Theme.bodySize
@@ -74,6 +74,7 @@ Item {
         visible: row.tip !== ""
         text: row.tip
         anchors.right: parent.right
+        anchors.rightMargin: -Theme.infoInset         // the drawn circle stays where it was, only its tap box is bigger
         anchors.verticalCenter: parent.verticalCenter
     }
     Keys.onPressed: (event) => {

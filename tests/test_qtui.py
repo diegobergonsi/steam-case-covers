@@ -240,7 +240,16 @@ class SystemHelpers(unittest.TestCase):
         self.assertEqual(system.start_size(3840, 2160), (1280, 900))        # capped: a huge screen does not get a huge window
         self.assertEqual(system.start_size(1920, 1080), (1280, 810))        # width capped at 1280, height 75%
         self.assertEqual(system.start_size(1280, 800), (900, 600))          # a Steam Deck
-        self.assertEqual(system.start_size(800, 600), (900, 560))           # a small or unknown screen keeps the old size
+        self.assertEqual(system.start_size(800, 600), (900, 596))           # a small or unknown screen opens at the shortest the window may be
+        self.assertEqual(system.start_size(1366, 768), (956, 596))          # a laptop: 75% of 768 is below the shortest window
+
+    def test_the_window_never_opens_shorter_than_its_shortest_height(self):
+        import re
+        with open(os.path.join(QML_DIR, "Theme.qml")) as f:
+            sizes = {k: int(v) for k, v in re.findall(r"readonly property int (\w+): (\d+)", f.read())}
+        for avail in (400, 600, 768, 800, 1080):
+            self.assertGreaterEqual(system.start_size(1920, avail)[1], sizes["windowMinHeight"], avail)
+        self.assertGreaterEqual(sizes["windowHeight"], sizes["windowMinHeight"])
 
     def test_a_packaged_linux_app_gives_its_children_the_systems_libraries_again(self):
         from unittest import mock
@@ -3555,7 +3564,10 @@ class TouchTargets(unittest.TestCase):
     def sizes(self):
         import re
         with open(os.path.join(QML_DIR, "Theme.qml")) as f:
-            return {k: int(v) for k, v in re.findall(r"readonly property int (\w+): (\d+)", f.read())}
+            raw = dict(re.findall(r"readonly property int (\w+): (\w+)", f.read()))
+        def size(v):
+            return int(v) if v.isdigit() else size(raw[v]) if v in raw else None        # a size may point at another size
+        return {k: n for k, n in ((k, size(v)) for k, v in raw.items()) if n is not None}
 
     def read(self, name):
         with open(os.path.join(QML_DIR, name)) as f:
@@ -3579,6 +3591,16 @@ class TouchTargets(unittest.TestCase):
         for key in ("navRowHeight", "fieldRowHeight", "infoSize"):
             with self.subTest(key):
                 self.assertGreaterEqual(sizes[key], sizes["touchMin"])
+
+    def test_the_tapped_sizes_all_follow_the_one_touch_size(self):
+        import re
+        text = self.read("Theme.qml")
+        for key in ("controlHeight", "fieldRowHeight", "infoSize", "navRowHeight"):
+            with self.subTest(key):
+                self.assertRegex(text, r"readonly property int %s: touchMin\b" % key)
+
+    def test_a_height_that_is_not_a_tap_does_not_borrow_the_touch_size(self):
+        self.assertNotIn("Theme.touchMin", self.read("ConfirmDialog.qml"))
 
     def test_a_flag_is_tapped_in_a_44_box(self):
         text = self.read("LanguageFlag.qml")
@@ -3620,8 +3642,14 @@ class TouchTargetsInWindow(QtCase):
         self.assertGreaterEqual(it.height(), 44, name + " is too short for a finger")
 
     def test_the_menu_and_its_links_are_tappable(self):
+        for language in ("en", "pt-BR"):
+            self.shell.setLanguage(language)
+            self.app.processEvents()
+            self.check_the_menu_is_tappable(language)
+
+    def check_the_menu_is_tappable(self, language):
         for name in ("nav_home", "nav_game_list", "nav_look", "nav_hundred", "nav_make", "nav_add", "footer_discord", "footer_kofi", "footer_updates", "language_en", "language_pt"):
-            with self.subTest(name):
+            with self.subTest(language + " " + name):
                 self.assert_tappable(name)
 
     def test_a_switch_row_and_its_i_circle_are_tappable(self):
@@ -3660,12 +3688,33 @@ class TouchTargetsInWindow(QtCase):
     def test_at_the_shortest_window_the_flags_touch_neither_the_title_nor_the_first_row_nor_the_footer_edge(self):
         self.check_the_menu_fits()
 
+    def test_a_title_of_two_lines_still_leaves_the_flags_alone(self):
+        self.item("nav_title").setProperty("text", "Steam Case Covers Steam Case Covers")
+        self.app.processEvents()
+        self.assertGreater(self.item("nav_title").height(), 30, "the title wrapped onto two lines")
+        self.check_the_menu_fits()
+
+    def test_the_i_circle_stays_flush_with_the_edge_of_its_row(self):
+        from PySide6.QtCore import QPointF
+        self.shell.go(1)
+        self.app.processEvents()
+        row, tip = self.item("gamelist_installed"), self.item("gamelist_installed_tip")
+        row_right = row.mapToScene(QPointF(row.width(), 0)).x()
+        tip_right = tip.mapToScene(QPointF(tip.width(), 0)).x()
+        self.assertEqual(tip_right - row_right, 10, "the 24 px circle is centred in its 44 px box, so the box reaches 10 px past the row")
+
     def test_the_same_in_portuguese_where_words_are_longer(self):
         self.shell.setLanguage("pt-BR")
         self.app.processEvents()
         self.check_the_menu_fits()
 
     def test_at_the_narrowest_window_the_colour_squares_and_choice_buttons_stay_inside_their_card(self):
+        for language in ("en", "pt-BR"):
+            with self.subTest(language):
+                self.shell.setLanguage(language)
+                self.check_the_look_step_fits()
+
+    def check_the_look_step_fits(self):
         from PySide6.QtCore import QPointF
         self.shell.go(2)
         self.at_the_shortest_window()
@@ -3677,12 +3726,14 @@ class TouchTargetsInWindow(QtCase):
             right = card.mapToScene(QPointF(card.width(), 0)).x()
             for name in names:
                 it = self.item(name)
-                with self.subTest(name):
-                    self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5)
+                self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, name)
+                self.assertGreaterEqual(it.height(), 44, name)
 
     def test_a_tap_on_the_empty_part_of_a_flag_picks_the_language(self):
         from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
+        self.shell.setLanguage("en")
+        self.assertEqual(self.shell.language, "en")
         flag = self.item("language_pt")
         corner = flag.mapToScene(QPointF(2, 2)).toPoint()           # inside the 44 px box, outside the 32 x 24 drawn flag
         QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, corner)
@@ -4779,6 +4830,19 @@ class AddScreen(AddWindow):
         self.shell.go(4)
         self.app.processEvents()
         self.assertFalse(self.ap.watching)
+
+    def test_the_account_buttons_are_at_least_44_px_on_home_and_on_the_last_step(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.start_window()
+        self.shell.go(0)
+        self.app.processEvents()
+        for name in ("home_accounts_chip_111", "home_accounts_chip_222"):
+            self.assertGreaterEqual(self.item(name).height(), 44, name)
+        self.shell.go(4)
+        self.shell.go(5)
+        self.app.processEvents()
+        for name in ("add_accounts_chip_111", "add_accounts_chip_222"):
+            self.assertGreaterEqual(self.item(name).height(), 44, name)
 
     def test_one_account_is_named_and_two_are_offered_as_chips(self):
         self.start_window()

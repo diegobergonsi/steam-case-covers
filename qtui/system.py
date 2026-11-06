@@ -9,8 +9,8 @@ SAVE_KEY = "Cmd+S" if sys.platform == "darwin" else "Ctrl+S"      # the shortcut
 
 
 def start_size(avail_w, avail_h):
-    """The size the window opens at: 70% of the free screen width and 75% of the height, never below the old 900x560, never above 1280x900."""
-    return max(900, min(1280, int(avail_w * 0.7))), max(560, min(900, int(avail_h * 0.75)))
+    """The size the window opens at: 70% of the free screen width and 75% of the height, never below 900 wide and 596 tall (the shortest the window may be, Theme.windowMinHeight), never above 1280x900."""
+    return max(900, min(1280, int(avail_w * 0.7))), max(596, min(900, int(avail_h * 0.75)))
 
 
 def restore_child_env():
