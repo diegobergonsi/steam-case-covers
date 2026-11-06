@@ -709,6 +709,17 @@ class GameListScreen(QtCase):
         self.app.processEvents()
         self.assertTrue(QAccessible.queryAccessibleInterface(self.item("gamelist_installed")).state().checked)
 
+    def test_the_instruction_has_the_key_of_this_computer_in_the_middle_in_both_languages(self):
+        from qtui import i18n, system
+        self.addCleanup(i18n.set_language, i18n.language())
+        text = lambda: self.item("gamelist_intro").property("text")
+        self.assertEqual(text(), "Steam keeps your game list on a web page. Open it and log in if asked. A page of text appears: press %s and save it, keeping the name userdata.json. "
+                                 "The app notices the file by itself." % system.SAVE_KEY)
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.assertEqual(text(), "A Steam guarda a sua lista de jogos em uma p\u00e1gina da web. Abra-a e entre, se pedir. Aparece uma p\u00e1gina de texto: aperte %s e salve, mantendo o nome "
+                                 "userdata.json. O programa percebe o arquivo sozinho." % system.SAVE_KEY)
+
     def test_escape_closes_a_pinned_info_tip_and_it_can_open_again(self):
         from PySide6.QtCore import QCoreApplication, QEvent, Qt
         from PySide6.QtGui import QKeyEvent
@@ -1853,6 +1864,23 @@ class Components(QtCase):
                '  model: [{"key": "colour", "label": "Colour", "value": "Teal", "step": 2}, {"key": "hundred", "label": "100% games", "value": "Gold case, rosette and ribbon", "step": 3},'
                ' {"key": "art", "label": "Art", "value": "Your own art, blurry art skipped", "step": 2}] }')
 
+    def spoken(self, language, source, item, text, size=(420, 240)):
+        """What a screen reader says (its name or its description) about an item of a small window, with the language set before the window is made."""
+        from PySide6.QtGui import QAccessible
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, i18n.language())
+        i18n.set_language(language)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        self.load(source, *size)
+        return QAccessible.queryAccessibleInterface(self.item(item)).text(text)
+
+    def test_a_choice_chip_is_read_out_as_label_value_and_change_in_both_languages(self):
+        from PySide6.QtGui import QAccessible
+        for language, said in (("en", "Colour: Teal. Change"), ("pt-BR", "Colour: Teal. Mudar")):
+            with self.subTest(language):
+                self.assertEqual(self.spoken(language, self.SUMMARY.replace("@W@", "560"), "sum_chip_colour", QAccessible.Text.Name, (600, 200)), said)
+
     def test_a_choice_summary_names_each_choice_and_leads_back_to_its_step(self):
         self.load(self.SUMMARY.replace("@W@", "560"), 600, 200)
         for key, step in (("colour", 2), ("hundred", 3), ("art", 2)):
@@ -2096,6 +2124,12 @@ class Components(QtCase):
         getattr(seq, kind)(0, QPoint(int(x), int(y)), self.root)
         seq.commit()
         self.app.processEvents()
+
+    def test_a_slider_says_its_value_and_its_range_in_both_languages(self):
+        from PySide6.QtGui import QAccessible
+        for language, said in (("en", "0 (0 to 359)"), ("pt-BR", "0 (0 a 359)")):
+            with self.subTest(language):
+                self.assertEqual(self.spoken(language, self.SLIDER, "s", QAccessible.Text.Description), said)
 
     def test_a_swipe_that_starts_on_the_track_with_a_finger_does_not_move_the_slider(self):
         """On the Steam Deck a swipe over a slider must scroll the page, not change the colour; a tap on the track still jumps, the handle still drags."""
@@ -3659,6 +3693,25 @@ class ShellWindow(QtCase):
         self.addCleanup(QAccessible.setActive, False)
         self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3. 100% games (optional), locked")
 
+    def test_the_menu_and_the_steps_on_home_are_read_out_with_their_state_in_both_languages(self):
+        from PySide6.QtGui import QAccessible
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, i18n.language())
+        self.addCleanup(self.shell.setFact, "ready", False)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        name = lambda item: QAccessible.queryAccessibleInterface(self.item(item)).text(QAccessible.Text.Name)
+        for language, locked, done, home_done, home_next in (("en", "2. Look, locked", "1. Game list, done", "1. Game list, Done", "2. Look, Next"),
+                                                            ("pt-BR", "2. Visual, bloqueado", "1. Lista de jogos, conclu\u00eddo", "1. Lista de jogos, Pronto", "2. Visual, Pr\u00f3ximo")):
+            with self.subTest(language):
+                self.shell.setLanguage(language)
+                self.shell.setFact("ready", False)
+                self.app.processEvents()
+                self.assertEqual(name("nav_look"), locked)
+                self.shell.setFact("ready", True)
+                self.app.processEvents()
+                self.assertEqual((name("nav_game_list"), name("home_row_game_list"), name("home_row_look")), (done, home_done, home_next))
+
     def test_the_steps_are_evenly_spaced_with_or_without_a_hint(self):
         from PySide6.QtCore import QPointF
         ys = [self.item("nav_%s_label" % k).mapToScene(QPointF(0, 0)).y() for k in ("game_list", "look", "hundred", "make", "add")]
@@ -4022,6 +4075,23 @@ class ReplaceReasons(FakeStore):
     def test_no_special_case(self):
         self.made(completed={1}, treatment="ribbon")
         self.assertIn("No special case", self.reason((0, 100, 100), set(), None)[1])
+
+    def test_the_no_highlight_sentence_reads_as_one_whole_sentence_in_both_languages(self):
+        from qtui import i18n
+        self.made(completed={1}, treatment="ribbon")
+        self.addCleanup(i18n.set_language, i18n.language())
+        self.assertEqual(self.reason((0, 100, 100), set(), None)[1],
+                         "You chose no highlight for your 100% games (\u201cNo special case\u201d, or \u201cNo marks\u201d on the normal case): the covers of your 100% games are made again as normal covers.")
+        i18n.set_language("pt-BR")
+        self.assertEqual(self.reason((0, 100, 100), set(), None)[1],
+                         "Voc\u00ea escolheu n\u00e3o destacar os seus jogos com 100% (\u201cSem case especial\u201d, ou \u201cSem marcas\u201d na case normal): as capas dos seus jogos com 100% s\u00e3o refeitas como capas normais.")
+
+    def test_the_theme_in_a_sentence_is_its_translated_label_not_its_key(self):
+        from unittest import mock
+        from qtui import reasons
+        self.made()
+        with mock.patch.dict(reasons.THEME_LABELS, {"halloween": "Spooky"}):
+            self.assertIn("new ones in the Spooky theme", self.reason((0, 100, 100), None, None, "halloween")[1])
 
     def test_a_page_with_no_game_at_100_says_the_highlight_is_lost(self):
         for treatment in ("ribbon", "gold-case"):

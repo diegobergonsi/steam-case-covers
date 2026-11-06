@@ -25,7 +25,7 @@ Flow {
             Behavior on color { ColorAnimation { duration: Theme.dur(120) } }
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
-            Accessible.name: modelData.label + ": " + modelData.value + qsTr(". Change")
+            Accessible.name: qsTr("%1: %2. Change").arg(modelData.label).arg(modelData.value)
             Accessible.onPressAction: summary.chosen(modelData.step)
             Rectangle {                                   // keyboard focus ring
                 anchors.fill: parent

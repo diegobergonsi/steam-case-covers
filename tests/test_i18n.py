@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The translation layer of the window (qtui/i18n.py): which language to start in, the words, the plurals, and changing language while it runs."""
-import os, sys, unittest
+import os, re, sys, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
@@ -149,7 +149,7 @@ class Table(unittest.TestCase):
             english, portuguese = (key.split("|"), text.split("|")) if plural else ([key], [text])
             self.assertEqual(len(english), len(portuguese), key[:70])
             for a, b in zip(english, portuguese):
-                self.assertEqual(re.findall(r"%%|%1|%[sd]", a), re.findall(r"%%|%1|%[sd]", b), key[:70])
+                self.assertTrue(Blanks.same_blanks(a, b), key[:70])
                 self.assertEqual(sorted(set(re.findall(r"%n", a))), sorted(set(re.findall(r"%n", b))) if "%n" in a else [], key[:70])
 
     def test_a_translation_keeps_the_spaces_around_it(self):
@@ -196,6 +196,78 @@ class Saving(unittest.TestCase):
         import json
         with open(self.path) as f:
             self.assertEqual(list(json.load(f)), list(settings.SETTING_KEYS))
+
+
+class WholeSentences(unittest.TestCase):
+    """A message is one sentence with a blank where the changing part goes (`%1` in QML, `%s` in Python), never pieces glued together: a translator cannot move a word
+    between pieces. The QML scanner lives in tools/i18n_keys.py, next to the one that finds the keys."""
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        import i18n_keys
+        cls.keys = i18n_keys
+
+    def test_no_qml_text_is_glued_to_a_translated_piece(self):
+        qml = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
+        for name in sorted(os.listdir(qml)):
+            if name.endswith(".qml"):
+                with open(os.path.join(qml, name), encoding="utf-8") as f:
+                    self.assertEqual(self.keys.glued(f.read()), [], name)
+
+    def test_the_glue_guard_sees_the_shapes_it_is_meant_to_catch(self):
+        for glued in ('qsTr("(optional)") + hint', 'qsTr("%n game", "", f(x)) + y', 'qsTr("Hi %1").arg(a) + b', 'label + ", " + qsTr("Done")', 'a + qsTr("x")',
+                      'qsTr("a\\\\") + b'):
+            self.assertTrue(self.keys.glued(glued), glued)
+        for fine in ('qsTr("Hi %1").arg(a)', 'x + " \\u00b7 " + qsTr("%n step|%n steps", "", n)', 'x + " \u00b7 " + qsTr("%n step|%n steps", "", n)'):
+            self.assertEqual(self.keys.glued(fine), [], fine)
+
+    def test_an_unclosed_call_is_an_error_that_says_so(self):
+        with self.assertRaisesRegex(ValueError, "unclosed"):
+            self.keys.glued('qsTr("a"')
+
+    def test_no_portuguese_message_is_a_fragment(self):
+        """A piece starts with punctuation, or with a space and a small letter, or ends with punctuation that opens something, or with a word and a space."""
+        from qtui.i18n_pt_br import PT_BR
+        piece = re.compile(r"^\s*[,.:;)]|^ [a-z]|[,:(]\s*$|\w $")
+        self.assertEqual([k[:60] for k in PT_BR if piece.search(k)], [])
+
+
+class Blanks(unittest.TestCase):
+    """The blanks of a message and of its translation: a numbered blank (%1, %2) may move, the others (%s, %d, %%) are filled in order."""
+    @staticmethod
+    def same_blanks(english, translation):
+        numbered = lambda t: sorted(re.findall(r"%\d", t))
+        ordered = lambda t: re.findall(r"%%|%[sd]", t)
+        return numbered(english) == numbered(translation) and ordered(english) == ordered(translation)
+
+    def test_numbered_blanks_may_be_reordered_and_the_others_may_not(self):
+        self.assertTrue(self.same_blanks("%1, %2", "%2, %1"))
+        self.assertTrue(self.same_blanks("%1 (%2 to %3)", "%3 a %2 (%1)"))
+        self.assertTrue(self.same_blanks("%s and %s", "%s e %s"))
+        self.assertFalse(self.same_blanks("%1", "%1 %2"))
+        self.assertFalse(self.same_blanks("%1, %2", "%1"))
+        self.assertFalse(self.same_blanks("%s and %d", "%d e %s"))
+
+
+@need_qt
+class ThemeLabels(unittest.TestCase):
+    def test_every_theme_has_a_label_to_translate(self):
+        from engine import steamcase as sc
+        from qtui import reasons
+        self.assertEqual(set(reasons.THEME_LABELS), {"classic", *sc.THEMES})
+
+
+@need_qt
+class CaseNames(unittest.TestCase):
+    """How a group's case is named: one message with a blank for the colour, so each language puts the colour where it wants it."""
+    def test_the_steam_case_in_a_colour_is_named_in_both_languages(self):
+        from qtui import cases, tones
+        self.addCleanup(i18n.set_language, i18n.language())
+        red = next(x for x in tones.swatches() if x["name"] == "Red")
+        for language, red_name, custom in (("en", "Steam case, red", "Steam case, custom colour"), ("pt-BR", "Case da Steam, vermelho", "Case da Steam, cor personalizada")):
+            i18n.set_language(language)
+            self.assertEqual(cases.case_label({"tone": (red["hue"], red["sat"], red["val"])}), red_name, language)
+            self.assertEqual(cases.case_label({"tone": (1, 2, 3)}), custom, language)
 
 
 if __name__ == "__main__":

@@ -75,7 +75,7 @@ ScreenFrame {
                     height: Theme.touchMin
                     activeFocusOnTab: !locked
                     Accessible.role: Accessible.Button
-                    Accessible.name: modelData.label + ", " + screen.stateText[modelData.state]
+                    Accessible.name: qsTr("%1, %2").arg(modelData.label).arg(screen.stateText[modelData.state])
                     enabled: !locked                          // a disabled item is announced as unavailable
                     Accessible.onPressAction: if (!locked) shell.go(index + 1)
                     Rectangle {

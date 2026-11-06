@@ -1,13 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The sentences of the question "replace the covers you made?": why Make covers would rebuild covers that are already in the folder.
-The words are those the app has always used, covered by tests in tests/test_steamcase.py (ReplaceReason)."""
+The words are those the app has always used, covered by tests in tests/test_steamcase.py (ReplaceReason). Also the names the Look and 100% games steps show for
+a case, its marks and a theme (STYLES, MARKS, THEME_LABELS)."""
 
 from engine import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
 STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("ribbon", N_("Normal case")), ("none", N_("No special case"))]    # values: sc.CASES, or "none"
 MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only")), ("none", N_("No marks"))]                    # values: sc.MARKS
+
+
+THEME_LABELS = {"classic": N_("Classic"), "halloween": N_("Halloween")}
+
+
+def theme_label(key):
+    """The name of a theme in the language in use (a test keeps THEME_LABELS in step with the engine's themes)."""
+    return tr(THEME_LABELS[key])
 
 
 def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None):
@@ -71,12 +80,12 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     marks_note = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
     if theme and completed is None and sc.covers_with_marks(covers_dir, "full"):
         marks_note = (tr(" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
-                  "load your games page and pick “Rosette and ribbon”.") % theme.capitalize())
+                  "load your games page and pick “Rosette and ribbon”.") % theme_label(theme))
     if theme and completed is None and sc.covers_with_marks(covers_dir, "none"):          # and to the ones with no marks: the theme gives them its rosette
-        marks_note += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme.capitalize()
+        marks_note += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme_label(theme)
     tail = ""                                            # the theme every cover is made in, when it changes
     if sc.covers_in_other_theme(covers_dir, theme):
-        tail = tr("the %s theme") % theme.capitalize() if theme else tr("the Classic case")
+        tail = tr("the %s theme") % theme_label(theme) if theme else tr("the Classic case")
     styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
     if completed is not None:
         for appid, _, notes in sc.usual_covers(covers_dir):                # covers by hand are left alone: they change nothing here
@@ -93,7 +102,7 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     label = look_label(treatment) if treatment else None
     if treatment is None:
         what = tr("the covers of your 100% games are made again as normal covers")
-        title, one = tr("Remove the 100% highlight?"), tr("You chose no highlight for your 100% games (“No special case”, or “No marks” on the normal case): ") + what + "."
+        title, one = tr("Remove the 100% highlight?"), tr("You chose no highlight for your 100%% games (“No special case”, or “No marks” on the normal case): %s.") % what
     elif not completed:
         what = tr("the covers with a highlight lose it, as no game on your page is at 100%")
         title, one = tr("Remove the 100% highlight?"), tr("No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers.")

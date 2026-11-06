@@ -16,7 +16,7 @@ Item {
     activeFocusOnTab: !locked
     Accessible.role: Accessible.Button
     Accessible.onPressAction: if (!locked) activated()
-    Accessible.name: label + (hint !== "" ? " " + hint : "") + (locked ? qsTr(", locked") : stepState === "done" ? qsTr(", done") : "")
+    Accessible.name: (locked ? qsTr("%1, locked") : stepState === "done" ? qsTr("%1, done") : "%1").arg(label + (hint !== "" ? " " + hint : ""))
 
     Rectangle {                                   // keyboard focus ring
         anchors.fill: parent

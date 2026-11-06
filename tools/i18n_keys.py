@@ -23,13 +23,60 @@ def python_keys():
 
 
 _QSTR = re.compile(r'qsTr\(\s*("(?:[^"\\]|\\.)*")')
+_SEPARATOR = re.compile(r'"\s*(?:\\u00b7|\u00b7)\s*"\s*$')            # the " \u00b7 " between a way's name and its step count is not a word
+
+
+def qsTr_calls(text):
+    """(start, end) of every `qsTr(...)` call in QML text, with the `.arg(...)` calls that follow it. Parentheses inside a quoted string do not count."""
+    def close(i, start):                                 # `i` is just after an opening parenthesis; the index just after its closing one
+        depth, quote, escaped = 1, None, False
+        while depth:
+            if i >= len(text):
+                raise ValueError("unclosed parenthesis in: " + text[start:start + 40])
+            c = text[i]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif c == "\\":
+                    escaped = True
+                elif c == quote:
+                    quote = None
+            elif c in "\"'":
+                quote = c
+            elif c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+            i += 1
+        return i
+    for m in re.finditer(r"qsTr\(", text):
+        end = close(m.end(), m.start())
+        while text.startswith(".arg(", end):
+            end = close(end + 5, m.start())
+        yield m.start(), end
+
+
+def glued(text):
+    """The places in QML text where a translated message is glued to something with `+`: a translator cannot move a word between pieces. Only the separator
+    between a way's name and its step count may sit next to one."""
+    found = []
+    for start, end in qsTr_calls(text):
+        if re.match(r"\s*\+", text[end:]):
+            found.append(text[start:end + 12])
+        before = text[:start].rstrip()
+        if before.endswith("+") and not _SEPARATOR.search(before[:-1].rstrip()):
+            found.append(text[max(0, start - 30):end])
+    return found
 
 
 def qml_keys():
     keys = {}
     for path in sorted(glob.glob(os.path.join(ROOT, "qtui", "qml", "*.qml"))):
-        for m in _QSTR.finditer(open(path, encoding="utf-8").read()):
-            keys.setdefault(json.loads(m.group(1)), os.path.basename(path))       # a QML string literal is a JSON string: → and \" are decoded the same way
+        text = open(path, encoding="utf-8").read()
+        for start, _ in qsTr_calls(text):
+            m = _QSTR.match(text, start)
+            if m:
+                keys.setdefault(json.loads(m.group(1)), os.path.basename(path))       # a QML string literal is a JSON string: → and \" are decoded the same way
     return keys
 
 

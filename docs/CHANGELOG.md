@@ -18,7 +18,11 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - The faint grey text (a locked step, the grey label of a switched-off main button), the green of a finished step and the thin outlines are a little brighter, so they are easier to see on the lighter blue parts of the window (the open step in the menu, the help bubble, the short messages). The grey subtitles are unchanged.
 
 ### 🛠 Fixed
+- A screen reader in Portuguese now reads the range of a slider in Portuguese ("0 a 359"); before, the word "to" stayed in English.
 - The help text that opens from an "i" circle now opens right above it. Before, it could open far to the left, further for longer texts.
+
+### 📝 Behind the scenes
+- A few messages were built from pieces glued together, so a translator could not move a word. They are now one sentence each with a blank for the changing part (the key to save a page, a colour name, the state read out by a screen reader). Nothing changes in the window.
 
 ## [1.6.1] - 2026-11-03
 
