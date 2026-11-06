@@ -46,8 +46,9 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {                  // always there while the page is taller than the window, so nobody has to guess it scrolls
+            id: bar
             objectName: "screen_scrollbar"
-            policy: size < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+            policy: bar.size < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
             implicitWidth: Theme.s8
             contentItem: Rectangle { radius: width / 2; color: Theme.edge }
             background: Rectangle { radius: width / 2; color: Theme.card }
@@ -62,12 +63,12 @@ Item {
     }
     Rectangle {                                           // the bottom edge melts away while there is more below: the page looks cut off on purpose
         objectName: "screen_fade"
-        visible: scroller.contentHeight > scroller.height + 1 && !scroller.atYEnd
+        visible: bar.size < 1 && !scroller.atYEnd
         y: scroller.y + scroller.height - height
         width: scroller.width
         height: Theme.s48
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0) }
+            GradientStop { position: 0; color: Qt.alpha(Theme.bg, 0) }
             GradientStop { position: 1; color: Theme.bg }
         }
     }
