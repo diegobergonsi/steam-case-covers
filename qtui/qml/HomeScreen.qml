@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-// Home: a Welcome the first time, a Dashboard after that, and the Undo section (Restore, Reset) always. Room for more "paths" later (Step by step is the first).
+// Home: a Welcome the first time, a Dashboard after that. Two cards (the ways to make covers), the progress of the way in use, and the Undo section (Restore, Reset) always.
 import QtQuick
 import "."
 
@@ -15,19 +15,53 @@ ScreenFrame {
     Component.onCompleted: { apply.refresh(); apply.watching = true; apply.groupTicks.refresh() }
     Component.onDestruction: apply.watching = false
 
+    function cue(flow) {                              // what a click on the card of a way does
+        if (flow !== shell.flow && !shell.canSwitch) return qsTr("Wait until this finishes")
+        return shell.returning && flow === shell.flow ? qsTr("Continue \u2192") : qsTr("Start \u2192")
+    }
+
     Section {
-        objectName: "home_section_main"
-        heading: shell.returning ? qsTr("Your progress") : qsTr("Step by step")
-        Text {
-            visible: !shell.returning
+        objectName: "home_section_paths"
+        heading: qsTr("Choose your way")
+        Grid {
+            id: paths
             width: parent.width
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.bodySize
-            text: qsTr("Five short steps, nothing to install or run: get your game list, choose the look, optionally highlight your 100% games, make the covers, and add them to Steam.")
+            columns: width >= 2 * Theme.pathCardMinWidth + Theme.s16 ? 2 : 1
+            spacing: Theme.s16
+            readonly property real cardWidth: columns === 2 ? (width - spacing) / 2 : width
+            readonly property real cardHeight: Math.max(natural.implicitHeight, manual.implicitHeight)     // side by side, the two are as tall as the taller
+            PathCard {
+                id: natural
+                objectName: "home_card_natural"
+                width: paths.cardWidth
+                height: paths.cardHeight
+                lead: true
+                tag: qsTr("Best for most people")
+                title: qsTr("The same case for every game on your list")
+                line: qsTr("Choose a look once. Every game on your list gets it.")
+                steps: qsTr("%n step|%n steps", "", shell.stepCount("natural"))
+                cue: screen.cue("natural")
+                onActivated: shell.startPath("natural")
+            }
+            PathCard {
+                id: manual
+                objectName: "home_card_manual"
+                width: paths.cardWidth
+                height: paths.cardHeight
+                title: qsTr("Pick games, choose their cases")
+                line: qsTr("Put games in groups and give each group its own case.")
+                steps: qsTr("%n step|%n steps", "", shell.stepCount("manual"))
+                cue: screen.cue("manual")
+                blocked: shell.flow !== "manual" && !shell.canSwitch
+                onActivated: shell.startPath("manual")
+            }
         }
+    }
+    Section {
+        objectName: "home_section_progress"
+        visible: shell.returning
+        heading: qsTr("Your progress: %1").arg(shell.flow === "manual" ? qsTr("Pick games") : qsTr("Same case"))
         Column {
-            visible: shell.returning
             width: parent.width
             Repeater {
                 model: shell.returning ? shell.steps.slice(1) : []
@@ -77,22 +111,6 @@ ScreenFrame {
                     }
                 }
             }
-        }
-    }
-    Section {
-        objectName: "home_section_manual"
-        heading: qsTr("Pick games by hand")
-        Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.bodySize
-            text: shell.flow === "manual" ? qsTr("You are choosing games and cases by hand. Go back to the step by step way to give every game the same case.")
-                                          : qsTr("Choose games and put them in PlayStation, Xbox or Nintendo cases.")
-        }
-        ButtonRow {
-            QuietButton { objectName: "home_manual"; visible: shell.flow !== "manual"; text: qsTr("Pick games by hand"); onClicked: shell.startManual() }
-            QuietButton { objectName: "home_natural"; visible: shell.flow === "manual"; text: qsTr("Back to step by step"); onClicked: shell.startNatural() }
         }
     }
     Section {
@@ -174,12 +192,4 @@ ScreenFrame {
             }
         }
     }
-
-    footer: [
-        PrimaryButton {
-            objectName: "home_main"
-            text: shell.returning ? qsTr("Continue \u2192") : qsTr("Start \u2192")
-            onClicked: shell.go(shell.returning ? shell.resume : 1)
-        }
-    ]
 }

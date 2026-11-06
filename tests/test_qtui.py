@@ -4285,7 +4285,7 @@ class MakeScreen(QtCase, FakeStore):
             self.click("make_folder")
         self.assertEqual(opened.call_count, 1)
 
-    def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
+    def test_nothing_is_wider_than_its_card_when_narrow(self):
         from PySide6.QtCore import QPointF
         self.root.setProperty("width", self.root.property("minimumWidth"))
         self.root.setProperty("height", self.root.property("minimumHeight"))
@@ -4608,7 +4608,7 @@ class AddScreen(AddWindow):
         self.assertEqual(QColor(self.item("add_status").property("color")).name(), "#ff7b72")
         self.assertEqual(self.text("add_main"), "Apply to Steam")
 
-    def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
+    def test_nothing_is_wider_than_its_card_when_narrow(self):
         from PySide6.QtCore import QPointF
         self.accounts = [("111", "A" * 40), ("222", "B" * 40)]
         self.start_window()
@@ -4718,22 +4718,105 @@ class HomeScreen(AddWindow):
         self.wait_for(lambda: self.ap.undoKnown and (self.ap.canRestore or not backup))
         self.app.processEvents()
 
-    def test_the_first_visit_is_a_welcome_with_a_start_button(self):
+    key = Components.key
+
+    def test_the_first_visit_is_a_welcome_with_two_cards_and_no_filled_button(self):
         self.open_home()
         self.assertEqual(self.text("screen_title"), "Cases for your games")
-        self.assertEqual(self.item("home_section_main").property("heading"), "Step by step")
-        self.assertEqual((self.text("home_main"), self.item("home_main").property("filled")), ("Start \u2192", True))
-        self.click("home_main")
-        self.assertEqual(self.shell.current, 1)
+        self.assertEqual(self.item("home_section_paths").property("heading"), "Choose your way")
+        self.assertEqual((self.text("home_card_natural_title"), self.text("home_card_manual_title")),
+                         ("The same case for every game on your list", "Pick games, choose their cases"))
+        self.assertEqual((self.text("home_card_natural_steps"), self.text("home_card_manual_steps")), ("5 steps", "6 steps"))
+        self.assertEqual((self.text("home_card_natural_cue"), self.text("home_card_manual_cue")), ("Start \u2192", "Start \u2192"))
+        self.assertEqual((self.item("home_card_natural").property("lead"), self.item("home_card_manual").property("lead")), (True, False))
+        self.assertEqual(self.text("home_card_natural_tag"), "Best for most people")
+        self.assertFalse(self.item("home_card_manual_tag").property("visible"))
+        self.assertFalse(self.item("home_restore").property("filled"))
+        from qtui.app import find_item
+        self.assertIsNone(find_item(self.root, "home_main"))                # the cards are the way in: no footer button
+        self.assertFalse(self.item("home_section_progress").property("visible"))
 
-    def test_a_returning_user_sees_the_dashboard_and_continues_where_they_stopped(self):
+    def test_a_card_starts_its_way(self):
+        self.open_home()
+        self.click("home_card_natural")
+        self.assertEqual((self.shell.flow, self.shell.current), ("natural", 1))
+        self.shell.go(0)
+        self.app.processEvents()
+        self.click("home_card_manual")
+        self.assertEqual((self.shell.flow, self.shell.current), ("manual", self.shell.resume))
+
+    def test_a_returning_user_continues_on_the_card_of_the_way_in_use(self):
         self.open_home(covers=True)
         self.assertEqual(self.text("screen_title"), "Welcome back")
-        self.assertEqual(self.item("home_section_main").property("heading"), "Your progress")
-        self.assertEqual(self.text("home_main"), "Continue \u2192")
+        self.assertEqual((self.text("home_card_natural_cue"), self.text("home_card_manual_cue")), ("Continue \u2192", "Start \u2192"))
+        self.assertEqual(self.item("home_section_progress").property("heading"), "Your progress: Same case")
         self.assertEqual([self.text("home_state_" + k) for k in ("game_list", "look", "hundred", "make", "add")], ["Done", "Next", "Locked", "Locked", "Locked"])
-        self.click("home_main")
+        self.click("home_card_natural")
         self.assertEqual(self.shell.current, 2)
+
+    def test_the_progress_list_follows_the_way_in_use(self):
+        self.open_home(covers=True)
+        self.shell.startManual()
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertEqual(self.item("home_section_progress").property("heading"), "Your progress: Pick games")
+        self.assertEqual((self.text("home_card_manual_cue"), self.text("home_card_natural_cue")), ("Continue \u2192", "Start \u2192"))
+
+    def test_the_other_way_waits_while_covers_are_made_or_added(self):
+        self.open_home()
+        self.shell.make._set_state(running=True)
+        self.app.processEvents()
+        self.assertEqual(self.text("home_card_manual_cue"), "Wait until this finishes")
+        self.assertEqual(self.text("home_card_natural_cue"), "Start \u2192")          # the way in use can still be continued
+        self.click("home_card_manual")
+        self.assertEqual(self.shell.flow, "natural")
+        self.shell.make._set_state(running=False)
+        self.app.processEvents()
+        self.assertEqual(self.text("home_card_manual_cue"), "Start \u2192")
+
+    def test_a_card_is_one_button_for_the_keyboard_and_screen_readers(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QAccessible
+        self.open_home()
+        card = self.item("home_card_manual")
+        self.assertTrue(card.property("activeFocusOnTab"))
+        info = QAccessible.queryAccessibleInterface(card)
+        self.assertEqual(info.role(), QAccessible.Role.Button)
+        self.assertIn("Pick games, choose their cases", info.text(QAccessible.Text.Name))
+        self.assertIn("6 steps", info.text(QAccessible.Text.Name))
+        self.key("home_card_manual", Qt.Key_Return)
+        self.assertEqual(self.shell.flow, "manual")
+        self.shell.startNatural()
+        self.shell.go(0)
+        self.app.processEvents()
+        self.key("home_card_manual", Qt.Key_Space)
+        self.assertEqual(self.shell.flow, "manual")
+
+    def test_the_cards_sit_side_by_side_in_a_roomy_window_and_stack_in_a_narrow_one(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        a, b, section = self.item("home_card_natural"), self.item("home_card_manual"), self.item("home_section_paths")
+        at = lambda it: it.mapToScene(QPointF(0, 0))
+        self.assertEqual((at(a).y(), a.height()), (at(b).y(), b.height()))      # one row, equal height
+        self.assertLess(at(a).x(), at(b).x())
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.app.processEvents()
+        self.assertEqual(at(a).x(), at(b).x())
+        self.assertLess(at(a).y(), at(b).y())
+        right = section.mapToScene(QPointF(section.width(), 0)).x()
+        for card in (a, b):
+            self.assertLessEqual(card.mapToScene(QPointF(card.width(), 0)).x(), right + 0.5)
+
+    def test_a_long_title_wraps_and_both_cards_stay_the_same_height(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        self.item("home_card_manual").setProperty("title", "Pick games, choose their cases, and keep every group with its own case " * 2)
+        self.app.processEvents()
+        a, b = self.item("home_card_natural"), self.item("home_card_manual")
+        self.assertEqual(a.height(), b.height())
+        title = self.item("home_card_manual_title")
+        self.assertGreater(title.property("lineCount"), 1)
+        self.assertLessEqual(title.mapToScene(QPointF(0, title.height())).y(), b.mapToScene(QPointF(0, b.height())).y())
 
     def test_a_row_of_the_dashboard_opens_its_step_unless_it_is_locked(self):
         self.open_home(covers=True)
@@ -4801,7 +4884,7 @@ class HomeScreen(AddWindow):
         self.assertTrue(self.text("home_note").startswith("Steam is open."))
         self.assertTrue(self.item("home_restart").property("checked"))
 
-    def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
+    def test_nothing_is_wider_than_its_card_when_narrow(self):
         from PySide6.QtCore import QPointF
         self.accounts = [("111", "A" * 40)]
         self.open_home(covers=True)
@@ -4809,14 +4892,12 @@ class HomeScreen(AddWindow):
         self.root.setProperty("width", self.root.property("minimumWidth"))
         self.root.setProperty("height", self.root.property("minimumHeight"))
         self.app.processEvents()
-        for sec, names in (("home_section_main", ("home_row_look", "home_state_look")), ("home_section_undo", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
+        for sec, names in (("home_section_paths", ("home_card_natural", "home_card_manual")), ("home_section_progress", ("home_row_look", "home_state_look")), ("home_section_undo", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
             card = self.item(sec)
             right = card.mapToScene(QPointF(card.width(), 0)).x()
             for n in names:
                 it = self.item(n)
                 self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5, n)
-        main = self.item("home_main")
-        self.assertLessEqual(main.mapToScene(QPointF(0, main.height())).y(), self.root.property("height"))
 
     def test_the_account_can_be_chosen_here_for_restore_and_reset(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
@@ -6942,8 +7023,8 @@ class ManualWindow(PickerBase):
     def test_home_offers_the_manual_flow(self):
         self.shell.go(0)
         self.app.processEvents()
-        self.assertTrue(self.has("home_manual"))
-        self.click("home_manual")
+        self.assertTrue(self.has("home_card_manual"))
+        self.click("home_card_manual")
         self.assertEqual((self.shell.flow, len(self.shell.steps), self.step()), ("manual", 7, "pick"))
         self.assertTrue(self.has("games_search"))
 
@@ -6951,8 +7032,8 @@ class ManualWindow(PickerBase):
         self.shell.startManual()
         self.shell.go(0)
         self.app.processEvents()
-        self.assertFalse(self.item("home_manual").property("visible"))
-        self.click("home_natural")
+        self.assertEqual(self.item("home_card_manual_cue").property("text"), "Continue \u2192")
+        self.click("home_card_natural")
         self.assertEqual((self.shell.flow, len(self.shell.steps)), ("natural", 6))
 
     def test_the_games_screen_lists_and_ticks_games(self):
