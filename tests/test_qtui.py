@@ -3670,7 +3670,8 @@ class Tokens(unittest.TestCase):
             self.assertEqual(said.group(1), "%.1f" % contrast(t[fg], fills[bg]), label)
 
     def test_the_guide_names_the_steps_like_the_window(self):
-        self.assertIn("1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam", self.doc("docs", "ui-guide.md"))
+        text = self.doc("docs", "ui-guide.md")
+        self.assertIn("1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam", text)
         self.assertNotIn("Extras", text.replace("Extras became", ""))
 
     def qml_files(self):
