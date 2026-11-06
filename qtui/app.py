@@ -25,12 +25,17 @@ def _asset_url(assets_dir, name):
     return QUrl.fromLocalFile(path).toString() if os.path.isfile(path) else ""
 
 
+def use_basic_style():
+    """Qt Quick's own plain style, never the desktop's (a KDE style once made the window fail to load). Qt allows this once, before the first QML is loaded."""
+    global _styled
+    if not _styled:
+        QQuickStyle.setStyle("Basic")
+        _styled = True
+
+
 def create_engine(shell, qml_dir=None, assets_dir=None):
     """Load Main.qml with `shell` as context property `shell`. Raises RuntimeError with every QML message if the window cannot be built."""
-    global _styled
-    if not _styled:                                    # Qt allows this once, before the first QML is loaded
-        QQuickStyle.setStyle("Basic")                  # never the desktop's own style (a KDE style once made the window fail to load)
-        _styled = True
+    use_basic_style()
     i18n.set_language(i18n.language())                 # the translator of the QML text, English included (it also picks the plural forms)
     qml_dir = qml_dir or os.path.join(HERE, "qml")
     assets_dir = assets_dir if assets_dir is not None else os.path.join(sc.HERE, "assets")

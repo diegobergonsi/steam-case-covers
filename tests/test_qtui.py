@@ -1520,7 +1520,9 @@ class Components(QtCase):
     def load(self, body, w=420, h=240):
         from PySide6.QtCore import QUrl
         from PySide6.QtQml import QQmlApplicationEngine
+        from qtui.app import use_basic_style
         from qtui.preview import PreviewProvider
+        use_basic_style()                                                   # as the window does; without it a class run alone found the desktop's own style missing
         folder = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, folder, True)
         path = os.path.join(folder, "Harness.qml")
