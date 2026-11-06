@@ -17,6 +17,7 @@ ScreenFrame {
 
     Section {
         objectName: "add_section_before"
+        visible: !screen.apply.hasResult                  // after an Apply that worked there is nothing left to decide
         heading: qsTr("Before you apply")
         StatusLine {
             objectName: "add_note"
@@ -55,11 +56,65 @@ ScreenFrame {
     }
     Section {
         objectName: "add_section_result"
+        visible: !screen.apply.hasResult
         heading: qsTr("Result")
-        StatusLine {
+        StatusLine {                                  // progress and errors; the "ok" sentence of an undo is a toast, not repeated here
             objectName: "add_status"
-            text: screen.apply.status !== "" ? screen.apply.status : screen.apply.readyText
-            kind: screen.apply.status !== "" ? screen.apply.statusKind : "wait"
+            readonly property bool said: screen.apply.status !== "" && screen.apply.statusKind !== "ok"
+            text: said ? screen.apply.status : screen.apply.readyText
+            kind: said ? screen.apply.statusKind : "wait"
+        }
+    }
+    Section {                                         // what an Apply that worked did: what was added, what to do next, and Undo in place
+        objectName: "add_section_done"
+        visible: screen.apply.hasResult
+        heading: qsTr("Done")
+        Text {
+            objectName: "add_done_title"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: screen.apply.result.title || ""
+            color: Theme.done
+            font.pixelSize: Theme.sectionSize
+            font.bold: true
+        }
+        CoverThumbs {
+            objectName: "add_thumbs"
+            prefix: "add_thumb_"
+            width: parent.width
+            model: screen.make.thumbs
+        }
+        Text {
+            objectName: "add_done_line"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: screen.apply.result.line || ""
+            color: Theme.text
+            font.pixelSize: Theme.bodySize
+        }
+        TextEdit {                                    // selectable, so the folder of the backup can be copied
+            objectName: "add_done_details"
+            width: parent.width
+            visible: text !== ""
+            readOnly: true
+            selectByMouse: true
+            wrapMode: TextEdit.WrapAnywhere
+            text: screen.apply.result.details || ""
+            color: Theme.muted
+            selectionColor: Theme.accent
+            selectedTextColor: Theme.accentInk
+            font.pixelSize: Theme.smallSize
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+        ButtonRow {
+            QuietButton {
+                objectName: "add_undo"
+                height: Theme.touchMin
+                visible: screen.apply.result.kind === "done" && screen.apply.canRestore
+                text: qsTr("Undo")
+                onClicked: screen.apply.restore()
+            }
         }
     }
 

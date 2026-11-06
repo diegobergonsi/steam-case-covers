@@ -34,6 +34,10 @@ class QtCase(unittest.TestCase):
         gc.collect()
         super().tearDown()
 
+    def has(self, name):
+        from qtui.app import find_item
+        return find_item(self.root, name) is not None
+
     def wait_for(self, condition, seconds=3):
         """Let Qt work until `condition()` is true or the time is up (layouts and images settle over several passes, slower on Windows); assert after it."""
         import time
@@ -4610,8 +4614,9 @@ class AddScreen(AddWindow):
     def test_it_has_its_title_sections_and_ready_text(self):
         self.start_window()
         self.assertEqual(self.text("screen_title"), "Add them to Steam")
-        for name in ("add_section_before", "add_section_result", "add_note", "add_account", "add_restart", "add_status", "add_main"):
+        for name in ("add_section_before", "add_section_result", "add_section_done", "add_note", "add_account", "add_restart", "add_status", "add_main"):
             self.assertIsNotNone(self.item(name), name)
+        self.assertFalse(self.item("add_section_done").property("visible"))                 # it comes after an Apply that worked
         self.assertEqual(self.text("add_status"), "2 covers are ready to add.")
         self.assertEqual((self.text("add_main"), self.item("add_main").property("filled"), self.item("add_main").property("enabled")), ("Apply to Steam", True, True))
 
@@ -4694,10 +4699,94 @@ class AddScreen(AddWindow):
         self.click("apply_dlg_confirm")
         self.wait_for(lambda: self.ap.applied)
         self.assertEqual(self.log, [("apply", None), "start"])
-        self.assertTrue(self.text("add_status").startswith("Done. 2 covers added to the Steam account \u201cAlice\u201d"))
+        self.assertEqual(self.text("add_done_title"), "2 covers added to \u201cAlice\u201d.")
         self.assertEqual((self.text("add_main"), self.item("add_main").property("filled")), ("Go to Home \u2192", True))
         self.click("add_main")
         self.assertEqual(self.shell.current, 0)
+
+    def apply_now(self):
+        self.start_window()
+        self.click("add_main")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: self.ap.applied)
+        self.app.processEvents()
+
+    def test_after_an_apply_one_done_card_replaces_the_other_two(self):
+        self.apply_now()
+        for gone in ("add_section_before", "add_section_result"):
+            self.assertFalse(self.item(gone).property("visible"), gone)
+        self.assertTrue(self.item("add_section_done").property("visible"))
+        self.assertEqual(self.item("add_section_done").property("heading"), "Done")
+        self.assertEqual(self.text("add_done_line"), "Steam is starting.")
+        self.assertTrue(self.text("add_done_details").startswith("0 replaced older art, 0 already up to date. Backup saved in: "))
+        self.assertTrue(self.has("add_thumb_0"))
+        self.assertEqual(self.item("add_done_title").property("color").name(), "#5ba32b")           # Done green
+        details = self.item("add_done_details")
+        self.assertEqual((details.property("readOnly"), details.property("selectByMouse")), (True, True))     # the folder can be copied
+        self.assertFalse(self.item("add_undo").property("filled"))                                        # the one blue button is "Go to Home"
+
+    def test_undo_in_the_card_asks_first_and_goes_back_to_the_before_state_with_a_toast(self):
+        self.apply_now()
+        self.backups = ["b1"]
+        open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore)
+        self.assertTrue(self.item("add_undo").property("visible"))
+        self.click("add_undo")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.assertEqual(self.text("apply_dlg_title"), "Restore previous artwork")
+        self.click("apply_dlg_cancel")
+        self.assertTrue(self.item("add_section_done").property("visible"))                              # cancelling changes nothing
+        self.click("add_undo")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: not self.ap.applied and not self.ap.busy)
+        self.assertFalse(self.item("add_section_done").property("visible"))
+        self.assertEqual((self.text("add_main"), self.text("add_status")), ("Apply to Steam", "2 covers are ready to add."))      # the sentence is not repeated here
+        self.assertTrue(self.item("toast").property("visible"))
+        self.assertTrue(self.text("toast_text").startswith("Restored your previous artwork"))
+
+    def test_nothing_to_change_has_a_card_without_undo(self):
+        self.start_window()
+        real = self.sc.apply_covers
+        self.sc.apply_covers = lambda steam, covers, user=None, files=None: dict(real(steam, covers, user, files), applied=0, unchanged=2)
+        self.addCleanup(lambda: setattr(self.sc, "apply_covers", real))
+        self.backups = ["b1"]
+        open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.click("add_main")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: self.ap.applied)
+        self.wait_for(lambda: self.ap.canRestore)
+        self.assertEqual(self.text("add_done_title"), "Nothing to change.")
+        self.assertEqual(self.text("add_done_line"), "All 2 covers were already in the Steam account \u201cAlice\u201d. Steam is starting.")
+        self.assertFalse(self.item("add_undo").property("visible"))                                      # nothing changed: nothing to undo here
+
+    def test_the_done_card_stays_inside_the_window_with_a_long_name_and_a_long_path(self):
+        from PySide6.QtCore import QPointF
+        self.accounts = [("111", "A" * 40)]
+        self.start_window()
+        real = self.sc.apply_covers
+        self.sc.apply_covers = lambda steam, covers, user=None, files=None: dict(real(steam, covers, user, files), backup="/home/someone/.local/share/Steam/userdata/123456789/config/" + "grid_backup_" * 4)
+        self.addCleanup(lambda: setattr(self.sc, "apply_covers", real))
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.click("add_main")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: self.ap.applied)
+        self.backups = ["b1"]
+        open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore)
+        card = self.item("add_section_done")
+        right = lambda it: it.mapToScene(QPointF(it.width(), 0)).x()
+        names = ("add_done_title", "add_done_line", "add_done_details", "add_thumbs", "add_undo")
+        self.wait_for(lambda: all(right(self.item(n)) <= right(card) + 0.5 for n in names))
+        for n in names:
+            self.assertLessEqual(right(self.item(n)), right(card) + 0.5, n)
+        self.assertGreaterEqual(self.item("add_undo").height(), 44)
 
     def test_declining_the_question_changes_nothing(self):
         from PySide6.QtTest import QTest
@@ -4733,6 +4822,8 @@ class AddScreen(AddWindow):
         self.assertEqual(self.text("add_status"), "No covers found in x. Make them first.")
         self.assertEqual(QColor(self.item("add_status").property("color")).name(), "#ff7b72")
         self.assertEqual(self.text("add_main"), "Apply to Steam")
+        self.assertTrue(self.item("add_section_before").property("visible"))
+        self.assertFalse(self.item("add_section_done").property("visible"))
 
     def test_nothing_is_wider_than_its_card_and_the_footer_stays_in_view_when_narrow(self):
         from PySide6.QtCore import QPointF
@@ -7457,10 +7548,6 @@ class ManualWindow(PickerBase):
         got = find_item(self.root, name)
         self.assertIsNotNone(got, name)
         return got
-
-    def has(self, name):
-        from qtui.app import find_item
-        return find_item(self.root, name) is not None
 
     def text(self, name):
         return self.item(name).property("text")
