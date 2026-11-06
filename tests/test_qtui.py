@@ -4856,6 +4856,17 @@ class HomeScreen(AddWindow):
         self.assertGreater(title.property("lineCount"), 1)
         self.assertLessEqual(title.mapToScene(QPointF(0, title.height())).y(), b.mapToScene(QPointF(0, b.height())).y())
 
+    def test_the_step_count_sits_at_the_right_of_the_title(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        at = lambda it: it.mapToScene(QPointF(0, 0))
+        for way in ("natural", "manual"):
+            card, title, steps = (self.item("home_card_%s%s" % (way, part)) for part in ("", "_title", "_steps"))
+            self.assertLessEqual(at(title).x() + title.property("contentWidth"), at(steps).x(), way)          # beside the title, never over it
+            self.assertLessEqual(at(steps).x() + steps.width(), at(card).x() + card.width() - 16, way)       # inside the card, one inset from its edge
+            self.assertGreaterEqual(at(steps).y(), at(title).y(), way)
+            self.assertLess(at(steps).y(), at(title).y() + title.height(), way)                              # on the line of the title, not under it
+
     def test_the_tag_sits_under_the_title_and_above_the_line(self):
         from PySide6.QtCore import QPointF
         self.open_home()

@@ -41,14 +41,28 @@ Rectangle {
         y: Theme.s16
         width: parent.width - 2 * Theme.s16
         spacing: Theme.s8
-        Text {
-            objectName: card.objectName + "_title"
+        Item {                                            // the title, and how many steps at its right
             width: parent.width
-            wrapMode: Text.WordWrap
-            text: card.title
-            color: Theme.text
-            font.pixelSize: Theme.sectionSize
-            font.bold: true
+            height: Math.max(titleText.height, stepsText.height)
+            Text {
+                id: titleText
+                objectName: card.objectName + "_title"
+                width: parent.width - stepsText.width - Theme.s12
+                wrapMode: Text.WordWrap
+                text: card.title
+                color: Theme.text
+                font.pixelSize: Theme.sectionSize
+                font.bold: true
+            }
+            Text {
+                id: stepsText
+                objectName: card.objectName + "_steps"
+                anchors.right: parent.right
+                anchors.baseline: titleText.baseline
+                text: card.steps
+                color: Theme.muted
+                font.pixelSize: Theme.bodySize
+            }
         }
         Rectangle {
             visible: card.tag !== ""
@@ -74,13 +88,6 @@ Rectangle {
             width: parent.width
             wrapMode: Text.WordWrap
             text: card.line
-            color: Theme.muted
-            font.pixelSize: Theme.bodySize
-        }
-        Text {
-            objectName: card.objectName + "_steps"
-            width: parent.width
-            text: card.steps
             color: Theme.muted
             font.pixelSize: Theme.bodySize
         }
