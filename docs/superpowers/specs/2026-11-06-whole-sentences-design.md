@@ -26,7 +26,7 @@ Each of the six places above is one message with a blank where the changing part
 Confirmed by the owner:
 - **Option A:** fix only the pieces that force a word order. The joins of whole sentences stay as they are (option B was a bigger change touching many texts, and the owner said the wording is fine).
 
-The planner's calls (the owner can change them):
+Choices made while planning (the owner can change them):
 - The English text of every message stays the same, word for word, including the screen reader names. The Portuguese text is today's text with the same words, now in one message each.
 - In the QML files a blank is written `%1`, `%2` and filled with `.arg(...)` (the usual Qt way). In Python it is `%s`, as everywhere else in the app.
 - The colour name in "Steam case, red" is still made lowercase in the code; it is a colour label from the app's own list, and both languages write colour names in lowercase.
@@ -42,8 +42,8 @@ English and Brazilian Portuguese texts exactly as today (a person comparing befo
 
 ## How we will know (the checks)
 1. A test reads every QML file and fails if a `qsTr(...)` is glued to something with `+` (before or after it). It fails today for the places above in QML (a separator such as " · " is allowed).
-2. A test reads the Portuguese list and fails if a message starts with `,`, `.`, `:`, `;` or `)`, or ends with `,`, `:` or `(` (with or without a space after). It fails today for the pieces `". Change"`, `", locked"`, `", done"` and `"Steam case, "`.
+2. A test reads the Portuguese list and fails if a message is a piece: it starts with `,`, `.`, `:`, `;` or `)`, or with a space and a small letter, or ends with `,`, `:` or `(`, or with a word and a space. It fails today for the pieces `". Change"`, `", locked"`, `", done"` and `"Steam case, "`. A third test says that numbered blanks (`%1`, `%2`) in a translation may be moved, so a translator can reorder the words.
 3. Tests that read the built window say the texts are the same as before: the step 1 instruction (English and Portuguese, with the key name in the middle), the case name of a group, and the screen reader names (through the accessibility interface, as the existing tests do).
 4. The full test suite passes.
 5. A look at the real window on the owner's desktop in both languages: step 1 (the instruction with the key), the Case step (a group's case name). The agent cannot do this one; it says so.
-6. The review of rule 12 (`/thermo-nuclear-code-quality-review`, user-only) is run by the owner before the push; the agent fixes every finding first.
+6. The owner's final review (the `/thermo-nuclear-code-quality-review` command, which only the owner can run) before the push; the agent fixes every finding first.

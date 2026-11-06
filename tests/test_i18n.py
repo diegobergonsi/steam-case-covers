@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The translation layer of the window (qtui/i18n.py): which language to start in, the words, the plurals, and changing language while it runs."""
-import os, sys, unittest
+import os, re, sys, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
@@ -149,7 +149,7 @@ class Table(unittest.TestCase):
             english, portuguese = (key.split("|"), text.split("|")) if plural else ([key], [text])
             self.assertEqual(len(english), len(portuguese), key[:70])
             for a, b in zip(english, portuguese):
-                self.assertEqual(re.findall(r"%%|%\d|%[sd]", a), re.findall(r"%%|%\d|%[sd]", b), key[:70])
+                self.assertTrue(Blanks.same_blanks(a, b), key[:70])
                 self.assertEqual(sorted(set(re.findall(r"%n", a))), sorted(set(re.findall(r"%n", b))) if "%n" in a else [], key[:70])
 
     def test_a_translation_keeps_the_spaces_around_it(self):
@@ -200,64 +200,61 @@ class Saving(unittest.TestCase):
 
 class WholeSentences(unittest.TestCase):
     """A message is one sentence with a blank where the changing part goes (`%1` in QML, `%s` in Python), never pieces glued together: a translator cannot move a word
-    between pieces."""
-    @staticmethod
-    def qsTr_calls(text):
-        """(start, end) of every `qsTr(...)` call in QML text, with the `.arg(...)` calls that follow it: parentheses inside quotes do not count."""
-        def close(i):                                    # `i` is just after an opening parenthesis; the index after its closing one
-            depth, quote = 1, None
-            while depth:
-                c = text[i]
-                if quote:
-                    quote = None if c == quote and text[i - 1] != "\\" else quote
-                elif c in "\"'":
-                    quote = c
-                elif c == "(":
-                    depth += 1
-                elif c == ")":
-                    depth -= 1
-                i += 1
-            return i
-        import re
-        for m in re.finditer(r"qsTr\(", text):
-            end = close(m.end())
-            while text.startswith(".arg(", end):
-                end = close(end + 5)
-            yield m.start(), end
+    between pieces. The QML scanner lives in tools/i18n_keys.py, next to the one that finds the keys."""
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        import i18n_keys
+        cls.keys = i18n_keys
 
     def test_no_qml_text_is_glued_to_a_translated_piece(self):
-        """The only thing allowed next to a translated message with a `+` is the separator " \u00b7 " between a way's name and its step count."""
-        import re
         qml = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
         for name in sorted(os.listdir(qml)):
             if name.endswith(".qml"):
                 with open(os.path.join(qml, name), encoding="utf-8") as f:
-                    text = f.read()
-                for start, end in self.qsTr_calls(text):
-                    self.assertFalse(re.match(r"\s*\+", text[end:]), "%s: %s" % (name, text[start:end + 12]))
-                    before = text[:start].rstrip()
-                    if before.endswith("+"):
-                        self.assertTrue(before[:-1].rstrip().endswith('" \\u00b7 "'), "%s: %s" % (name, text[max(0, start - 30):end]))
+                    self.assertEqual(self.keys.glued(f.read()), [], name)
 
     def test_the_glue_guard_sees_the_shapes_it_is_meant_to_catch(self):
-        """The guard above is only worth something if it fails on these."""
-        import re
-        for glued in ('qsTr("(optional)") + hint', 'qsTr("%n game", "", f(x)) + y', 'qsTr("Hi %1").arg(a) + b', 'label + ", " + qsTr("Done")', 'a + qsTr("x")'):
-            calls = list(self.qsTr_calls(glued))
-            self.assertEqual(len(calls), 1, glued)
-            start, end = calls[0]
-            before = glued[:start].rstrip()
-            sees = bool(re.match(r"\s*\+", glued[end:])) or (before.endswith("+") and not before[:-1].rstrip().endswith('" \\u00b7 "'))
-            self.assertTrue(sees, glued)
-        self.assertEqual(len(list(self.qsTr_calls('x + " \\u00b7 " + qsTr("%n step|%n steps", "", n)'))), 1)
+        for glued in ('qsTr("(optional)") + hint', 'qsTr("%n game", "", f(x)) + y', 'qsTr("Hi %1").arg(a) + b', 'label + ", " + qsTr("Done")', 'a + qsTr("x")',
+                      'qsTr("a\\\\") + b'):
+            self.assertTrue(self.keys.glued(glued), glued)
+        for fine in ('qsTr("Hi %1").arg(a)', 'x + " \\u00b7 " + qsTr("%n step|%n steps", "", n)', 'x + " \u00b7 " + qsTr("%n step|%n steps", "", n)'):
+            self.assertEqual(self.keys.glued(fine), [], fine)
+
+    def test_an_unclosed_call_is_an_error_that_says_so(self):
+        with self.assertRaisesRegex(ValueError, "unclosed"):
+            self.keys.glued('qsTr("a"')
 
     def test_no_portuguese_message_is_a_fragment(self):
-        """A piece starts with punctuation or with a space and a small letter, or ends with punctuation that opens something or with a word and a space."""
-        import re
+        """A piece starts with punctuation, or with a space and a small letter, or ends with punctuation that opens something, or with a word and a space."""
         from qtui.i18n_pt_br import PT_BR
-        starts = lambda k: k.lstrip(" ")[:1] in ",.:;)" or re.match(r" [a-z]", k)
-        ends = lambda k: k.rstrip(" ")[-1:] in ",:(" or re.search(r"\w $", k)
-        self.assertEqual([k[:60] for k in PT_BR if starts(k) or ends(k)], [])
+        piece = re.compile(r"^\s*[,.:;)]|^ [a-z]|[,:(]\s*$|\w $")
+        self.assertEqual([k[:60] for k in PT_BR if piece.search(k)], [])
+
+
+class Blanks(unittest.TestCase):
+    """The blanks of a message and of its translation: a numbered blank (%1, %2) may move, the others (%s, %d, %%) are filled in order."""
+    @staticmethod
+    def same_blanks(english, translation):
+        numbered = lambda t: sorted(re.findall(r"%\d", t))
+        ordered = lambda t: re.findall(r"%%|%[sd]", t)
+        return numbered(english) == numbered(translation) and ordered(english) == ordered(translation)
+
+    def test_numbered_blanks_may_be_reordered_and_the_others_may_not(self):
+        self.assertTrue(self.same_blanks("%1, %2", "%2, %1"))
+        self.assertTrue(self.same_blanks("%1 (%2 to %3)", "%3 a %2 (%1)"))
+        self.assertTrue(self.same_blanks("%s and %s", "%s e %s"))
+        self.assertFalse(self.same_blanks("%1", "%1 %2"))
+        self.assertFalse(self.same_blanks("%1, %2", "%1"))
+        self.assertFalse(self.same_blanks("%s and %d", "%d e %s"))
+
+
+@need_qt
+class ThemeLabels(unittest.TestCase):
+    def test_every_theme_has_a_label_to_translate(self):
+        from engine import steamcase as sc
+        from qtui import reasons
+        self.assertEqual(set(reasons.THEME_LABELS), {"classic", *sc.THEMES})
 
 
 @need_qt

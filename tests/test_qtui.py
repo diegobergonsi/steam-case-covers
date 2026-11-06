@@ -1864,21 +1864,22 @@ class Components(QtCase):
                '  model: [{"key": "colour", "label": "Colour", "value": "Teal", "step": 2}, {"key": "hundred", "label": "100% games", "value": "Gold case, rosette and ribbon", "step": 3},'
                ' {"key": "art", "label": "Art", "value": "Your own art, blurry art skipped", "step": 2}] }')
 
-    def chip_name(self, language):
+    def spoken(self, language, source, item, text, size=(420, 240)):
+        """What a screen reader says (its name or its description) about an item of a small window, with the language set before the window is made."""
         from PySide6.QtGui import QAccessible
         from qtui import i18n
         self.addCleanup(i18n.set_language, i18n.language())
         i18n.set_language(language)
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
-        self.load(self.SUMMARY.replace("@W@", "560"), 600, 200)
-        return QAccessible.queryAccessibleInterface(self.item("sum_chip_colour")).text(QAccessible.Text.Name)
+        self.load(source, *size)
+        return QAccessible.queryAccessibleInterface(self.item(item)).text(text)
 
-    def test_a_choice_chip_is_read_out_as_label_value_and_change(self):
-        self.assertEqual(self.chip_name("en"), "Colour: Teal. Change")
-
-    def test_a_choice_chip_is_read_out_as_label_value_and_change_in_portuguese(self):
-        self.assertEqual(self.chip_name("pt-BR"), "Colour: Teal. Mudar")
+    def test_a_choice_chip_is_read_out_as_label_value_and_change_in_both_languages(self):
+        from PySide6.QtGui import QAccessible
+        for language, said in (("en", "Colour: Teal. Change"), ("pt-BR", "Colour: Teal. Mudar")):
+            with self.subTest(language):
+                self.assertEqual(self.spoken(language, self.SUMMARY.replace("@W@", "560"), "sum_chip_colour", QAccessible.Text.Name, (600, 200)), said)
 
     def test_a_choice_summary_names_each_choice_and_leads_back_to_its_step(self):
         self.load(self.SUMMARY.replace("@W@", "560"), 600, 200)
@@ -2124,21 +2125,11 @@ class Components(QtCase):
         seq.commit()
         self.app.processEvents()
 
-    def slider_description(self, language):
+    def test_a_slider_says_its_value_and_its_range_in_both_languages(self):
         from PySide6.QtGui import QAccessible
-        from qtui import i18n
-        self.addCleanup(i18n.set_language, i18n.language())
-        i18n.set_language(language)
-        QAccessible.setActive(True)
-        self.addCleanup(QAccessible.setActive, False)
-        self.load(self.SLIDER)
-        return QAccessible.queryAccessibleInterface(self.item("s")).text(QAccessible.Text.Description)
-
-    def test_a_slider_says_its_value_and_its_range(self):
-        self.assertEqual(self.slider_description("en"), "0 (0 to 359)")
-
-    def test_a_slider_says_its_range_in_portuguese_too(self):
-        self.assertEqual(self.slider_description("pt-BR"), "0 (0 a 359)")
+        for language, said in (("en", "0 (0 to 359)"), ("pt-BR", "0 (0 a 359)")):
+            with self.subTest(language):
+                self.assertEqual(self.spoken(language, self.SLIDER, "s", QAccessible.Text.Description), said)
 
     def test_a_swipe_that_starts_on_the_track_with_a_finger_does_not_move_the_slider(self):
         """On the Steam Deck a swipe over a slider must scroll the page, not change the colour; a tap on the track still jumps, the handle still drags."""

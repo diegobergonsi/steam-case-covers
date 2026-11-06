@@ -420,6 +420,7 @@ PT_BR = {
     "Case colour": "Cor da case",
     "Colourfulness": "Intensidade da cor",
     "Brightness": "Brilho",
+    "%1 (%2 to %3)": "%1 (%2 a %3)",                                   # what a screen reader says about a slider: its value, then its range
     "Use my own custom art where I have it": "Usar a minha própria arte onde eu tiver",
     "Skip blurry covers": "Pular capas borradas",
     "Next: 100% games →": "Próximo: Jogos com 100% →",
@@ -442,10 +443,10 @@ PT_BR = {
     "Make covers": "Criar capas",
     "Steam keeps showing your current art until you add the new covers in step 5.": "A Steam continua mostrando a sua arte atual até você adicionar as capas novas no passo 5.",
     "Replace them": "Substituí-las",
+    # what a screen reader says about a step: its name, then its state (the blanks may move)
     "%1, locked": "%1, bloqueado",
     "%1, done": "%1, concluído",
-    "%1, %2": "%1, %2",
-    "%1 (%2 to %3)": "%1 (%2 a %3)",
+    "%1, %2": "%1, %2",                                                 # a step on Home: its name, then its state
     "Put every game in a physical case": "Coloque cada jogo em uma case física",
     "Coming soon": "Em breve",
     "This screen is built in a later plan.": "Esta tela será feita em um plano futuro.",
