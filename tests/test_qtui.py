@@ -4849,12 +4849,12 @@ class HomeScreen(AddWindow):
         from PySide6.QtCore import QPointF
         self.open_home()
         self.item("home_card_manual").setProperty("title", "Pick games, choose their cases, and keep every group with its own case " * 2)
-        self.app.processEvents()
-        a, b = self.item("home_card_natural"), self.item("home_card_manual")
+        a, b, title = self.item("home_card_natural"), self.item("home_card_manual"), self.item("home_card_manual_title")
+        bottom = lambda it: it.mapToScene(QPointF(0, it.height())).y()
+        self.wait_for(lambda: bottom(title) <= bottom(b) and a.height() == b.height())          # the layout settles over a few passes, slower on Windows
         self.assertEqual(a.height(), b.height())
-        title = self.item("home_card_manual_title")
         self.assertGreater(title.property("lineCount"), 1)
-        self.assertLessEqual(title.mapToScene(QPointF(0, title.height())).y(), b.mapToScene(QPointF(0, b.height())).y())
+        self.assertLessEqual(bottom(title), bottom(b))
 
     def test_the_step_count_sits_at_the_right_of_the_title(self):
         from PySide6.QtCore import QPointF
@@ -4880,9 +4880,9 @@ class HomeScreen(AddWindow):
         self.open_home()
         card, tag = self.item("home_card_natural"), self.item("home_card_natural_tag")
         card.setProperty("tag", "Best for most people, whatever the size of the font or the length of the translation")
-        self.app.processEvents()
-        self.assertGreater(tag.property("lineCount"), 1)
         right = lambda it: it.mapToScene(QPointF(it.width(), 0)).x()
+        self.wait_for(lambda: tag.property("lineCount") > 1 and right(tag) <= right(card))      # the layout settles over a few passes
+        self.assertGreater(tag.property("lineCount"), 1)
         self.assertLessEqual(right(tag), right(card))
 
     def test_stacked_cards_are_only_as_tall_as_their_own_content(self):
