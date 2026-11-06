@@ -1943,6 +1943,7 @@ class Components(QtCase):
         self.assertEqual(toast.property("shownMs"), 80 + 5 * 50)                   # 50 ms for each character
         self.root.setProperty("msg", "x" * 400)
         self.assertEqual(toast.property("shownMs"), 12000)                          # never more than Theme.toastMaxMs
+        self.assertEqual(toast.property("timerInterval"), 12000)                    # and the timer really uses it
 
     def test_a_second_toast_replaces_the_first_and_starts_the_time_again(self):
         self.load(self.TOAST.replace("@R@", "true"), 420, 160)
@@ -4736,8 +4737,10 @@ class AddScreen(AddWindow):
         self.click("add_undo")
         self.wait_for(lambda: self.item("apply_dialog").isVisible())
         self.assertEqual(self.text("apply_dlg_title"), "Restore previous artwork")
+        before = (list(self.log), self.ap.status, self.ap.statusKind, self.ap.applied)
         self.click("apply_dlg_cancel")
         self.assertTrue(self.item("add_section_done").property("visible"))                              # cancelling changes nothing
+        self.assertEqual((list(self.log), self.ap.status, self.ap.statusKind, self.ap.applied), before)
         self.click("add_undo")
         self.wait_for(lambda: self.item("apply_dialog").isVisible())
         self.click("apply_dlg_confirm")
@@ -4746,6 +4749,50 @@ class AddScreen(AddWindow):
         self.assertEqual((self.text("add_main"), self.text("add_status")), ("Apply to Steam", "2 covers are ready to add."))      # the sentence is not repeated here
         self.assertTrue(self.item("toast").property("visible"))
         self.assertTrue(self.text("toast_text").startswith("Restored your previous artwork"))
+
+    def test_the_button_says_working_not_applying_while_an_undo_runs(self):
+        import threading
+        self.apply_now()
+        self.backups = ["b1"]
+        open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore)
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        real = self.sc.restore_backup
+        self.sc.restore_backup = lambda *a, **k: gate.wait(5) and real(*a, **k)
+        self.addCleanup(lambda: setattr(self.sc, "restore_backup", real))
+        self.click("add_undo")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: self.ap.busy)
+        self.assertEqual(self.text("add_main"), "Working\u2026")
+        gate.set()
+        self.wait_for(lambda: not self.ap.busy)
+
+    def test_after_an_undo_the_keyboard_lands_on_the_main_button(self):
+        self.apply_now()
+        self.backups = ["b1"]
+        open(os.path.join(self.grid, "123p.png"), "wb").close()
+        self.ap.refreshUndo()
+        self.wait_for(lambda: self.ap.canRestore)
+        self.root.requestActivate()
+        self.click("add_undo")
+        self.wait_for(lambda: self.item("apply_dialog").isVisible())
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: not self.ap.applied and not self.ap.busy)
+        self.wait_for(lambda: self.root.property("activeFocusItem") is not None and self.root.property("activeFocusItem").property("objectName") == "add_main")
+        self.assertEqual(self.root.property("activeFocusItem").property("objectName"), "add_main")
+
+    def test_the_done_card_follows_a_change_of_language_on_screen(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        self.apply_now()
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.assertEqual(self.text("add_done_title"), "2 capas adicionadas a \u201cAlice\u201d.")
+        self.assertEqual(self.text("add_done_line"), "A Steam est\u00e1 iniciando.")
+        self.assertEqual(self.item("add_section_done").property("heading"), "Pronto")
 
     def test_nothing_to_change_has_a_card_without_undo(self):
         self.start_window()
@@ -4763,6 +4810,7 @@ class AddScreen(AddWindow):
         self.assertEqual(self.text("add_done_title"), "Nothing to change.")
         self.assertEqual(self.text("add_done_line"), "All 2 covers were already in the Steam account \u201cAlice\u201d. Steam is starting.")
         self.assertFalse(self.item("add_undo").property("visible"))                                      # nothing changed: nothing to undo here
+        self.assertFalse(self.item("add_thumbs").property("visible"))                                    # no pictures under "nothing was added"
 
     def test_the_done_card_stays_inside_the_window_with_a_long_name_and_a_long_path(self):
         from PySide6.QtCore import QPointF
@@ -4789,6 +4837,7 @@ class AddScreen(AddWindow):
         for n in ("add_done_title", "add_done_line", "add_done_details"):                       # the words themselves, not only their box
             text = self.item(n)
             self.assertLessEqual(text.property("contentWidth"), text.width() + 0.5, n)
+        self.assertLessEqual(right(card), self.root.property("width"))                          # the card itself is inside the window
         self.assertGreaterEqual(self.item("add_undo").height(), 44)
 
     def test_declining_the_question_changes_nothing(self):
@@ -5154,6 +5203,15 @@ class HomeScreen(AddWindow):
         self.ap.undoChanged.emit()
         self.app.processEvents()
         self.assertFalse(self.item("home_section_undo").property("visible"))
+
+    def test_the_undo_card_does_not_vanish_while_covers_are_made(self):
+        self.open_home()
+        self.undo_ready()
+        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.shell.make._set_state(running=True)                        # nothing can be restored meanwhile, but the card stays
+        self.app.processEvents()
+        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.shell.make._set_state(running=False)
 
     def test_the_line_in_the_undo_card_is_only_for_progress_and_errors(self):
         self.open_home()
@@ -6386,6 +6444,41 @@ class ApplyState(QtCase, FakeStore):
         self.go()
         self.assertEqual(len(said), 2)                                  # an error is a message in a box, not a toast
 
+    def test_a_failed_undo_keeps_the_result_so_the_card_and_its_button_stay(self):
+        self.covers_ready()
+        self.go()
+        self.undo_ready(("b1",))
+        self.backups = []                                               # the worker finds no backup: the undo fails
+        self.ask(self.ap.restore)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual((self.ap.statusKind, self.ap.hasResult, self.ap.applied), ("error", True, True))
+
+    def test_choosing_another_account_clears_the_result_of_the_first(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.ap.refresh()
+        self.covers_ready()
+        self.go()
+        self.assertTrue(self.ap.hasResult)
+        self.ap.chooseAccount("222")
+        self.assertFalse(self.ap.hasResult)                             # the card said Alice; its Undo would have acted on Bob
+
+    def test_the_mode_names_the_job_that_runs(self):
+        import threading
+        self.covers_ready()
+        self.assertEqual(self.ap.mode, "apply")
+        self.undo_ready(("b1",))
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        real = self.sc.restore_backup
+        self.sc.restore_backup = lambda *a, **k: gate.wait(5) and real(*a, **k)
+        self.addCleanup(lambda: setattr(self.sc, "restore_backup", real))
+        self.ask(self.ap.restore)
+        self.ap.confirm()
+        self.assertEqual((self.ap.busy, self.ap.mode), (True, "restore"))
+        gate.set()
+        self.wait_for(lambda: not self.ap.busy)
+
     def test_the_result_follows_a_change_of_language(self):
         from qtui import i18n
         self.addCleanup(i18n.set_language, "en")
@@ -6395,7 +6488,7 @@ class ApplyState(QtCase, FakeStore):
         i18n.set_language("pt-BR")
         r = self.ap.result                                              # read again: built from the facts, not saved as text
         self.assertEqual((r["title"], r["line"]), ("2 capas adicionadas a \u201cAlice\u201d.", "A Steam est\u00e1 iniciando."))
-        self.assertEqual(r["details"], "0 substitu\u00edram arte antiga, 0 j\u00e1 estavam em dia. Backup salvo em: /b")
+        self.assertEqual(r["details"], "Arte antiga substitu\u00edda: 0. J\u00e1 em dia: 0. Backup salvo em: /b")
 
     def test_art_set_by_hand_is_said_to_be_in_the_backup(self):
         self.covers_ready()
@@ -6615,7 +6708,12 @@ class ApplyState(QtCase, FakeStore):
         self.undo_ready()
         self.ap.reset()
         self.wait_for(lambda: not self.ap.busy)
+        said = []
+        self.shell.toast.connect(said.append)
+        self.ap.reset()
+        self.wait_for(lambda: not self.ap.busy)
         self.assertEqual(self.ap.status, "No custom covers were found in \u201cAlice\u201d. Nothing to reset.")
+        self.assertEqual((self.ap.statusKind, said), ("ok", ["No custom covers were found in \u201cAlice\u201d. Nothing to reset."]))      # a result: a toast, like the others
         self.assertEqual(self.log, [])
 
     def test_declining_the_reset_question_changes_nothing_and_frees_the_screen(self):

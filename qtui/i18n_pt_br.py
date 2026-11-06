@@ -395,7 +395,7 @@ PT_BR = {
     "Start Steam to see them.": "Abra a Steam para ver as capas.",
     "Steam is starting.": "A Steam está iniciando.",
     "Could not start Steam (%s). Please open it yourself.": "Não foi possível iniciar a Steam (%s). Abra-a você mesmo.",
-    "%d replaced older art, %d already up to date.": "%d substituíram arte antiga, %d já estavam em dia.",
+    "%d replaced older art, %d already up to date.": "Arte antiga substituída: %d. Já em dia: %d.",
     "Backup saved in: %s": "Backup salvo em: %s",
     "Nothing to change.": "Nada a mudar.",
     "The cover was already in the Steam account \u201c%s\u201d.|All %n covers were already in the Steam account \u201c%s\u201d.": "A capa já estava na conta \u201c%s\u201d da Steam.|Todas as %n capas já estavam na conta \u201c%s\u201d da Steam.",

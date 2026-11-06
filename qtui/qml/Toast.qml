@@ -12,6 +12,7 @@ Rectangle {
     property int maxWidth: Theme.tipMaxWidth             // the parent narrows it on a small window
     readonly property int shownMs: Math.min(Theme.toastMaxMs, showMs + message.length * Theme.toastCharMs)       // longer for a longer message
     readonly property bool active: timer.running
+    property alias timerInterval: timer.interval          // what the timer really waits (the tests read it)
     function show(text) {
         message = text
         opacity = 1

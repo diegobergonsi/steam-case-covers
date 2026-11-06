@@ -118,7 +118,7 @@ ScreenFrame {
     Section {
         objectName: "home_section_undo"
         // only when there is something to undo; with two or more accounts always, because the account is chosen in this card
-        visible: screen.apply.canChoose || screen.apply.canRestore || screen.apply.canReset || screen.apply.busy || screen.apply.asking
+        visible: screen.apply.canChoose || screen.apply.canRestore || screen.apply.canReset || screen.apply.busy || screen.apply.asking || shell.make.running
         heading: qsTr("Undo")
         StatusLine {
             objectName: "home_note"

@@ -68,6 +68,7 @@ ScreenFrame {
     Section {                                         // what an Apply that worked did: what was added, what to do next, and Undo in place
         objectName: "add_section_done"
         visible: screen.apply.hasResult
+        onVisibleChanged: if (!visible) Qt.callLater(function() { mainButton.forceActiveFocus() })      // Undo is gone: the keyboard goes to the main button
         heading: qsTr("Done")
         Text {
             objectName: "add_done_title"
@@ -82,7 +83,7 @@ ScreenFrame {
             objectName: "add_thumbs"
             prefix: "add_thumb_"
             width: parent.width
-            model: screen.make.thumbs
+            model: screen.apply.result.kind === "done" ? screen.make.thumbs : []      // nothing was added otherwise
         }
         Text {
             objectName: "add_done_line"
@@ -120,8 +121,9 @@ ScreenFrame {
 
     footer: [
         PrimaryButton {                               // one button for the whole step, so the keyboard focus stays: Apply, then the way home
+            id: mainButton
             objectName: "add_main"
-            text: screen.apply.busy ? qsTr("Applying\u2026") : screen.apply.applied ? qsTr("Go to Home \u2192") : qsTr("Apply to Steam")
+            text: screen.apply.busy ? (screen.apply.mode === "apply" ? qsTr("Applying\u2026") : qsTr("Working\u2026")) : screen.apply.applied ? qsTr("Go to Home \u2192") : qsTr("Apply to Steam")
             enabled: screen.apply.applied || screen.apply.canApply
             onClicked: screen.apply.applied ? shell.go(0) : screen.apply.apply()
         }

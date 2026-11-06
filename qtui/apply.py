@@ -209,6 +209,7 @@ class Apply(QObject):
         self._who = self._raw.get(key, key)
         self.accountChanged.emit()
         self._set_status("", "wait")
+        self._set_result(None)                          # the card named the other account, and its Undo would act on this one
 
     # ----- the switch -----
     def _get_restart(self):
@@ -246,6 +247,11 @@ class Apply(QObject):
     @Property(str, notify=statusChanged)
     def statusKind(self):
         return self._kind
+
+    @Property(str, notify=canApplyChanged)
+    def mode(self):
+        """What the last job was or is: "apply", "restore" or "reset" (the button says what it does while it runs)."""
+        return self._mode
 
     @Property("QVariantMap", notify=resultChanged)
     def result(self):
@@ -427,8 +433,10 @@ class Apply(QObject):
         names, keep, stay, going = self._by_groups(names)
         if not names and not other:
             self._busy = False
-            self._set_status(tr("No custom covers were found in \u201c%s\u201d. Nothing to reset.") % who if not keep else
-                             tr("Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it.") % who, "wait")
+            text = (tr("No custom covers were found in \u201c%s\u201d. Nothing to reset.") % who if not keep else
+                    tr("Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it.") % who)
+            self._set_status(text, "ok")
+            self._shell.toast.emit(text)                        # a result, so a toast like the others
             self.canApplyChanged.emit()
             self.undoChanged.emit()
             return
@@ -499,7 +507,8 @@ class Apply(QObject):
                "names": (names or {}).get("names"), "everything": True if alternate else (names or {}).get("everything", False),
                "keep": (names or {}).get("keep") or []}
         self._job = job
-        self._set_result(None)
+        if mode == "apply":
+            self._set_result(None)                      # a restore or reset that fails must leave the card, and its Undo, where they are
         threading.Thread(target=self._work, args=(self._req, job), daemon=True).start()
 
     def _work(self, req, job):
@@ -598,6 +607,7 @@ class Apply(QObject):
             if self._mode == "apply":
                 self._set_result(self._job.get("result"))     # the card says it
             else:
+                self._set_result(None)                        # what was added is gone (or taken back)
                 self._shell.toast.emit(text)                  # a restore or a reset says it in a toast
             if self._mode == "reset":
                 self._forget_reset_groups()
