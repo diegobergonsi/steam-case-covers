@@ -211,7 +211,7 @@ Bom saber:
 - Várias contas da Steam num computador: você escolhe qual recebe as capas
 
 **O programa em si**
-- Funciona com o teclado, ajusta-se a telas de alta resolução e cabe em telas pequenas como a do Steam Deck
+- Funciona com o teclado, ajusta-se a telas de alta resolução e cabe em telas pequenas como a do Steam Deck; botões e controles têm tamanho de dedo (44 px) para telas de toque, e as cores seguem a regra de contraste recomendada (WCAG 2.2 nível AA)
 - Inglês e português do Brasil: o programa começa no idioma do seu sistema, e duas bandeirinhas embaixo do nome trocam o idioma quando você quiser (a linha de comando continua em inglês)
 - Um botão "Verificar atualizações", só quando você clica: ele pergunta ao GitHub qual é a versão mais nova e nunca baixa nem instala nada
 - Software livre: sem anúncios, sem conta, sem telemetria

@@ -211,7 +211,7 @@ Good to know:
 - Several Steam accounts on one computer: you choose which one gets the covers
 
 **The app itself**
-- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's
+- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's; buttons and controls are finger-sized (44 px) for a touchscreen, and the colours follow the recommended contrast rule (WCAG 2.2 level AA)
 - English and Brazilian Portuguese: the app starts in your system's language, and two small flags under the name switch it at any time (the command line stays in English; this README is also in [Brazilian Portuguese](README.pt-BR.md))
 - A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 - Free software: no ads, no account, no telemetry
