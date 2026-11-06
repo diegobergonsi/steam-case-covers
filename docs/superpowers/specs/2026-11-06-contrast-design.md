@@ -3,13 +3,13 @@
 Date: 2026-11-06. Origin: item 5 of 6 of the UI work plan from the Impeccable critique (score 27/40), and a short interview with the owner who has strong vision problems and said not to take their eyes as the measure: apply the recommended guideline. A mockup of three options helped them decide. Items 1 to 4 are merged (#47 to #51).
 
 ## Problem
-`docs/ui-guide.md` promises that text has 4.5 to 1 contrast and outlines 3 to 1, but it measures only against the card colour. Three colours sit on the lighter navy fill ("raised": choice buttons, text fields, the open step in the menu, the help bubble, the empty progress bar) and miss the rule there:
+`docs/ui-guide.md` promises that text has 4.5 to 1 contrast and outlines 3 to 1, but it measures only against the card colour. Three colours sit on the lighter navy fill ("raised": the open step in the menu, the help bubble, a row under the mouse, the main button when switched off) and miss the rule there:
 
 | Colour | Used for | On the raised fill now | Rule |
 |---|---|---|---|
-| Faint grey `#7d92a8` | locked steps, placeholders, small notes | 3.95 | 4.5 |
+| Faint grey `#7d92a8` | locked steps, small notes | 3.95 | 4.5 |
 | Done green `#5ba32b` | finished step, the "done" line | 4.05 | 4.5 |
-| Control edge `#5d7a96` | outlines of fields and cards, the off switch, the scroll bar | 2.83 | 3 |
+| Control edge `#5d7a96` | outlines of the help bubble and of tick boxes, the off switch, the scroll bar | 2.83 | 3 |
 
 ## Goal
 Every colour meets the rule on every fill it is really drawn on, and a test says so for all of them, not only for the card.

@@ -22,13 +22,13 @@ A left navigation and one screen on the right. The navigation lists Home, then a
 
 ## Colour
 
-Contrast is measured on every fill a colour is drawn on (the window, the menu panel, the card, the raised fill, and the raised fill under the mouse), not only on the card; the numbers in the table below are on the card. Body text needs 4.5:1, a control's outline needs 3:1 (WCAG 2.2 level AA); a switched-off control (shown at 60%) is left out, as the rule leaves it out. Colour never carries meaning alone: a locked or finished step also changes its icon.
+Contrast is measured on every fill a colour is drawn on (the window, the menu panel, the card, the raised fill, and the raised fill under the mouse), not only on the card; the numbers in the table below are on the card (the accent: on the window). Body text needs 4.5:1, a control's outline needs 3:1 (WCAG 2.2 level AA); a switched-off control (shown at 60%) is left out, as the rule leaves it out. Colour never carries meaning alone: a locked or finished step also changes its icon.
 
 | Token | Value | Use |
 |---|---|---|
 | Background | `#11151c` | window |
 | Card | `#182433` | sections |
-| Raised | `#22344a` | chips, fields |
+| Raised | `#22344a` | chips, the help bubble, the current step in the menu |
 | Accent | `#66c0f4` | primary button, selection (9.1:1 on the background) |
 | Text | `#e6edf3` | 13.3:1 |
 | Muted | `#93a7bb` | help text, 6.3:1 |

@@ -3603,15 +3603,28 @@ class Tokens(unittest.TestCase):
     def test_the_colours_are_the_guides(self):
         self.assertEqual(self.theme(), self.GUIDE)
 
-    def fills(self):
-        """The fills a colour is drawn on. The menu panel and the choice button under the mouse are made from other colours the way Qt's `darker` and `lighter` do it."""
+    @staticmethod
+    def shift(hex_colour, factor):
+        """Qt's `lighter` (factor above 1) and `darker` (1 / factor) on a #rrggbb colour: the brightness is scaled, and what goes past the top is taken off the saturation."""
         import colorsys
-        t = self.theme()
+        h, s, v = colorsys.rgb_to_hsv(*[int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)])
+        v *= factor
+        if v > 1:
+            s, v = max(0.0, s - (v - 1)), 1.0
+        return "#%02x%02x%02x" % tuple(round(x * 255) for x in colorsys.hsv_to_rgb(h, s, v))
 
-        def shift(hex_colour, factor):
-            h, s, v = colorsys.rgb_to_hsv(*[int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)])
-            return "#%02x%02x%02x" % tuple(round(x * 255) for x in colorsys.hsv_to_rgb(h, s, min(1, v * factor)))
-        return {"bg": t["bg"], "navBg": shift(t["bg"], 1 / 1.3), "card": t["card"], "raised": t["raised"], "raisedHover": shift(t["raised"], 1.15)}
+    def fills(self):
+        """The fills a colour is drawn on. The menu panel and the buttons under the mouse are made from other colours the way Qt's `darker` and `lighter` do it."""
+        t = self.theme()
+        return {"bg": t["bg"], "navBg": self.shift(t["bg"], 1 / 1.3), "card": t["card"], "raised": t["raised"], "raisedHover": self.shift(t["raised"], 1.15),
+                "accent": t["accent"], "accentHover": self.shift(t["accent"], 1.15), "done": t["done"]}
+
+    @need_qt
+    def test_the_test_makes_the_same_colours_as_qt(self):
+        from PySide6.QtGui import QColor
+        for colour, factor in ((self.theme()["bg"], 1 / 1.3), (self.theme()["raised"], 1.15), (self.theme()["accent"], 1.15)):
+            qt = QColor(colour).lighter(round(factor * 100)) if factor > 1 else QColor(colour).darker(round(100 / factor))
+            self.assertEqual(self.shift(colour, factor), qt.name(), (colour, factor))
 
     def test_every_colour_meets_the_rule_on_every_fill_it_is_drawn_on(self):
         """WCAG 2.2 AA: text 4.5 to 1, outlines 3 to 1. A switched-off control (60%) is left out, as the rule leaves it out."""
@@ -3623,9 +3636,9 @@ class Tokens(unittest.TestCase):
         for fg, bg, need in pairs:
             with self.subTest("%s on %s" % (fg, bg)):
                 self.assertGreaterEqual(contrast(t[fg], fills[bg]), need)
-        for bg in ("accent", "done"):
+        for bg in ("accent", "accentHover", "done"):
             with self.subTest("accentInk on " + bg):
-                self.assertGreaterEqual(contrast(t["accentInk"], t[bg]), 4.5)
+                self.assertGreaterEqual(contrast(t["accentInk"], fills[bg]), 4.5)
 
     def doc(self, *parts):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", *parts)) as f:
@@ -3641,6 +3654,8 @@ class Tokens(unittest.TestCase):
                  "sky-blue": "accent", "ink-on-blue": "accentInk", "done-green": "done", "caution-amber": "warning", "error-coral": "error", "shadow": "shadow"}
         listed = dict(re.findall(r'^  ([\w-]+): "(#[0-9a-f]{6})"$', design.split("typography:")[0], re.M))
         self.assertEqual(listed, {k: t[v] for k, v in names.items()})
+        for text, name in ((design, "DESIGN.md"), (guide, "ui-guide.md")):                 # a colour written in the prose is one of these too
+            self.assertLessEqual(set(re.findall(r"#[0-9a-f]{6}\b", text)), set(t.values()), name)
 
     def test_the_ratios_in_the_guide_are_true(self):
         import re
@@ -3648,14 +3663,14 @@ class Tokens(unittest.TestCase):
         rows = {"Accent": ("accent", "bg"), "Text": ("text", "card"), "Muted": ("muted", "card"), "Faint": ("faint", "card"), "Control edge": ("edge", "card"),
                 "Warning": ("warning", "card"), "Error": ("error", "card")}
         for label, (fg, bg) in rows.items():
-            row = re.search(r"^\| %s \|.*$" % label, guide, re.M).group(0)
-            said = re.search(r"(\d+\.\d):1", row).group(1)
-            self.assertEqual(said, "%.1f" % contrast(t[fg], fills[bg]), label)
+            row = re.search(r"^\| %s \|.*$" % label, guide, re.M)
+            self.assertIsNotNone(row, "the colour table has no row for " + label)
+            said = re.search(r"(\d+\.\d):1", row.group(0))
+            self.assertIsNotNone(said, "the row of %s has no ratio" % label)
+            self.assertEqual(said.group(1), "%.1f" % contrast(t[fg], fills[bg]), label)
 
     def test_the_guide_names_the_steps_like_the_window(self):
-        with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
-            text = f.read()
-        self.assertIn("1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam", text)
+        self.assertIn("1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam", self.doc("docs", "ui-guide.md"))
         self.assertNotIn("Extras", text.replace("Extras became", ""))
 
     def qml_files(self):

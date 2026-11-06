@@ -96,7 +96,7 @@ A Steam-night palette: a blue-black ground, navy cards, one sky-blue action colo
 ### Neutral
 - **Night Ground** (#11151c): window background (the navigation is this colour, a little darker).
 - **Card Navy** (#182433): card surface.
-- **Card Raised** (#22344a): chips, fields, the current step in the navigation, the empty progress track.
+- **Card Raised** (#22344a): chips, the help bubble, the current step in the navigation, the empty progress track.
 - **Control Edge** (#637f9a): outlines of controls and the off switch.
 - **Text** (#e6edf3): headings, labels, steps you can open.
 - **Text Muted** (#93a7bb): instructions and secondary copy.
