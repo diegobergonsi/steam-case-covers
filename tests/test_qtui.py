@@ -5119,15 +5119,49 @@ class HomeScreen(AddWindow):
         self.click("home_row_make")                                     # locked: nothing happens
         self.assertEqual(self.shell.current, 0)
 
-    def test_the_undo_section_has_its_buttons_greyed_until_there_is_something_to_undo(self):
+    def test_the_undo_card_is_hidden_until_there_is_something_to_undo(self):
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
-        self.assertTrue(self.text("home_hint").startswith("Nothing to undo yet"))
+        self.assertFalse(self.item("home_section_undo").property("visible"))                 # one account, nothing to undo: nothing to show
         self.undo_ready()
+        self.assertTrue(self.item("home_section_undo").property("visible"))
         self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [True, True])
         self.assertEqual(self.text("home_hint"), "")
-        self.assertFalse(self.item("home_restore").property("filled"))      # the only filled button is Start / Continue
+        self.assertFalse(self.item("home_restore").property("filled"))      # Home has no filled button
+
+    def test_with_two_accounts_the_undo_card_always_shows_because_the_account_is_chosen_in_it(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
+        self.assertTrue(self.text("home_hint").startswith("Nothing to undo yet"))
+
+    def test_the_undo_card_shows_while_a_job_runs_or_a_question_is_open(self):
+        self.open_home()
+        self.wait_for(lambda: self.ap.undoKnown)
+        self.assertFalse(self.item("home_section_undo").property("visible"))
+        self.ap._busy = True
+        self.ap.canApplyChanged.emit()
+        self.ap.undoChanged.emit()
+        self.app.processEvents()
+        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.ap._busy = False
+        self.ap.canApplyChanged.emit()
+        self.ap.undoChanged.emit()
+        self.app.processEvents()
+        self.assertFalse(self.item("home_section_undo").property("visible"))
+
+    def test_the_line_in_the_undo_card_is_only_for_progress_and_errors(self):
+        self.open_home()
+        self.undo_ready()
+        for kind, shown in (("wait", True), ("error", True), ("ok", False)):
+            self.ap._set_status("Something was said", kind)
+            self.app.processEvents()
+            self.assertEqual(self.item("home_status").property("visible"), shown, kind)
+        self.ap._set_status("", "wait")
+        self.app.processEvents()
+        self.assertFalse(self.item("home_status").property("visible"))
 
     def test_restore_asks_and_then_says_what_was_done(self):
         from PySide6.QtTest import QTest
@@ -5139,7 +5173,9 @@ class HomeScreen(AddWindow):
         self.assertEqual(self.text("apply_dlg_title"), "Restore previous artwork")
         self.click("apply_dlg_confirm")
         self.wait_for(lambda: not self.ap.busy)
-        self.assertTrue(self.text("home_status").startswith("Restored your previous artwork (5 files)."))
+        self.assertTrue(self.item("toast").property("visible"))
+        self.assertTrue(self.text("toast_text").startswith("Restored your previous artwork (5 files)."))
+        self.assertFalse(self.item("home_status").property("visible"))                       # said once, in the toast
         self.assertIn(("restore", "b1"), self.log)
 
     def test_reset_with_art_from_elsewhere_shows_three_buttons(self):
@@ -5154,6 +5190,20 @@ class HomeScreen(AddWindow):
         self.click("apply_dlg_alternate")
         self.wait_for(lambda: not self.ap.busy)
         self.assertEqual(self.log[0], ("reset", None, ["a"], True))
+
+    def test_reset_says_what_was_done_in_a_toast(self):
+        from PySide6.QtTest import QTest
+        self.open_home()
+        self.undo_ready()
+        self.ours = ["a", "b"]
+        self.click("home_reset")
+        self.wait_for(lambda: self.ap.asking)
+        QTest.qWait(60)
+        self.click("apply_dlg_confirm")
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertTrue(self.item("toast").property("visible"))
+        self.assertTrue(self.text("toast_text").startswith("Done. 2 covers removed from the Steam account"))
+        self.assertFalse(self.item("home_status").property("visible"))
 
     def test_the_home_screen_watches_steam_only_while_it_is_shown(self):
         self.open_home()
