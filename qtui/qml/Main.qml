@@ -167,6 +167,17 @@ ApplicationWindow {
         }
     }
 
+    Toast {                                                       // a short message from the shell, above the footer line of the screen
+        id: toast
+        objectName: "toast"
+        x: win.navWidth + Theme.s32 + (win.width - win.navWidth - 2 * Theme.s32 - width) / 2
+        y: win.height - Theme.s32 - Theme.controlHeight - Theme.s16 - height
+    }
+    Connections {
+        target: shell
+        function onToast(text) { toast.show(text) }
+    }
+
     // Two dialogs are never open at once: the window's own (the questions of Apply, the answers of the update check) take turns.
     property Item lastFocus: null                                 // where the keyboard was before a question, for the way back
     onActiveFocusItemChanged: if (activeFocusItem && !String(activeFocusItem.objectName).match(/_dlg_/)) lastFocus = activeFocusItem

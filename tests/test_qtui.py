@@ -1552,6 +1552,14 @@ class Components(QtCase):
         self.assertIsNotNone(got, name)
         return got
 
+    def wait_for(self, condition, seconds=3):
+        import time
+        end = time.time() + seconds
+        while time.time() < end and not condition():
+            self.app.processEvents()
+            time.sleep(0.02)
+        self.app.processEvents()
+
     def mouse(self, kind, x, y):
         from PySide6.QtCore import QPoint, Qt
         from PySide6.QtTest import QTest
@@ -1841,6 +1849,98 @@ class Components(QtCase):
         self.root.setProperty("last", -1)
         self.key("sum_chip_art", Qt.Key_Space)
         self.assertEqual(self.root.property("last"), 2)
+
+    GROUP = ('property int picks: 0\nGroupCard { objectName: "gc"; x: 10; y: 10; width: 200; title: "ps5-cases"; subtitle: "PlayStation 5 \u00b7 3 games"; onPicked: win.picks += 1 }')
+
+    def test_a_group_card_has_the_name_on_top_and_the_case_under_it(self):
+        self.load(self.GROUP, 260, 120)
+        title, sub = self.item("gc_title"), self.item("gc_subtitle")
+        self.assertEqual((title.property("text"), sub.property("text")), ("ps5-cases", "PlayStation 5 \u00b7 3 games"))
+        self.assertTrue(title.property("font").bold())
+        self.assertLess(sub.property("font").pixelSize(), title.property("font").pixelSize())
+        self.assertLessEqual(title.y() + title.height(), sub.y())
+
+    def test_a_group_card_cuts_long_lines_and_is_at_least_44_high(self):
+        self.load(self.GROUP, 260, 120)
+        card = self.item("gc")
+        self.assertGreaterEqual(card.height(), 44)
+        card.setProperty("title", "x" * 40)
+        card.setProperty("subtitle", "Steam case, custom colour \u00b7 124 games in this group")
+        self.app.processEvents()
+        for name in ("gc_title", "gc_subtitle"):
+            line = self.item(name)
+            self.assertTrue(line.property("truncated"), name)
+            self.assertLessEqual(line.x() + line.width(), card.width(), name)
+            self.assertEqual(line.property("lineCount"), 1, name)
+        self.assertGreaterEqual(card.height(), 44)
+
+    def test_a_group_card_is_picked_by_click_enter_and_space_and_not_when_greyed(self):
+        from PySide6.QtCore import QPointF, Qt
+        self.load(self.GROUP, 260, 120)
+        card = self.item("gc")
+        p = card.mapToScene(QPointF(card.width() / 2, card.height() / 2))
+        self.mouse("click", p.x(), p.y())
+        self.key("gc", Qt.Key_Return)
+        self.key("gc", Qt.Key_Space)
+        self.assertEqual(self.root.property("picks"), 3)
+        card.setProperty("enabled", False)
+        self.app.processEvents()
+        self.mouse("click", p.x(), p.y())
+        self.assertEqual(self.root.property("picks"), 3)
+        self.assertEqual(card.property("opacity"), 0.6)
+
+    def test_a_group_card_is_a_radio_button_that_shows_when_it_is_chosen(self):
+        from PySide6.QtGui import QAccessible
+        self.load(self.GROUP, 260, 120)
+        card = self.item("gc")
+        info = QAccessible.queryAccessibleInterface(card)
+        self.assertEqual(info.role(), QAccessible.Role.RadioButton)
+        self.assertIn("ps5-cases", info.text(QAccessible.Text.Name))
+        self.assertIn("PlayStation 5", info.text(QAccessible.Text.Name))
+        self.assertTrue(card.property("activeFocusOnTab"))
+        self.assertFalse(info.state().checked)
+        self.assertEqual(card.property("edgeColor").name(), "#5d7a96")
+        card.setProperty("chosen", True)
+        self.app.processEvents()
+        self.assertTrue(QAccessible.queryAccessibleInterface(card).state().checked)
+        self.assertEqual(card.property("edgeColor").name(), "#66c0f4")
+
+    TOAST = ('property string msg: ""\nonMsgChanged: toast.show(msg)\nBinding { target: Theme; property: "reduce"; value: @R@ }\n'
+             'Toast { id: toast; objectName: "toast"; x: 10; y: 60; showMs: 80 }')
+
+    def test_a_toast_is_hidden_until_shown_then_goes_away_by_itself(self):
+        self.load(self.TOAST.replace("@R@", "true"), 420, 160)
+        toast = self.item("toast")
+        self.assertFalse(toast.property("visible"))
+        self.root.setProperty("msg", "hello")
+        self.assertTrue(toast.property("visible"))
+        self.assertEqual(self.item("toast_text").property("text"), "hello")
+        self.assertEqual(toast.property("opacity"), 1.0)                       # "Reduce effects": no fade
+        self.wait_for(lambda: not toast.property("visible"))
+        self.assertFalse(toast.property("visible"))
+
+    def test_a_second_toast_replaces_the_first_and_starts_the_time_again(self):
+        self.load(self.TOAST.replace("@R@", "true"), 420, 160)
+        self.root.setProperty("msg", "first")
+        self.root.setProperty("msg", "second")
+        self.assertEqual(self.item("toast_text").property("text"), "second")
+        self.assertTrue(self.item("toast").property("active"))
+        self.wait_for(lambda: not self.item("toast").property("active"))
+        self.assertFalse(self.item("toast").property("active"))
+
+    def test_a_toast_fades_in_and_is_announced_to_screen_readers(self):
+        from PySide6.QtGui import QAccessible
+        self.load(self.TOAST.replace("@R@", "false"), 420, 160)
+        self.root.setProperty("msg", "A long message that has to wrap inside the toast, however wide the letters of the font are, and never leave the window at all.")
+        toast = self.item("toast")
+        toast.setProperty("showMs", 3000)                                        # longer than the fade, or it starts to fade out before it is fully there
+        self.root.setProperty("msg", "A long message that has to wrap inside the toast, however wide the letters of the font are, and never leave the window at all. Again.")
+        self.wait_for(lambda: toast.property("opacity") == 1.0)
+        self.assertEqual(toast.property("opacity"), 1.0)
+        info = QAccessible.queryAccessibleInterface(toast)
+        self.assertEqual(info.role(), QAccessible.Role.AlertMessage)
+        self.assertIn("A long message", info.text(QAccessible.Text.Name))
+        self.assertLessEqual(toast.width(), 360)                                  # Theme.tipMaxWidth
 
     def test_a_progress_bar_shows_the_share_and_never_leaves_its_track(self):
         self.load('ProgressBar { objectName: "bar"; x: 10; y: 10; width: 300; value: 0.5 }', 340, 80)
@@ -5038,6 +5138,17 @@ class HomeScreen(AddWindow):
         self.assertLessEqual(title.property("contentWidth"), title.property("width"))
         self.assertLessEqual(title.property("y") + title.property("height"), 68)       # Theme.navFlagsY: where the language flags start
         self.assertFalse(title.property("truncated"))
+
+    def test_the_window_shows_the_toast_the_shell_sends_above_the_footer(self):
+        self.open_home()
+        toast = self.item("toast")
+        self.assertFalse(toast.property("visible"))
+        self.shell.toast.emit("A message from the shell")
+        self.app.processEvents()
+        self.assertTrue(toast.property("visible"))
+        self.assertEqual(self.item("toast_text").property("text"), "A message from the shell")
+        from PySide6.QtCore import QPointF
+        self.assertLessEqual(toast.mapToScene(QPointF(0, toast.height())).y(), self.root.property("height") - 32)       # clear of the footer line
 
     def test_the_navigation_names_the_way_in_use_under_home(self):
         from PySide6.QtCore import QPointF

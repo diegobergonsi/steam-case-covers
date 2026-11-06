@@ -25,6 +25,8 @@ MakeScreen 1.0 MakeScreen.qml
 AddScreen 1.0 AddScreen.qml
 NavLink 1.0 NavLink.qml
 PathCard 1.0 PathCard.qml
+GroupCard 1.0 GroupCard.qml
+Toast 1.0 Toast.qml
 HomeScreen 1.0 HomeScreen.qml
 GamesScreen 1.0 GamesScreen.qml
 CasesScreen 1.0 CasesScreen.qml
