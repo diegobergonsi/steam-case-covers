@@ -10,7 +10,7 @@ from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui import i18n
 from qtui.preview import PreviewProvider
 from qtui.system import CUSTOM_ART_HELP, SAVE_KEY, page_help, start_size

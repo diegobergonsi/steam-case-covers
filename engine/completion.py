@@ -7,7 +7,7 @@ ever leaves read_games_page: no page text, no script content, no token (the page
 """
 import os, re
 
-import safefile
+from engine import safefile
 
 _t = lambda text: text                 # the window replaces this with its own tr(), so a message is in its language; the command line stays English
 

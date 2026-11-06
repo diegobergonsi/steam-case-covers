@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""The store of groups of covers made by hand (groups.py)."""
+"""The store of groups of covers made by hand (engine/groups.py)."""
 import json, os, shutil, sys, tempfile, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import groups as gr
-import steamcase as sc
+from engine import groups as gr
+from engine import steamcase as sc
 
 RED = {"tone": [134, 100, 100]}
 PS5 = {"platform": "ps5"}
@@ -22,7 +22,7 @@ def run_load(folder, limit_mb=800, timeout=15):
             "except (ImportError, ValueError, OSError):\n"
             "    pass                                    # no such limit here (macOS refuses it): the time limit still protects the run\n"
             "sys.path.insert(0, %r)\n"
-            "import groups\n"
+            "from engine import groups\n"
             "print(json.dumps(groups.load(%r)))\n") % (limit_mb, limit_mb, os.path.dirname(os.path.dirname(os.path.abspath(__file__))), folder)
     try:
         r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=timeout)

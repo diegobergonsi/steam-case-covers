@@ -12,7 +12,7 @@ MARKERS = {"tr", "trn", "N_", "_t"}
 
 def python_keys():
     keys = {}
-    for path in sorted(glob.glob(os.path.join(ROOT, "qtui", "*.py")) + [os.path.join(ROOT, "steamcase.py"), os.path.join(ROOT, "completion.py"), os.path.join(ROOT, "caseframe.py")]):
+    for path in sorted(glob.glob(os.path.join(ROOT, "qtui", "*.py")) + glob.glob(os.path.join(ROOT, "engine", "*.py"))):
         tree = ast.parse(open(path, encoding="utf-8").read())
         for n in ast.walk(tree):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in MARKERS and n.args:
@@ -34,7 +34,7 @@ def qml_keys():
 
 
 def help_keys():
-    import steamcase as sc
+    from engine import steamcase as sc
     from qtui import system
     return {t: "help" for t in (sc.FAMILY_HELP, sc.AUTO_ART_HELP, system.CUSTOM_ART_HELP, system.PAGE_HELP_TEMPLATE)}
 

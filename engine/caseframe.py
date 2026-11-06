@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Reads a case the user made: one PNG with a see-through art window. Finds the window (and the tabs of the frame that cover part of it) from the picture itself.
-Nothing here knows about covers or Steam; steamcase.py keeps the chosen case and draws with it."""
+Nothing here knows about covers or Steam; engine/steamcase.py keeps the chosen case and draws with it."""
 import io, os
 
 try:
     from PIL import Image, ImageDraw
-except ImportError:                     # steamcase.py says what is missing when a case is asked for
+except ImportError:                     # engine/steamcase.py says what is missing when a case is asked for
     Image = ImageDraw = None
 
 _t = lambda text: text                  # the window replaces this with its own tr(), so a message is in its language; the command line stays English

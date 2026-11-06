@@ -5,8 +5,8 @@ import json
 import os
 import uuid
 
-import safefile
-import steamcase as sc
+from engine import safefile
+from engine import steamcase as sc
 
 SETTING_KEYS = ("skip_auto_art", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
 DEFAULTS = {"skip_auto_art": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}

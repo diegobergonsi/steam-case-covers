@@ -3,7 +3,7 @@
 """The case colour as the Look screen needs it: names (in words), hints, swatches and the colours of the sliders' tracks. No Qt in here."""
 import math
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui.i18n import N_, tr
 
 ORIGINAL = (0, 100, 100)

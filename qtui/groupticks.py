@@ -4,7 +4,7 @@
 Nothing is ticked at first."""
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-import groups
+from engine import groups
 from qtui.cases import case_label, group_caption
 
 

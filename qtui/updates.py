@@ -7,7 +7,7 @@ import threading
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui.i18n import tr
 
 

@@ -9,7 +9,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
 
-import steamcase as sc
+from engine import steamcase as sc
 
 DEFAULT_SIZE = QSize(200, 300)
 CACHE_SIZE = 16

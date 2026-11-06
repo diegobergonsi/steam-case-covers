@@ -3,7 +3,7 @@
 """Step 2 of the window: the look of the covers. The case colour, the theme and the two art switches, with a preview that follows them."""
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui import tones
 from qtui.i18n import N_, tr
 

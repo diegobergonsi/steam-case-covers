@@ -3,7 +3,7 @@
 """The object the QML window talks to: which step is shown, which steps are open, and the remembered switches."""
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui import i18n, settings, steps, system
 from qtui.apply import Apply
 from qtui.cases import Cases

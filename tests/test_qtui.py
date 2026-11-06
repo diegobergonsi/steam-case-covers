@@ -187,7 +187,7 @@ class Watcher(unittest.TestCase):
 class EngineSelfCheck(unittest.TestCase):
     """What the packaged app's --selftest proves about the engine inside the bundle (the Tk window's selftest did the same)."""
     def setUp(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
 
@@ -197,7 +197,7 @@ class EngineSelfCheck(unittest.TestCase):
 
     def test_each_broken_part_is_named(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui import selfcheck
         cases = (("build_cover", mock.patch.object(sc, "build_cover", side_effect=ValueError("no frame")), "no frame"),
                  ("certificates", mock.patch.object(sc, "_ssl_context", return_value=mock.Mock(cert_store_stats=lambda: {"x509_ca": 0})), "no trusted certificates"),
@@ -211,7 +211,7 @@ class EngineSelfCheck(unittest.TestCase):
 
     def test_the_ribbon_picture_is_checked_too(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui import selfcheck
         with mock.patch.object(sc, "COMPLETION_OVERLAY", os.path.join(tempfile.gettempdir(), "no-such-overlay.png")):
             self.assertTrue(any("completion overlay missing" in p for p in selfcheck.engine_problems()))
@@ -341,7 +341,7 @@ class Tones(unittest.TestCase):
         self.assertEqual(tones.tone_hint(10, 50, 50), "")
 
     def test_nine_swatches_six_colours_then_three_greys(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         sw = tones.swatches()
         self.assertEqual(len(sw), 9)
         self.assertEqual([x["hue"] for x in sw[:6]], list(sc.HUE_SWATCHES))
@@ -359,7 +359,7 @@ class Tones(unittest.TestCase):
         self.assertFalse(tones.same_tone((10, 50, 50), (10, 60, 50)))
 
     def test_slider_tracks(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         lo, hi = tones.track_colors(120, 60, 80, "sat")
         self.assertEqual((lo, hi), (sc.case_color(120, 0, 80), sc.case_color(120, 100, 80)))
         lo, hi = tones.track_colors(120, 60, 80, "val")
@@ -368,7 +368,7 @@ class Tones(unittest.TestCase):
             tones.track_colors(0, 0, 0, "other")
 
     def test_the_slider_track_runs_through_the_real_case_colours(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         g = tones.track_gradient(120, 60, 80, "sat", 5)
         self.assertEqual(g, [sc.case_color(120, v, 80) for v in (0, 25, 50, 75, 100)])
         g = tones.track_gradient(120, 60, 80, "val")
@@ -455,7 +455,7 @@ class Settings(unittest.TestCase):
             self.assertFalse(st.save_settings(st.DEFAULTS, self.path))
 
     def test_the_default_path_sits_next_to_the_covers_folder(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         self.assertEqual(os.path.dirname(st.settings_path()), os.path.dirname(sc.default_covers_dir()))
         self.assertEqual(os.path.basename(st.settings_path()), "settings.json")
 
@@ -617,7 +617,7 @@ class GameListScreen(QtCase):
 
     def test_copy_link_works_from_the_screen(self):
         from unittest import mock
-        with mock.patch("steamcase.library_login_url", return_value="https://example.test/login"):
+        with mock.patch("engine.steamcase.library_login_url", return_value="https://example.test/login"):
             self.click("gamelist_copy")
         self.assertEqual(QGuiApplication.clipboard().text(), "https://example.test/login")
         self.assertTrue(self.item("gamelist_status").property("text").startswith("Link copied."))
@@ -695,7 +695,7 @@ class GameListScreen(QtCase):
         self.assertTrue(tip.property("shown"))
 
     def test_the_info_tip_explains_family_games(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         self.assertEqual(self.item("gamelist_installed_tip").property("text"), sc.FAMILY_HELP)
 
     def test_the_status_colour_follows_its_kind(self):
@@ -840,7 +840,7 @@ class GameListFlow(QtCase):
         with open(os.path.join(downloads, "userdata (1).json"), "w") as f:
             json.dump({"rgOwnedApps": [], "rgOwnedPackages": [1]}, f)   # a logged-out copy saved later must not replace it
         from unittest import mock
-        with mock.patch("steamcase.owned_ids", side_effect=AssertionError("a list is loaded: nothing else may be read")) as read:
+        with mock.patch("engine.steamcase.owned_ids", side_effect=AssertionError("a list is loaded: nothing else may be read")) as read:
             lib.poll(); lib.poll(); lib.poll()
             self.assertEqual(read.call_count, 0)
         self.assertEqual(status(), "Got it: userdata.json (4 items in your library).")
@@ -867,7 +867,7 @@ class LibraryActions(QtCase):
         self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
         self.lib = self.shell.library
         self.url = "https://store.steampowered.com/login/?redir=test"
-        patch = mock.patch("steamcase.library_login_url", return_value=self.url)
+        patch = mock.patch("engine.steamcase.library_login_url", return_value=self.url)
         patch.start()
         self.addCleanup(patch.stop)
 
@@ -1106,15 +1106,15 @@ class LibraryState(QtCase):
         """Antivirus or the browser may hold the file for a moment: the next poll must retry it, as the old window did."""
         from unittest import mock
         self.save("userdata.json", {"rgOwnedApps": [10, 20]})
-        real = __import__("steamcase").owned_ids
+        real = __import__("engine.steamcase", fromlist=["x"]).owned_ids
         calls = []
 
         def flaky(path):
             calls.append(path)
             if len(calls) == 1:
-                raise __import__("steamcase").SteamcaseError("Could not read userdata.json as a game list (PermissionError).")
+                raise __import__("engine.steamcase", fromlist=["x"]).SteamcaseError("Could not read userdata.json as a game list (PermissionError).")
             return real(path)
-        with mock.patch("steamcase.owned_ids", side_effect=flaky):
+        with mock.patch("engine.steamcase.owned_ids", side_effect=flaky):
             self.poll(2)                                     # becomes finished on the second poll: the first read fails
             self.assertFalse(self.lib.ready)
             self.assertEqual(self.lib.statusKind, "error")
@@ -1127,7 +1127,7 @@ class LibraryState(QtCase):
         self.poll(2)
         self.assertEqual(self.lib.statusKind, "error")
         from unittest import mock
-        with mock.patch("steamcase.library_login_url", return_value="https://example.test/x"):
+        with mock.patch("engine.steamcase.library_login_url", return_value="https://example.test/x"):
             self.lib.copyLink()
         self.poll(3)                                         # the same bad file is looked at again, but not reported again
         self.assertTrue(self.lib.status.startswith("Link copied."), self.lib.status)
@@ -1303,7 +1303,7 @@ class LookScreen(QtCase):
             self.app.processEvents()
         self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt)
         self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
-        self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("steamcase").AUTO_ART_HELP)
+        self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).AUTO_ART_HELP)
         self.assertTrue(self.shell.switchValue("use_custom_art") and self.shell.switchValue("skip_auto_art"))        # saved, not only shown
 
     def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
@@ -1347,7 +1347,7 @@ class LookFlow(QtCase):
         import time
         from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.app import close_engine, create_engine, find_item
         from qtui.shell import Shell
         tmp = tempfile.mkdtemp()
@@ -1418,7 +1418,7 @@ class HundredFlow(QtCase):
         from PySide6.QtTest import QTest
         from qtui.app import close_engine, create_engine, find_item
         from qtui.shell import Shell
-        import steamcase as sc
+        from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
         self.tmp = tempfile.mkdtemp()
@@ -2086,7 +2086,7 @@ class Components(QtCase):
             self.app.processEvents()
             time.sleep(0.02)
         self.assertTrue(p.property("showing"))
-        with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
+        with mock.patch("engine.steamcase.preview_cover", side_effect=RuntimeError("boom")):
             p.setProperty("source", "image://preview/200/100/100/classic/none/2")
             end = time.time() + 3
             while time.time() < end and p.property("status") not in (3,):                       # Image.Error
@@ -2243,7 +2243,7 @@ class PreviewImages(QtCase):
         cls.app = qt_app()
 
     def setUp(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
         from PySide6.QtCore import QSize
@@ -2267,7 +2267,7 @@ class PreviewImages(QtCase):
         self.assertEqual(g1.pixelColor(3, 150).name(), g2.pixelColor(3, 150).name())
 
     def test_a_theme_and_a_treatment_change_the_picture(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         plain = self.get("0/100/100/classic/none/1")
         themed = self.get("0/100/100/halloween/none/2")
         marked = self.get("0/100/100/classic/%s/3" % sc.TREATMENTS[0])
@@ -2275,7 +2275,7 @@ class PreviewImages(QtCase):
         self.assertNotEqual(bytes(plain.constBits()), bytes(marked.constBits()))
 
     def test_my_own_case_is_asked_for_only_while_there_is_one(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
         self.addCleanup(sc.use_custom_case, None)
@@ -2306,14 +2306,14 @@ class PreviewImages(QtCase):
 
     def test_an_engine_failure_gives_no_picture_so_the_old_one_stays(self):
         from unittest import mock
-        with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
+        with mock.patch("engine.steamcase.preview_cover", side_effect=RuntimeError("boom")):
             img = self.get("0/100/100/classic/none/1", 50, 75)
         self.assertTrue(img.isNull())                                     # QML sees an error, not a blank picture that would replace the old one
 
     def test_a_repeated_request_is_not_rendered_again(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         from unittest import mock
-        with mock.patch("steamcase.preview_cover", wraps=sc.preview_cover) as engine:
+        with mock.patch("engine.steamcase.preview_cover", wraps=sc.preview_cover) as engine:
             a = self.get("33/100/100/classic/none/1")
             b = self.get("33/100/100/classic/none/2")                    # only the serial differs
         self.assertEqual(engine.call_count, 1)
@@ -2370,7 +2370,7 @@ class LookState(QtCase):
         return self.Shell(self.settings, downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
 
     def make_cover(self, hue=0, sat=100, val=100, theme=None):
-        import steamcase as sc
+        from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
         art = os.path.join(self.tmp, "art.png")
@@ -2414,7 +2414,7 @@ class LookState(QtCase):
         self.assertEqual((self.look.hue, self.look.sat, self.look.val), (120, 55, 66))
 
     def test_a_swatch_sets_its_tone_and_only_it_is_selected(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         for i in range(9):
             with self.subTest(i):
                 self.look.setTone(200, 33, 44)
@@ -2511,7 +2511,7 @@ class LookState(QtCase):
         self.assertIn("/%d/100/100/" % h, self.look.previewSource)         # and the last one shows the final tone
 
     def test_the_colours_for_the_sliders_come_from_python(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         self.assertEqual(self.look.colorFor(120, 50, 80), sc.case_color(120, 50, 80))
         self.assertEqual(self.look.trackStart("sat"), sc.case_color(0, 0, 100))
         self.assertEqual(self.look.trackEnd("val"), sc.case_color(0, 100, 100))
@@ -2613,7 +2613,7 @@ class HundredState(QtCase):
     def test_a_huge_file_is_refused_without_being_read(self):
         from unittest import mock
         path = self.page({1: (1, 1)})
-        with mock.patch("completion.MAX_GAMES_PAGE", 10):
+        with mock.patch("engine.completion.MAX_GAMES_PAGE", 10):
             self.load(path)
         self.assertEqual(self.h.status, "games.html: That file is too big to be your Steam games page.")
         self.assertFalse(self.h.loaded)
@@ -2638,7 +2638,7 @@ class HundredState(QtCase):
     def test_a_surprise_never_quotes_the_page(self):
         from unittest import mock
         path = self.page({1: (1, 1)})
-        with mock.patch("completion.read_games_page", side_effect=RuntimeError("token=SECRET123")):
+        with mock.patch("engine.completion.read_games_page", side_effect=RuntimeError("token=SECRET123")):
             self.load(path)
         self.assertEqual(self.h.status, "games.html: That file could not be read.")
         self.assertNotIn("SECRET", self.h.status + self.h.note)
@@ -2653,7 +2653,7 @@ class HundredState(QtCase):
     def test_two_loads_in_a_row_the_newest_answer_wins_even_if_the_older_arrives_late(self):
         import threading
         from unittest import mock
-        import completion
+        from engine import completion
         first = self.page({1: (1, 1)}, "first.html")
         second = self.page({2: (2, 2), 3: (4, 4)}, "second.html")
         gate = threading.Event()
@@ -2664,7 +2664,7 @@ class HundredState(QtCase):
             if os.path.basename(path) == "first.html":
                 gate.wait(5)                                          # the older read finishes last
             return real(path)
-        with mock.patch("completion.read_games_page", side_effect=slow):
+        with mock.patch("engine.completion.read_games_page", side_effect=slow):
             self.h.loadPage(first)
             self.h.loadPage(second)
             self.wait_for(lambda: self.h.loaded)
@@ -2720,7 +2720,7 @@ class HundredState(QtCase):
     def test_the_styles_and_marks_decide_what_make_gets(self):
         h = self.h
         self.load(self.page({1: (1, 1), 2: (1, 2)}))
-        import steamcase as sc
+        from engine import steamcase as sc
         for style in sc.CASES:
             for marks in sc.MARKS:
                 h.style, h.marks = style, marks
@@ -2801,11 +2801,11 @@ class HundredState(QtCase):
         look.theme = "halloween"
         self.load(self.page({1: (1, 1)}))
         self.assertEqual((h.styleEnabled, h.marksEnabled, h.marks), (True, False, "rosette"))
-        import steamcase as sc
+        from engine import steamcase as sc
         self.assertEqual(h.values()[1], sc.compose_treatment("ribbon", "rosette"))
 
     def test_covers_made_in_halloween_open_the_window_in_halloween(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
         art = os.path.join(self.tmp, "art.png")
@@ -2850,7 +2850,7 @@ class HundredState(QtCase):
         bad = os.path.join(self.downloads, "games.html")
         with open(bad, "w") as f:
             f.write("<html>nothing</html>")
-        with mock.patch("completion.read_games_page", wraps=__import__("completion").read_games_page) as read:
+        with mock.patch("engine.completion.read_games_page", wraps=__import__("engine.completion", fromlist=["x"]).read_games_page) as read:
             h.poll(); h.poll()
             self.wait_for(lambda: h.statusKind == "error")
             h.poll(); h.poll(); h.poll()
@@ -2994,12 +2994,12 @@ class HundredScreen(QtCase):
     def test_the_button_to_go_on_waits_while_a_page_is_being_read(self):
         import threading
         from unittest import mock
-        import completion
+        from engine import completion
         self.load_page()
         gate = threading.Event()
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
-        with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
+        with mock.patch("engine.completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
             self.h.loadPage(write_games_page(self.tmp, {5: (2, 2)}, "second.html"))
             self.app.processEvents()
             self.assertFalse(self.item("hundred_next").property("enabled"))
@@ -3534,7 +3534,7 @@ class NoTkLeft(unittest.TestCase):
 
     def test_the_engine_does_not_point_at_a_file_that_is_gone(self):
         for name in ("steamcase.py", "completion.py"):
-            self.assertNotIn("gui.py", self.read(name), name)
+            self.assertNotIn("gui.py", self.read("engine", name), name)
 
     def test_the_qt_texts_do_not_depend_on_a_function_that_no_longer_exists(self):
         self.assertNotIn("gui.App", self.read("qtui", "reasons.py"))
@@ -3905,14 +3905,14 @@ class Entry(QtCase):
 
     def test_version_prints_the_version_like_the_old_window(self):
         import subprocess
-        import steamcase as sc
+        from engine import steamcase as sc
         r = subprocess.run([sys.executable, "-m", "qtui", "--version"], cwd=self.ROOT, env=dict(os.environ, QT_QPA_PLATFORM="offscreen"), capture_output=True, text=True, timeout=60)
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "steam-case-covers %s" % sc.APP_VERSION), r.stderr)
 
     def test_check_network_says_whether_steam_can_be_reached(self):
         import contextlib, io
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.__main__ import main
         for answer, code, text in (((True, "Steam answered."), 0, "network ok: Steam answered."), ((False, "No route."), 1, "network FAILED: No route.")):
             out = io.StringIO()
@@ -3930,7 +3930,7 @@ class Entry(QtCase):
         engine = create_engine(Shell(os.path.join(tmp, "s.json"), downloads=tmp, covers_dir=tmp))
         self.addCleanup(close_engine, engine)
         self.assertTrue(check_preview(engine))
-        with mock.patch("steamcase.preview_cover", side_effect=RuntimeError("boom")):
+        with mock.patch("engine.steamcase.preview_cover", side_effect=RuntimeError("boom")):
             self.assertFalse(check_preview(engine, fresh=True))
         with open(os.path.join(self.ROOT, "qtui", "__main__.py")) as f:
             self.assertIn("check_preview", f.read())
@@ -3974,7 +3974,7 @@ class FakeStore(unittest.TestCase):
     def setUp(self):
         super().setUp()
         import io
-        import steamcase as sc
+        from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
         self.tmp = tempfile.mkdtemp()
@@ -3989,7 +3989,7 @@ class FakeStore(unittest.TestCase):
         self.addCleanup(lambda: setattr(sc, "store_items", real[0]) or setattr(sc, "http_get", real[1]))
 
     def made(self, games=None, **kw):
-        import steamcase as sc
+        from engine import steamcase as sc
         sc.make_covers(games or {1: None, 2: None}, self.covers, **kw)
 
     def remake(self, **kw):
@@ -3997,7 +3997,7 @@ class FakeStore(unittest.TestCase):
         self.made(**kw)
 
     def mine(self, colour=(10, 160, 30)):
-        import steamcase as sc
+        from engine import steamcase as sc
         path = os.path.join(self.tmp, "mine.jpg")
         sc.Image.new("RGB", (100, 150), colour).save(path, format="JPEG")
         return path
@@ -4073,7 +4073,7 @@ class ReplaceReasons(FakeStore):
             self.assertIn("lose it", self.reason((0, 100, 100), set(), "ribbon")[1])
 
     def test_a_first_highlight_over_plain_covers(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         for treatment in sc.TREATMENTS:
             self.remake()
             self.assertIn("highlighted", self.reason((0, 100, 100), {1}, treatment)[1])
@@ -4105,7 +4105,7 @@ class ReplaceReasons(FakeStore):
 class ReplaceReasonsAndConsoleCovers(FakeStore):
     """Review finding 7: a console cover is never rebuilt by the natural flow, so it must not colour the question about the others."""
     def test_console_covers_do_not_count_as_covers_that_change(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui import reasons
         sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, completed={1}, treatment="ribbon")
         sc.make_covers({2: None}, self.covers)
@@ -4136,7 +4136,7 @@ class UpdatesState(QtCase):
 
     def check(self, result=None, error=None):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         effect = error if error else None
         with mock.patch.object(sc, "check_for_update", return_value=result, side_effect=effect):
             self.u.check()
@@ -4162,7 +4162,7 @@ class UpdatesState(QtCase):
         self.assertEqual(paragraphs[0]["text"], "The latest version is 1.3.0. This copy has no version number (it was not installed from a release), so I cannot compare.")
 
     def test_a_failed_check_says_why(self):
-        import steamcase as sc
+        from engine import steamcase as sc
         self.assertEqual(self.check(error=sc.SteamcaseError("No connection.")),
                          ("Could not check for updates", [{"text": "No connection.", "kind": "main"}], "OK", "", ""))
         self.seen.clear()
@@ -4171,7 +4171,7 @@ class UpdatesState(QtCase):
     def test_one_check_at_a_time_and_it_runs_off_the_ui_thread(self):
         import threading
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         gate, threads = threading.Event(), []
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
 
@@ -4199,7 +4199,7 @@ class UpdatesState(QtCase):
 
     def test_kofi_opens_the_page_or_copies_the_link(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from PySide6.QtGui import QGuiApplication
         with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
             self.u.openKofi()
@@ -4211,7 +4211,7 @@ class UpdatesState(QtCase):
 
     def test_discord_opens_the_invite_or_copies_it(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from PySide6.QtGui import QGuiApplication
         with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
             self.u.openDiscord()
@@ -4224,7 +4224,7 @@ class UpdatesState(QtCase):
     def test_an_answer_that_cannot_be_delivered_is_dropped_quietly(self):
         import shiboken6
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.updates import Updates
         gone = Updates()
         shiboken6.delete(gone)
@@ -4242,7 +4242,7 @@ class MakeScreen(QtCase, FakeStore):
     def setUp(self):
         super().setUp()
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.app import close_engine, create_engine
         from qtui.shell import Shell
         for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: ({1: None, 2: None}, set()))):
@@ -4309,7 +4309,7 @@ class MakeScreen(QtCase, FakeStore):
     def test_the_button_becomes_cancel_while_it_runs_and_keeps_the_focus(self):
         import threading
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         gate, reached = threading.Event(), threading.Event()
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
@@ -4340,7 +4340,7 @@ class MakeScreen(QtCase, FakeStore):
 
     def test_after_a_stopped_run_the_main_button_says_how_many_covers_it_adds(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         real = sc.make_covers
         stopped = lambda games, out, **kw: dict(real(games, out, **kw), cancelled=True)       # as if Cancel was pressed after the covers were made
         with mock.patch.object(sc, "make_covers", stopped):
@@ -4382,7 +4382,7 @@ class MakeScreen(QtCase, FakeStore):
         self.assertFalse(self.sc_colour_differs(90))
 
     def sc_colour_differs(self, hue):
-        import steamcase as sc
+        from engine import steamcase as sc
         return sc.covers_in_other_colour(self.covers, hue, 100, 100)
 
     def test_next_opens_add_to_steam(self):
@@ -4395,11 +4395,11 @@ class MakeScreen(QtCase, FakeStore):
     def test_the_button_waits_while_a_games_page_is_being_read(self):
         import threading
         from unittest import mock
-        import completion
+        from engine import completion
         gate = threading.Event()
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
-        with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
+        with mock.patch("engine.completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
             self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
             self.app.processEvents()
             self.assertFalse(self.item("make_main").property("enabled"))
@@ -4432,7 +4432,7 @@ class MakeScreen(QtCase, FakeStore):
 
     def test_leaving_the_screen_while_looking_for_art_still_shows_the_question(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         self.click("make_main")
         self.wait_for(lambda: self.make.done and not self.make.running)
         self.settle()
@@ -4453,7 +4453,7 @@ class MakeScreen(QtCase, FakeStore):
     def test_make_again_and_the_folder_button_follow_their_conditions(self):
         import threading
         from unittest import mock
-        import completion
+        from engine import completion
         self.assertFalse(self.item("make_folder").property("enabled"))        # no covers yet
         self.click("make_main")
         self.wait_for(lambda: self.make.done and not self.make.running)
@@ -4462,7 +4462,7 @@ class MakeScreen(QtCase, FakeStore):
         gate = threading.Event()
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         real = completion.read_games_page
-        with mock.patch("completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
+        with mock.patch("engine.completion.read_games_page", side_effect=lambda p: (gate.wait(5), real(p))[1]):
             self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
             self.app.processEvents()
             self.assertFalse(self.item("make_again").property("enabled"))
@@ -4497,7 +4497,7 @@ class MakeScreen(QtCase, FakeStore):
     def test_the_earlier_steps_cannot_be_changed_while_the_covers_are_made(self):
         import threading
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         gate, reached = threading.Event(), threading.Event()
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
         self.addCleanup(gate.set)                                       # a failing test must not leave a worker thread waiting
@@ -4549,7 +4549,7 @@ class AddWindow(QtCase, FakeStore):
     def setUp(self):
         super().setUp()
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.app import close_engine, create_engine
         from qtui.shell import Shell
         self.sc, self.running, self.log, self.accounts = sc, False, [], [("111", "Alice")]
@@ -5320,7 +5320,7 @@ class HomeScreen(AddWindow):
 
     def test_discord_in_the_navigation_opens_the_invite(self):
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         self.open_home()
         with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
             self.click("footer_discord")
@@ -5329,7 +5329,7 @@ class HomeScreen(AddWindow):
     def test_kofi_in_the_navigation_sits_under_discord_and_opens_the_page(self):
         from unittest import mock
         from PySide6.QtCore import QPointF
-        import steamcase as sc
+        from engine import steamcase as sc
         self.open_home()
         with mock.patch("qtui.updates.QDesktopServices.openUrl", return_value=True) as opened:
             self.click("footer_kofi")
@@ -5689,7 +5689,7 @@ class MakeState(QtCase, FakeStore):
         super().setUp()
         import threading
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.shell import Shell
         self.sc = sc
         self.games, self.family, self.art, self.art_problems = {1: None, 2: None}, set(), {}, []
@@ -6169,7 +6169,7 @@ class ApplyState(QtCase, FakeStore):
         super().setUp()
         import threading
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.shell import Shell
         self.sc = sc
         self.running = False                                            # what steam_running answers
@@ -6871,7 +6871,7 @@ class PickerBase(QtCase, FakeStore):
     def setUp(self):
         super().setUp()
         from unittest import mock
-        import steamcase as sc
+        from engine import steamcase as sc
         from qtui.shell import Shell
         self.sc = sc
         sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": self.NAMES[i]} for i in ids if i in self.NAMES}
@@ -7063,7 +7063,7 @@ class CaseGroups(PickerBase):
 
     def setUp(self):
         super().setUp()
-        import groups
+        from engine import groups
         self.groups = groups
         self.cases = self.shell.cases
         self.load()
@@ -7344,7 +7344,7 @@ class CasesTests(PickerBase):
         self.assertIsNotNone(self.sc.custom_case_digest())
 
     def test_a_group_in_my_own_case_whose_file_is_gone_asks_to_pick_again(self):
-        import groups
+        from engine import groups
         groups.save(self.covers, groups.assign([], "Mine", {"platform": "custom"}, [1])[0])
         self.cases.reloadGroups()
         self.shell.startPath("manual")
@@ -7552,7 +7552,7 @@ class CasesState(PickerBase):
         self.shell.cases.assign()
 
     def saved_group(self, name="Red games", games=(9,)):
-        import groups
+        from engine import groups
         saved, gid = groups.assign([], name, {"tone": [134, 100, 100]}, list(games))
         groups.save(self.covers, saved)
         self.shell.cases.reloadGroups()
@@ -7635,7 +7635,7 @@ class CasesState(PickerBase):
         self.assertEqual((cases.selectedKey, cases.selectedGroup, said), ("steam", "", []))      # its case stays, as a new group
 
     def test_the_new_group_card_never_asks_for_the_own_case_file(self):
-        import groups
+        from engine import groups
         from unittest import mock
         self.load()
         saved, gid = groups.assign([], "Mine", {"platform": "custom"}, [9])
@@ -7864,7 +7864,7 @@ class ManualWindow(PickerBase):
         self.assertEqual([g["name"] for g in self.shell.cases.groupList], ["Old favourites"])
 
     def saved_red(self, name="Red Steam Cases", games=(9,)):
-        import groups
+        from engine import groups
         saved, gid = groups.assign([], name, {"tone": [134, 100, 100]}, list(games))
         groups.save(self.covers, saved)
         return gid
@@ -8050,7 +8050,7 @@ class ManualWindow(PickerBase):
         self.assertGreaterEqual(card.height(), 44)
 
     def test_a_refused_name_is_said_in_words(self):
-        import groups
+        from engine import groups
         saved, gid = groups.assign([], "Mine", {"tone": [134, 100, 100]}, [9])
         groups.save(self.covers, saved)
         self.open_case_screen(1)
@@ -8062,7 +8062,7 @@ class ManualWindow(PickerBase):
         self.assertIn("Mine", self.item("case_error").property("text"))
 
     def saved_groups(self):
-        import groups
+        from engine import groups
         saved, red = groups.assign([], "Red games", {"tone": [134, 100, 100]}, [1])
         saved, ps = groups.assign(saved, "PS5 games", {"platform": "ps5"}, [2])
         groups.save(self.covers, saved)
@@ -8106,7 +8106,7 @@ class ManualWindow(PickerBase):
         self.assertFalse(self.item("make_section_groups").property("visible"))
 
     def test_a_group_named_like_its_case_is_not_shown_with_the_name_twice(self):
-        import groups
+        from engine import groups
         from qtui.cases import group_caption
         self.assertEqual(group_caption("Xbox One", "Xbox One", 1), "Xbox One \u00b7 1 game")
         self.assertEqual(group_caption("Dad's games", "Xbox One", 2), "Dad's games \u00b7 Xbox One \u00b7 2 games")
@@ -8358,7 +8358,8 @@ class GroupTicksTests(QtCase):
     """The list of saved groups with a box each, as the usual Make and Reset show it."""
 
     def setUp(self):
-        import groups, shutil, tempfile
+        from engine import groups
+        import shutil, tempfile
         qt_app()
         self.groups = groups
         self.tmp = tempfile.mkdtemp()
@@ -8416,7 +8417,7 @@ class GroupsInMake(PickerBase):
 
     def setUp(self):
         super().setUp()
-        import groups
+        from engine import groups
         self.groups = groups
         self.make = self.shell.make
         self.shell.startPath("manual")
@@ -8598,7 +8599,7 @@ class GroupReset(PickerBase):
 
     def setUp(self):
         super().setUp()
-        import groups
+        from engine import groups
         from unittest import mock
         self.groups = groups
         self.grid = os.path.join(self.tmp, "userdata", "111", "config", "grid")
@@ -8729,7 +8730,7 @@ class GroupsEndToEnd(PickerBase):
 
     def setUp(self):
         super().setUp()
-        import groups
+        from engine import groups
         from unittest import mock
         self.groups = groups
         self.grid = os.path.join(self.tmp, "userdata", "111", "config", "grid")

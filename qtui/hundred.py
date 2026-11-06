@@ -8,8 +8,8 @@ import threading
 from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
-import completion
-import steamcase as sc
+from engine import completion
+from engine import steamcase as sc
 from qtui.filepicker import pick_file
 from qtui.reasons import MARKS, STYLES
 from qtui.system import GAMES_PAGE_URL, SAVE_KEY, THEME_NOTE

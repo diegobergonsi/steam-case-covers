@@ -3,18 +3,19 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """steamcase: give every game in your Steam library a "physical case" portrait cover.
 
-  python steamcase.py list                       show the games it found
-  python steamcase.py make                       build covers into ./covers
-  python steamcase.py apply                      copy covers into Steam's grid folder
-  python steamcase.py run                        make + apply
-  python steamcase.py restore                    undo the last apply
+  python -m engine list                       show the games it found
+  python -m engine make                       build covers into ./covers
+  python -m engine apply                      copy covers into Steam's grid folder
+  python -m engine run                        make + apply
+  python -m engine restore                    undo the last apply
 
 Needs Python 3.8+ and Pillow (pip install pillow). No Steam API key, no account login.
 Covers are built on your machine from the artwork Steam itself serves for your games.
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, caseframe, completion, filecmp, functools, hashlib, io, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+from engine import caseframe, completion, safefile
+import argparse, filecmp, functools, hashlib, io, json, os, re, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from typing import NamedTuple
 
 try:
@@ -32,7 +33,7 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
     if _s is not None and hasattr(_s, "reconfigure"):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
@@ -2458,7 +2459,7 @@ def cmd_apply(args):
     if r["jpg_moved"]:
         print("Art you had set by hand in Steam (%d games) was moved into the backup; restore brings it back." % r["jpg_moved"])
     print("Start Steam to see them.")
-    print("To undo: python steamcase.py restore")
+    print("To undo: python -m engine restore")
 
 
 def cmd_run(args):
@@ -2495,7 +2496,7 @@ def cmd_reset(args):
     elif not args.yes and input("Remove them? [y/N] ").strip().lower() != "y":
         raise SteamcaseError(_t("Cancelled."))
     r = reset_to_default(steam, args.user, names, args.everything)
-    print("Removed %d covers. Backup: %s\nTo bring them back: python steamcase.py restore" % (r["removed"], r["backup"]))
+    print("Removed %d covers. Backup: %s\nTo bring them back: python -m engine restore" % (r["removed"], r["backup"]))
 
 
 def cmd_restore(args):
