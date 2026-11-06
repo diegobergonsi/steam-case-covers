@@ -24,7 +24,7 @@ The planner's calls (the owner can change them):
 - Faint grey becomes `#8a9db1` (4.55 on raised), done green `#6aab3e` (4.53), control edge `#637f9a` (3.04). They are the dimmest colours that pass, so the look changes as little as possible.
 - Where each colour is measured: faint, done, error, warning and the blue accent on the window, the menu panel, the card and the raised fill; control edge on the same four; muted and white text also on the raised fill while the mouse is over it (it is a little lighter then). Faint, done and edge are not measured on that hovered fill because they are not drawn there.
 - A control that is switched off is shown at 60% and the rule does not apply to it (WCAG leaves it out).
-- The dark text on the blue and the green buttons (5.9 and higher) is measured as well.
+- The dark text on the blue main button, also under the mouse, is measured as well (9.2 and higher).
 - `docs/ui-guide.md` (colour table and the sentence about the card) and `docs/DESIGN.md` (colour names and values, the contrast sentence) are updated to the new values and to "measured on every fill".
 
 ## Not in this spec

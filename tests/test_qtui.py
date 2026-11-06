@@ -5,6 +5,8 @@ Run:  python -m unittest discover -s tests -v   (with Qt: QT_QPA_PLATFORM=offscr
 import json, os, shutil, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_tokens import THEME
 from qtui import settings as st
 from qtui import steps as sp
 from qtui import system
@@ -746,11 +748,11 @@ class GameListScreen(QtCase):
         self.app.processEvents()
         ok = status.property("color").name()
         self.assertNotEqual(waiting, ok)
-        self.assertEqual((waiting, ok), ("#93a7bb", "#66c0f4"))
+        self.assertEqual((waiting, ok), (THEME["muted"], THEME["accent"]))
         self.lib.installedOnly = False
         self.lib.useFile(os.path.join(self.tmp, "missing.json"))
         self.app.processEvents()
-        self.assertEqual(status.property("color").name(), "#ff7b72")
+        self.assertEqual(status.property("color").name(), THEME["error"])
 
     def test_a_saved_file_appears_on_screen_by_itself(self):
         with open(os.path.join(self.downloads, "userdata.json"), "w") as f:
@@ -1637,8 +1639,8 @@ class Components(QtCase):
         self.assertEqual(self.item("dlg_confirm").property("text"), "Close Steam and add them")
         self.assertEqual(self.item("dlg_cancel").property("text"), "Cancel")
         from PySide6.QtGui import QColor
-        self.assertEqual(QColor(self.item("dlg_p2").property("color")).name(), "#f0b429")        # the warning has the warning colour
-        self.assertEqual(QColor(self.item("dlg_p1").property("color")).name(), "#93a7bb")
+        self.assertEqual(QColor(self.item("dlg_p2").property("color")).name(), THEME["warning"])        # the warning has the warning colour
+        self.assertEqual(QColor(self.item("dlg_p1").property("color")).name(), THEME["muted"])
 
     def test_the_safe_button_has_the_focus_and_only_the_confirm_is_filled(self):
         self.open_dialog()
@@ -1957,11 +1959,11 @@ class Components(QtCase):
         self.assertIn("PlayStation 5", info.text(QAccessible.Text.Name))
         self.assertTrue(card.property("activeFocusOnTab"))
         self.assertFalse(info.state().checked)
-        self.assertEqual(card.property("edgeColor").name(), "#637f9a")
+        self.assertEqual(card.property("edgeColor").name(), THEME["edge"])
         card.setProperty("chosen", True)
         self.app.processEvents()
         self.assertTrue(QAccessible.queryAccessibleInterface(card).state().checked)
-        self.assertEqual(card.property("edgeColor").name(), "#66c0f4")
+        self.assertEqual(card.property("edgeColor").name(), THEME["accent"])
 
     TOAST = ('property string msg: ""\nonMsgChanged: toast.show(msg)\nBinding { target: Theme; property: "reduce"; value: @R@ }\n'
              'Toast { id: toast; objectName: "toast"; x: 10; y: 60; showMs: 80 }')
@@ -3310,16 +3312,6 @@ class ShellObject(QtCase):
         self.assertTrue(shell.switchValue("restart_steam"))
 
 
-def contrast(a, b):
-    """WCAG contrast ratio of two #rrggbb colours."""
-    def lum(h):
-        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
-        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
-        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-    hi, lo = sorted((lum(a), lum(b)), reverse=True)
-    return (hi + 0.05) / (lo + 0.05)
-
-
 class BundledAssets(unittest.TestCase):
     def test_the_list_matches_what_the_build_recipe_bundles(self):
         import re
@@ -3561,8 +3553,7 @@ class NoTkLeft(unittest.TestCase):
             for gone in ("Tk", "tkinter", "Canvas", "px()", "three labelled", "no shadows", "No drop shadows"):
                 self.assertNotIn(gone, text, gone)
         self.assertIn("docs/ui-guide.md", design)
-        theme = Tokens.theme(self)
-        for hexcode in theme.values():                                        # every colour of the window is in the design document
+        for hexcode in THEME.values():                                        # every colour of the window is in the design document
             self.assertIn(hexcode, design.lower() if hexcode.islower() else design, hexcode)
 
     def test_every_picture_the_readme_shows_exists_and_the_old_window_screenshot_is_gone(self):
@@ -3589,150 +3580,16 @@ class ChecksWorkflow(unittest.TestCase):
         for needle in ("qt-tests:", "requirements-qt.txt", "tests.test_qtui", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
             self.assertIn(needle, text)
 
-
-class Tokens(unittest.TestCase):
-    """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
-    GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#8a9db1",
-             "edge": "#637f9a", "done": "#6aab3e", "warning": "#f0b429", "error": "#ff7b72", "accentInk": "#0b141d", "shadow": "#000000"}
-
-    def theme(self):
-        import re
-        with open(os.path.join(QML_DIR, "Theme.qml")) as f:
-            return dict(re.findall(r'readonly property color (\w+): "(#[0-9a-fA-F]{6})"', f.read()))
-
-    def test_the_colours_are_the_guides(self):
-        self.assertEqual(self.theme(), self.GUIDE)
-
-    @staticmethod
-    def shift(hex_colour, factor):
-        """Qt's `lighter` (factor above 1) and `darker` (1 / factor) on a #rrggbb colour: the brightness is scaled, and what goes past the top is taken off the saturation."""
-        import colorsys
-        h, s, v = colorsys.rgb_to_hsv(*[int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)])
-        v *= factor
-        if v > 1:
-            s, v = max(0.0, s - (v - 1)), 1.0
-        return "#%02x%02x%02x" % tuple(round(x * 255) for x in colorsys.hsv_to_rgb(h, s, v))
-
-    def fills(self):
-        """The fills a colour is drawn on. The menu panel and the buttons under the mouse are made from other colours the way Qt's `darker` and `lighter` do it."""
-        t = self.theme()
-        return {"bg": t["bg"], "navBg": self.shift(t["bg"], 1 / 1.3), "card": t["card"], "raised": t["raised"], "raisedHover": self.shift(t["raised"], 1.15),
-                "accent": t["accent"], "accentHover": self.shift(t["accent"], 1.15), "done": t["done"]}
-
-    @need_qt
-    def test_the_test_makes_the_same_colours_as_qt(self):
-        from PySide6.QtGui import QColor
-        for colour, factor in ((self.theme()["bg"], 1 / 1.3), (self.theme()["raised"], 1.15), (self.theme()["accent"], 1.15)):
-            qt = QColor(colour).lighter(round(factor * 100)) if factor > 1 else QColor(colour).darker(round(100 / factor))
-            self.assertEqual(self.shift(colour, factor), qt.name(), (colour, factor))
-
-    def test_every_colour_meets_the_rule_on_every_fill_it_is_drawn_on(self):
-        """WCAG 2.2 AA: text 4.5 to 1, outlines 3 to 1. A switched-off control (60%) is left out, as the rule leaves it out."""
-        t, fills = self.theme(), self.fills()
-        main = ("bg", "navBg", "card", "raised")
-        pairs = [(c, f, 4.5) for c in ("faint", "done", "error", "warning", "accent") for f in main]
-        pairs += [(c, f, 4.5) for c in ("muted", "text") for f in main + ("raisedHover",)]
-        pairs += [("edge", f, 3.0) for f in main]
-        for fg, bg, need in pairs:
-            with self.subTest("%s on %s" % (fg, bg)):
-                self.assertGreaterEqual(contrast(t[fg], fills[bg]), need)
-        for bg in ("accent", "accentHover", "done"):
-            with self.subTest("accentInk on " + bg):
-                self.assertGreaterEqual(contrast(t["accentInk"], fills[bg]), 4.5)
-
-    def doc(self, *parts):
-        with open(os.path.join(os.path.dirname(QML_DIR), "..", *parts)) as f:
-            return f.read()
-
-    def test_the_docs_hold_the_themes_colours(self):
-        import re
-        t, guide, design = self.theme(), self.doc("docs", "ui-guide.md"), self.doc("docs", "DESIGN.md")
-        for name, value in t.items():
-            if name != "shadow":                                      # pure black: the guide names the shadow without a hex
-                self.assertIn(value, guide, name)
-        names = {"night-ground": "bg", "card-navy": "card", "card-raised": "raised", "control-edge": "edge", "text": "text", "text-muted": "muted", "text-faint": "faint",
-                 "sky-blue": "accent", "ink-on-blue": "accentInk", "done-green": "done", "caution-amber": "warning", "error-coral": "error", "shadow": "shadow"}
-        listed = dict(re.findall(r'^  ([\w-]+): "(#[0-9a-f]{6})"$', design.split("typography:")[0], re.M))
-        self.assertEqual(listed, {k: t[v] for k, v in names.items()})
-        for text, name in ((design, "DESIGN.md"), (guide, "ui-guide.md")):                 # a colour written in the prose is one of these too
-            self.assertLessEqual(set(re.findall(r"#[0-9a-f]{6}\b", text)), set(t.values()), name)
-
-    def test_the_ratios_in_the_guide_are_true(self):
-        import re
-        t, fills, guide = self.theme(), self.fills(), self.doc("docs", "ui-guide.md")
-        rows = {"Accent": ("accent", "bg"), "Text": ("text", "card"), "Muted": ("muted", "card"), "Faint": ("faint", "card"), "Control edge": ("edge", "card"),
-                "Warning": ("warning", "card"), "Error": ("error", "card")}
-        for label, (fg, bg) in rows.items():
-            row = re.search(r"^\| %s \|.*$" % label, guide, re.M)
-            self.assertIsNotNone(row, "the colour table has no row for " + label)
-            said = re.search(r"(\d+\.\d):1", row.group(0))
-            self.assertIsNotNone(said, "the row of %s has no ratio" % label)
-            self.assertEqual(said.group(1), "%.1f" % contrast(t[fg], fills[bg]), label)
-
-    def test_the_guide_names_the_steps_like_the_window(self):
-        text = self.doc("docs", "ui-guide.md")
-        self.assertIn("1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam", text)
-        self.assertNotIn("Extras", text.replace("Extras became", ""))
-
-    def qml_files(self):
-        for name in sorted(os.listdir(QML_DIR)):
-            if name.endswith(".qml") and name != "Theme.qml":
-                with open(os.path.join(QML_DIR, name)) as f:
-                    yield name, f.read()
-
-    def test_only_the_guides_durations_are_used(self):
-        import re
-        for name, text in self.qml_files():
-            self.assertEqual(re.findall(r"duration:\s*\d", text), [], name + ": a duration must go through Theme.dur")
-            for n in re.findall(r"Theme\.dur\((\d+)\)", text):
-                self.assertIn(int(n), (90, 120, 200, 260), "%s: %s ms is not in the guide" % (name, n))
-
-    def test_no_loose_design_numbers(self):
-        """Corner radius, text size, shadow and opacity values come from Theme (sizes of layout boxes may stay in the files)."""
-        import re
-        for name, text in self.qml_files():
-            for pattern in (r"\bradius:\s*\d", r"pixelSize:\s*\d", r"shadow(?:Blur|Opacity|VerticalOffset):\s*-?\d", r"\bopacity:[^\n]*\d\.\d",
-                            r"Qt\.lighter\([^)]*,\s*[\d.]+\)", r"(?:blur|brightness|saturation):\s*-?\d"):
-                self.assertEqual(re.findall(pattern, text), [], "%s: %s" % (name, pattern))
-
-    def test_no_loose_layout_numbers(self):
-        """Sizes, spacing, margins, borders and positions come from Theme too (0 is allowed). Only Theme.qml may hold a number."""
-        import re
-        patterns = (r"\b(?:width|height|implicitWidth|implicitHeight|spacing)\s*:\s*(?:-(?!Theme)|[1-9])", r"\banchors\.\w*[mM]argins?\s*:\s*(?:-(?!Theme)|[1-9])",
-                    r"\b[xy]\s*:\s*(?:-(?!Theme)|[1-9])", r"\bborder\.width\s*:[^\n]*[1-9]", r"\bsourceSize\.\w+\s*:\s*[1-9]", r"Theme\.\w+\s*[-+*/]\s*\d",
-                    r"Math\.(?:min|max)\(\s*[1-9]", r"\bfont\.pixelSize\s*:\s*[1-9]")
-        for name, text in self.qml_files():
-            for pattern in patterns:
-                self.assertEqual(re.findall(pattern, text), [], "%s: %s" % (name, pattern))
-
-    def test_there_is_no_picture_behind_the_window(self):
-        """The approved design has plain surfaces; a decorative backdrop was added once without asking and removed again."""
-        import re
-        with open(os.path.join(QML_DIR, "Main.qml")) as f:
-            main = f.read()
-        self.assertEqual(re.findall(r"\bImage\s*\{", main), [], "the window itself has no picture")
-        with open(os.path.join(QML_DIR, "NavLink.qml")) as f:
-            self.assertEqual(re.findall(r"\bImage\s*\{", f.read()), ["Image {"], "the only picture in the window is the Discord icon of a navigation link")
-        for name in os.listdir(QML_DIR):
-            with open(os.path.join(QML_DIR, name)) as f:
-                self.assertNotIn("backdrop", f.read().lower(), name)
-
-    def test_every_component_is_in_the_guide(self):
-        import re
-        with open(os.path.join(QML_DIR, "qmldir")) as f:
-            names = [m.group(1) for m in re.finditer(r"^(\w+) 1\.0 ", f.read(), re.M)]
-        with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
-            guide = f.read()
-        for name in names:
-            if name != "Theme" and not name.endswith("Screen"):
-                self.assertIn("`%s`" % name, guide, "%s is not in the guide's component list" % name)
-
-    def test_no_other_file_has_a_colour_of_its_own(self):
-        import re
-        for name in os.listdir(QML_DIR):
-            if name.endswith(".qml") and name != "Theme.qml":
-                with open(os.path.join(QML_DIR, name)) as f:
-                    self.assertEqual(re.findall(r"#[0-9a-fA-F]{3,8}\b", f.read()), [], name)
+    def test_the_qt_job_names_every_test_file_that_needs_qt(self):
+        """The other jobs have no Qt, so a test file that needs it and is not named here would never run where it can."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "..", ".github", "workflows", "checks.yml"), encoding="utf-8") as f:
+            line = next(l for l in f if "python -m unittest tests." in l)
+        for name in sorted(os.listdir(here)):
+            if name.startswith("test_") and name.endswith(".py"):
+                with open(os.path.join(here, name), encoding="utf-8") as f:
+                    if "need_qt" in f.read():
+                        self.assertIn("tests." + name[:-3], line, name)
 
 
 @need_qt
@@ -3795,7 +3652,7 @@ class ShellWindow(QtCase):
         centre = lambda it: it.mapToScene(QPointF(0, it.height() / 2)).y()
         self.assertAlmostEqual(centre(hint), centre(label), delta=6)                                  # the same line, not a second one
         self.assertGreaterEqual(hint.mapToScene(QPointF(0, 0)).x(), label.mapToScene(QPointF(label.width(), 0)).x())      # after the name
-        self.assertEqual(QColor(hint.property("color")).name(), "#8a9db1")                               # greyer than the name
+        self.assertEqual(QColor(hint.property("color")).name(), THEME["faint"])                               # greyer than the name
         self.assertLess(hint.property("font").pixelSize(), label.property("font").pixelSize())          # and smaller
         self.assertLessEqual(hint.mapToScene(QPointF(hint.width(), 0)).x(), row.mapToScene(QPointF(row.width(), 0)).x() - 20)   # inside the list, clear of the right mark
         QAccessible.setActive(True)
@@ -3811,13 +3668,13 @@ class ShellWindow(QtCase):
     def test_a_step_that_cannot_be_opened_looks_greyed_out_and_has_a_lock(self):
         from PySide6.QtGui import QColor
         colour = lambda key: QColor(self.item("nav_%s_label" % key).property("color")).name()
-        self.assertEqual(colour("look"), "#8a9db1")                                                     # locked: grey
-        self.assertEqual(colour("game_list"), "#e6edf3")                                                # open: the normal text colour
+        self.assertEqual(colour("look"), THEME["faint"])                                                     # locked: grey
+        self.assertEqual(colour("game_list"), THEME["text"])                                                # open: the normal text colour
         self.assertTrue(self.item("nav_look_lock").property("visible"))
         self.assertFalse(self.item("nav_game_list_lock").property("visible"))
         self.shell.setFact("ready", True)
         self.assertFalse(self.item("nav_look_lock").property("visible"))
-        self.assertEqual(colour("look"), "#e6edf3")
+        self.assertEqual(colour("look"), THEME["text"])
         self.assertTrue(self.item("nav_game_list_done").property("visible"))                            # a finished step has its tick instead
         self.assertFalse(self.item("nav_game_list_lock").property("visible"))
 
@@ -4727,7 +4584,7 @@ class AddScreen(AddWindow):
         self.assertTrue(self.ap.watching)
         self.assertEqual(self.text("add_note"), "Steam is open. Changing the artwork closes it: any running game stops and downloads pause. Save your game first.")
         from PySide6.QtGui import QColor
-        self.assertEqual(QColor(self.item("add_note").property("color")).name(), "#f0b429")
+        self.assertEqual(QColor(self.item("add_note").property("color")).name(), THEME["warning"])
         self.shell.go(4)
         self.app.processEvents()
         self.assertFalse(self.ap.watching)
@@ -4834,7 +4691,7 @@ class AddScreen(AddWindow):
         self.assertEqual(self.text("add_done_line"), "Steam is starting.")
         self.assertTrue(self.text("add_done_details").startswith("0 replaced older art, 0 already up to date. Backup saved in: "))
         self.assertTrue(self.has("add_thumb_0"))
-        self.assertEqual(self.item("add_done_title").property("color").name(), "#6aab3e")           # Done green
+        self.assertEqual(self.item("add_done_title").property("color").name(), THEME["done"])           # Done green
         details = self.item("add_done_details")
         self.assertEqual((details.property("readOnly"), details.property("selectByMouse")), (True, True))     # the folder can be copied
         self.assertFalse(self.item("add_undo").property("filled"))                                        # the one blue button is "Go to Home"
@@ -4984,7 +4841,7 @@ class AddScreen(AddWindow):
         self.wait_for(lambda: not self.ap.busy and self.ap.status != "Working\u2026")
         self.app.processEvents()
         self.assertEqual(self.text("add_status"), "No covers found in x. Make them first.")
-        self.assertEqual(QColor(self.item("add_status").property("color")).name(), "#ff7b72")
+        self.assertEqual(QColor(self.item("add_status").property("color")).name(), THEME["error"])
         self.assertEqual(self.text("add_main"), "Apply to Steam")
         self.assertTrue(self.item("add_section_before").property("visible"))
         self.assertFalse(self.item("add_section_done").property("visible"))
@@ -5188,7 +5045,7 @@ class HomeScreen(AddWindow):
         self.assertEqual(self.text("home_card_natural_cue"), "Wait until this finishes")
         self.assertTrue(self.item("home_card_natural").property("blocked"))
         self.assertFalse(self.item("home_card_manual").property("blocked"))
-        self.assertEqual(self.item("home_card_natural_cue").property("color").name(), "#93a7bb")          # Theme.muted: it reads as waiting, not as a call to act
+        self.assertEqual(self.item("home_card_natural_cue").property("color").name(), THEME["muted"])          # Theme.muted: it reads as waiting, not as a call to act
         self.assertFalse(self.item("home_card_natural_cue").property("font").bold())
         self.click("home_card_natural")
         self.assertEqual(self.shell.flow, "manual")
