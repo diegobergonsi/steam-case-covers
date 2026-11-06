@@ -13,121 +13,106 @@ ScreenFrame {
     title: qsTr("Highlight your 100% games")
     subtitle: qsTr("Optional. Games where you unlocked every achievement get a special mark.")
 
-    Item {
-        id: layout
-        width: parent.width
-        readonly property bool narrow: width < Theme.previewWidth + Theme.s24 + Theme.sectionMinWidth
-        readonly property real previewBlock: Theme.previewHeight + Theme.s8 + caption.height      // the caption always keeps its line: nothing moves when it shows
-        implicitHeight: narrow ? previewBlock + Theme.s24 + sections.implicitHeight : Math.max(previewBlock, sections.implicitHeight)
-        height: implicitHeight
-
-        PreviewCard {
-            id: preview
-            objectName: "hundred_preview"
-            x: layout.narrow ? Math.max(0, (layout.width - width) / 2) : 0
-            source: screen.look.previewSource
-        }
-        FontMetrics { id: captionFont; font.pixelSize: Theme.bodySize }
-        Text {                                            // the text, not the row, comes and goes: nothing moves under a finger
-            id: caption
-            objectName: "hundred_caption"
-            x: preview.x
-            y: preview.height + Theme.s8
-            width: preview.width
-            height: captionFont.height
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.bodySize
-            text: screen.hundred.loaded && screen.look.treatment !== "none" ? qsTr("Preview of a 100% game") : ""
-            Accessible.role: Accessible.StaticText
-            Accessible.name: text
-        }
-        Column {
-            id: sections
-            x: layout.narrow ? 0 : preview.width + Theme.s24
-            y: layout.narrow ? layout.previewBlock + Theme.s24 : 0
-            width: layout.width - x
-            spacing: Theme.s24
-
-            Section {
-                objectName: "hundred_section_page"
-                heading: qsTr("Your games page")
-                Item {
-                    width: parent.width
-                    implicitHeight: Math.max(intro.implicitHeight, tip.height)
-                    height: implicitHeight
-                    Text {
-                        id: intro
-                        objectName: "hundred_intro"
-                        width: parent.width - tip.width - Theme.s8
-                        wrapMode: Text.WordWrap
-                        color: Theme.muted
-                        font.pixelSize: Theme.bodySize
-                        text: qsTr("Games where you unlocked every achievement can get a rosette and a ribbon (or the rosette alone, or no marks), and a gold case or border if you like. Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. The app notices the file by itself.")
-                    }
-                    InfoTip { id: tip; objectName: "hundred_tip"; x: parent.width - width; text: pageHelp }
-                }
-                ButtonRow {
-                    // the filled button is "Open my games page" until a page is loaded, then it turns quiet and "Next" takes over (same button: focus stays)
-                    PrimaryButton { objectName: "hundred_open"; text: qsTr("Open my games page"); quiet: screen.hundred.loaded; onClicked: screen.hundred.openPage() }
-                    QuietButton { objectName: "hundred_browse"; text: qsTr("Browse…"); onClicked: screen.hundred.browse() }
-                    QuietButton { objectName: "hundred_copy"; text: qsTr("Copy link"); onClicked: screen.hundred.copyLink() }
-                }
-                StatusLine { objectName: "hundred_status"; text: screen.hundred.status; kind: screen.hundred.statusKind }
-                StatusLine {
-                    objectName: "hundred_note"
-                    text: screen.hundred.note
-                    visible: text !== ""
-                    kind: "wait"
-                    color: Theme.faint
-                    font.pixelSize: Theme.smallSize
-                }
+    PreviewLayout {
+        previewName: "hundred_preview"
+        source: screen.look.previewSource
+        underHeight: Theme.s8 + caption.height                  // the caption always keeps its line: nothing moves when it shows
+        underPreview: [
+            FontMetrics { id: captionFont; font.pixelSize: Theme.bodySize },
+            Text {                                            // the text, not the row, comes and goes: nothing moves under a finger
+                id: caption
+                objectName: "hundred_caption"
+                y: Theme.s8
+                width: parent.width
+                height: captionFont.height
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: Theme.muted
+                font.pixelSize: Theme.bodySize
+                text: screen.hundred.loaded && screen.look.treatment !== "none" ? qsTr("Preview of a 100% game") : ""
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
             }
-            Section {
-                objectName: "hundred_section_mark"
-                heading: qsTr("How to mark them")
+        ]
+
+
+        Section {
+            objectName: "hundred_section_page"
+            heading: qsTr("Your games page")
+            Item {
+                width: parent.width
+                implicitHeight: Math.max(intro.implicitHeight, tip.height)
+                height: implicitHeight
                 Text {
-                    objectName: "hundred_locked_note"
+                    id: intro
+                    objectName: "hundred_intro"
+                    width: parent.width - tip.width - Theme.s8
+                    wrapMode: Text.WordWrap
+                    color: Theme.muted
+                    font.pixelSize: Theme.bodySize
+                    text: qsTr("Games where you unlocked every achievement can get a rosette and a ribbon (or the rosette alone, or no marks), and a gold case or border if you like. Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. The app notices the file by itself.")
+                }
+                InfoTip { id: tip; objectName: "hundred_tip"; x: parent.width - width; text: pageHelp }
+            }
+            ButtonRow {
+                // the filled button is "Open my games page" until a page is loaded, then it turns quiet and "Next" takes over (same button: focus stays)
+                PrimaryButton { objectName: "hundred_open"; text: qsTr("Open my games page"); quiet: screen.hundred.loaded; onClicked: screen.hundred.openPage() }
+                QuietButton { objectName: "hundred_browse"; text: qsTr("Browse…"); onClicked: screen.hundred.browse() }
+                QuietButton { objectName: "hundred_copy"; text: qsTr("Copy link"); onClicked: screen.hundred.copyLink() }
+            }
+            StatusLine { objectName: "hundred_status"; text: screen.hundred.status; kind: screen.hundred.statusKind }
+            StatusLine {
+                objectName: "hundred_note"
+                text: screen.hundred.note
+                visible: text !== ""
+                kind: "wait"
+                color: Theme.faint
+                font.pixelSize: Theme.smallSize
+            }
+        }
+        Section {
+            objectName: "hundred_section_mark"
+            heading: qsTr("How to mark them")
+            Text {
+                objectName: "hundred_locked_note"
+                width: parent.width
+                height: captionFont.height                    // the line stays when the text goes: the chips below do not move
+                wrapMode: Text.WordWrap
+                color: Theme.faint
+                font.pixelSize: Theme.bodySize
+                text: screen.hundred.styleEnabled ? "" : qsTr("Load your games page first.")
+            }
+            Column {
+                width: parent.width
+                spacing: Theme.s8
+                Text { text: qsTr("Marks"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                ChoiceChips {
+                    objectName: "hundred_marks"
+                    groupName: qsTr("Marks")
                     width: parent.width
-                    height: captionFont.height                    // the line stays when the text goes: the chips below do not move
+                    enabled: screen.hundred.marksEnabled
+                    model: screen.hundred.markChoices
+                    current: screen.hundred.marks
+                    onChosen: (key) => screen.hundred.marks = key
+                }
+                Text {
+                    objectName: "hundred_theme_note"
+                    width: parent.width
+                    visible: screen.hundred.themeNote !== ""
                     wrapMode: Text.WordWrap
                     color: Theme.faint
                     font.pixelSize: Theme.bodySize
-                    text: screen.hundred.styleEnabled ? "" : qsTr("Load your games page first.")
+                    text: screen.hundred.themeNote
                 }
-                Column {
+                Text { text: shell.flow === "manual" ? qsTr("Highlight") : qsTr("Case"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                ChoiceChips {
+                    objectName: "hundred_style"
+                    groupName: qsTr("Case")
                     width: parent.width
-                    spacing: Theme.s8
-                    Text { text: qsTr("Marks"); color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    ChoiceChips {
-                        objectName: "hundred_marks"
-                        groupName: qsTr("Marks")
-                        width: parent.width
-                        enabled: screen.hundred.marksEnabled
-                        model: screen.hundred.markChoices
-                        current: screen.hundred.marks
-                        onChosen: (key) => screen.hundred.marks = key
-                    }
-                    Text {
-                        objectName: "hundred_theme_note"
-                        width: parent.width
-                        visible: screen.hundred.themeNote !== ""
-                        wrapMode: Text.WordWrap
-                        color: Theme.faint
-                        font.pixelSize: Theme.bodySize
-                        text: screen.hundred.themeNote
-                    }
-                    Text { text: shell.flow === "manual" ? qsTr("Highlight") : qsTr("Case"); color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    ChoiceChips {
-                        objectName: "hundred_style"
-                        groupName: qsTr("Case")
-                        width: parent.width
-                        enabled: screen.hundred.styleEnabled
-                        model: shell.flow === "manual" ? screen.hundred.manualStyles : screen.hundred.styles
-                        current: shell.flow === "manual" && screen.hundred.style !== "none" ? "ribbon" : screen.hundred.style       // console cases have no gold: any case style means "highlight"
-                        onChosen: (key) => screen.hundred.style = key
-                    }
+                    enabled: screen.hundred.styleEnabled
+                    model: shell.flow === "manual" ? screen.hundred.manualStyles : screen.hundred.styles
+                    current: shell.flow === "manual" && screen.hundred.style !== "none" ? "ribbon" : screen.hundred.style       // console cases have no gold: any case style means "highlight"
+                    onChosen: (key) => screen.hundred.style = key
                 }
             }
         }

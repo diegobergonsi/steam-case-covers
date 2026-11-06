@@ -1836,6 +1836,31 @@ class Components(QtCase):
         self.key("sum_chip_art", Qt.Key_Space)
         self.assertEqual(self.root.property("last"), 2)
 
+    PLAYOUT = ('PreviewLayout { objectName: "pl"; x: 10; y: 10; width: @W@; previewName: "pl_preview"; underHeight: @U@\n'
+               '  underPreview: Rectangle { objectName: "pl_under"; y: 8; width: parent.width; height: 32 }\n'
+               '  Rectangle { objectName: "pl_sec"; width: parent.width; height: 100 } }')
+
+    def test_a_preview_layout_puts_the_sections_beside_the_preview_when_there_is_room(self):
+        from PySide6.QtCore import QPointF
+        self.load(self.PLAYOUT.replace("@W@", "700").replace("@U@", "0"), 760, 420)
+        at = lambda name: self.item(name).mapToScene(QPointF(0, 0))
+        layout, preview, sec = self.item("pl"), self.item("pl_preview"), self.item("pl_sec")
+        self.assertEqual((at("pl_preview").x(), at("pl_preview").y()), (10, 10))
+        self.assertEqual((at("pl_sec").x(), at("pl_sec").y()), (10 + preview.width() + 24, 10))
+        self.assertEqual(sec.width(), 700 - preview.width() - 24)
+        self.assertEqual(layout.height(), 300)                                    # the preview is taller than the one section
+
+    def test_a_preview_layout_puts_the_preview_above_the_sections_when_it_is_narrow(self):
+        from PySide6.QtCore import QPointF
+        self.load(self.PLAYOUT.replace("@W@", "400").replace("@U@", "40"), 460, 620)
+        at = lambda name: self.item(name).mapToScene(QPointF(0, 0))
+        layout, preview = self.item("pl"), self.item("pl_preview")
+        self.assertEqual(at("pl_preview").x(), 10 + (400 - preview.width()) / 2)          # centred
+        self.assertEqual(at("pl_under").x(), at("pl_preview").x())                        # what sits under the preview follows it
+        self.assertEqual(at("pl_under").y(), 10 + preview.height() + 8)
+        self.assertEqual((at("pl_sec").x(), at("pl_sec").y()), (10, 10 + 300 + 40 + 24))
+        self.assertEqual(layout.height(), 300 + 40 + 24 + 100)
+
     GROUP = ('property int picks: 0\nGroupCard { objectName: "gc"; x: 10; y: 10; width: 200; title: "ps5-cases"; subtitle: "PlayStation 5 \u00b7 3 games"; onPicked: win.picks += 1 }')
 
     def test_a_group_card_has_the_name_on_top_and_the_case_under_it(self):
