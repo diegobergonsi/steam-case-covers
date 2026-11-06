@@ -4856,6 +4856,14 @@ class HomeScreen(AddWindow):
         self.assertGreater(title.property("lineCount"), 1)
         self.assertLessEqual(title.mapToScene(QPointF(0, title.height())).y(), b.mapToScene(QPointF(0, b.height())).y())
 
+    def test_the_tag_sits_under_the_title_and_above_the_line(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        top = lambda name: self.item(name).mapToScene(QPointF(0, 0)).y()
+        title, tag, line = "home_card_natural_title", "home_card_natural_tag", "home_card_natural_line"
+        self.assertLessEqual(top(title) + self.item(title).height(), top(tag))
+        self.assertLessEqual(top(tag) + self.item(tag).height(), top(line))
+
     def test_a_long_tag_wraps_inside_its_card(self):
         from PySide6.QtCore import QPointF
         self.open_home()

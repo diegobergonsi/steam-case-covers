@@ -41,6 +41,15 @@ Rectangle {
         y: Theme.s16
         width: parent.width - 2 * Theme.s16
         spacing: Theme.s8
+        Text {
+            objectName: card.objectName + "_title"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: card.title
+            color: Theme.text
+            font.pixelSize: Theme.sectionSize
+            font.bold: true
+        }
         Rectangle {
             visible: card.tag !== ""
             width: tagText.width + 2 * Theme.s8
@@ -59,15 +68,6 @@ Rectangle {
                 font.pixelSize: Theme.smallSize
                 font.bold: true
             }
-        }
-        Text {
-            objectName: card.objectName + "_title"
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: card.title
-            color: Theme.text
-            font.pixelSize: Theme.sectionSize
-            font.bold: true
         }
         Text {
             objectName: card.objectName + "_line"
