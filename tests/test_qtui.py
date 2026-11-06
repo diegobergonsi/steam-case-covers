@@ -723,6 +723,18 @@ class GameListScreen(QtCase):
         self.app.processEvents()
         self.assertTrue(tip.property("shown"))
 
+    def test_the_bubble_of_an_info_tip_opens_over_its_tip_not_far_to_the_left(self):
+        """Qt centres a ToolTip by the width of its text on one line (about 1500 px for a long help text), not by its real width."""
+        from PySide6.QtCore import QObject, QPointF
+        tip = self.item("gamelist_installed_tip")
+        tip.setProperty("pinned", True)
+        self.app.processEvents()
+        bubble = next(c for c in tip.findChildren(QObject) if c.metaObject().className().startswith("ToolTip"))
+        left = tip.mapToScene(QPointF(0, 0)).x() + bubble.property("x")
+        middle_of_tip = tip.mapToScene(QPointF(tip.width() / 2, 0)).x()
+        self.assertLessEqual(left, middle_of_tip)
+        self.assertGreaterEqual(left + bubble.property("width"), middle_of_tip)
+
     def test_the_info_tip_explains_family_games(self):
         from engine import steamcase as sc
         self.assertEqual(self.item("gamelist_installed_tip").property("text"), sc.FAMILY_HELP)

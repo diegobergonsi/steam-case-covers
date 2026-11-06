@@ -16,6 +16,9 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - Home now shows the two ways to make covers as two cards: the same case for every game on your list (the one most people want), or pick games and choose their cases. The left menu says which way you are on and how many steps it has. Home no longer has a Start button; you click the card.
 - Everything you tap is now big enough for a finger (44 px): the left menu rows, buttons, the language flags, the small "i" circles, the switches, the colour squares and the slider handles. The "i" circles and the language flags look the same but react to a tap in a 44 px area around them; the two flags are 4 px further apart. The window cannot be made quite as short as before (596 px instead of 528), to fit the new line and the bigger rows in the left menu.
 
+### 🛠 Fixed
+- The help text that opens from an "i" circle now opens right above it. Before, it could open far to the left, further for longer texts.
+
 ## [1.6.1] - 2026-11-03
 
 ### 🛠 Fixed
