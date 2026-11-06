@@ -3634,6 +3634,31 @@ class TouchTargetsInWindow(QtCase):
             with self.subTest(name):
                 self.assert_tappable(name)
 
+    def at_the_shortest_window(self):
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.root.setProperty("height", self.root.property("minimumHeight"))
+        self.app.processEvents()
+
+    def edges(self, name):
+        from PySide6.QtCore import QPointF
+        it = self.item(name)
+        top = it.mapToScene(QPointF(0, 0)).y()
+        return top, top + it.height()
+
+    def check_the_menu_fits(self):
+        self.at_the_shortest_window()
+        self.assertGreaterEqual(self.edges("nav_languages")[0], self.edges("nav_title")[1], "the flags are under the title")
+        self.assertLessEqual(self.edges("nav_languages")[1], self.edges("nav_home")[0], "the flags are above the first menu row")
+        self.assertLessEqual(self.edges("footer_updates")[1], self.root.property("height"), "the last link is inside the window")
+
+    def test_at_the_shortest_window_the_flags_touch_neither_the_title_nor_the_first_row_nor_the_footer_edge(self):
+        self.check_the_menu_fits()
+
+    def test_the_same_in_portuguese_where_words_are_longer(self):
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.check_the_menu_fits()
+
     def test_a_tap_on_the_empty_part_of_a_flag_picks_the_language(self):
         from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
