@@ -9,7 +9,7 @@ A left navigation and one screen on the right. The navigation lists Home, then a
 ## Eleven rules
 
 1. **One job per screen.** Its title says it in four words or fewer ("Choose the look").
-2. **One primary button per screen**, always bottom right. Everything else is quiet. (Home has none: its two cards are the way in.)
+2. **One primary button per screen**, always bottom right. Everything else is quiet. (Home has none: its two cards are the way in. On the Case step the footer button changes its words to the action of the moment: "Use this case for 3 games" while a case and games are ready, "Next →" otherwise.)
 3. **At most three sections per screen**, each with a heading. A fourth thing means a new screen.
 4. **A section holds at most three controls.** More is a list or its own screen. A group that works as one tool (the colour slider, the two tone sliders and the swatches) counts as one control, "the colour picker".
 5. **A new feature needs a home before code.** Which screen, which section? If none fits, this guide changes first.
