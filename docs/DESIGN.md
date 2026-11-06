@@ -47,12 +47,12 @@ components:
     backgroundColor: "{colors.sky-blue}"
     textColor: "{colors.ink-on-blue}"
     rounded: "{rounded.pill}"
-    height: "36px"
+    height: "44px"
   button-quiet:
     backgroundColor: "transparent"
     textColor: "{colors.text}"
     rounded: "{rounded.pill}"
-    height: "36px"
+    height: "44px"
   card:
     backgroundColor: "{colors.card-navy}"
     textColor: "{colors.text}"
@@ -62,7 +62,7 @@ components:
     backgroundColor: "{colors.card-raised}"
     textColor: "{colors.text}"
     rounded: "{rounded.pill}"
-    height: "36px"
+    height: "44px"
 ---
 
 # Design System: Steam Case Covers
@@ -83,6 +83,7 @@ Density is relaxed: a screen has one job, at most three sections, and one filled
 - Fully rounded buttons and chips, softly rounded cards.
 - A preview of the cover beside every choice that changes it.
 - Motion explains, never decorates, and "Reduce effects" turns it all off.
+- Touch-sized: everything tapped has a tap area of at least 44px; the drawn shape may be smaller inside it (the "i" circle, the flags, the switch).
 - Accessible by construction: visible control edges, a keyboard focus ring, names for screen readers, nothing wider than its card.
 
 ## Colors
@@ -145,7 +146,7 @@ Press and hover 90 to 120ms, the navigation highlight and switches 200ms, a scre
 
 ## Components
 
-- **Buttons:** `PrimaryButton` (the one filled button; `quiet: true` is the outlined look) and `QuietButton`. At least 36px tall, bold text, a ring on keyboard focus.
+- **Buttons:** `PrimaryButton` (the one filled button; `quiet: true` is the outlined look) and `QuietButton`. At least 44px tall, bold text, a ring on keyboard focus.
 - **Choices:** `ChoiceChips` (one choice out of a few, arrow keys move it), `SwitchRow`, `Swatch`, `GradientSlider`, `ChoiceSummary` (what earlier steps chose, each leading back to its step).
 - **Frame:** `ScreenFrame`, `Section`, `Card`, `ButtonRow`, `PreviewCard` (the sample cover, the old picture stays while the next one loads).
 - **Cover pictures:** `CoverThumbs` (the first covers of a run as small pictures, wrapping on a narrow window; Make and Add).

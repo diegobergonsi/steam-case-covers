@@ -3568,6 +3568,12 @@ class TouchTargets(unittest.TestCase):
         for name in os.listdir(QML_DIR):
             self.assertNotIn("Theme.touchSize", self.read(name), name)
 
+    def test_the_design_file_says_44(self):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "DESIGN.md")) as f:
+            text = f.read()
+        self.assertNotIn('height: "36px"', text)
+        self.assertEqual(text.count('height: "44px"'), 3, "button-primary, button-quiet and chip")
+
     def test_tapped_rows_and_tips_are_at_least_44(self):
         sizes = self.sizes()
         for key in ("navRowHeight", "fieldRowHeight", "infoSize"):
