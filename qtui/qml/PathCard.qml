@@ -16,7 +16,7 @@ Rectangle {
     property bool blocked: false                      // the other way, while covers are made or added: the click does nothing
     signal activated()
 
-    implicitHeight: info.implicitHeight + cueText.height + Theme.s8 + 2 * Theme.s16
+    implicitHeight: info.implicitHeight + cueText.height + Theme.s8 + Theme.s32
     radius: Theme.radiusCard
     color: "transparent"
     border.width: lead ? Theme.focusRing : Theme.hairline
