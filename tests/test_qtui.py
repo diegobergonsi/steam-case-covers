@@ -3580,6 +3580,76 @@ class TouchTargets(unittest.TestCase):
         self.assertIn("width: Theme.touchMin", text)
 
 
+@need_qt
+class TouchTargetsInWindow(QtCase):
+    """The sizes of the built window: everything a finger taps is at least 44 x 44 (docs/PRODUCT.md), read from the real items."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui import i18n
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True               # the later steps are open
+        self.addCleanup(i18n.set_language, i18n.language())
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.app.processEvents()
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+    def assert_tappable(self, name):
+        it = self.item(name)
+        self.assertGreaterEqual(it.width(), 44, name + " is too narrow for a finger")
+        self.assertGreaterEqual(it.height(), 44, name + " is too short for a finger")
+
+    def test_the_menu_and_its_links_are_tappable(self):
+        for name in ("nav_home", "nav_game_list", "nav_look", "nav_hundred", "nav_make", "nav_add", "footer_discord", "footer_kofi", "footer_updates", "language_en", "language_pt"):
+            with self.subTest(name):
+                self.assert_tappable(name)
+
+    def test_a_switch_row_and_its_i_circle_are_tappable(self):
+        self.shell.go(1)
+        self.app.processEvents()
+        for name in ("gamelist_installed", "gamelist_installed_tip"):
+            with self.subTest(name):
+                self.assert_tappable(name)
+
+    def test_the_look_step_controls_are_tappable(self):
+        self.shell.go(2)
+        self.app.processEvents()
+        names = ["look_swatch_%d" % i for i in range(len(self.shell.look.swatchList))] + ["look_hue", "look_sat", "look_val"]
+        names += ["look_theme_chip_" + t["key"] for t in self.shell.look.themes]
+        for name in names:
+            with self.subTest(name):
+                self.assert_tappable(name)
+
+    def test_a_tap_on_the_empty_part_of_a_flag_picks_the_language(self):
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        flag = self.item("language_pt")
+        corner = flag.mapToScene(QPointF(2, 2)).toPoint()           # inside the 44 px box, outside the 32 x 24 drawn flag
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, corner)
+        self.app.processEvents()
+        self.assertEqual(self.shell.language, "pt-BR")
+
+    def test_the_focus_ring_of_a_flag_and_of_the_i_circle_is_the_drawn_shape(self):
+        import re
+        for name, size in (("LanguageFlag.qml", r"width: Theme\.s32\s+height: Theme\.s24"), ("InfoTip.qml", r"width: Theme\.infoDot\s+height: Theme\.infoDot")):
+            with open(os.path.join(QML_DIR, name)) as f:
+                self.assertRegex(f.read(), r"anchors\.centerIn: parent\s+" + size, name)
+
+
 class Tokens(unittest.TestCase):
     """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
     GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",
