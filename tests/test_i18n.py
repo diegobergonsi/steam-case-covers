@@ -198,5 +198,23 @@ class Saving(unittest.TestCase):
             self.assertEqual(list(json.load(f)), list(settings.SETTING_KEYS))
 
 
+class WholeSentences(unittest.TestCase):
+    """A message is one sentence with a blank where the changing part goes (`%1` in QML, `%s` in Python), never pieces glued together: a translator cannot move a word
+    between pieces."""
+    def test_no_qml_text_is_glued_to_a_translated_piece(self):
+        import re
+        qml = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
+        for name in sorted(os.listdir(qml)):
+            if name.endswith(".qml"):
+                with open(os.path.join(qml, name), encoding="utf-8") as f:
+                    self.assertEqual(re.findall(r"qsTr\([^)]*\)\s*\+|\+\s*qsTr\(", f.read()), [], name)
+
+    @need_qt
+    def test_no_portuguese_message_is_a_fragment(self):
+        from qtui.i18n_pt_br import PT_BR
+        fragments = [k[:60] for k in PT_BR if k.lstrip(" ")[:1] in ",.:;)" or k.rstrip(" ")[-1:] in ",:("]
+        self.assertEqual(fragments, [])
+
+
 if __name__ == "__main__":
     unittest.main()
