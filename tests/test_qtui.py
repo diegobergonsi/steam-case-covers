@@ -7082,6 +7082,64 @@ class FlowTests(PickerBase):
 
 
 @need_qt
+class CasesState(PickerBase):
+    """What the Case step knows besides the pictures: the preview, the so-far line, the subtitle of a group, and the notice when a saved group is left."""
+    def assign(self, key, *games):
+        self.shell.cases.pick(key)
+        for g in games:
+            self.picker.toggle(g)
+        self.shell.cases.assign()
+
+    def saved_group(self, name="Red games", games=(9,)):
+        import groups
+        saved, gid = groups.assign([], name, {"tone": [134, 100, 100]}, list(games))
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        return gid
+
+    def test_the_preview_follows_the_choice_then_the_most_used_case_then_steam(self):
+        self.load()
+        cases = self.shell.cases
+        self.assertEqual(cases.previewSource, "image://preview/platform/steam/1")
+        cases.pick("ps5")
+        self.assertEqual(cases.previewSource, "image://preview/platform/ps5/1")
+        self.picker.toggle(1)
+        cases.assign()
+        self.assertEqual(cases.previewSource, "image://preview/platform/ps5/1")      # nothing chosen now: the case most games are in
+        cases.pick("xbox360")
+        self.assertEqual(cases.previewSource, "image://preview/platform/xbox360/1")
+
+    def test_so_far_lists_the_cases_in_use(self):
+        self.load()
+        cases = self.shell.cases
+        self.assertEqual(cases.soFar, "")
+        self.assign("ps5", 1, 2)
+        self.assign("xbox360", 3)
+        self.assertEqual(cases.soFar, "So far: PlayStation 5 \u00b7 2 games, Xbox 360 \u00b7 1 game")
+
+    def test_a_group_has_a_subtitle_with_its_case_and_games(self):
+        from qtui.cases import case_label
+        self.load()
+        self.saved_group(games=(7, 8, 9))
+        entry = self.shell.cases.groupList[0]
+        self.assertEqual(entry["subtitle"], case_label({"tone": [134, 100, 100]}) + " \u00b7 3 games")
+        self.assertIn("caption", entry)                                          # Home and Make still use it
+
+    def test_picking_a_case_while_a_saved_group_is_chosen_says_so_once(self):
+        self.load()
+        cases, said = self.shell.cases, []
+        self.shell.toast.connect(said.append)
+        cases.pick("ps5")                                                        # no saved group chosen: nothing to say
+        self.assertEqual(said, [])
+        gid = self.saved_group()
+        cases.pickGroup(gid)
+        cases.pick("ps5")
+        self.assertEqual(said, ["You picked a new case, so the saved group was unselected."])
+        cases.pick("ps5")                                                        # the same case again changes nothing
+        self.assertEqual(len(said), 1)
+
+
+@need_qt
 class ManualWindow(PickerBase):
     """The manual flow in the real window: Home, the Games step and the Case step."""
     def setUp(self):

@@ -26,6 +26,7 @@ class Shell(QObject):
     reduceEffectsChanged = Signal()
     flowChanged = Signal()
     switchChanged = Signal()                    # whether the other way can be chosen
+    toast = Signal(str)                         # a short message for the window to show for a moment
     flowNameChanged = Signal()                  # the way in use, or the language its name is in
     languageChanged = Signal()
 

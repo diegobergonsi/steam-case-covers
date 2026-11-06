@@ -7,7 +7,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import groups
 import steamcase as sc
 from qtui import tones
-from qtui.i18n import N_, tr
+from qtui.i18n import N_, tr, trn
 
 ORDER = ("steam", "ps5", "ps4", "ps3", "xboxseries", "xboxone", "xbox360", "switch2", "switch", sc.CUSTOM)       # the Steam case first, then newest to oldest, then the user's own
 LABELS = dict(sc.PLATFORM_LABELS, steam="Steam", custom=N_("My own case"))      # shown through tr(): the brand names have no translation and stay as they are
@@ -47,6 +47,7 @@ class Cases(QObject):
     colourChanged = Signal()
     errorChanged = Signal()
     choicesChanged = Signal()
+    previewChanged = Signal()               # the choice, what is in use, or the own case changed
 
     def __init__(self, shell, parent=None, covers_dir=None):
         super().__init__(parent)
@@ -62,6 +63,8 @@ class Cases(QObject):
         self._tone = (0, 100, 100)
         self._name, self._typed, self._error = "", False, ""
         self._family = False
+        for signal in (self.selectedKeyChanged, self.assignmentsChanged, self.choicesChanged):
+            signal.connect(self.previewChanged)
         shell.owncase.changed.connect(self.choicesChanged)         # the card of the user's own case shows the case, or asks for a file
         shell.picker.selectionChanged.connect(self.selectedKeyChanged)           # canAssign follows the ticks too
         shell.library.pathChanged.connect(self._library_changed)
@@ -85,14 +88,19 @@ class Cases(QObject):
             self._shell.owncase.ask(self._pick_custom)
             return
         if key in ORDER and (key != self._key or self._gid):
-            self._key, self._gid = key, ""
-            self._follow_case()
-            self.selectedKeyChanged.emit()
+            self._new_group(key)
 
     def _pick_custom(self):
-        self._key, self._gid = sc.CUSTOM, ""
+        self._new_group(sc.CUSTOM)
+
+    def _new_group(self, key):
+        """A case was picked: a new group starts with it. Leaving a saved group is said in a toast."""
+        left = self._gid != ""
+        self._key, self._gid = key, ""
         self._follow_case()
         self.selectedKeyChanged.emit()
+        if left:
+            self._shell.toast.emit(tr("You picked a new case, so the saved group was unselected."))
 
     # ----- the colour of the Steam case, the name and the groups -----
     @Property("QVariantList", constant=True)
@@ -157,6 +165,7 @@ class Cases(QObject):
             case = g["case"]
             tone = tuple(case["tone"]) if "tone" in case else None
             out.append({"id": g["id"], "name": g["name"], "label": case_label(case), "caption": group_caption(g["name"], case_label(case), len(g["games"])), "count": len(g["games"]),
+                        "subtitle": case_label(case) + " \u00b7 " + trn("%n game|%n games", len(g["games"])),
                         "color": sc.case_color(*tone) if tone else ""})
         return out
 
@@ -266,6 +275,19 @@ class Cases(QObject):
         """{"label", "count"} for every case in use, in the order of the choices."""
         used = [None if v is None else v for v in self._assigned.values()]
         return [{"label": tr(LABELS[k]), "count": used.count(None if k == "steam" else k)} for k in ORDER if (None if k == "steam" else k) in used]
+
+    @Property(str, notify=assignmentsChanged)
+    def soFar(self):
+        """The cases in use, as one line for the Case step: "So far: PlayStation 5 · 3 games, Xbox One · 1 game" (empty until a game has a case)."""
+        if not self.summary:
+            return ""
+        return tr("So far: %s") % ", ".join(s["label"] + " \u00b7 " + trn("%n game|%n games", s["count"]) for s in self.summary)
+
+    @Property(str, notify=previewChanged)
+    def previewSource(self):
+        """The sample cover beside the choices: the case picked, else the one most games are in, else the Steam case."""
+        key = self._key or self.previewKey or "steam"
+        return next(c["source"] for c in self.choices if c["key"] == key)
 
     @Property(str, notify=assignmentsChanged)
     def previewKey(self):

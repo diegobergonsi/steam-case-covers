@@ -386,6 +386,8 @@ PT_BR = {
     "Same case": "Mesma case",
     "Pick games": "Escolher jogos",
     "Wait until this finishes": "Espere isto terminar",
+    "So far: %s": "Até agora: %s",
+    "You picked a new case, so the saved group was unselected.": "Você escolheu uma nova case, então o grupo salvo foi desmarcado.",
     "Continue →": "Continuar →",
     "Start →": "Começar →",
     "Highlight your 100% games": "Destaque os seus jogos com 100%",
