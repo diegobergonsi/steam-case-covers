@@ -18,7 +18,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAMES = {1: "Hades", 2: "Forza Horizon 5", 3: "God of War"}            # made-up library: the covers are the sample art
 PAGE = {1: (3, 3), 2: (1, 4)}                                            # the games page: game 1 at 100%, game 2 only started
-SIZES = {"home": (900, 900), "look": (900, 900), "100": (900, 1000), "cases": (900, 1000)}      # window size in points; the picture is this times the scale
+SIZES = {"home": (900, 900), "look": (900, 900), "100": (1100, 1150), "cases": (1100, 1150)}      # window size in points; the picture is this times the scale
 LANGUAGES = (("en", ""), ("pt-BR", "-pt"))
 
 
@@ -95,9 +95,12 @@ def main(argv=None):
         shell.setLanguage(code)
         shell.picker.clearAll()
         shell.startPath("natural")
-        shell.go(0)                                                         # Home, the first time: two cards
+        shell.library.installedOnly = False                                 # nothing done yet, so Home is the first-time Home
+        shell.setFact("look_done", False)
+        shell.go(0)
         settle()
         shot("home", suffix)
+        shell.library.installedOnly = True                                  # the steps after the game list are open
         shell.setFact("look_done", False)
         shell.go(shell.stepIndex("look"))
         shot("look", suffix)

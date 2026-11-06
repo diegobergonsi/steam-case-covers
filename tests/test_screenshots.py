@@ -25,7 +25,7 @@ class ScreenshotScript(unittest.TestCase):
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
         run = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "take_screenshots.py"), out, "--scale", "1"], env=env, capture_output=True, text=True, timeout=120)
         self.assertEqual(run.returncode, 0, run.stderr[-600:])
-        sizes = {"home": (900, 900), "look": (900, 900), "100": (900, 1000), "cases": (900, 1000)}
+        sizes = {"home": (900, 900), "look": (900, 900), "100": (1100, 1150), "cases": (1100, 1150)}
         for screen, size in sizes.items():
             for suffix in ("", "-pt"):
                 path = os.path.join(out, "screenshot-%s%s.png" % (screen, suffix))
