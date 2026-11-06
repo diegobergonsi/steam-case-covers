@@ -4964,6 +4964,32 @@ class HomeScreen(AddWindow):
         self.assertLessEqual(title.property("y") + title.property("height"), 68)       # Theme.navFlagsY: where the language flags start
         self.assertFalse(title.property("truncated"))
 
+    def test_the_navigation_names_the_way_in_use_under_home(self):
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QAccessible
+        self.open_home()
+        heading = self.item("nav_flow")
+        self.assertEqual(heading.property("text"), "Same case \u00b7 5 steps")
+        self.assertEqual(QAccessible.queryAccessibleInterface(heading).role(), QAccessible.Role.Heading)
+        top = lambda name: self.item(name).mapToScene(QPointF(0, 0)).y()
+        self.assertLessEqual(top("nav_home") + self.item("nav_home").height(), top("nav_flow"))
+        self.assertLessEqual(top("nav_flow") + heading.height(), top("nav_game_list"))
+        self.shell.startManual()
+        self.app.processEvents()
+        self.assertEqual(heading.property("text"), "Pick games \u00b7 6 steps")
+        self.assertTrue(heading.property("visible"))
+
+    def test_the_highlight_stays_on_the_chosen_step_below_the_heading(self):
+        from PySide6.QtCore import QPointF
+        self.open_home(covers=True)
+        names = {0: "nav_home", 1: "nav_game_list", 2: "nav_look"}
+        for index, name in names.items():
+            self.shell.go(index)
+            self.app.processEvents()
+            light = self.item("nav_highlight").mapToScene(QPointF(0, 0)).y()
+            row = self.item(name).mapToScene(QPointF(0, 0)).y()
+            self.assertEqual(light, row + 3, name)                          # Theme.navHighlightInset
+
     def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):
         import re
         self.open_home()
