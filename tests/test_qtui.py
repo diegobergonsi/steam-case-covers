@@ -50,24 +50,49 @@ class QtCase(unittest.TestCase):
         self.app.processEvents()
 
 class WindowCase(QtCase):
-    """The real window (offscreen, effects reduced so nothing is still sliding), with the later steps open. Tests find items by object name with `item`."""
+    """The real window (offscreen), over a fresh settings file, Downloads folder and covers folder. A test class says what it needs with class attributes:
+    `reduce_effects` (no animation, so nothing is still sliding when a test clicks), `installed_only` (the steps after the game list are open), `facts` (steps
+    already done), `step` (the key of the step the window opens on) and `autostart` (False: the test calls `start_window()` itself, after more set-up).
+    Tests find items by object name with `item`."""
+    reduce_effects = True
+    installed_only = True
+    facts = ()
+    step = None
+    autostart = True
+
     @classmethod
     def setUpClass(cls):
         cls.app = qt_app()
 
     def setUp(self):
+        super().setUp()
+        self.make_shell()
+        if self.autostart:
+            self.start_window()
+
+    def make_shell(self):
+        """`self.shell` over `self.tmp` (a class that already made one, such as FakeStore, keeps its folder and its `covers`)."""
         from qtui import i18n
-        from qtui.app import close_engine, create_engine
         from qtui.shell import Shell
-        self.tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
-        self.shell.reduceEffects = True
-        self.shell.library.installedOnly = True
+        if not hasattr(self, "tmp"):
+            self.tmp = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.downloads = os.path.join(self.tmp, "Downloads")
+        os.makedirs(self.downloads, exist_ok=True)                    # Qt's file dialog starts in a folder that exists
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=getattr(self, "covers", os.path.join(self.tmp, "covers")))
+        self.shell.reduceEffects = self.reduce_effects
+        self.shell.library.installedOnly = self.installed_only
+        for fact in self.facts:
+            self.shell.setFact(fact, True)
         self.addCleanup(i18n.set_language, i18n.language())
+
+    def start_window(self):
+        from qtui.app import close_engine, create_engine
         self.engine = create_engine(self.shell)
         self.addCleanup(close_engine, self.engine)
         self.root = self.engine.rootObjects()[0]
+        if self.step:
+            self.shell.go(self.shell.stepIndex(self.step))
         self.app.processEvents()
 
     def item(self, name):
@@ -75,6 +100,30 @@ class WindowCase(QtCase):
         got = find_item(self.root, name)
         self.assertIsNotNone(got, name)
         return got
+
+    def centre(self, name):
+        from PySide6.QtCore import QPointF
+        it = self.item(name)
+        return it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
+
+    def reveal(self, name):
+        """Scroll the page so the item is in view, as a person would."""
+        from PySide6.QtCore import QPointF
+        scroller = self.item("screen_scroller")
+        y = self.item(name).mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+        scroller.setProperty("contentY", max(0, y - 40))
+        self.app.processEvents()
+
+    def click(self, name):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.reveal(name)
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, self.centre(name))
+        self.app.processEvents()
+
+    def pos(self, name):
+        from PySide6.QtCore import QPointF
+        return self.item(name).mapToScene(QPointF(0, 0))
 
 
 os.environ.setdefault("STEAMCASE_LANG", "en")
@@ -567,45 +616,14 @@ class FilePicker(unittest.TestCase):
 
 
 @need_qt
-class GameListScreen(QtCase):
-    """Step 1 as the approved wireframe, in the real window (offscreen, effects reduced so nothing is still sliding when a test clicks)."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
+class GameListScreen(WindowCase):
+    """Step 1 as the approved wireframe, in the real window."""
+    installed_only = False
+    step = "game_list"
 
     def setUp(self):
-        from qtui.shell import Shell
-        from qtui.app import create_engine
-        self.tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.downloads = os.path.join(self.tmp, "Downloads")
-        os.makedirs(self.downloads)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=self.downloads, covers_dir=os.path.join(self.tmp, "covers"))
-        self.shell.reduceEffects = True
-        self.engine = create_engine(self.shell)
-        self.addCleanup(self.close, self.engine)
-        self.root = self.engine.rootObjects()[0]
+        super().setUp()
         self.lib = self.shell.library
-        self.shell.go(1)
-        self.app.processEvents()
-
-    def close(self, engine):
-        from qtui.app import close_engine
-        close_engine(engine)
-
-    def item(self, name):
-        from qtui.app import find_item
-        got = find_item(self.root, name)
-        self.assertIsNotNone(got, name)
-        return got
-
-    def click(self, name):
-        from PySide6.QtCore import QPointF, Qt
-        from PySide6.QtTest import QTest
-        it = self.item(name)
-        centre = it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
-        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, centre)
-        self.app.processEvents()
 
     def test_it_shows_the_title_and_the_waiting_status(self):
         self.assertEqual(self.item("screen_title").property("text"), "Get your game list")
@@ -1196,56 +1214,13 @@ class LibraryState(QtCase):
 
 
 @need_qt
-class LookScreen(QtCase):
-    """Step 2 as the approved wireframe, in the real window (effects reduced so nothing is still sliding)."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
+class LookScreen(WindowCase):
+    """Step 2 as the approved wireframe, in the real window."""
+    step = "look"
 
     def setUp(self):
-        from qtui.app import close_engine, create_engine
-        from qtui.shell import Shell
-        self.tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
-        self.shell.reduceEffects = True
-        self.shell.library.installedOnly = True               # step 2 is open
-        self.engine = create_engine(self.shell)
-        self.addCleanup(close_engine, self.engine)
-        self.root = self.engine.rootObjects()[0]
+        super().setUp()
         self.look = self.shell.look
-        self.shell.go(2)
-        self.app.processEvents()
-
-    def item(self, name):
-        from qtui.app import find_item
-        got = find_item(self.root, name)
-        self.assertIsNotNone(got, name)
-        return got
-
-    def centre(self, name):
-        from PySide6.QtCore import QPointF
-        it = self.item(name)
-        return it.mapToScene(QPointF(it.width() / 2, it.height() / 2)).toPoint()
-
-    def reveal(self, name):
-        """Scroll the page so the item is in view, as a person would."""
-        from PySide6.QtCore import QPointF
-        scroller = self.item("screen_scroller")
-        y = self.item(name).mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
-        scroller.setProperty("contentY", max(0, y - 40))
-        self.app.processEvents()
-
-    def click(self, name):
-        from PySide6.QtCore import Qt
-        from PySide6.QtTest import QTest
-        self.reveal(name)
-        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, self.centre(name))
-        self.app.processEvents()
-
-    def pos(self, name):
-        from PySide6.QtCore import QPointF
-        return self.item(name).mapToScene(QPointF(0, 0))
 
     def test_it_shows_its_title_and_the_nine_swatches(self):
         self.assertEqual(self.item("screen_title").property("text"), "Choose the look")
@@ -3002,34 +2977,14 @@ class HundredState(QtCase):
 
 
 @need_qt
-class HundredScreen(QtCase):
-    """Step 3 as the approved wireframe, in the real window (effects reduced so nothing is still sliding)."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
+class HundredScreen(WindowCase):
+    """Step 3 as the approved wireframe, in the real window."""
+    step = "hundred"
+    facts = ("look_done",)
 
     def setUp(self):
-        from qtui.app import close_engine, create_engine
-        from qtui.shell import Shell
-        self.tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        os.makedirs(os.path.join(self.tmp, "Downloads"))      # Qt's dialog starts in a folder that exists
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
-        self.shell.reduceEffects = True
-        self.shell.library.installedOnly = True
-        self.shell.setFact("look_done", True)
-        self.engine = create_engine(self.shell)
-        self.addCleanup(close_engine, self.engine)
-        self.root = self.engine.rootObjects()[0]
+        super().setUp()
         self.h = self.shell.hundred
-        self.shell.go(3)
-        self.app.processEvents()
-
-    item = LookScreen.item
-    centre = LookScreen.centre
-    reveal = LookScreen.reveal
-    click = LookScreen.click
-    pos = LookScreen.pos
 
     def load_page(self, progress=None, name="games.html"):
         self.h.loadPage(write_games_page(self.tmp, progress or {1: (3, 3), 2: (1, 4)}, name))
@@ -3627,35 +3582,10 @@ class ChecksWorkflow(unittest.TestCase):
 
 
 @need_qt
-class ShellWindow(QtCase):
-    """The real QML window, offscreen."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
-
-    def setUp(self):
-        from qtui.shell import Shell
-        from qtui.app import create_engine
-        self.tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
-        self.engine = create_engine(self.shell)
-        self.addCleanup(self.close, self.engine)
-        self.root = self.engine.rootObjects()[0]
-
-    def close(self, engine):
-        from qtui.app import close_engine
-        close_engine(engine)
-
-    def item(self, name):
-        """The QML item with this objectName, found in the visual tree (delegates of a Repeater are not QObject children of the window)."""
-        stack = [self.root.contentItem()]
-        while stack:
-            it = stack.pop()
-            if it.objectName() == name:
-                return it
-            stack.extend(it.childItems())
-        self.fail("no item named %s" % name)
+class ShellWindow(WindowCase):
+    """The real QML window, offscreen, as it opens: nothing done yet, and its animations on."""
+    reduce_effects = False
+    installed_only = False
 
     def test_the_window_has_six_nav_items_and_the_footer(self):
         self.assertEqual([self.item("nav_" + k).property("label") for k in ("home", "game_list", "look", "hundred", "make", "add")],
@@ -3764,11 +3694,11 @@ class ShellWindow(QtCase):
         self.assertFalse(QGuiApplication.windowIcon().isNull())
 
     def test_the_window_opens_without_the_art_files(self):
-        from qtui.app import create_engine
+        from qtui.app import close_engine, create_engine
         empty = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, empty, True)
         engine = create_engine(self.shell, assets_dir=empty)           # no discord.png, no default art
-        self.addCleanup(self.close, engine)
+        self.addCleanup(close_engine, engine)
         self.assertEqual(len(engine.rootObjects()), 1)
 
     def test_a_qml_error_is_an_error(self):
@@ -4259,41 +4189,23 @@ class UpdatesState(QtCase):
 
 
 @need_qt
-class MakeScreen(QtCase, FakeStore):
+class MakeScreen(WindowCase, FakeStore):
     """Step 4 in the real window: the choices, the progress, the question before replacing, and the buttons that follow the state."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
+    step = "make"
+    facts = ("look_done", "hundred_done")
 
-    def setUp(self):
-        super().setUp()
+    def make_shell(self):
         from unittest import mock
         from engine import steamcase as sc
-        from qtui.app import close_engine, create_engine
-        from qtui.shell import Shell
         for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: ({1: None, 2: None}, set()))):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        os.makedirs(os.path.join(self.tmp, "Downloads"))
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
-        self.shell.reduceEffects = True
-        self.shell.library.installedOnly = True
-        for fact in ("look_done", "hundred_done"):
-            self.shell.setFact(fact, True)
-        self.engine = create_engine(self.shell)
-        self.addCleanup(close_engine, self.engine)
-        self.root = self.engine.rootObjects()[0]
-        self.make = self.shell.make
-        self.shell.go(4)
-        self.app.processEvents()
+        super().make_shell()
 
-    item = LookScreen.item
-    centre = LookScreen.centre
-    reveal = LookScreen.reveal
-    click = LookScreen.click
-    pos = LookScreen.pos
-    wait_for = HundredScreen.wait_for
+    def setUp(self):
+        super().setUp()
+        self.make = self.shell.make
 
     def text(self, name):
         return self.item(name).property("text")
@@ -4566,18 +4478,16 @@ class MakeScreen(QtCase, FakeStore):
 
 
 @need_qt
-class AddWindow(QtCase, FakeStore):
-    """The real window with Steam faked, for the tests of step 5 and of the whole way: the engine's Steam functions are replaced and logged."""
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
+class AddWindow(WindowCase, FakeStore):
+    """The real window with Steam faked, for the tests of step 5 and of the whole way: the engine's Steam functions are replaced and logged. The covers are made
+    and the window is opened by `start_window()`, which a test calls after its own set-up."""
+    step = "add"
+    facts = ("look_done", "hundred_done")
+    autostart = False
 
-    def setUp(self):
-        super().setUp()
+    def make_shell(self):
         from unittest import mock
         from engine import steamcase as sc
-        from qtui.app import close_engine, create_engine
-        from qtui.shell import Shell
         self.sc, self.running, self.log, self.accounts = sc, False, [], [("111", "Alice")]
         self.backups, self.restored, self.ours, self.extra, self.other = [], 5, [], [], []
         self.grid = os.path.join(self.tmp, "grid")
@@ -4599,33 +4509,19 @@ class AddWindow(QtCase, FakeStore):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        os.makedirs(os.path.join(self.tmp, "Downloads"))
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
-        self.shell.reduceEffects = True
-        self.shell.library.installedOnly = True
-        for fact in ("look_done", "hundred_done"):
-            self.shell.setFact(fact, True)
-        self.made = False
-        self.start_window = lambda: self._start_window(create_engine, close_engine)
+        super().make_shell()
 
-    def _start_window(self, create_engine, close_engine):
+    def setUp(self):
+        super().setUp()
+        self.made = False
+
+    def start_window(self):
         if not self.made:
             self.made = True
             self.shell.make.start()
             self.wait_for(lambda: self.shell.make.done and not self.shell.make.running)
-        self.engine = create_engine(self.shell)
-        self.addCleanup(close_engine, self.engine)
-        self.root = self.engine.rootObjects()[0]
+        super().start_window()
         self.ap = self.shell.apply
-        self.shell.go(5)
-        self.app.processEvents()
-
-    item = LookScreen.item
-    centre = LookScreen.centre
-    reveal = LookScreen.reveal
-    click = LookScreen.click
-    pos = LookScreen.pos
-    wait_for = HundredScreen.wait_for
 
     def text(self, name):
         return self.item(name).property("text")
@@ -6898,20 +6794,16 @@ class ApplyState(QtCase, FakeStore):
 
 
 @need_qt
-class PickerBase(QtCase, FakeStore):
-    """A shell over a three-game library with a fake store, for the Games and Case steps of the manual flow."""
+class PickerBase(WindowCase, FakeStore):
+    """A shell over a three-game library with a fake store, for the Games and Case steps of the manual flow. Most tests use only the shell; the ones that
+    need the window call `start_window()`."""
     NAMES = {1: "Hades", 2: "forza Horizon 5", 3: "God of War"}
     family = ()                              # app ids the fake library reports as family games
+    autostart = False
 
-    @classmethod
-    def setUpClass(cls):
-        cls.app = qt_app()
-
-    def setUp(self):
-        super().setUp()
+    def make_shell(self):
         from unittest import mock
         from engine import steamcase as sc
-        from qtui.shell import Shell
         self.sc = sc
         sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 0, "name": self.NAMES[i]} for i in ids if i in self.NAMES}
         self.library = {i: None for i in self.NAMES}
@@ -6919,9 +6811,10 @@ class PickerBase(QtCase, FakeStore):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        os.makedirs(os.path.join(self.tmp, "Downloads"))
-        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
-        self.shell.library.installedOnly = True
+        super().make_shell()
+
+    def setUp(self):
+        super().setUp()
         self.picker = self.shell.picker
 
     def load(self):
@@ -7715,18 +7608,7 @@ class ManualWindow(PickerBase):
     """The manual flow in the real window: Home, the Games step and the Case step."""
     def setUp(self):
         super().setUp()
-        from qtui.app import close_engine, create_engine
-        self.shell.reduceEffects = True
-        self.engine = create_engine(self.shell)
-        self.addCleanup(close_engine, self.engine)
-        self.root = self.engine.rootObjects()[0]
-        self.app.processEvents()
-
-    def item(self, name):
-        from qtui.app import find_item
-        got = find_item(self.root, name)
-        self.assertIsNotNone(got, name)
-        return got
+        self.start_window()
 
     def text(self, name):
         return self.item(name).property("text")
