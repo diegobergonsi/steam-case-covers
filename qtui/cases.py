@@ -7,7 +7,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 import groups
 import steamcase as sc
 from qtui import tones
-from qtui.i18n import N_, tr
+from qtui.i18n import N_, tr, trn
 
 ORDER = ("steam", "ps5", "ps4", "ps3", "xboxseries", "xboxone", "xbox360", "switch2", "switch", sc.CUSTOM)       # the Steam case first, then newest to oldest, then the user's own
 LABELS = dict(sc.PLATFORM_LABELS, steam="Steam", custom=N_("My own case"))      # shown through tr(): the brand names have no translation and stay as they are
@@ -22,10 +22,14 @@ def _colour_choices():
 
 
 
+def games_line(label, count):
+    """"PlayStation 5 · 3 games": a case and how many games are in it."""
+    return label + " \u00b7 " + trn("%n game|%n games", count)
+
+
 def group_caption(name, label, count):
     """The line that names a group in a list: its name, its case (left out when the name already says it) and how many games."""
-    games = "%d %s" % (count, "game" if count == 1 else "games")
-    return " \u00b7 ".join([name] + ([label] if label and label != name else []) + [games])
+    return " \u00b7 ".join([name] + ([label] if label and label != name else []) + [trn("%n game|%n games", count)])
 
 
 def case_label(case):
@@ -47,6 +51,7 @@ class Cases(QObject):
     colourChanged = Signal()
     errorChanged = Signal()
     choicesChanged = Signal()
+    previewChanged = Signal()               # the choice, what is in use, or the own case changed
 
     def __init__(self, shell, parent=None, covers_dir=None):
         super().__init__(parent)
@@ -62,8 +67,11 @@ class Cases(QObject):
         self._tone = (0, 100, 100)
         self._name, self._typed, self._error = "", False, ""
         self._family = False
+        for signal in (self.selectedKeyChanged, self.assignmentsChanged, self.choicesChanged):
+            signal.connect(self.previewChanged)
         shell.owncase.changed.connect(self.choicesChanged)         # the card of the user's own case shows the case, or asks for a file
         shell.picker.selectionChanged.connect(self.selectedKeyChanged)           # canAssign follows the ticks too
+        self._library_seen = self._library_state()
         shell.library.pathChanged.connect(self._library_changed)
         shell.library.installedOnlyChanged.connect(self._library_changed)
 
@@ -78,21 +86,39 @@ class Cases(QObject):
     def selectedKey(self):
         return self._key
 
+    @Property(str, notify=selectedKeyChanged)
+    def selectedLabel(self):
+        """How the case picked is named ("PlayStation 5", "Steam case, red"), or "" when none is."""
+        return self._case_label(self._key, self._tone) if self._key else ""
+
     @Slot(str)
     def pick(self, key):
         """Pick a case for a new group."""
         if key == sc.CUSTOM:                # always asks for the file: picking again replaces the case
             self._shell.owncase.ask(self._pick_custom)
             return
-        if key in ORDER and (key != self._key or self._gid):
-            self._key, self._gid = key, ""
+        if key in ORDER and key != self._key:
+            self._new_group(key)
+
+    @Slot()
+    def newGroup(self):
+        """The "New group" card: leave the saved group and keep its case for a new one, with no message and without asking for the own case file."""
+        if self._gid:
+            self._gid = ""
             self._follow_case()
             self.selectedKeyChanged.emit()
 
     def _pick_custom(self):
-        self._key, self._gid = sc.CUSTOM, ""
+        self._new_group(sc.CUSTOM)
+
+    def _new_group(self, key):
+        """A case was picked: a new group starts with it. Leaving a saved group is said in a toast."""
+        left = self._gid != ""
+        self._key, self._gid = key, ""
         self._follow_case()
         self.selectedKeyChanged.emit()
+        if left:
+            self._shell.toast.emit(tr("You picked a new case, so the saved group was unselected."))
 
     # ----- the colour of the Steam case, the name and the groups -----
     @Property("QVariantList", constant=True)
@@ -151,14 +177,8 @@ class Cases(QObject):
 
     @Property("QVariantList", notify=groupsChanged)
     def groupList(self):
-        """The groups, saved ones and this run's: {"id", "name", "label" (its case), "color" (its colour or ""), "count"}."""
-        out = []
-        for g in self._groups:
-            case = g["case"]
-            tone = tuple(case["tone"]) if "tone" in case else None
-            out.append({"id": g["id"], "name": g["name"], "label": case_label(case), "caption": group_caption(g["name"], case_label(case), len(g["games"])), "count": len(g["games"]),
-                        "color": sc.case_color(*tone) if tone else ""})
-        return out
+        """The groups, saved ones and this run's, as the cards of the Case step read them: {"id", "name", "count", "subtitle" (its case and games)}."""
+        return [{"id": g["id"], "name": g["name"], "count": len(g["games"]), "subtitle": games_line(case_label(g["case"]), len(g["games"]))} for g in self._groups]
 
     @Slot(str)
     def pickGroup(self, group_id):
@@ -263,15 +283,28 @@ class Cases(QObject):
 
     @Property("QVariantList", notify=assignmentsChanged)
     def summary(self):
-        """{"label", "count"} for every case in use, in the order of the choices."""
-        used = [None if v is None else v for v in self._assigned.values()]
-        return [{"label": tr(LABELS[k]), "count": used.count(None if k == "steam" else k)} for k in ORDER if (None if k == "steam" else k) in used]
+        """{"key", "label", "count"} for every case in use, in the order of the choices."""
+        used = list(self._assigned.values())
+        return [{"key": k, "label": tr(LABELS[k]), "count": used.count(None if k == "steam" else k)} for k in ORDER if (None if k == "steam" else k) in used]
+
+    @Property(str, notify=assignmentsChanged)
+    def soFar(self):
+        """The cases in use, as one line for the Case step: "So far: PlayStation 5 · 3 games, Xbox One · 1 game" (empty until a game has a case)."""
+        if not self.summary:
+            return ""
+        return tr("So far: %s") % ", ".join(games_line(s["label"], s["count"]) for s in self.summary)
+
+    @Property(str, notify=previewChanged)
+    def previewSource(self):
+        """The sample cover beside the choices: the case picked, else the one most games are in, else the Steam case."""
+        key = self._key or self.previewKey or "steam"
+        return next(c["source"] for c in self.choices if c["key"] == key)
 
     @Property(str, notify=assignmentsChanged)
     def previewKey(self):
         """The case most games are in (the first one on a tie): the sample shown on the Make screen."""
         top = max(self.summary, key=lambda s: s["count"], default=None)
-        return next((k for k in ORDER if top and tr(LABELS[k]) == top["label"]), "")
+        return top["key"] if top else ""
 
     def _get_family(self):
         return self._family
@@ -290,7 +323,15 @@ class Cases(QObject):
         library = self._shell.library
         return (not library.installedOnly) and bool(library.path)
 
+    def _library_state(self):
+        library = self._shell.library
+        return (library.path, bool(library.installedOnly))
+
     def _library_changed(self):
+        state = self._library_state()
+        if state == self._library_seen:             # told again (a change of language does that to every property): the list is the same
+            return
+        self._library_seen = state
         self.availabilityChanged.emit()
         if self._assigned:                  # the games belong to the old list
             self._assigned, self._tones, self._gids = {}, {}, {}

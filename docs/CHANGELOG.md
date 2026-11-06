@@ -10,6 +10,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - Pages and the game list now show that they scroll. When the window is too short for a whole page, a thin scroll bar shows on the right and the bottom edge of the page fades out. The game list always shows its scroll bar when it has more games than fit. Both go away when there is nothing more to scroll to.
 
 ### 🔧 Changed
+- The Case step (picking games by hand) is easier to follow. It has three sections instead of five and a preview of the case you picked. Your saved groups are small cards, with the name you gave each group on top and its case and number of games under it. One button at the bottom always shows what comes next ("Use this case for 3 games", then "Next →"). A short message tells you when picking a new case un-selects a saved group, and deleting a group now asks first.
 - Home now shows the two ways to make covers as two cards: the same case for every game on your list (the one most people want), or pick games and choose their cases. The left menu says which way you are on and how many steps it has. Home no longer has a Start button; you click the card.
 - The window cannot be made quite as short as before (552 px instead of 528), to fit the new line in the left menu.
 

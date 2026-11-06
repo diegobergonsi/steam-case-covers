@@ -55,6 +55,23 @@ class Words(unittest.TestCase):
         self.assertEqual(i18n.tr("Cancel"), "Cancelar")
         self.assertEqual(i18n.tr("A sentence nobody translated"), "A sentence nobody translated")
 
+    def test_a_games_line_and_a_group_caption_are_translated(self):
+        from qtui import i18n
+        from qtui.cases import games_line, group_caption
+        self.addCleanup(i18n.set_language, "en")
+        i18n.set_language("en")
+        self.assertEqual((games_line("PlayStation 5", 3), group_caption("Dad's games", "Xbox One", 1)), ("PlayStation 5 \u00b7 3 games", "Dad's games \u00b7 Xbox One \u00b7 1 game"))
+        i18n.set_language("pt-BR")
+        self.assertEqual((games_line("PlayStation 5", 3), group_caption("Dad's games", "Xbox One", 3)), ("PlayStation 5 \u00b7 3 jogos", "Dad's games \u00b7 Xbox One \u00b7 3 jogos"))
+
+    def test_the_games_in_a_group_in_both_languages(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        i18n.set_language("en")
+        self.assertEqual([i18n.trn("%n game|%n games", n) for n in (1, 3)], ["1 game", "3 games"])
+        i18n.set_language("pt-BR")
+        self.assertEqual([i18n.trn("%n game|%n games", n) for n in (1, 3)], ["1 jogo", "3 jogos"])
+
     def test_the_step_counts_of_the_two_ways_in_both_languages(self):
         from qtui import i18n
         self.addCleanup(i18n.set_language, "en")

@@ -20,109 +20,92 @@ ScreenFrame {
         return look.trackColors(which)
     }
 
-    Item {
-        id: layout
-        width: parent.width
-        readonly property bool narrow: width < Theme.previewWidth + Theme.s24 + Theme.sectionMinWidth
-        implicitHeight: narrow ? Theme.previewHeight + Theme.s24 + sections.implicitHeight : Math.max(Theme.previewHeight, sections.implicitHeight)
-        height: implicitHeight
+    PreviewLayout {
+        previewName: "look_preview"
+        source: screen.look.previewSource
 
-        PreviewCard {
-            id: preview
-            objectName: "look_preview"
-            x: layout.narrow ? Math.max(0, (layout.width - width) / 2) : 0
-            source: screen.look.previewSource
-        }
-        Column {
-            id: sections
-            x: layout.narrow ? 0 : preview.width + Theme.s24
-            y: layout.narrow ? preview.height + Theme.s24 : 0
-            width: layout.width - x
-            spacing: Theme.s24
-
-            Section {
-                objectName: "look_section_colour"
-                enabled: !screen.look.ownCase
-                opacity: enabled ? 1 : Theme.disabledOpacity
-                heading: qsTr("Case colour")
-                note: screen.look.toneName
-                Column {
-                    width: parent.width
-                    spacing: Theme.s8
-                    Text { text: qsTr("Colour"); color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    GradientSlider { objectName: "look_hue"; width: parent.width; label: qsTr("Colour"); from: 0; to: 359; value: screen.look.hue
-                        stops: screen.look.hueColors(); onMoved: (v) => screen.look.hue = v }
-                    Text { text: qsTr("Colourfulness"); color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    GradientSlider { objectName: "look_sat"; width: parent.width; label: qsTr("Colourfulness"); from: 0; to: 100; value: screen.look.sat
-                        stops: screen.stopsFor("sat"); onMoved: (v) => screen.look.sat = v }
-                    Text { text: qsTr("Brightness"); color: Theme.muted; font.pixelSize: Theme.bodySize }
-                    GradientSlider { objectName: "look_val"; width: parent.width; label: qsTr("Brightness"); from: 0; to: 100; value: screen.look.val
-                        stops: screen.stopsFor("val"); onMoved: (v) => screen.look.val = v }
-                }
-                Flow {
-                    width: parent.width
-                    spacing: Theme.s8
-                    Repeater {
-                        id: swatchRepeater
-                        model: screen.look.swatchList.length        // a number, and a list that never changes: a new tone rebuilds nothing (the focused swatch would be destroyed)
-                        delegate: Swatch {
-                            objectName: "look_swatch_" + index
-                            readonly property var info: screen.look.swatchList[index]
-                            color: info.color
-                            name: info.name
-                            selected: screen.look.selectedSwatch === index
-                            tabStop: selected || (screen.look.selectedSwatch < 0 && index === 0)
-                            onPicked: screen.look.pickSwatch(index)
-                            onStep: (delta) => {
-                                var to = Math.max(0, Math.min(screen.look.swatchList.length - 1, index + delta))
-                                swatchRepeater.itemAt(to).forceActiveFocus()          // the focus moves first, then the choice
-                                screen.look.pickSwatch(to)
-                            }
+        Section {
+            objectName: "look_section_colour"
+            enabled: !screen.look.ownCase
+            opacity: enabled ? 1 : Theme.disabledOpacity
+            heading: qsTr("Case colour")
+            note: screen.look.toneName
+            Column {
+                width: parent.width
+                spacing: Theme.s8
+                Text { text: qsTr("Colour"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                GradientSlider { objectName: "look_hue"; width: parent.width; label: qsTr("Colour"); from: 0; to: 359; value: screen.look.hue
+                    stops: screen.look.hueColors(); onMoved: (v) => screen.look.hue = v }
+                Text { text: qsTr("Colourfulness"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                GradientSlider { objectName: "look_sat"; width: parent.width; label: qsTr("Colourfulness"); from: 0; to: 100; value: screen.look.sat
+                    stops: screen.stopsFor("sat"); onMoved: (v) => screen.look.sat = v }
+                Text { text: qsTr("Brightness"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                GradientSlider { objectName: "look_val"; width: parent.width; label: qsTr("Brightness"); from: 0; to: 100; value: screen.look.val
+                    stops: screen.stopsFor("val"); onMoved: (v) => screen.look.val = v }
+            }
+            Flow {
+                width: parent.width
+                spacing: Theme.s8
+                Repeater {
+                    id: swatchRepeater
+                    model: screen.look.swatchList.length        // a number, and a list that never changes: a new tone rebuilds nothing (the focused swatch would be destroyed)
+                    delegate: Swatch {
+                        objectName: "look_swatch_" + index
+                        readonly property var info: screen.look.swatchList[index]
+                        color: info.color
+                        name: info.name
+                        selected: screen.look.selectedSwatch === index
+                        tabStop: selected || (screen.look.selectedSwatch < 0 && index === 0)
+                        onPicked: screen.look.pickSwatch(index)
+                        onStep: (delta) => {
+                            var to = Math.max(0, Math.min(screen.look.swatchList.length - 1, index + delta))
+                            swatchRepeater.itemAt(to).forceActiveFocus()          // the focus moves first, then the choice
+                            screen.look.pickSwatch(to)
                         }
                     }
                 }
-                StatusLine { objectName: "look_hint"; text: screen.look.toneHint; visible: text !== "" }
-                StatusLine { objectName: "look_note"; text: screen.look.colourNote; visible: text !== ""; color: Theme.faint; font.pixelSize: Theme.smallSize }
             }
-            Section {
-                objectName: "look_section_theme"
-                enabled: !screen.look.ownCase
-                opacity: enabled ? 1 : Theme.disabledOpacity
-                heading: qsTr("Theme")
-                ChoiceChips {
-                    objectName: "look_theme"
-                    width: parent.width
-                    model: screen.look.themes
-                    current: screen.look.theme
-                    onChosen: (key) => screen.look.theme = key
-                }
+            StatusLine { objectName: "look_hint"; text: screen.look.toneHint; visible: text !== "" }
+            StatusLine { objectName: "look_note"; text: screen.look.colourNote; visible: text !== ""; color: Theme.faint; font.pixelSize: Theme.smallSize }
+        }
+        Section {
+            objectName: "look_section_theme"
+            enabled: !screen.look.ownCase
+            opacity: enabled ? 1 : Theme.disabledOpacity
+            heading: qsTr("Theme")
+            ChoiceChips {
+                objectName: "look_theme"
+                width: parent.width
+                model: screen.look.themes
+                current: screen.look.theme
+                onChosen: (key) => screen.look.theme = key
             }
-            Section {
-                objectName: "look_section_own"
-                heading: qsTr("My own case")
-                Text {
-                    width: parent.width
-                    wrapMode: Text.WordWrap
-                    color: Theme.muted
-                    font.pixelSize: Theme.bodySize
-                    text: qsTr("Use a case you made: a PNG of 600 x 900 pixels that is see-through where the art goes (at least 400 x 400). Every game is made in it.")
-                }
-                SwitchRow { objectName: "look_own_case"; label: qsTr("Use my own case for every game"); enabled: shell.owncase.available
-                    checked: screen.look.ownCase; onToggled: (v) => screen.look.ownCase = v }
-                StatusLine { objectName: "look_own_error"; visible: shell.owncase.error !== ""; text: shell.owncase.error; kind: "error" }
-                ButtonRow {
-                    PrimaryButton { objectName: "look_own_choose"; quiet: true; text: shell.owncase.available ? qsTr("Choose another file…") : qsTr("Choose file…")
-                        onClicked: screen.look.chooseOwnCase() }
-                }
+        }
+        Section {
+            objectName: "look_section_own"
+            heading: qsTr("My own case")
+            Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                color: Theme.muted
+                font.pixelSize: Theme.bodySize
+                text: qsTr("Use a case you made: a PNG of 600 x 900 pixels that is see-through where the art goes (at least 400 x 400). Every game is made in it.")
             }
-            Section {
-                objectName: "look_section_art"
-                heading: qsTr("Art")
-                SwitchRow { objectName: "look_custom_art"; label: qsTr("Use my own custom art where I have it"); tip: customArtHelp
-                    checked: screen.look.useCustomArt; onToggled: (v) => screen.look.useCustomArt = v }
-                SwitchRow { objectName: "look_skip_blurry"; label: qsTr("Skip blurry covers"); tip: autoArtHelp
-                    checked: screen.look.skipAutoArt; onToggled: (v) => screen.look.skipAutoArt = v }
+            SwitchRow { objectName: "look_own_case"; label: qsTr("Use my own case for every game"); enabled: shell.owncase.available
+                checked: screen.look.ownCase; onToggled: (v) => screen.look.ownCase = v }
+            StatusLine { objectName: "look_own_error"; visible: shell.owncase.error !== ""; text: shell.owncase.error; kind: "error" }
+            ButtonRow {
+                PrimaryButton { objectName: "look_own_choose"; quiet: true; text: shell.owncase.available ? qsTr("Choose another file…") : qsTr("Choose file…")
+                    onClicked: screen.look.chooseOwnCase() }
             }
+        }
+        Section {
+            objectName: "look_section_art"
+            heading: qsTr("Art")
+            SwitchRow { objectName: "look_custom_art"; label: qsTr("Use my own custom art where I have it"); tip: customArtHelp
+                checked: screen.look.useCustomArt; onToggled: (v) => screen.look.useCustomArt = v }
+            SwitchRow { objectName: "look_skip_blurry"; label: qsTr("Skip blurry covers"); tip: autoArtHelp
+                checked: screen.look.skipAutoArt; onToggled: (v) => screen.look.skipAutoArt = v }
         }
     }
 

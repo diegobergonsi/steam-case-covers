@@ -12,87 +12,70 @@ ScreenFrame {
     title: qsTr("Make your covers")
     subtitle: qsTr("Downloads each game's artwork from Steam and builds the covers on your computer.")
 
-    Item {
-        id: layout
-        width: parent.width
-        readonly property bool narrow: width < Theme.previewWidth + Theme.s24 + Theme.sectionMinWidth
-        implicitHeight: narrow ? Theme.previewHeight + Theme.s24 + sections.implicitHeight : Math.max(Theme.previewHeight, sections.implicitHeight)
-        height: implicitHeight
+    PreviewLayout {
+        previewName: "make_preview"
+        source: shell.flow === "manual" && shell.cases.previewKey !== "" ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.previewSource
 
-        PreviewCard {
-            id: preview
-            objectName: "make_preview"
-            x: layout.narrow ? Math.max(0, (layout.width - width) / 2) : 0
-            source: shell.flow === "manual" && shell.cases.previewKey !== "" ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.previewSource
+        Section {
+            objectName: "make_section_choices"
+            heading: qsTr("Your choices")
+            ChoiceSummary {
+                objectName: "make_choices"
+                width: parent.width
+                model: screen.make.choices
+                onChosen: (step) => shell.go(step)
+            }
         }
-        Column {
-            id: sections
-            x: layout.narrow ? 0 : preview.width + Theme.s24
-            y: layout.narrow ? Theme.previewHeight + Theme.s24 : 0
-            width: layout.width - x
-            spacing: Theme.s24
-
-            Section {
-                objectName: "make_section_choices"
-                heading: qsTr("Your choices")
-                ChoiceSummary {
-                    objectName: "make_choices"
-                    width: parent.width
-                    model: screen.make.choices
-                    onChosen: (step) => shell.go(step)
+        Section {
+            objectName: "make_section_groups"
+            heading: qsTr("Your groups")
+            visible: shell.flow === "natural" && screen.make.groupTicks.choices.length > 0
+            Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                color: Theme.muted
+                font.pixelSize: Theme.bodySize
+                text: qsTr("These groups of covers were made by hand, so they are left as they are. Tick a group to repaint its covers with the look above. That deletes the group.")
+            }
+            Repeater {
+                model: screen.make.groupTicks.choices
+                delegate: SwitchRow {
+                    objectName: "make_group_" + modelData.id
+                    label: modelData.caption
+                    checked: modelData.ticked
+                    enabled: screen.make.canMake
+                    onToggled: screen.make.groupTicks.toggle(modelData.id)
                 }
             }
-            Section {
-                objectName: "make_section_groups"
-                heading: qsTr("Your groups")
-                visible: shell.flow === "natural" && screen.make.groupTicks.choices.length > 0
-                Text {
-                    width: parent.width
-                    wrapMode: Text.WordWrap
-                    color: Theme.muted
-                    font.pixelSize: Theme.bodySize
-                    text: qsTr("These groups of covers were made by hand, so they are left as they are. Tick a group to repaint its covers with the look above. That deletes the group.")
-                }
+        }
+        Section {
+            objectName: "make_section_progress"
+            heading: qsTr("Progress")
+            ProgressBar { objectName: "make_progress"; label: qsTr("Making the covers"); value: screen.make.progress }
+            StatusLine { objectName: "make_status"; text: screen.make.status; kind: screen.make.statusKind }
+            Flow {                                    // what was built: the first covers of the run
+                objectName: "make_thumbs"
+                width: parent.width
+                visible: screen.make.thumbs.length > 0
+                spacing: Theme.s8
                 Repeater {
-                    model: screen.make.groupTicks.choices
-                    delegate: SwitchRow {
-                        objectName: "make_group_" + modelData.id
-                        label: modelData.caption
-                        checked: modelData.ticked
-                        enabled: screen.make.canMake
-                        onToggled: screen.make.groupTicks.toggle(modelData.id)
+                    model: screen.make.thumbs
+                    delegate: Image {
+                        objectName: "make_thumb_" + index
+                        width: Theme.thumbWidth
+                        height: Theme.thumbHeight
+                        source: modelData
+                        sourceSize.width: Theme.thumbPixels
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        cache: false                          // a cover made again under the same name must show the new picture
+                        Accessible.role: Accessible.Graphic
+                        Accessible.name: qsTr("Cover %1").arg(index + 1)
                     }
                 }
             }
-            Section {
-                objectName: "make_section_progress"
-                heading: qsTr("Progress")
-                ProgressBar { objectName: "make_progress"; label: qsTr("Making the covers"); value: screen.make.progress }
-                StatusLine { objectName: "make_status"; text: screen.make.status; kind: screen.make.statusKind }
-                Flow {                                    // what was built: the first covers of the run
-                    objectName: "make_thumbs"
-                    width: parent.width
-                    visible: screen.make.thumbs.length > 0
-                    spacing: Theme.s8
-                    Repeater {
-                        model: screen.make.thumbs
-                        delegate: Image {
-                            objectName: "make_thumb_" + index
-                            width: Theme.thumbWidth
-                            height: Theme.thumbHeight
-                            source: modelData
-                            sourceSize.width: Theme.thumbPixels
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
-                            cache: false                          // a cover made again under the same name must show the new picture
-                            Accessible.role: Accessible.Graphic
-                            Accessible.name: qsTr("Cover %1").arg(index + 1)
-                        }
-                    }
-                }
-                ButtonRow {
-                    QuietButton { objectName: "make_folder"; text: qsTr("Open covers folder"); enabled: screen.make.done; onClicked: screen.make.openFolder() }
-                }
+            ButtonRow {
+                QuietButton { objectName: "make_folder"; text: qsTr("Open covers folder"); enabled: screen.make.done; onClicked: screen.make.openFolder() }
             }
         }
     }
