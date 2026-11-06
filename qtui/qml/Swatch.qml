@@ -13,8 +13,8 @@ Item {
     signal picked()
     signal step(int delta)                              // an arrow key, Home (-100) or End (100): the owner moves the choice and the focus
 
-    width: Theme.touchSize
-    height: Theme.touchSize
+    width: Theme.touchMin
+    height: Theme.touchMin
     activeFocusOnTab: tabStop
     Accessible.role: Accessible.RadioButton
     Accessible.name: name

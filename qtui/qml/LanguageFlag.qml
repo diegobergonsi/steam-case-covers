@@ -12,8 +12,8 @@ Item {
     property bool current: false
     signal activated()
 
-    width: Theme.s32
-    height: Theme.s24
+    width: Theme.flagWidth
+    height: Theme.flagHeight
     activeFocusOnTab: true
     Accessible.role: Accessible.RadioButton
     Accessible.name: name
@@ -35,9 +35,8 @@ Item {
         fillMode: Image.PreserveAspectFit
         opacity: flag.current || area.containsMouse ? 1 : Theme.disabledOpacity
     }
-    MouseArea {
+    TapArea {
         id: area
-        anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: flag.activated()

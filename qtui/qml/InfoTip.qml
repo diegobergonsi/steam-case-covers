@@ -32,9 +32,8 @@ Item {
         border.color: tip.activeFocus ? Theme.text : Theme.accent
         Text { anchors.centerIn: parent; text: "i"; color: Theme.accent; font.pixelSize: Theme.smallSize; font.bold: true }
     }
-    MouseArea {
+    TapArea {
         id: area
-        anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: tip.pinned = !tip.pinned
@@ -56,6 +55,8 @@ Item {
         delay: 0
         timeout: -1
         width: Math.min(Theme.tipMaxWidth, tip.Window.width - 2 * Theme.s32)
+        x: (tip.width - width) / 2                       // the default centres by the width of the text on one line, which is far wider than the bubble
+        y: area.y - height - Theme.s4                    // above the tap area of the "i", so the bubble never covers part of it
         padding: Theme.s12
         onClosed: tip.pinned = false
         contentItem: Text { text: tip.text; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: Theme.tipTextSize }

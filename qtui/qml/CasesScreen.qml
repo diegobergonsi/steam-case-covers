@@ -177,7 +177,7 @@ ScreenFrame {
                 visible: screen.cases.selectedKey !== ""
                 readOnly: screen.cases.selectedGroup !== ""
                 width: parent.width
-                height: Theme.controlHeight
+                height: Theme.touchMin
                 placeholderText: qsTr("Name this group")
                 placeholderTextColor: Theme.faint
                 color: readOnly ? Theme.muted : Theme.text

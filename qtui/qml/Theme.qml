@@ -39,20 +39,21 @@ QtObject {
 
     // sizes of the window and of the controls (docs/ui-guide.md)
     readonly property int windowWidth: 900
-    readonly property int windowHeight: 560
+    readonly property int windowHeight: windowMinHeight
     readonly property int windowMinWidth: 640
-    readonly property int windowMinHeight: 552               // the name and the flags, the heading of the way, seven steps in the navigation and the three links under them
+    readonly property int windowMinHeight: navTop + 10 * navRowHeight + navHeadingHeight + s8 + navFooterGap   // the name and the flags, the heading of the way, seven steps in the navigation and the three links under them
     readonly property int navWidth: 230
-    readonly property int navFlagsY: 68                    // the language flags sit under the name, which may take two lines
-    readonly property int navTop: 100
-    readonly property int navRowHeight: 40
+    readonly property int navFlagsY: 70                    // the language flags sit under the name, which may take two lines; a tap on a flag reaches 10 px above and below it
+    readonly property int navTop: navFlagsY + flagHeight + (touchMin - flagHeight) / 2
+    readonly property int navFooterGap: 20                 // room between the last step and the first link under it
+    readonly property int navRowHeight: touchMin
     readonly property int navHeadingHeight: 24              // the line under Home that names the way in use
     readonly property int navHighlightInset: 3
     readonly property int chromeWidth: navWidth + 2 * s32 + s8 + 2 * s16          // the window width that is not inside a section: the nav, the margins, the shadow room and the card padding
     readonly property int navHighlightHeight: navRowHeight - 2 * navHighlightInset
-    readonly property int controlHeight: 36
-    readonly property int fieldRowHeight: 32
     readonly property int infoSize: 24
+    readonly property int flagWidth: 32
+    readonly property int flagHeight: 24
     readonly property int iconSize: 20
     readonly property int iconPixels: 40
     readonly property int switchWidth: 38
@@ -61,13 +62,13 @@ QtObject {
     readonly property int knobInset: 3
     readonly property int tipMaxWidth: 360
     readonly property int tipTextSize: 13
-    readonly property int touchSize: 36                 // the smallest thing a finger must hit (the Steam Deck)
     readonly property int sliderTrack: 14
     readonly property int previewWidth: 200
     readonly property int previewHeight: 300
     readonly property int sectionMinWidth: 300          // below this the sections no longer fit beside the preview
     readonly property int groupCardWidth: 200            // a saved group on the Case step
-    readonly property int touchMin: 44                   // a finger needs at least this (PRODUCT.md); new controls use it
+    readonly property int touchMin: 44                   // a finger needs at least this (PRODUCT.md): what is tapped is at least this big (see TapArea for a control drawn smaller)
+    readonly property int dialogTextMin: 36             // the least height of the scrolling text of a question: about two lines of body text
     readonly property int toastMs: 4000                  // how long a toast stays
     readonly property int toastCharMs: 50                // a toast stays this much longer for each character, so a long sentence can be read
     readonly property int toastMaxMs: 12000              // but never longer than this

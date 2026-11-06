@@ -72,7 +72,7 @@ ScreenFrame {
                     objectName: "home_row_" + modelData.key
                     readonly property bool locked: modelData.state === "locked"
                     width: parent.width
-                    height: Theme.touchSize
+                    height: Theme.touchMin
                     activeFocusOnTab: !locked
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.label + ", " + screen.stateText[modelData.state]

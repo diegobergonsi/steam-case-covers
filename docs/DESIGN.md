@@ -47,12 +47,12 @@ components:
     backgroundColor: "{colors.sky-blue}"
     textColor: "{colors.ink-on-blue}"
     rounded: "{rounded.pill}"
-    height: "36px"
+    height: "44px"
   button-quiet:
     backgroundColor: "transparent"
     textColor: "{colors.text}"
     rounded: "{rounded.pill}"
-    height: "36px"
+    height: "44px"
   card:
     backgroundColor: "{colors.card-navy}"
     textColor: "{colors.text}"
@@ -62,7 +62,7 @@ components:
     backgroundColor: "{colors.card-raised}"
     textColor: "{colors.text}"
     rounded: "{rounded.pill}"
-    height: "36px"
+    height: "44px"
 ---
 
 # Design System: Steam Case Covers
@@ -83,6 +83,7 @@ Density is relaxed: a screen has one job, at most three sections, and one filled
 - Fully rounded buttons and chips, softly rounded cards.
 - A preview of the cover beside every choice that changes it.
 - Motion explains, never decorates, and "Reduce effects" turns it all off.
+- Touch-sized: everything tapped has a tap area of at least 44px; the drawn shape may be smaller inside it (the "i" circle, the flags, the switch).
 - Accessible by construction: visible control edges, a keyboard focus ring, names for screen readers, nothing wider than its card.
 
 ## Colors
@@ -145,13 +146,14 @@ Press and hover 90 to 120ms, the navigation highlight and switches 200ms, a scre
 
 ## Components
 
-- **Buttons:** `PrimaryButton` (the one filled button; `quiet: true` is the outlined look) and `QuietButton`. At least 36px tall, bold text, a ring on keyboard focus.
+- **Buttons:** `PrimaryButton` (the one filled button; `quiet: true` is the outlined look) and `QuietButton`. At least 44px tall, bold text, a ring on keyboard focus.
 - **Choices:** `ChoiceChips` (one choice out of a few, arrow keys move it), `SwitchRow`, `Swatch`, `GradientSlider`, `ChoiceSummary` (what earlier steps chose, each leading back to its step).
 - **Frame:** `ScreenFrame`, `Section`, `Card`, `ButtonRow`, `PreviewCard` (the sample cover, the old picture stays while the next one loads).
 - **Cover pictures:** `CoverThumbs` (the first covers of a run as small pictures, wrapping on a narrow window; Make and Add).
 - **Preview layout:** `PreviewLayout` (the preview beside the sections, above them on a narrow window; one rule for Look, 100% games, Case and Make).
 - **Groups and messages:** `GroupCard` (a saved group as a two-line selectable card: its name, then its case and games, muted) and `Toast` (a short message above the footer line, 4 seconds plus 50 ms for each character (12 at most), fades in and out).
 - **Ways:** `PathCard` (one of the two ways to make covers on Home: title, line, number of steps, and a "Start" or "Continue" cue; the whole card is the button; the leading card has a sky-blue edge and a tag, the other the control-edge outline on the card colour).
+- **Tapping:** `TapArea` (the part of a small control that reacts to a tap, at least 44px wide and high, centred on the control; the "i" and the language flags use it).
 - **Information:** `StatusLine`, `InfoTip`, `ProgressBar`.
 - **Navigation:** a heading under Home with the name of the way in use and its steps ("Same case · 5 steps"), `NavItem` (a name, a small grey note after it such as "(optional)", a tick or a padlock) and `NavLink` (Discord, Check for updates).
 - **Questions:** `ConfirmDialog`, which dims the window, puts the safe button in focus and keeps Tab inside.

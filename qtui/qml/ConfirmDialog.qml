@@ -147,7 +147,7 @@ FocusScope {
             Flickable {                                 // a lot of words scroll; the buttons stay in view
                 id: body
                 width: content.width
-                height: Math.min(words.implicitHeight, Math.max(Theme.touchSize, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12 - Theme.s12 - Theme.s12))
+                height: Math.min(words.implicitHeight, Math.max(Theme.dialogTextMin, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12 - Theme.s12 - Theme.s12))
                 contentWidth: width
                 contentHeight: words.implicitHeight
                 clip: true

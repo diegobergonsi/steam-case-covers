@@ -69,7 +69,7 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     if screen is not None:                             # a screen that reports nothing keeps the size in Main.qml
         free = screen.availableGeometry()
         root = engine.rootObjects()[0]
-        width, height = start_size(free.width(), free.height())
+        width, height = start_size(free.width(), free.height(), root.minimumHeight())
         root.setWidth(width)
         root.setHeight(height)
     return engine

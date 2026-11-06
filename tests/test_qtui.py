@@ -47,6 +47,34 @@ class QtCase(unittest.TestCase):
             time.sleep(0.02)
         self.app.processEvents()
 
+class WindowCase(QtCase):
+    """The real window (offscreen, effects reduced so nothing is still sliding), with the later steps open. Tests find items by object name with `item`."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = qt_app()
+
+    def setUp(self):
+        from qtui import i18n
+        from qtui.app import close_engine, create_engine
+        from qtui.shell import Shell
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.shell = Shell(os.path.join(self.tmp, "settings.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=os.path.join(self.tmp, "covers"))
+        self.shell.reduceEffects = True
+        self.shell.library.installedOnly = True
+        self.addCleanup(i18n.set_language, i18n.language())
+        self.engine = create_engine(self.shell)
+        self.addCleanup(close_engine, self.engine)
+        self.root = self.engine.rootObjects()[0]
+        self.app.processEvents()
+
+    def item(self, name):
+        from qtui.app import find_item
+        got = find_item(self.root, name)
+        self.assertIsNotNone(got, name)
+        return got
+
+
 os.environ.setdefault("STEAMCASE_LANG", "en")
 QML_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "qml")
 
@@ -237,10 +265,11 @@ class EngineSelfCheck(unittest.TestCase):
 class SystemHelpers(unittest.TestCase):
 
     def test_the_window_opens_bigger_on_a_big_screen_and_never_smaller_than_before(self):
-        self.assertEqual(system.start_size(3840, 2160), (1280, 900))        # capped: a huge screen does not get a huge window
-        self.assertEqual(system.start_size(1920, 1080), (1280, 810))        # width capped at 1280, height 75%
-        self.assertEqual(system.start_size(1280, 800), (900, 600))          # a Steam Deck
-        self.assertEqual(system.start_size(800, 600), (900, 560))           # a small or unknown screen keeps the old size
+        self.assertEqual(system.start_size(3840, 2160, 596), (1280, 900))        # capped: a huge screen does not get a huge window
+        self.assertEqual(system.start_size(1920, 1080, 596), (1280, 810))        # width capped at 1280, height 75%
+        self.assertEqual(system.start_size(1280, 800, 596), (900, 600))          # a Steam Deck
+        self.assertEqual(system.start_size(800, 600, 596), (900, 596))           # a small or unknown screen opens at the shortest the window may be
+        self.assertEqual(system.start_size(1366, 768, 596), (956, 596))          # a laptop: 75% of 768 is below the shortest window
 
     def test_a_packaged_linux_app_gives_its_children_the_systems_libraries_again(self):
         from unittest import mock
@@ -693,6 +722,18 @@ class GameListScreen(QtCase):
         tip.setProperty("pinned", True)                        # the next click works again, it is not stuck
         self.app.processEvents()
         self.assertTrue(tip.property("shown"))
+
+    def test_the_bubble_of_an_info_tip_opens_over_its_tip_not_far_to_the_left(self):
+        """Qt centres a ToolTip by the width of its text on one line (about 1500 px for a long help text), not by its real width."""
+        from PySide6.QtCore import QObject, QPointF
+        tip = self.item("gamelist_installed_tip")
+        tip.setProperty("pinned", True)
+        self.app.processEvents()
+        bubble = next(c for c in tip.findChildren(QObject) if c.metaObject().className().startswith("ToolTip"))
+        left = tip.mapToScene(QPointF(0, 0)).x() + bubble.property("x")
+        middle_of_tip = tip.mapToScene(QPointF(tip.width() / 2, 0)).x()
+        self.assertLessEqual(left, middle_of_tip)
+        self.assertGreaterEqual(left + bubble.property("width"), middle_of_tip)
 
     def test_the_info_tip_explains_family_games(self):
         from engine import steamcase as sc
@@ -1647,7 +1688,7 @@ class Components(QtCase):
         for name in ("dlg_title", "dlg_p0", "dlg_p1", "dlg_p2", "dlg_confirm", "dlg_cancel"):
             it = self.item(name)
             self.assertLessEqual(it.x() + it.width(), card.width() + 0.5, name)
-        self.assertGreaterEqual(self.item("dlg_confirm").height(), 36)
+        self.assertGreaterEqual(self.item("dlg_confirm").height(), 44)
         self.assertLessEqual(card.y() + card.height(), 420)
 
     def test_the_card_fits_its_words_so_the_right_side_has_no_extra_margin(self):
@@ -1815,7 +1856,7 @@ class Components(QtCase):
         for key, step in (("colour", 2), ("hundred", 3), ("art", 2)):
             with self.subTest(key=key):
                 chip = self.item("sum_chip_" + key)
-                self.assertGreaterEqual(chip.height(), 36)
+                self.assertGreaterEqual(chip.height(), 44)
                 from PySide6.QtCore import QPointF
                 p = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
                 self.root.setProperty("last", -1)
@@ -1831,7 +1872,7 @@ class Components(QtCase):
             self.assertLessEqual(chip.x() + chip.width(), 240.5, key)
             ys.add(round(chip.y()))
         self.assertGreater(len(ys), 1)                                         # they wrap onto more rows
-        self.assertGreaterEqual(s.height(), 36)
+        self.assertGreaterEqual(s.height(), 44)
 
     def test_a_choice_summary_chip_works_from_the_keyboard(self):
         from PySide6.QtCore import Qt
@@ -2006,7 +2047,7 @@ class Components(QtCase):
     def test_a_slider_follows_a_click_and_a_drag_and_stays_in_range(self):
         self.load(self.SLIDER)
         s = self.item("s")
-        self.assertGreaterEqual(s.height(), 36)                      # a finger on the Steam Deck
+        self.assertGreaterEqual(s.height(), 44)                      # a finger on the Steam Deck
         y = 20 + s.height() / 2
         self.mouse("click", 20 + 150, y)
         self.assertAlmostEqual(s.property("value"), 179, delta=8)
@@ -2101,7 +2142,7 @@ class Components(QtCase):
         from PySide6.QtCore import Qt
         self.load(self.SWATCH)
         w = self.item("w")
-        self.assertGreaterEqual(min(w.width(), w.height()), 36)
+        self.assertGreaterEqual(min(w.width(), w.height()), 44)
         self.mouse("click", 20 + w.width() / 2, 20 + w.height() / 2)
         self.assertEqual(w.property("n"), 1)
         self.key("w", Qt.Key_Return)
@@ -2133,7 +2174,7 @@ class Components(QtCase):
         self.load(self.CHIPS)
         c = self.item("c")
         chip = self.item("c_chip_halloween")
-        self.assertGreaterEqual(chip.height(), 36)
+        self.assertGreaterEqual(chip.height(), 44)
         from PySide6.QtCore import QPointF
         centre = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
         self.mouse("click", centre.x(), centre.y())
@@ -4633,6 +4674,19 @@ class AddScreen(AddWindow):
         self.app.processEvents()
         self.assertFalse(self.ap.watching)
 
+    def test_the_account_buttons_are_at_least_44_px_on_home_and_on_the_last_step(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.start_window()
+        self.shell.go(0)
+        self.app.processEvents()
+        for name in ("home_accounts_chip_111", "home_accounts_chip_222"):
+            self.assertGreaterEqual(self.item(name).height(), 44, name)
+        self.shell.go(4)
+        self.shell.go(5)
+        self.app.processEvents()
+        for name in ("add_accounts_chip_111", "add_accounts_chip_222"):
+            self.assertGreaterEqual(self.item(name).height(), 44, name)
+
     def test_one_account_is_named_and_two_are_offered_as_chips(self):
         self.start_window()
         self.assertEqual(self.text("add_account"), "Steam account: Alice")
@@ -5630,7 +5684,7 @@ class HomeScreen(AddWindow):
             self.assertTrue(it.property("activeFocusOnTab"), name)
             iface = QAccessible.queryAccessibleInterface(it)
             self.assertEqual((iface.text(QAccessible.Text.Name), iface.role()), (text, QAccessible.Role.Button), name)
-            self.assertGreaterEqual(it.height(), 36)
+            self.assertGreaterEqual(it.height(), 44)
 
 
 @need_qt
