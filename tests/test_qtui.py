@@ -1957,7 +1957,7 @@ class Components(QtCase):
         self.assertIn("PlayStation 5", info.text(QAccessible.Text.Name))
         self.assertTrue(card.property("activeFocusOnTab"))
         self.assertFalse(info.state().checked)
-        self.assertEqual(card.property("edgeColor").name(), "#5d7a96")
+        self.assertEqual(card.property("edgeColor").name(), "#637f9a")
         card.setProperty("chosen", True)
         self.app.processEvents()
         self.assertTrue(QAccessible.queryAccessibleInterface(card).state().checked)
@@ -3779,7 +3779,7 @@ class ShellWindow(QtCase):
         centre = lambda it: it.mapToScene(QPointF(0, it.height() / 2)).y()
         self.assertAlmostEqual(centre(hint), centre(label), delta=6)                                  # the same line, not a second one
         self.assertGreaterEqual(hint.mapToScene(QPointF(0, 0)).x(), label.mapToScene(QPointF(label.width(), 0)).x())      # after the name
-        self.assertEqual(QColor(hint.property("color")).name(), "#7d92a8")                               # greyer than the name
+        self.assertEqual(QColor(hint.property("color")).name(), "#8a9db1")                               # greyer than the name
         self.assertLess(hint.property("font").pixelSize(), label.property("font").pixelSize())          # and smaller
         self.assertLessEqual(hint.mapToScene(QPointF(hint.width(), 0)).x(), row.mapToScene(QPointF(row.width(), 0)).x() - 20)   # inside the list, clear of the right mark
         QAccessible.setActive(True)
@@ -3795,7 +3795,7 @@ class ShellWindow(QtCase):
     def test_a_step_that_cannot_be_opened_looks_greyed_out_and_has_a_lock(self):
         from PySide6.QtGui import QColor
         colour = lambda key: QColor(self.item("nav_%s_label" % key).property("color")).name()
-        self.assertEqual(colour("look"), "#7d92a8")                                                     # locked: grey
+        self.assertEqual(colour("look"), "#8a9db1")                                                     # locked: grey
         self.assertEqual(colour("game_list"), "#e6edf3")                                                # open: the normal text colour
         self.assertTrue(self.item("nav_look_lock").property("visible"))
         self.assertFalse(self.item("nav_game_list_lock").property("visible"))
@@ -4818,7 +4818,7 @@ class AddScreen(AddWindow):
         self.assertEqual(self.text("add_done_line"), "Steam is starting.")
         self.assertTrue(self.text("add_done_details").startswith("0 replaced older art, 0 already up to date. Backup saved in: "))
         self.assertTrue(self.has("add_thumb_0"))
-        self.assertEqual(self.item("add_done_title").property("color").name(), "#5ba32b")           # Done green
+        self.assertEqual(self.item("add_done_title").property("color").name(), "#6aab3e")           # Done green
         details = self.item("add_done_details")
         self.assertEqual((details.property("readOnly"), details.property("selectByMouse")), (True, True))     # the folder can be copied
         self.assertFalse(self.item("add_undo").property("filled"))                                        # the one blue button is "Go to Home"

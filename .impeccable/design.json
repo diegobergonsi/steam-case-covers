@@ -52,7 +52,7 @@
       "control-edge": {
         "role": "neutral",
         "displayName": "Control Edge",
-        "canonical": "#5d7a96",
+        "canonical": "#637f9a",
         "tonalRamp": [
           "#1d262f",
           "#344453",
@@ -97,7 +97,7 @@
       "text-faint": {
         "role": "neutral",
         "displayName": "Text Faint",
-        "canonical": "#7d92a8",
+        "canonical": "#8a9db1",
         "tonalRamp": [
           "#1f262e",
           "#364351",
@@ -142,7 +142,7 @@
       "done-green": {
         "role": "status",
         "displayName": "Done Green",
-        "canonical": "#5ba32b",
+        "canonical": "#6aab3e",
         "tonalRamp": [
           "#223d10",
           "#3c6b1c",
@@ -268,7 +268,7 @@
       "refersTo": "button-quiet",
       "description": "Everything that is not the main action.",
       "html": "<button class=\"ds-btn ds-quiet\">Browse…</button>",
-      "css": ".ds-btn{font:700 14px system-ui,sans-serif;height:36px;padding:0 16px;border-radius:9999px;cursor:pointer}.ds-quiet{background:transparent;color:#e6edf3;border:1px solid #5d7a96}.ds-quiet:hover{background:#22344a}.ds-quiet:focus-visible{outline:2px solid #e6edf3;outline-offset:3px}"
+      "css": ".ds-btn{font:700 14px system-ui,sans-serif;height:36px;padding:0 16px;border-radius:9999px;cursor:pointer}.ds-quiet{background:transparent;color:#e6edf3;border:1px solid #637f9a}.ds-quiet:hover{background:#22344a}.ds-quiet:focus-visible{outline:2px solid #e6edf3;outline-offset:3px}"
     },
     {
       "name": "Choice Chip",
