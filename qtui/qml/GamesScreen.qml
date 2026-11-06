@@ -62,7 +62,7 @@ ScreenFrame {
             clip: true
             model: screen.picker.model
             boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: ScrollCue { objectName: "games_scrollbar" }
             activeFocusOnTab: true                        // one stop for the whole list: the arrows move between games, Space ticks (a list only builds the rows it shows)
             keyNavigationEnabled: true
             highlightMoveDuration: Theme.dur(90)

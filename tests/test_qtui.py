@@ -1712,6 +1712,26 @@ class Components(QtCase):
             from PySide6.QtCore import QPointF
             self.assertLessEqual(it.mapToScene(QPointF(0, it.height())).y(), 260, name)
 
+    def frame(self, rows, h=300):
+        self.load('ScreenFrame { width: parent.width; height: parent.height; title: "T"; subtitle: "S"\n'
+                  'Repeater { model: %d; Rectangle { width: parent.width; height: 100; color: Theme.card } } }' % rows, 400, h)
+        self.app.processEvents()
+
+    def test_a_long_page_shows_a_scroll_bar_and_a_fade_until_the_end(self):
+        self.frame(8)
+        self.assertTrue(self.item("screen_scrollbar").property("visible"))
+        self.assertTrue(self.item("screen_fade").property("visible"))
+        scroller = self.item("screen_scroller")
+        scroller.setProperty("contentY", scroller.property("contentHeight") - scroller.property("height"))
+        self.app.processEvents()
+        self.assertFalse(self.item("screen_fade").property("visible"))      # nothing more below
+        self.assertTrue(self.item("screen_scrollbar").property("visible"))
+
+    def test_a_short_page_shows_no_scroll_bar_and_no_fade(self):
+        self.frame(1, 600)
+        self.assertFalse(self.item("screen_scrollbar").property("visible"))
+        self.assertFalse(self.item("screen_fade").property("visible"))
+
     THREE = ('property string last: ""\nConfirmDialog { id: dlg; objectName: "dlg"; onConfirmed: win.last = "yes"; onDeclined: win.last = "no"; onAlternated: win.last = "alt" }\n'
              'function openIt() { dlg.ask("Reset", [{"text": "a", "kind": "main"}], "Remove only ours", "Remove all") }\n'
              'function openPlain() { dlg.ask("Plain", [{"text": "a", "kind": "main"}], "Yes") }\n'
@@ -6874,6 +6894,14 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, point)
         self.app.processEvents()
+
+    def test_a_long_games_list_always_shows_its_scroll_bar(self):
+        self.NAMES = {i: "Game %d" % i for i in range(1, 41)}
+        self.library = {i: None for i in self.NAMES}
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.app.processEvents()
+        self.assertTrue(self.item("games_scrollbar").property("visible"))
 
     def step(self):
         return self.shell.steps[self.shell.current]["key"]

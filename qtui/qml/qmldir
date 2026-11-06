@@ -4,6 +4,7 @@ PrimaryButton 1.0 PrimaryButton.qml
 QuietButton 1.0 QuietButton.qml
 Card 1.0 Card.qml
 ScreenFrame 1.0 ScreenFrame.qml
+ScrollCue 1.0 ScrollCue.qml
 Section 1.0 Section.qml
 ButtonRow 1.0 ButtonRow.qml
 StatusLine 1.0 StatusLine.qml

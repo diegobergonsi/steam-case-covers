@@ -3,6 +3,7 @@
 // The frame every step's screen uses: a title, a one-line subtitle, sections that scroll when the window is short, and a footer whose
 // buttons never scroll away (rule 9 of the guide). Put sections inside it, and the screen's buttons in `footer`.
 import QtQuick
+import QtQuick.Controls
 import "."
 
 Item {
@@ -44,12 +45,24 @@ Item {
         contentHeight: body.implicitHeight + Theme.s16       // room for the shadow of the last section
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollCue { id: bar; objectName: "screen_scrollbar" }   // the fade below reads its `size` too
         Column {
             id: body
             enabled: !frame.frozen
             opacity: enabled ? 1 : Theme.disabledOpacity
             width: scroller.width - Theme.s8              // the shadows of the sections need a little room on the right
             spacing: Theme.s24                            // sections sit 24 px apart (rule 7 of the guide)
+        }
+    }
+    Rectangle {                                           // the bottom edge melts away while there is more below: the page looks cut off on purpose
+        objectName: "screen_fade"
+        visible: bar.size < 1 && !scroller.atYEnd
+        y: scroller.y + scroller.height - height
+        width: scroller.width
+        height: Theme.s48
+        gradient: Gradient {
+            GradientStop { position: 0; color: Qt.alpha(Theme.bg, 0) }
+            GradientStop { position: 1; color: Theme.bg }
         }
     }
     Row {
