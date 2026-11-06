@@ -33,7 +33,7 @@ Flow {
             objectName: chips.objectName + "_chip_" + modelData.key
             readonly property bool selected: modelData.key === chips.current
             width: Math.min(label.implicitWidth + 2 * Theme.s16, chips.width)
-            height: Theme.touchSize
+            height: Theme.touchMin
             radius: height / 2
             color: selected ? Theme.accent : area.containsMouse ? Qt.lighter(Theme.raised, Theme.hoverLift) : Theme.raised
             Behavior on color { ColorAnimation { duration: Theme.dur(120) } }

@@ -58,7 +58,7 @@ ScreenFrame {
             id: list
             objectName: "games_list"
             width: parent.width
-            height: Theme.listRows * Theme.touchSize
+            height: Theme.listRows * Theme.touchMin
             clip: true
             model: screen.picker.model
             boundsBehavior: Flickable.StopAtBounds
@@ -86,7 +86,7 @@ ScreenFrame {
                 objectName: "games_row_" + model.appid
                 readonly property int rowAppid: model.appid
                 width: list.width
-                height: Theme.touchSize
+                height: Theme.touchMin
                 Accessible.role: Accessible.CheckBox
                 Accessible.name: model.name
                 Accessible.checkable: true

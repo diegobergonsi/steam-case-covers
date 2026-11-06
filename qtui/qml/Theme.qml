@@ -41,18 +41,19 @@ QtObject {
     readonly property int windowWidth: 900
     readonly property int windowHeight: 560
     readonly property int windowMinWidth: 640
-    readonly property int windowMinHeight: 552               // the name and the flags, the heading of the way, seven steps in the navigation and the three links under them
+    readonly property int windowMinHeight: 596               // the name and the flags, the heading of the way, seven steps in the navigation and the three links under them
     readonly property int navWidth: 230
-    readonly property int navFlagsY: 68                    // the language flags sit under the name, which may take two lines
-    readonly property int navTop: 100
-    readonly property int navRowHeight: 40
+    readonly property int navFlagsY: 58                    // the language flags sit under the name, which may take two lines
+    readonly property int navTop: 104
+    readonly property int navRowHeight: 44
     readonly property int navHeadingHeight: 24              // the line under Home that names the way in use
     readonly property int navHighlightInset: 3
     readonly property int chromeWidth: navWidth + 2 * s32 + s8 + 2 * s16          // the window width that is not inside a section: the nav, the margins, the shadow room and the card padding
     readonly property int navHighlightHeight: navRowHeight - 2 * navHighlightInset
-    readonly property int controlHeight: 36
-    readonly property int fieldRowHeight: 32
-    readonly property int infoSize: 24
+    readonly property int controlHeight: 44
+    readonly property int fieldRowHeight: 44
+    readonly property int infoSize: 44
+    readonly property int infoDot: 24                    // the drawn circle of the "i", inside its 44 box
     readonly property int iconSize: 20
     readonly property int iconPixels: 40
     readonly property int switchWidth: 38
@@ -61,7 +62,6 @@ QtObject {
     readonly property int knobInset: 3
     readonly property int tipMaxWidth: 360
     readonly property int tipTextSize: 13
-    readonly property int touchSize: 36                 // the smallest thing a finger must hit (the Steam Deck)
     readonly property int sliderTrack: 14
     readonly property int previewWidth: 200
     readonly property int previewHeight: 300

@@ -19,7 +19,7 @@ Flow {
             id: chip
             objectName: summary.objectName + "_chip_" + modelData.key
             width: Math.min(names.implicitWidth + Theme.s8 + values.implicitWidth + 2 * Theme.s16, summary.width)
-            height: Theme.touchSize
+            height: Theme.touchMin
             radius: height / 2
             color: area.containsMouse ? Qt.lighter(Theme.raised, Theme.hoverLift) : Theme.raised
             Behavior on color { ColorAnimation { duration: Theme.dur(120) } }

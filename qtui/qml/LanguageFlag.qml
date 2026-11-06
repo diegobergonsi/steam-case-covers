@@ -12,8 +12,8 @@ Item {
     property bool current: false
     signal activated()
 
-    width: Theme.s32
-    height: Theme.s24
+    width: Theme.touchMin
+    height: Theme.touchMin
     activeFocusOnTab: true
     Accessible.role: Accessible.RadioButton
     Accessible.name: name
@@ -21,7 +21,9 @@ Item {
     Accessible.onPressAction: activated()
 
     Rectangle {                                   // the ring: the language in use, and the keyboard focus
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: Theme.s32
+        height: Theme.s24
         radius: Theme.radiusField
         color: "transparent"
         border.width: flag.activeFocus || flag.current ? Theme.focusRing : 0

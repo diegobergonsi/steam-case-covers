@@ -3549,6 +3549,37 @@ class ChecksWorkflow(unittest.TestCase):
             self.assertIn(needle, text)
 
 
+class TouchTargets(unittest.TestCase):
+    """A finger needs 44 px (docs/PRODUCT.md): one size in Theme, and every control that is tapped is at least that big."""
+
+    def sizes(self):
+        import re
+        with open(os.path.join(QML_DIR, "Theme.qml")) as f:
+            return {k: int(v) for k, v in re.findall(r"readonly property int (\w+): (\d+)", f.read())}
+
+    def read(self, name):
+        with open(os.path.join(QML_DIR, name)) as f:
+            return f.read()
+
+    def test_there_is_one_touch_size_and_it_is_44(self):
+        sizes = self.sizes()
+        self.assertEqual(sizes["touchMin"], 44)
+        self.assertNotIn("touchSize", sizes)
+        for name in os.listdir(QML_DIR):
+            self.assertNotIn("Theme.touchSize", self.read(name), name)
+
+    def test_tapped_rows_and_tips_are_at_least_44(self):
+        sizes = self.sizes()
+        for key in ("navRowHeight", "fieldRowHeight", "infoSize"):
+            with self.subTest(key):
+                self.assertGreaterEqual(sizes[key], sizes["touchMin"])
+
+    def test_a_flag_is_tapped_in_a_44_box(self):
+        text = self.read("LanguageFlag.qml")
+        self.assertIn("height: Theme.touchMin", text)
+        self.assertIn("width: Theme.touchMin", text)
+
+
 class Tokens(unittest.TestCase):
     """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
     GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",

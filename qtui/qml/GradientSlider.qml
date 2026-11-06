@@ -14,7 +14,7 @@ Item {
     property var stops: []                              // colours along the track, as "#rrggbb" strings
     signal moved(int value)
 
-    readonly property real handleSize: Theme.touchSize
+    readonly property real handleSize: Theme.touchMin
     readonly property real span: Math.max(Theme.minSpan, width - handleSize)
     implicitHeight: handleSize
     activeFocusOnTab: true

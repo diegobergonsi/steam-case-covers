@@ -25,7 +25,9 @@ Item {
     onPinnedChanged: refresh()                        // with keyboard focus the tip is 'wanted' all the time: pinning must still reopen it after Escape
 
     Rectangle {
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: Theme.infoDot
+        height: Theme.infoDot
         radius: width / 2
         color: "transparent"
         border.width: tip.activeFocus ? Theme.focusRing : Theme.hairline
