@@ -6895,6 +6895,14 @@ class ManualWindow(PickerBase):
         QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, point)
         self.app.processEvents()
 
+    def test_a_long_games_list_always_shows_its_scroll_bar(self):
+        self.NAMES = {i: "Game %d" % i for i in range(1, 41)}
+        self.library = {i: None for i in self.NAMES}
+        self.shell.startManual()
+        self.wait_for(lambda: self.picker.rows)
+        self.app.processEvents()
+        self.assertTrue(self.item("games_scrollbar").property("visible"))
+
     def step(self):
         return self.shell.steps[self.shell.current]["key"]
 

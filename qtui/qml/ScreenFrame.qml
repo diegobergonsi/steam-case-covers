@@ -45,14 +45,7 @@ Item {
         contentHeight: body.implicitHeight + Theme.s16       // room for the shadow of the last section
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {                  // always there while the page is taller than the window, so nobody has to guess it scrolls
-            id: bar
-            objectName: "screen_scrollbar"
-            policy: bar.size < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
-            implicitWidth: Theme.s8
-            contentItem: Rectangle { radius: width / 2; color: Theme.edge }
-            background: Rectangle { radius: width / 2; color: Theme.card }
-        }
+        ScrollBar.vertical: ScrollCue { id: bar; objectName: "screen_scrollbar" }   // the fade below reads its `size` too
         Column {
             id: body
             enabled: !frame.frozen
