@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-31T00:00:00+00:00",
+  "generatedAt": "2026-11-06T00:00:00+00:00",
   "title": "Design System: Steam Case Covers",
   "extensions": {
     "colorMeta": {
@@ -54,14 +54,14 @@
         "displayName": "Control Edge",
         "canonical": "#637f9a",
         "tonalRamp": [
-          "#1d262f",
-          "#344453",
-          "#4a6177",
-          "#607e9b",
-          "#839bb2",
-          "#a7b8c9",
-          "#cbd5df",
-          "#eff2f5"
+          "#1b2632",
+          "#304457",
+          "#44617d",
+          "#597ea2",
+          "#7d9cb9",
+          "#a4b9cd",
+          "#c9d6e1",
+          "#eff2f6"
         ]
       },
       "text": {
@@ -102,8 +102,8 @@
           "#1f262e",
           "#364351",
           "#4d6074",
-          "#657d97",
-          "#879aaf",
+          "#657d96",
+          "#869aaf",
           "#aab8c6",
           "#cdd5dd",
           "#f0f2f5"
@@ -144,14 +144,14 @@
         "displayName": "Done Green",
         "canonical": "#6aab3e",
         "tonalRamp": [
-          "#223d10",
-          "#3c6b1c",
-          "#559928",
-          "#6fc734",
-          "#8fd560",
-          "#b0e18f",
-          "#d0eebd",
-          "#f1faeb"
+          "#233e11",
+          "#3e6c1c",
+          "#579925",
+          "#70c42e",
+          "#8dd560",
+          "#aee191",
+          "#cfeebe",
+          "#f0faeb"
         ]
       },
       "caution-amber": {
