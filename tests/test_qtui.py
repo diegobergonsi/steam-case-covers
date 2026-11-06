@@ -3686,6 +3686,25 @@ class ShellWindow(QtCase):
         self.addCleanup(QAccessible.setActive, False)
         self.assertEqual(QAccessible.queryAccessibleInterface(row).text(QAccessible.Text.Name), "3. 100% games (optional), locked")
 
+    def test_the_menu_and_the_steps_on_home_are_read_out_with_their_state_in_both_languages(self):
+        from PySide6.QtGui import QAccessible
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, i18n.language())
+        self.addCleanup(self.shell.setFact, "ready", False)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        name = lambda item: QAccessible.queryAccessibleInterface(self.item(item)).text(QAccessible.Text.Name)
+        for language, locked, done, home_done, home_next in (("en", "2. Look, locked", "1. Game list, done", "1. Game list, Done", "2. Look, Next"),
+                                                            ("pt-BR", "2. Visual, bloqueado", "1. Lista de jogos, conclu\u00eddo", "1. Lista de jogos, Pronto", "2. Visual, Pr\u00f3ximo")):
+            with self.subTest(language):
+                self.shell.setLanguage(language)
+                self.shell.setFact("ready", False)
+                self.app.processEvents()
+                self.assertEqual(name("nav_look"), locked)
+                self.shell.setFact("ready", True)
+                self.app.processEvents()
+                self.assertEqual((name("nav_game_list"), name("home_row_game_list"), name("home_row_look")), (done, home_done, home_next))
+
     def test_the_steps_are_evenly_spaced_with_or_without_a_hint(self):
         from PySide6.QtCore import QPointF
         ys = [self.item("nav_%s_label" % k).mapToScene(QPointF(0, 0)).y() for k in ("game_list", "look", "hundred", "make", "add")]
