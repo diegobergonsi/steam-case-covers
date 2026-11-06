@@ -4665,6 +4665,39 @@ class ShellHome(QtCase):
             sh.setFact(fact, True)
         self.assertEqual(sh.resume, 1)
 
+    def test_step_counts_leave_out_home(self):
+        sh = self.shell()
+        self.assertEqual((sh.stepCount("natural"), sh.stepCount("manual")), (5, 6))
+
+    def test_choosing_the_other_path_switches_and_leaves_home(self):
+        sh = self.shell()
+        sh.startPath("manual")
+        self.assertEqual((sh.flow, sh.current), ("manual", sh.resume))
+
+    def test_choosing_the_path_you_are_on_goes_to_the_step_to_continue(self):
+        sh = self.shell()
+        sh.startPath("natural")
+        self.assertEqual((sh.flow, sh.current), ("natural", 1))
+
+    def test_a_path_can_be_switched_unless_covers_are_made_or_added(self):
+        sh = self.shell()
+        seen = []
+        sh.switchChanged.connect(lambda: seen.append(sh.canSwitch))
+        self.assertTrue(sh.canSwitch)
+        sh.make._set_state(running=True)
+        self.assertFalse(sh.canSwitch)
+        sh.startPath("manual")
+        self.assertEqual(sh.flow, "natural")
+        sh.make._set_state(running=False)
+        self.assertTrue(sh.canSwitch)
+        sh.apply._busy = True
+        sh.apply.canApplyChanged.emit()
+        self.assertFalse(sh.canSwitch)
+        sh.apply._busy = False
+        sh.apply.canApplyChanged.emit()
+        self.assertTrue(sh.canSwitch)
+        self.assertEqual([v for i, v in enumerate(seen) if i == 0 or v != seen[i - 1]], [False, True, False, True])      # a change may be announced twice; the order is what counts
+
 
 @need_qt
 class HomeScreen(AddWindow):

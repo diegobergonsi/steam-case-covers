@@ -24,6 +24,7 @@ class Shell(QObject):
     currentChanged = Signal()
     reduceEffectsChanged = Signal()
     flowChanged = Signal()
+    switchChanged = Signal()                    # whether the other way can be chosen
     languageChanged = Signal()
 
     def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
@@ -47,6 +48,8 @@ class Shell(QObject):
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
+        self._make.runningChanged.connect(self.switchChanged)
+        self._apply.canApplyChanged.connect(self.switchChanged)
         self._updates = Updates(self)
         self._library.restore()                 # the game list of the last run, if it is still there
         self._picker.selectionChanged.connect(lambda: self.setFact("picked", self._picker.selectedCount > 0))
@@ -83,6 +86,24 @@ class Shell(QObject):
     @Slot()
     def startNatural(self):
         self._switch("natural")
+
+    @Property(bool, notify=switchChanged)
+    def canSwitch(self):
+        """The other way can be chosen: not while covers are made or added to Steam."""
+        return not (self._make.running or self._apply.busy)
+
+    @Slot(str, result=int)
+    def stepCount(self, flow):
+        """How many steps a way has, Home not counted."""
+        return len(steps.STEPS_MANUAL if flow == "manual" else steps.STEPS) - 1
+
+    @Slot(str)
+    def startPath(self, flow):
+        """A card of Home was chosen: the other way is switched to, the way already in use is continued."""
+        if flow == self._flow:
+            self.go(self.resume)
+        else:
+            self._switch(flow)
 
     @Slot(str, result=int)
     def stepIndex(self, key):
