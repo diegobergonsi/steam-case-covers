@@ -58,11 +58,10 @@ ScreenFrame {
         objectName: "add_section_result"
         visible: !screen.apply.hasResult
         heading: qsTr("Result")
-        StatusLine {                                  // progress and errors; the "ok" sentence of an undo is a toast, not repeated here
+        StatusLine {                                  // progress and errors; a result is the Done card or a toast
             objectName: "add_status"
-            readonly property bool said: screen.apply.status !== "" && screen.apply.statusKind !== "ok"
-            text: said ? screen.apply.status : screen.apply.readyText
-            kind: said ? screen.apply.statusKind : "wait"
+            text: screen.apply.status !== "" ? screen.apply.status : screen.apply.readyText
+            kind: screen.apply.status !== "" ? screen.apply.statusKind : "wait"
         }
     }
     Section {                                         // what an Apply that worked did: what was added, what to do next, and Undo in place

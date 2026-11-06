@@ -160,7 +160,7 @@ ScreenFrame {
         }
         StatusLine {
             objectName: "home_status"
-            visible: text !== "" && screen.apply.statusKind !== "ok"          // progress and errors; what was done is said in a toast
+            visible: text !== ""                                       // progress and errors; what was done is said in a toast
             text: screen.apply.status
             kind: screen.apply.statusKind
         }

@@ -62,7 +62,7 @@ class Apply(QObject):
     confirmNeeded = Signal(str, list, str, str)     # the title, the paragraphs [{"text", "kind"}], the label of the "yes" button and of a second way forward ("": none)
     _probed = Signal(bool)                  # whether Steam runs (from the probe thread)
     _stage = Signal(int, str)               # request, what the worker is doing now
-    _finished = Signal(int, object, object)         # request, the words of the result, the words of the error
+    _finished = Signal(int, object, object, object)     # request, the toast words of a restore or reset, the facts of an apply, the words of the error
     _undone = Signal(bool, bool, object)            # is there a backup, is there art of ours to reset, for which account (from the probe thread)
     _scanned = Signal(int, object, object, int, object)     # request, our covers, the account's name, other custom art, the words of an error
 
@@ -81,7 +81,6 @@ class Apply(QObject):
         self._busy = self._asking = self._applied = False
         self._pending = None                            # (mode, names) waiting for the answer to the question
         self._mode = "apply"
-        self._job = None                                # the job the worker is doing; it leaves the facts of an Apply in job["result"]
         self._backup = self._art = self._undo_known = self._undoing = self._again = False
         self._status, self._kind = "", "wait"
         self._result_info = None                        # the facts of the last Apply that worked, for the card (see result_card)
@@ -435,7 +434,7 @@ class Apply(QObject):
             self._busy = False
             text = (tr("No custom covers were found in \u201c%s\u201d. Nothing to reset.") % who if not keep else
                     tr("Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it.") % who)
-            self._set_status(text, "ok")
+            self._set_status("", "wait")
             self._shell.toast.emit(text)                        # a result, so a toast like the others
             self.canApplyChanged.emit()
             self.undoChanged.emit()
@@ -506,15 +505,15 @@ class Apply(QObject):
         job = {"mode": mode, "restart": self.restart, "account": self._acc(), "files": self._make.files() if mode == "apply" else [],
                "names": (names or {}).get("names"), "everything": True if alternate else (names or {}).get("everything", False),
                "keep": (names or {}).get("keep") or []}
-        self._job = job
         if mode == "apply":
             self._set_result(None)                      # a restore or reset that fails must leave the card, and its Undo, where they are
         threading.Thread(target=self._work, args=(self._req, job), daemon=True).start()
 
     def _work(self, req, job):
-        """Off the UI thread: close Steam if it runs, do the job, start Steam again if asked. Talks to the window only through signals."""
+        """Off the UI thread: close Steam if it runs, do the job, start Steam again if asked. Talks to the window only through signals: the toast words of a restore
+        or reset, or the facts of an apply (the card words are built from them when read, see result_card)."""
         say = lambda text: self._tell(req, text)
-        text = error = None
+        text = facts = error = None
         try:
             steam = sc.steam_dir()
             if sc.steam_running():
@@ -525,18 +524,8 @@ class Apply(QObject):
             if job["mode"] == "apply":
                 say(tr("Backing up and copying covers\u2026"))
                 r = sc.apply_covers(steam, self._covers, job["account"], files=job["files"])
-                job["result"] = {"kind": "done" if r["applied"] else "nothing", "applied": r["applied"], "replaced": r["replaced"], "unchanged": r["unchanged"],
-                                 "account": r["account_name"], "backup": r.get("backup", ""), "jpg_moved": r["jpg_moved"], "restart": "no", "error": ""}
-                if r["applied"]:
-                    text = trn("Done. %n cover added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s|"
-                               "Done. %n covers added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s",
-                               r["applied"]) % (r["account_name"], r["replaced"], r["unchanged"], r["backup"])
-                    if r["jpg_moved"]:
-                        text += " " + trn("Art you had set by hand in Steam (%n game) was moved into the backup; Restore brings it back.|"
-                                          "Art you had set by hand in Steam (%n games) was moved into the backup; Restore brings it back.", r["jpg_moved"])
-                else:
-                    text = trn("Nothing to change: the cover was already in the Steam account \u201c%s\u201d.|"
-                               "Nothing to change: all %n covers were already in the Steam account \u201c%s\u201d.", r["unchanged"]) % r["account_name"]
+                facts = {"kind": "done" if r["applied"] else "nothing", "applied": r["applied"], "replaced": r["replaced"], "unchanged": r["unchanged"],
+                         "account": r["account_name"], "backup": r.get("backup", ""), "jpg_moved": r["jpg_moved"], "restart": "no", "error": ""}
             elif job["mode"] == "reset":
                 say(tr("Removing our covers\u2026"))
                 r = sc.reset_to_default(steam, job["account"], job["names"], job["everything"], keep=job["keep"])
@@ -556,21 +545,23 @@ class Apply(QObject):
                 say(tr("Starting Steam\u2026"))
                 try:
                     sc.start_steam(steam)
-                    text += tr(" Steam is starting.")
-                    if job.get("result"):
-                        job["result"]["restart"] = "started"
+                    if facts:
+                        facts["restart"] = "started"
+                    else:
+                        text += tr(" Steam is starting.")
                 except sc.SteamcaseError as e:
-                    text += tr(" Could not start Steam (%s). Please open it yourself.") % e
-                    if job.get("result"):
-                        job["result"].update(restart="failed", error=str(e))
-            else:
+                    if facts:
+                        facts.update(restart="failed", error=str(e))
+                    else:
+                        text += tr(" Could not start Steam (%s). Please open it yourself.") % e
+            elif not facts:
                 text += tr(" Start Steam to see the change.")
         except sc.SteamcaseError as e:
             error = str(e)
         except Exception as e:                          # never leave the window stuck in "busy"
             error = tr("Unexpected problem: %s") % e
         try:
-            self._finished.emit(req, text, error)
+            self._finished.emit(req, text, facts, error)
         except RuntimeError:
             pass
 
@@ -592,7 +583,7 @@ class Apply(QObject):
         if req == self._req and self._busy:
             self._set_status(text, "wait")
 
-    def _on_finished(self, req, text, error):
+    def _on_finished(self, req, text, facts, error):
         if req != self._req:
             return
         self._busy = False
@@ -602,13 +593,13 @@ class Apply(QObject):
             self._set_status(error, "error")
             self.failed.emit(error)
         else:
-            self._set_status(text, "ok")
+            self._set_status("", "wait")                      # the result is a card (apply) or a toast (restore, reset), not a line
             self._set_applied(self._mode == "apply")         # a restore or a reset undoes what was applied
             if self._mode == "apply":
-                self._set_result(self._job.get("result"))     # the card says it
+                self._set_result(facts)
             else:
                 self._set_result(None)                        # what was added is gone (or taken back)
-                self._shell.toast.emit(text)                  # a restore or a reset says it in a toast
+                self._shell.toast.emit(text)
             if self._mode == "reset":
                 self._forget_reset_groups()
         self.refreshUndo()
