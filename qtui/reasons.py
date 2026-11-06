@@ -93,7 +93,7 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     label = look_label(treatment) if treatment else None
     if treatment is None:
         what = tr("the covers of your 100% games are made again as normal covers")
-        title, one = tr("Remove the 100% highlight?"), tr("You chose no highlight for your 100% games (“No special case”, or “No marks” on the normal case): ") + what + "."
+        title, one = tr("Remove the 100% highlight?"), tr("You chose no highlight for your 100%% games (“No special case”, or “No marks” on the normal case): %s.") % what
     elif not completed:
         what = tr("the covers with a highlight lose it, as no game on your page is at 100%")
         title, one = tr("Remove the 100% highlight?"), tr("No game on your page is at 100%, so the covers you made with a highlight lose it and are made again as normal covers.")

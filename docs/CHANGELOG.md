@@ -20,6 +20,9 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 ### 🛠 Fixed
 - The help text that opens from an "i" circle now opens right above it. Before, it could open far to the left, further for longer texts.
 
+### 📝 Behind the scenes
+- A few messages were built from pieces glued together, so a translator could not move a word. They are now one sentence each with a blank for the changing part (the key to save a page, a colour name, the state read out by a screen reader). Nothing changes in the window.
+
 ## [1.6.1] - 2026-11-03
 
 ### 🛠 Fixed

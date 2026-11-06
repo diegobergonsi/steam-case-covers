@@ -14,11 +14,12 @@ The pieces that do this (found by searching the whole window):
 | Screen reader name of a chosen look (`ChoiceSummary.qml`) | an ending | label + ": " + value + ". Change" |
 | Screen reader name of a menu step (`NavItem.qml`) | an ending | label + hint + ", locked" or ", done" |
 | Screen reader name of a step on Home (`HomeScreen.qml`) | a state word | label + ", " + state |
+| Question before replacing covers (`reasons.py`) | a clause in the middle of a sentence | "You chose no highlight … case): " + clause + "." (added during the work: the guard test found it) |
 
 Whole sentences joined by a space (the lines of the Make step, the "Done" card details, the reasons in questions) are **not** a problem: each part is a complete sentence and can be translated as it is.
 
 ## Goal
-Each of the five places above is one message with a blank where the changing part goes, the way the games page help already works (`PAGE_HELP_TEMPLATE % SAVE_KEY`). The words in English and in Portuguese stay as they are today; only where the pieces are cut changes.
+Each of the six places above is one message with a blank where the changing part goes, the way the games page help already works (`PAGE_HELP_TEMPLATE % SAVE_KEY`). The words in English and in Portuguese stay as they are today; only where the pieces are cut changes.
 
 ## Decisions
 
@@ -38,7 +39,7 @@ Wording changes, new languages, the joins of whole sentences, the comma between 
 English and Brazilian Portuguese texts exactly as today (a person comparing before and after sees no change in the window); every message has a Portuguese translation (an existing test checks); the key name still comes from the computer (Cmd+S on macOS, Ctrl+S elsewhere).
 
 ## How we will know (the checks)
-1. A test reads every QML file and fails if a `qsTr(...)` is glued to something with `+` (before or after it). It fails today for the five places above.
+1. A test reads every QML file and fails if a `qsTr(...)` is glued to something with `+` (before or after it). It fails today for the places above in QML (a separator such as " · " is allowed).
 2. A test reads the Portuguese list and fails if a message starts with `,`, `.`, `:`, `;` or `)`, or ends with `,`, `:` or `(` (with or without a space after). It fails today for the pieces `". Change"`, `", locked"`, `", done"` and `"Steam case, "`.
 3. Tests that read the built window say the texts are the same as before: the step 1 instruction (English and Portuguese, with the key name in the middle), the case name of a group, and the screen reader names (through the accessibility interface, as the existing tests do).
 4. The full test suite passes.

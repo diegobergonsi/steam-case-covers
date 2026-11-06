@@ -16,11 +16,12 @@ ScreenFrame {
         objectName: "gamelist_section_list"
         heading: qsTr("Your game list")
         Text {
+            objectName: "gamelist_intro"
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: qsTr("Steam keeps your game list on a web page. Open it and log in if asked. A page of text appears: press ") + saveKey + qsTr(" and save it, keeping the name userdata.json. The app notices the file by itself.")
+            text: qsTr("Steam keeps your game list on a web page. Open it and log in if asked. A page of text appears: press %1 and save it, keeping the name userdata.json. The app notices the file by itself.").arg(saveKey)
         }
         ButtonRow {
             // the one filled button of the screen is "Open the page" until a list is ready, then it turns quiet and "Next" takes over (same button: focus stays)

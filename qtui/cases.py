@@ -38,7 +38,7 @@ def case_label(case):
         return tr(LABELS.get(case["platform"], ""))
     tone = tuple(case["tone"])
     found = next((c["label"] for c in _colour_choices() if sc.tone_key(c["hue"], c["sat"], c["val"]) == sc.tone_key(*tone)), tr("custom colour"))
-    return tr("Steam case, ") + found.lower()
+    return tr("Steam case, %s") % found.lower()
 
 
 class Cases(QObject):

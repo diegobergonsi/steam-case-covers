@@ -207,7 +207,12 @@ class WholeSentences(unittest.TestCase):
         for name in sorted(os.listdir(qml)):
             if name.endswith(".qml"):
                 with open(os.path.join(qml, name), encoding="utf-8") as f:
-                    self.assertEqual(re.findall(r"qsTr\([^)]*\)\s*\+|\+\s*qsTr\(", f.read()), [], name)
+                    text = f.read()
+                glued = re.findall(r"qsTr\([^)]*\)\s*\+", text)
+                for m in re.finditer(r"\+\s*qsTr\(", text):
+                    if not re.search(r'"(?:\\u[0-9a-fA-F]{4}|[^"A-Za-z\\\\])*"\s*$', text[max(0, m.start() - 20):m.start()]):         # a separator such as " \u00b7 " is not a word
+                        glued.append(text[max(0, m.start() - 30):m.end()])
+                self.assertEqual(glued, [], name)
 
     @need_qt
     def test_no_portuguese_message_is_a_fragment(self):
