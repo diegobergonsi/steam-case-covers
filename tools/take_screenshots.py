@@ -91,19 +91,18 @@ def main(argv=None):
         print(path)
 
     page = write_games_page(downloads)
-    for code, suffix in LANGUAGES:
+    for code, suffix in LANGUAGES:                                          # Home and Look first, in both languages: the 100% step loads a games page, which Look would show
         shell.setLanguage(code)
-        shell.picker.clearAll()
-        shell.startPath("natural")
         shell.library.installedOnly = False                                 # nothing done yet, so Home is the first-time Home
         shell.setFact("look_done", False)
         shell.go(0)
-        settle()
         shot("home", suffix)
         shell.library.installedOnly = True                                  # the steps after the game list are open
-        shell.setFact("look_done", False)
         shell.go(shell.stepIndex("look"))
         shot("look", suffix)
+    for code, suffix in LANGUAGES:
+        shell.setLanguage(code)
+        shell.startPath("natural")
         shell.setFact("look_done", True)
         shell.go(shell.stepIndex("hundred"))
         shell.hundred.loadPage(page)
@@ -113,6 +112,7 @@ def main(argv=None):
         shell.hundred.style = "gold-case"
         shot("100", suffix)
         shell.startPath("manual")                                           # the other way: pick games, then a case for them
+        shell.picker.clearAll()
         shell.picker.load()
         end = time.time() + 10
         while shell.picker.loading and time.time() < end:
@@ -122,7 +122,6 @@ def main(argv=None):
         shell.go(shell.stepIndex("case"))
         shell.cases.pick("ps5")
         shot("cases", suffix)
-        shell.startPath("natural")
     return 0
 
 
