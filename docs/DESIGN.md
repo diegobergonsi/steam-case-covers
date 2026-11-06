@@ -148,8 +148,9 @@ Press and hover 90 to 120ms, the navigation highlight and switches 200ms, a scre
 - **Buttons:** `PrimaryButton` (the one filled button; `quiet: true` is the outlined look) and `QuietButton`. At least 36px tall, bold text, a ring on keyboard focus.
 - **Choices:** `ChoiceChips` (one choice out of a few, arrow keys move it), `SwitchRow`, `Swatch`, `GradientSlider`, `ChoiceSummary` (what earlier steps chose, each leading back to its step).
 - **Frame:** `ScreenFrame`, `Section`, `Card`, `ButtonRow`, `PreviewCard` (the sample cover, the old picture stays while the next one loads).
+- **Ways:** `PathCard` (one of the two ways to make covers on Home: title, line, number of steps, and a "Start" or "Continue" cue; the whole card is the button; the leading card has a sky-blue edge and a tag, the other the control-edge outline on the card colour).
 - **Information:** `StatusLine`, `InfoTip`, `ProgressBar`.
-- **Navigation:** `NavItem` (a name, a small grey note after it such as "(optional)", a tick or a padlock) and `NavLink` (Discord, Check for updates).
+- **Navigation:** a heading under Home with the name of the way in use and its steps ("Same case · 5 steps"), `NavItem` (a name, a small grey note after it such as "(optional)", a tick or a padlock) and `NavLink` (Discord, Check for updates).
 - **Questions:** `ConfirmDialog`, which dims the window, puts the safe button in focus and keeps Tab inside.
 - **Cover thumbnails (signature):** the covers just made, in a row under the status on the Make screen. They are the product's output and the only saturated imagery in the window.
 

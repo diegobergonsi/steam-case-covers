@@ -35,7 +35,7 @@ def selftest(shell, qml_dir, assets_dir, log):
     root = engine.rootObjects()[0]
     missing = [k for k in steps.STEPS if find_item(root, "nav_" + k) is None]
     QCoreApplication.processEvents()
-    if find_item(root, "home_main") is None:        # Home is the screen the window opens with
+    if find_item(root, "home_card_natural") is None:     # Home is the screen the window opens with
         missing.append("the Home screen")
     shell.go(1)                                     # step 1 imports parts (the file dialog) that only a packaged build can lack
     QCoreApplication.processEvents()

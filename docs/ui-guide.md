@@ -4,12 +4,12 @@ The rules every screen of the window follows, so a new feature has a place befor
 
 ## Layout
 
-A left navigation and one screen on the right. The navigation lists Home, then five steps: 1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam. Discord and Ko-fi and "Check for updates" (each with its icon; always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
+A left navigation and one screen on the right. The navigation lists Home, then a heading that names the way you are on with its number of steps ("Same case · 5 steps" or "Pick games · 6 steps"), then the steps of that way: for the same case, 1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam. Home shows the two ways as two equal cards (the same case for every game, or pick games and choose their cases); the whole card is the button, the same case leads with a sky-blue edge, and Home has no filled button. You change way from Home, never in the middle of one. Discord and Ko-fi and "Check for updates" (each with its icon; always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
 
 ## Eleven rules
 
 1. **One job per screen.** Its title says it in four words or fewer ("Choose the look").
-2. **One primary button per screen**, always bottom right. Everything else is quiet.
+2. **One primary button per screen**, always bottom right. Everything else is quiet. (Home has none: its two cards are the way in.)
 3. **At most three sections per screen**, each with a heading. A fourth thing means a new screen.
 4. **A section holds at most three controls.** More is a list or its own screen. A group that works as one tool (the colour slider, the two tone sliders and the swatches) counts as one control, "the colour picker".
 5. **A new feature needs a home before code.** Which screen, which section? If none fits, this guide changes first.
@@ -68,6 +68,7 @@ Every piece of a screen is one of these, in `qtui/qml/`. A new component is adde
 - Buttons: `PrimaryButton` (the one filled button of a screen; `quiet: true` is the outlined look) and `QuietButton` (the quiet look).
 - Frame of a screen: `ScreenFrame` (title, subtitle, sections that scroll with a scroll bar and a bottom fade while there is more below, a footer that never scrolls away), `ScrollCue` (the scroll bar every scrolling page and list uses: always on while there is more to scroll to), `Section` (a card with a heading and an optional note at its right), `Card`, `ButtonRow` (buttons with one goal in one row, wrapping when narrow).
 - Navigation: `LanguageFlag` (a small flag under the name of the app that chooses the language; the one in use has a ring), `NavLink` (a quiet link at the bottom of the navigation, with an optional icon: Discord, Ko-fi, Check for updates), `NavItem` (a name, an optional small hint under it such as "(optional)", and a mark when done).
+- Ways: `PathCard` (one of the two ways to make covers on Home: title, line, number of steps and a "Start" or "Continue" cue; the whole card is the button, the leading one has a sky-blue edge and a tag, the other the control-edge outline).
 - Choices: `SwitchRow` (a switch with a label that wraps and an optional info tip), `ChoiceChips` (one choice out of a few, arrow keys move it; `groupName` names it for screen readers; `enabled: false` greys it, makes it inert and keeps the choice visible), `Swatch` (a ready-made colour, arrow keys move between them), `GradientSlider` (a slider whose track shows what it does; a swipe with a finger scrolls, a tap or the handle moves it).
 - Information: `StatusLine` (what is happening), `InfoTip` (the small "i"), `PreviewCard` (the sample cover with a soft shadow; the old picture stays while the next one loads), `ProgressBar` (how far a long job is, 0 to 1; the count goes in a `StatusLine` beside it), `ChoiceSummary` (what earlier steps chose, as chips that lead back to their step; the whole group is one control).
 - Questions: `ConfirmDialog` (covers the window; a question that must be answered before anything changes. It has its own filled button, the confirm; the safe button, Cancel, has the focus; Escape declines; Tab stays inside; an optional third button sits between them for a second way forward, and an information box shows only OK).

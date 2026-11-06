@@ -9,6 +9,10 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - Use a case you made yourself. In the Case step of picking games by hand there is a new card, "My own case", and the Look step of the step by step way has a switch for it. It is a PNG of 600 x 900 pixels that is see-through where the art goes (at least 400 x 400), like the console cases. The app finds the see-through part by itself and refuses a file that does not fit, with one plain sentence. Picking a file replaces the last one, and a copy is kept so you can make the covers again. In the step by step way every game is made in it. From the command line, `make --case-file FILE` does the same for the whole run.
 - Pages and the game list now show that they scroll. When the window is too short for a whole page, a thin scroll bar shows on the right and the bottom edge of the page fades out. The game list always shows its scroll bar when it has more games than fit. Both go away when there is nothing more to scroll to.
 
+### 🔧 Changed
+- Home now shows the two ways to make covers as two cards: the same case for every game on your list (the one most people want), or pick games and choose their cases. The left menu says which way you are on and how many steps it has. Home no longer has a Start button; you click the card.
+- The window cannot be made quite as short as before (552 px instead of 528), to fit the new line in the left menu.
+
 ## [1.6.1] - 2026-11-03
 
 ### 🛠 Fixed
