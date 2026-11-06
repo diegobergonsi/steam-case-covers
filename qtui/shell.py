@@ -8,6 +8,7 @@ from qtui import i18n, settings, steps, system
 from qtui.apply import Apply
 from qtui.cases import Cases
 from qtui.hundred import Hundred
+from qtui.i18n import N_, tr
 from qtui.library import Library
 from qtui.look import Look
 from qtui.make import Make
@@ -25,6 +26,7 @@ class Shell(QObject):
     reduceEffectsChanged = Signal()
     flowChanged = Signal()
     switchChanged = Signal()                    # whether the other way can be chosen
+    flowNameChanged = Signal()                  # the way in use, or the language its name is in
     languageChanged = Signal()
 
     def __init__(self, settings_path=None, downloads=None, covers_dir=None, parent=None):
@@ -48,6 +50,8 @@ class Shell(QObject):
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
+        self.flowChanged.connect(self.flowNameChanged)
+        self.languageChanged.connect(self.flowNameChanged)
         self._make.runningChanged.connect(self.switchChanged)
         self._apply.canApplyChanged.connect(self.switchChanged)
         self._updates = Updates(self)
@@ -70,7 +74,7 @@ class Shell(QObject):
 
     def _switch(self, flow):
         """Change the way through the window. Not while covers are made or added to Steam, and nothing happens if it is the flow already."""
-        if flow == self._flow or self._make.running or self._apply.busy:
+        if flow == self._flow or not self.canSwitch:
             return
         self._flow = flow
         self._steps = self._build()
@@ -79,13 +83,10 @@ class Shell(QObject):
         self._current = self.resume
         self.currentChanged.emit()
 
-    @Slot()
-    def startManual(self):
-        self._switch("manual")
-
-    @Slot()
-    def startNatural(self):
-        self._switch("natural")
+    @Property(str, notify=flowNameChanged)
+    def flowName(self):
+        """The short name of the way in use, for the heading of the navigation and of Home's progress."""
+        return tr(N_("Pick games") if self._flow == "manual" else N_("Same case"))
 
     @Property(bool, notify=switchChanged)
     def canSwitch(self):

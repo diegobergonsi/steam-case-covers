@@ -15,8 +15,9 @@ ScreenFrame {
     Component.onCompleted: { apply.refresh(); apply.watching = true; apply.groupTicks.refresh() }
     Component.onDestruction: apply.watching = false
 
+    function blocked(flow) { return flow !== shell.flow && !shell.canSwitch }          // the other way, while covers are made or added
     function cue(flow) {                              // what a click on the card of a way does
-        if (flow !== shell.flow && !shell.canSwitch) return qsTr("Wait until this finishes")
+        if (blocked(flow)) return qsTr("Wait until this finishes")
         return shell.returning && flow === shell.flow ? qsTr("Continue \u2192") : qsTr("Start \u2192")
     }
 
@@ -29,30 +30,31 @@ ScreenFrame {
             columns: width >= 2 * Theme.pathCardMinWidth + Theme.s16 ? 2 : 1
             spacing: Theme.s16
             readonly property real cardWidth: columns === 2 ? (width - spacing) / 2 : width
-            readonly property real cardHeight: Math.max(natural.implicitHeight, manual.implicitHeight)     // side by side, the two are as tall as the taller
+            readonly property real cardHeight: Math.max(natural.implicitHeight, manual.implicitHeight)
             PathCard {
                 id: natural
                 objectName: "home_card_natural"
                 width: paths.cardWidth
-                height: paths.cardHeight
+                height: paths.columns === 2 ? paths.cardHeight : implicitHeight          // side by side, the two are as tall as the taller
                 lead: true
                 tag: qsTr("Best for most people")
                 title: qsTr("The same case for every game on your list")
                 line: qsTr("Choose a look once. Every game on your list gets it.")
                 steps: qsTr("%n step|%n steps", "", shell.stepCount("natural"))
                 cue: screen.cue("natural")
+                blocked: screen.blocked("natural")
                 onActivated: shell.startPath("natural")
             }
             PathCard {
                 id: manual
                 objectName: "home_card_manual"
                 width: paths.cardWidth
-                height: paths.cardHeight
+                height: paths.columns === 2 ? paths.cardHeight : implicitHeight
                 title: qsTr("Pick games, choose their cases")
                 line: qsTr("Put games in groups and give each group its own case.")
                 steps: qsTr("%n step|%n steps", "", shell.stepCount("manual"))
                 cue: screen.cue("manual")
-                blocked: shell.flow !== "manual" && !shell.canSwitch
+                blocked: screen.blocked("manual")
                 onActivated: shell.startPath("manual")
             }
         }
@@ -60,7 +62,7 @@ ScreenFrame {
     Section {
         objectName: "home_section_progress"
         visible: shell.returning
-        heading: qsTr("Your progress: %1").arg(shell.flow === "manual" ? qsTr("Pick games") : qsTr("Same case"))
+        heading: qsTr("Your progress: %1").arg(shell.flowName)
         Column {
             width: parent.width
             Repeater {

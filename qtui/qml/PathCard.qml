@@ -21,7 +21,7 @@ Rectangle {
     color: "transparent"
     border.width: lead ? Theme.focusRing : Theme.hairline
     border.color: lead ? Theme.accent : Theme.edge
-    opacity: area.pressed ? Theme.pressedOpacity : 1
+    opacity: area.pressed && !blocked ? Theme.pressedOpacity : 1
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: title + ". " + line + " " + steps + ". " + cue
@@ -43,14 +43,17 @@ Rectangle {
         spacing: Theme.s8
         Rectangle {
             visible: card.tag !== ""
-            width: tagText.implicitWidth + 2 * Theme.s8
-            height: tagText.implicitHeight + Theme.s4
-            radius: height / 2
+            width: tagText.width + 2 * Theme.s8
+            height: tagText.height + Theme.s4
+            radius: Theme.radiusField
             color: Theme.raised
             Text {
                 id: tagText
                 objectName: card.objectName + "_tag"
-                anchors.centerIn: parent
+                x: Theme.s8
+                y: Theme.s4 / 2
+                width: Math.min(implicitWidth, info.width - 2 * Theme.s8)          // a long translation wraps instead of leaving the card
+                wrapMode: Text.WordWrap
                 text: card.tag
                 color: Theme.accent
                 font.pixelSize: Theme.smallSize

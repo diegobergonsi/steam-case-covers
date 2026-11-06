@@ -84,9 +84,24 @@ ApplicationWindow {
             width: nav.width
             Repeater {
                 model: shell.steps
-                delegate: Item {                                  // the row after Home also makes room for the heading of the way
+                delegate: Item {                                  // the row after Home also holds the heading of the way, above it
                     width: nav.width
                     height: Theme.navRowHeight + (index === 1 ? Theme.navHeadingHeight : 0)
+                    Text {                                        // which way you are on: its name and how many steps it has
+                        objectName: index === 1 ? "nav_flow" : ""
+                        visible: index === 1
+                        x: Theme.s24
+                        width: nav.width - 2 * Theme.s24
+                        height: Theme.navHeadingHeight
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                        text: shell.flowName + " \u00b7 " + qsTr("%n step|%n steps", "", shell.stepCount(shell.flow))
+                        color: Theme.muted
+                        font.pixelSize: Theme.smallSize
+                        font.bold: true
+                        Accessible.role: Accessible.Heading
+                        Accessible.name: text
+                    }
                     NavItem {
                         objectName: "nav_" + modelData.key
                         y: index === 1 ? Theme.navHeadingHeight : 0
@@ -99,21 +114,6 @@ ApplicationWindow {
                     }
                 }
             }
-        }
-        Text {                                                    // which way you are on: its name and how many steps it has
-            objectName: "nav_flow"
-            x: Theme.s24
-            y: Theme.navTop + Theme.navRowHeight
-            width: nav.width - 2 * Theme.s24
-            height: Theme.navHeadingHeight
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-            text: (shell.flow === "manual" ? qsTr("Pick games") : qsTr("Same case")) + " \u00b7 " + qsTr("%n step|%n steps", "", shell.stepCount(shell.flow))
-            color: Theme.muted
-            font.pixelSize: Theme.smallSize
-            font.bold: true
-            Accessible.role: Accessible.Heading
-            Accessible.name: text
         }
         NavLink {                                                 // footer: Discord, Ko-fi and updates
             objectName: "footer_discord"
