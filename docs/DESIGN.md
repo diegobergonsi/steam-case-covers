@@ -5,13 +5,13 @@ colors:
   night-ground: "#11151c"
   card-navy: "#182433"
   card-raised: "#22344a"
-  control-edge: "#5d7a96"
+  control-edge: "#637f9a"
   text: "#e6edf3"
   text-muted: "#93a7bb"
-  text-faint: "#7d92a8"
+  text-faint: "#8a9db1"
   sky-blue: "#66c0f4"
   ink-on-blue: "#0b141d"
-  done-green: "#5ba32b"
+  done-green: "#6aab3e"
   caution-amber: "#f0b429"
   error-coral: "#ff7b72"
   shadow: "#000000"
@@ -88,7 +88,7 @@ Density is relaxed: a screen has one job, at most three sections, and one filled
 
 ## Colors
 
-A Steam-night palette: a blue-black ground, navy cards, one sky-blue action colour, status colours used sparingly. Contrast is measured against the card colour: text 4.5:1, control outlines 3:1.
+A Steam-night palette: a blue-black ground, navy cards, one sky-blue action colour, status colours used sparingly. Contrast is measured on every fill a colour is drawn on, not only the card: text 4.5:1, control outlines 3:1 (WCAG 2.2 level AA).
 
 ### Primary
 - **Sky Blue** (#66c0f4): the one filled button of a screen, the chosen chip, the progress fill, the switch when on, "i" help. Hover is 15% lighter. Text on it is **Ink on Blue** (#0b141d).
@@ -97,13 +97,13 @@ A Steam-night palette: a blue-black ground, navy cards, one sky-blue action colo
 - **Night Ground** (#11151c): window background (the navigation is this colour, a little darker).
 - **Card Navy** (#182433): card surface.
 - **Card Raised** (#22344a): chips, fields, the current step in the navigation, the empty progress track.
-- **Control Edge** (#5d7a96): outlines of controls and the off switch.
+- **Control Edge** (#637f9a): outlines of controls and the off switch.
 - **Text** (#e6edf3): headings, labels, steps you can open.
 - **Text Muted** (#93a7bb): instructions and secondary copy.
-- **Text Faint** (#7d92a8): steps that cannot be opened yet, small notes such as "(optional)".
+- **Text Faint** (#8a9db1): steps that cannot be opened yet, small notes such as "(optional)".
 
 ### Status
-- **Done Green** (#5ba32b): finished step.
+- **Done Green** (#6aab3e): finished step.
 - **Caution Amber** (#f0b429): warnings, such as Steam being open.
 - **Error Coral** (#ff7b72): errors.
 - **Shadow** (#000000): the shadow under cards and the dimmed window behind a question.

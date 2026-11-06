@@ -22,7 +22,7 @@ A left navigation and one screen on the right. The navigation lists Home, then a
 
 ## Colour
 
-Contrast is measured against the card colour. Body text needs 4.5:1, a control's outline needs 3:1. Colour never carries meaning alone: a locked or finished step also changes its icon.
+Contrast is measured on every fill a colour is drawn on (the window, the menu panel, the card, the raised fill, and the raised fill under the mouse), not only on the card; the numbers in the table below are on the card. Body text needs 4.5:1, a control's outline needs 3:1 (WCAG 2.2 level AA); a switched-off control (shown at 60%) is left out, as the rule leaves it out. Colour never carries meaning alone: a locked or finished step also changes its icon.
 
 | Token | Value | Use |
 |---|---|---|
@@ -32,9 +32,9 @@ Contrast is measured against the card colour. Body text needs 4.5:1, a control's
 | Accent | `#66c0f4` | primary button, selection (9.1:1 on the background) |
 | Text | `#e6edf3` | 13.3:1 |
 | Muted | `#93a7bb` | help text, 6.3:1 |
-| Faint | `#7d92a8` | locked items, 4.9:1 |
-| Control edge | `#5d7a96` | outlines, off switches, 3.5:1 |
-| Done | `#5ba32b` | finished step |
+| Faint | `#8a9db1` | locked items, 5.6:1 |
+| Control edge | `#637f9a` | outlines, off switches, 3.8:1 |
+| Done | `#6aab3e` | finished step |
 | Warning | `#f0b429` | 8.4:1 |
 | Error | `#ff7b72` | 6.2:1 |
 

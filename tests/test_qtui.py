@@ -3592,8 +3592,8 @@ class ChecksWorkflow(unittest.TestCase):
 
 class Tokens(unittest.TestCase):
     """The colours in qtui/qml/Theme.qml are those of docs/ui-guide.md, with the contrast the guide promises; nothing else holds a colour."""
-    GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#7d92a8",
-             "edge": "#5d7a96", "done": "#5ba32b", "warning": "#f0b429", "error": "#ff7b72", "accentInk": "#0b141d", "shadow": "#000000"}
+    GUIDE = {"bg": "#11151c", "card": "#182433", "raised": "#22344a", "accent": "#66c0f4", "text": "#e6edf3", "muted": "#93a7bb", "faint": "#8a9db1",
+             "edge": "#637f9a", "done": "#6aab3e", "warning": "#f0b429", "error": "#ff7b72", "accentInk": "#0b141d", "shadow": "#000000"}
 
     def theme(self):
         import re
@@ -3603,12 +3603,54 @@ class Tokens(unittest.TestCase):
     def test_the_colours_are_the_guides(self):
         self.assertEqual(self.theme(), self.GUIDE)
 
-    def test_contrast_meets_the_guide(self):
+    def fills(self):
+        """The fills a colour is drawn on. The menu panel and the choice button under the mouse are made from other colours the way Qt's `darker` and `lighter` do it."""
+        import colorsys
         t = self.theme()
-        for fg, bg, need in (("text", "card", 4.5), ("muted", "card", 4.5), ("faint", "card", 4.5), ("text", "bg", 4.5), ("accent", "bg", 4.5),
-                             ("accentInk", "accent", 4.5), ("accentInk", "done", 4.5), ("edge", "card", 3.0), ("warning", "card", 4.5), ("error", "card", 4.5)):
+
+        def shift(hex_colour, factor):
+            h, s, v = colorsys.rgb_to_hsv(*[int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)])
+            return "#%02x%02x%02x" % tuple(round(x * 255) for x in colorsys.hsv_to_rgb(h, s, min(1, v * factor)))
+        return {"bg": t["bg"], "navBg": shift(t["bg"], 1 / 1.3), "card": t["card"], "raised": t["raised"], "raisedHover": shift(t["raised"], 1.15)}
+
+    def test_every_colour_meets_the_rule_on_every_fill_it_is_drawn_on(self):
+        """WCAG 2.2 AA: text 4.5 to 1, outlines 3 to 1. A switched-off control (60%) is left out, as the rule leaves it out."""
+        t, fills = self.theme(), self.fills()
+        main = ("bg", "navBg", "card", "raised")
+        pairs = [(c, f, 4.5) for c in ("faint", "done", "error", "warning", "accent") for f in main]
+        pairs += [(c, f, 4.5) for c in ("muted", "text") for f in main + ("raisedHover",)]
+        pairs += [("edge", f, 3.0) for f in main]
+        for fg, bg, need in pairs:
             with self.subTest("%s on %s" % (fg, bg)):
-                self.assertGreaterEqual(contrast(t[fg], t[bg]), need)
+                self.assertGreaterEqual(contrast(t[fg], fills[bg]), need)
+        for bg in ("accent", "done"):
+            with self.subTest("accentInk on " + bg):
+                self.assertGreaterEqual(contrast(t["accentInk"], t[bg]), 4.5)
+
+    def doc(self, *parts):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", *parts)) as f:
+            return f.read()
+
+    def test_the_docs_hold_the_themes_colours(self):
+        import re
+        t, guide, design = self.theme(), self.doc("docs", "ui-guide.md"), self.doc("docs", "DESIGN.md")
+        for name, value in t.items():
+            if name != "shadow":                                      # pure black: the guide names the shadow without a hex
+                self.assertIn(value, guide, name)
+        names = {"night-ground": "bg", "card-navy": "card", "card-raised": "raised", "control-edge": "edge", "text": "text", "text-muted": "muted", "text-faint": "faint",
+                 "sky-blue": "accent", "ink-on-blue": "accentInk", "done-green": "done", "caution-amber": "warning", "error-coral": "error", "shadow": "shadow"}
+        listed = dict(re.findall(r'^  ([\w-]+): "(#[0-9a-f]{6})"$', design.split("typography:")[0], re.M))
+        self.assertEqual(listed, {k: t[v] for k, v in names.items()})
+
+    def test_the_ratios_in_the_guide_are_true(self):
+        import re
+        t, fills, guide = self.theme(), self.fills(), self.doc("docs", "ui-guide.md")
+        rows = {"Accent": ("accent", "bg"), "Text": ("text", "card"), "Muted": ("muted", "card"), "Faint": ("faint", "card"), "Control edge": ("edge", "card"),
+                "Warning": ("warning", "card"), "Error": ("error", "card")}
+        for label, (fg, bg) in rows.items():
+            row = re.search(r"^\| %s \|.*$" % label, guide, re.M).group(0)
+            said = re.search(r"(\d+\.\d):1", row).group(1)
+            self.assertEqual(said, "%.1f" % contrast(t[fg], fills[bg]), label)
 
     def test_the_guide_names_the_steps_like_the_window(self):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", "docs", "ui-guide.md")) as f:
