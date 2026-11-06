@@ -141,10 +141,9 @@ class TouchTargetsInWindow(WindowCase):
         self.in_both_languages(self.check_the_menu_fits)
 
     def test_a_title_of_two_lines_still_leaves_the_flags_alone(self):
-        one_line = self.item("nav_title").height()
-        self.item("nav_title").setProperty("text", "Steam Case Covers Steam Case Covers")
+        self.item("nav_title").setProperty("text", "Steam Case Covers Steam Case Covers")      # on Windows the normal title is already two lines, so ask for two
         self.app.processEvents()
-        self.assertGreater(self.item("nav_title").height(), one_line)
+        self.assertEqual(self.item("nav_title").property("lineCount"), 2)
         self.check_the_menu_fits()
 
     def test_at_the_narrowest_window_the_look_step_stays_inside_its_cards(self):
