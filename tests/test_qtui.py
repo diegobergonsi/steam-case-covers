@@ -3659,6 +3659,21 @@ class TouchTargetsInWindow(QtCase):
         self.app.processEvents()
         self.check_the_menu_fits()
 
+    def test_at_the_narrowest_window_the_colour_squares_and_choice_buttons_stay_inside_their_card(self):
+        from PySide6.QtCore import QPointF
+        self.shell.go(2)
+        self.at_the_shortest_window()
+        look = self.shell.look
+        groups = (("look_section_colour", ["look_swatch_%d" % i for i in range(len(look.swatchList))]),
+                  ("look_section_theme", ["look_theme_chip_" + t["key"] for t in look.themes]))
+        for section, names in groups:
+            card = self.item(section)
+            right = card.mapToScene(QPointF(card.width(), 0)).x()
+            for name in names:
+                it = self.item(name)
+                with self.subTest(name):
+                    self.assertLessEqual(it.mapToScene(QPointF(it.width(), 0)).x(), right + 0.5)
+
     def test_a_tap_on_the_empty_part_of_a_flag_picks_the_language(self):
         from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
