@@ -6,6 +6,8 @@ import http.server, json, os, re, shutil, socketserver, struct, sys, tempfile, t
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_tokens import THEME, contrast
 from engine import steamcase as sc
 from engine import completion as cp
 
@@ -987,17 +989,6 @@ class FamilyOwnership(Base):
         games, family = sc.load_library(self.steam, None)
         self.assertEqual(family, set())
         self.assertNotIn(2, games)
-
-
-def _luminance(rgb):
-    c = [v / 255 for v in rgb[:3]]
-    c = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-
-
-def contrast(a, b):
-    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
-    return (hi + 0.05) / (lo + 0.05)
 
 
 class FamilyFrame(unittest.TestCase):
@@ -3118,10 +3109,9 @@ class UpdateIcon(unittest.TestCase):
         self.assertEqual(im.size, (96, 96))
         solid = [p for p in pixels(im) if p[3] == 255]
         self.assertGreater(len(solid), 500)
-        self.assertTrue(all(p[:3] == (0x93, 0xA7, 0xBB) for p in solid))                  # Theme.muted, the colour of the link's words
+        muted = tuple(int(THEME["muted"][i:i + 2], 16) for i in (1, 3, 5))
+        self.assertTrue(all(p[:3] == muted for p in solid))                  # Theme.muted, the colour of the link's words
         self.assertEqual(im.getpixel((0, 0))[3], 0)
-        with open(os.path.join(sc.HERE, "qtui", "qml", "Theme.qml"), encoding="utf-8") as f:
-            self.assertIn('readonly property color muted: "#93a7bb"', f.read())
 
     def test_the_packaged_app_bundles_the_image_and_says_the_drawing_is_ours(self):
         with open(os.path.join(sc.HERE, "steamcase-qt.spec"), encoding="utf-8") as f:

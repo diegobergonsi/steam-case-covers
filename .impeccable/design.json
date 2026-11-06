@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-31T00:00:00+00:00",
+  "generatedAt": "2026-11-06T00:00:00+00:00",
   "title": "Design System: Steam Case Covers",
   "extensions": {
     "colorMeta": {
@@ -52,16 +52,16 @@
       "control-edge": {
         "role": "neutral",
         "displayName": "Control Edge",
-        "canonical": "#5d7a96",
+        "canonical": "#637f9a",
         "tonalRamp": [
-          "#1d262f",
-          "#344453",
-          "#4a6177",
-          "#607e9b",
-          "#839bb2",
-          "#a7b8c9",
-          "#cbd5df",
-          "#eff2f5"
+          "#1b2632",
+          "#304457",
+          "#44617d",
+          "#597ea2",
+          "#7d9cb9",
+          "#a4b9cd",
+          "#c9d6e1",
+          "#eff2f6"
         ]
       },
       "text": {
@@ -97,13 +97,13 @@
       "text-faint": {
         "role": "neutral",
         "displayName": "Text Faint",
-        "canonical": "#7d92a8",
+        "canonical": "#8a9db1",
         "tonalRamp": [
           "#1f262e",
           "#364351",
           "#4d6074",
-          "#657d97",
-          "#879aaf",
+          "#657d96",
+          "#869aaf",
           "#aab8c6",
           "#cdd5dd",
           "#f0f2f5"
@@ -142,16 +142,16 @@
       "done-green": {
         "role": "status",
         "displayName": "Done Green",
-        "canonical": "#5ba32b",
+        "canonical": "#6aab3e",
         "tonalRamp": [
-          "#223d10",
-          "#3c6b1c",
-          "#559928",
-          "#6fc734",
-          "#8fd560",
-          "#b0e18f",
-          "#d0eebd",
-          "#f1faeb"
+          "#233e11",
+          "#3e6c1c",
+          "#579925",
+          "#70c42e",
+          "#8dd560",
+          "#aee191",
+          "#cfeebe",
+          "#f0faeb"
         ]
       },
       "caution-amber": {
@@ -268,7 +268,7 @@
       "refersTo": "button-quiet",
       "description": "Everything that is not the main action.",
       "html": "<button class=\"ds-btn ds-quiet\">Browse…</button>",
-      "css": ".ds-btn{font:700 14px system-ui,sans-serif;height:36px;padding:0 16px;border-radius:9999px;cursor:pointer}.ds-quiet{background:transparent;color:#e6edf3;border:1px solid #5d7a96}.ds-quiet:hover{background:#22344a}.ds-quiet:focus-visible{outline:2px solid #e6edf3;outline-offset:3px}"
+      "css": ".ds-btn{font:700 14px system-ui,sans-serif;height:36px;padding:0 16px;border-radius:9999px;cursor:pointer}.ds-quiet{background:transparent;color:#e6edf3;border:1px solid #637f9a}.ds-quiet:hover{background:#22344a}.ds-quiet:focus-visible{outline:2px solid #e6edf3;outline-offset:3px}"
     },
     {
       "name": "Choice Chip",
