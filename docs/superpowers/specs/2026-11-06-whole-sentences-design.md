@@ -32,6 +32,8 @@ The planner's calls (the owner can change them):
 - The colour name in "Steam case, red" is still made lowercase in the code; it is a colour label from the app's own list, and both languages write colour names in lowercase.
 - `docs/CHANGELOG.md` gets one line under "Behind the scenes" (nothing changes for people using the window).
 
+Added during the work, each with the owner's answer: the range a slider reads out ("0 (0 to 359)") is one message and its Portuguese says "a" ("0 a 359"); the name of a theme in a sentence comes from its translated label (`theme_label`) and no longer from its internal key. Left as they are, at the owner's word: the Art summary on the Make step (two phrases joined with a comma, first letter made capital in code).
+
 ## Not in this spec
 Wording changes, new languages, the joins of whole sentences, the comma between two labels in `reasons.py` ("Normal case, No marks"), the separators like " · " and ". " that are not words, and the README.
 

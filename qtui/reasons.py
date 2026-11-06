@@ -7,6 +7,14 @@ from engine import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
 STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("ribbon", N_("Normal case")), ("none", N_("No special case"))]    # values: sc.CASES, or "none"
+THEME_LABELS = {"classic": N_("Classic"), "halloween": N_("Halloween")}
+
+
+def theme_label(key):
+    """The name of a theme in the language in use (the key itself, capitalised, for a theme with no label)."""
+    return tr(THEME_LABELS.get(key, key.capitalize()))
+
+
 MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only")), ("none", N_("No marks"))]                    # values: sc.MARKS
 
 
@@ -71,12 +79,12 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     marks_note = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
     if theme and completed is None and sc.covers_with_marks(covers_dir, "full"):
         marks_note = (tr(" The covers of your 100%% games lose their ribbon: the %s case shows the rosette only. To get it back later, choose the Classic case, "
-                  "load your games page and pick “Rosette and ribbon”.") % theme.capitalize())
+                  "load your games page and pick “Rosette and ribbon”.") % theme_label(theme))
     if theme and completed is None and sc.covers_with_marks(covers_dir, "none"):          # and to the ones with no marks: the theme gives them its rosette
-        marks_note += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme.capitalize()
+        marks_note += tr(" The covers of your 100%% games with no marks get the rosette: the %s case shows the rosette only.") % theme_label(theme)
     tail = ""                                            # the theme every cover is made in, when it changes
     if sc.covers_in_other_theme(covers_dir, theme):
-        tail = tr("the %s theme") % theme.capitalize() if theme else tr("the Classic case")
+        tail = tr("the %s theme") % theme_label(theme) if theme else tr("the Classic case")
     styles, changed = set(), False                       # the treatments in the folder, and whether any cover gets another one
     if completed is not None:
         for appid, _, notes in sc.usual_covers(covers_dir):                # covers by hand are left alone: they change nothing here

@@ -5,11 +5,11 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from engine import steamcase as sc
 from qtui import tones
+from qtui.reasons import theme_label
 from qtui.i18n import N_, tr
 
 COLOUR_NOTE = N_("Only the original colour is checked for readable text.")
 THEMES = ("classic",) + tuple(sc.THEMES)
-THEME_LABELS = {"classic": N_("Classic"), "halloween": N_("Halloween")}
 PREVIEW_DELAY_MS = 60                       # one preview render per burst of slider changes: the newest tone wins
 
 
@@ -129,7 +129,7 @@ class Look(QObject):
 
     @Property("QVariantList", constant=True)
     def themes(self):
-        return [{"key": k, "label": tr(THEME_LABELS.get(k, k.capitalize()))} for k in THEMES]
+        return [{"key": k, "label": theme_label(k)} for k in THEMES]
 
     @Property("QVariantList", notify=toneChanged)
     def swatches(self):

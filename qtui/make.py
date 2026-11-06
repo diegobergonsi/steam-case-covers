@@ -198,7 +198,7 @@ class Make(QObject):
         art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt)) if on]
         art = ", ".join(art)
         art = (art[0].upper() + art[1:]) if art else tr("Steam's art")
-        theme = tr("Classic case") if look.theme == "classic" else tr(look.theme.capitalize())
+        theme = tr("Classic case") if look.theme == "classic" else reasons.theme_label(look.theme)
         return [{"key": "games", "label": tr("Games"), "value": games, "step": 1},
                 {"key": "colour", "label": tr("Colour"), "value": look.toneName, "step": 2},
                 {"key": "theme", "label": tr("Theme"), "value": theme, "step": 2},

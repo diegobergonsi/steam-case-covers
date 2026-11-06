@@ -2124,6 +2124,22 @@ class Components(QtCase):
         seq.commit()
         self.app.processEvents()
 
+    def slider_description(self, language):
+        from PySide6.QtGui import QAccessible
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, i18n.language())
+        i18n.set_language(language)
+        QAccessible.setActive(True)
+        self.addCleanup(QAccessible.setActive, False)
+        self.load(self.SLIDER)
+        return QAccessible.queryAccessibleInterface(self.item("s")).text(QAccessible.Text.Description)
+
+    def test_a_slider_says_its_value_and_its_range(self):
+        self.assertEqual(self.slider_description("en"), "0 (0 to 359)")
+
+    def test_a_slider_says_its_range_in_portuguese_too(self):
+        self.assertEqual(self.slider_description("pt-BR"), "0 (0 a 359)")
+
     def test_a_swipe_that_starts_on_the_track_with_a_finger_does_not_move_the_slider(self):
         """On the Steam Deck a swipe over a slider must scroll the page, not change the colour; a tap on the track still jumps, the handle still drags."""
         self.load(self.SLIDER)
@@ -4078,6 +4094,13 @@ class ReplaceReasons(FakeStore):
         i18n.set_language("pt-BR")
         self.assertEqual(self.reason((0, 100, 100), set(), None)[1],
                          "Voc\u00ea escolheu n\u00e3o destacar os seus jogos com 100% (\u201cSem case especial\u201d, ou \u201cSem marcas\u201d na case normal): as capas dos seus jogos com 100% s\u00e3o refeitas como capas normais.")
+
+    def test_the_theme_in_a_sentence_is_its_translated_label_not_its_key(self):
+        from unittest import mock
+        from qtui import reasons
+        self.made()
+        with mock.patch.dict(reasons.THEME_LABELS, {"halloween": "Spooky"}):
+            self.assertIn("new ones in the Spooky theme", self.reason((0, 100, 100), None, None, "halloween")[1])
 
     def test_a_page_with_no_game_at_100_says_the_highlight_is_lost(self):
         for treatment in ("ribbon", "gold-case"):

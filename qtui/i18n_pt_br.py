@@ -445,6 +445,7 @@ PT_BR = {
     "%1, locked": "%1, bloqueado",
     "%1, done": "%1, concluído",
     "%1, %2": "%1, %2",
+    "%1 (%2 to %3)": "%1 (%2 a %3)",
     "Put every game in a physical case": "Coloque cada jogo em uma case física",
     "Coming soon": "Em breve",
     "This screen is built in a later plan.": "Esta tela será feita em um plano futuro.",

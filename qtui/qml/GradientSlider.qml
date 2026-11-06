@@ -20,7 +20,7 @@ Item {
     activeFocusOnTab: true
     Accessible.role: Accessible.Slider
     Accessible.name: label
-    Accessible.description: value + " (" + from + " to " + to + ")"
+    Accessible.description: qsTr("%1 (%2 to %3)").arg(value).arg(from).arg(to)
     Accessible.onIncreaseAction: slider.step(1)
     Accessible.onDecreaseAction: slider.step(-1)
 
