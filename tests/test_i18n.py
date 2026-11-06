@@ -55,6 +55,14 @@ class Words(unittest.TestCase):
         self.assertEqual(i18n.tr("Cancel"), "Cancelar")
         self.assertEqual(i18n.tr("A sentence nobody translated"), "A sentence nobody translated")
 
+    def test_the_step_counts_of_the_two_ways_in_both_languages(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        i18n.set_language("en")
+        self.assertEqual([i18n.trn("%n step|%n steps", n) for n in (1, 5, 6)], ["1 step", "5 steps", "6 steps"])
+        i18n.set_language("pt-BR")
+        self.assertEqual([i18n.trn("%n step|%n steps", n) for n in (1, 5, 6)], ["1 passo", "5 passos", "6 passos"])
+
     def test_plurals_follow_the_rules_of_each_language(self):
         i18n.set_language("en")
         self.assertEqual([i18n.trn("%n game|%n games", n) for n in (0, 1, 2)], ["0 games", "1 game", "2 games"])

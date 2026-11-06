@@ -719,7 +719,7 @@ class GameListScreen(QtCase):
 
 @need_qt
 class GameListRemembered(QtCase):
-    """The game list you used is remembered: after a restart "Pick games by hand" opens the games to pick instead of asking for the file again."""
+    """The game list you used is remembered: after a restart the card "Pick games, choose their cases" opens the games to pick instead of asking for the file again."""
     @classmethod
     def setUpClass(cls):
         cls.app = qt_app()
@@ -4979,6 +4979,18 @@ class HomeScreen(AddWindow):
         self.assertEqual(heading.property("text"), "Pick games \u00b7 6 steps")
         self.assertTrue(heading.property("visible"))
 
+    def test_the_cards_and_the_heading_follow_the_language(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        self.open_home()
+        self.click("language_pt")
+        self.app.processEvents()
+        self.assertEqual(self.item("nav_flow").property("text"), "Mesma case \u00b7 5 passos")
+        self.assertEqual(self.text("home_card_natural_title"), "A mesma case para todos os jogos da sua lista")
+        self.assertEqual(self.text("home_card_manual_title"), "Escolha os jogos e as cases")
+        self.assertEqual(self.text("home_card_manual_steps"), "6 passos")
+        self.assertEqual(self.text("home_card_natural_tag"), "A melhor para a maioria das pessoas")
+
     def test_the_highlight_stays_on_the_chosen_step_below_the_heading(self):
         from PySide6.QtCore import QPointF
         self.open_home(covers=True)
@@ -6929,7 +6941,7 @@ class FlowTests(PickerBase):
         self.assertEqual(self.shell.steps[self.shell.resume]["key"], "pick")  # Continue leads to the screen where games are picked, not to the game list
         self.shell.startNatural()
         self.shell.startManual()
-        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")  # and so does choosing "Pick games by hand" again
+        self.assertEqual(self.shell.steps[self.shell.current]["key"], "pick")  # and so does choosing the card "Pick games, choose their cases" again
 
     def test_the_natural_flow_still_opens_at_the_game_list_when_every_step_is_done(self):
         for fact in ("look_done", "hundred_done", "covers_made", "applied"):

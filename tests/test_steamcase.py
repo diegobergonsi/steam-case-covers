@@ -2921,7 +2921,7 @@ class ReadmeLanguages(unittest.TestCase):
         except ImportError:
             self.skipTest("PySide6 missing")
         for english in ("Open the page in my browser", "Copy link", "Make covers", "Apply to Steam", "Restore previous artwork", "Reset to Steam's default art",
-                        "Remove all", "Pick games by hand", "Open my games page", "Browse…", "Use my own custom art where I have it", "Skip blurry covers",
+                        "Remove all", "Pick games, choose their cases", "Open my games page", "Browse…", "Use my own custom art where I have it", "Skip blurry covers",
                         "Open covers folder", "Rosette and ribbon", "Rosette only", "Gold case", "Gold border", "Normal case", "No special case",
                         "Mark family games with a green corner", "Remove only ours"):
             self.assertIn("**%s**" % PT_BR[english].rstrip("."), pt, english)

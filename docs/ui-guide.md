@@ -4,12 +4,12 @@ The rules every screen of the window follows, so a new feature has a place befor
 
 ## Layout
 
-A left navigation and one screen on the right. The navigation lists Home, then five steps: 1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam. Discord and Ko-fi and "Check for updates" (each with its icon; always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
+A left navigation and one screen on the right. The navigation lists Home, then a heading that names the way you are on with its number of steps ("Same case · 5 steps" or "Pick games · 6 steps"), then the steps of that way: for the same case, 1. Game list, 2. Look, 3. 100% games (optional), 4. Make, 5. Add to Steam. Home shows the two ways as two equal cards (the same case for every game, or pick games and choose their cases); the whole card is the button, the same case leads with a sky-blue edge, and Home has no filled button. You change way from Home, never in the middle of one. Discord and Ko-fi and "Check for updates" (each with its icon; always the full words) sit at its bottom. A step unlocks when the one before it is done; finished steps stay open. Home is always open and holds Restore and Reset.
 
 ## Eleven rules
 
 1. **One job per screen.** Its title says it in four words or fewer ("Choose the look").
-2. **One primary button per screen**, always bottom right. Everything else is quiet.
+2. **One primary button per screen**, always bottom right. Everything else is quiet. (Home has none: its two cards are the way in.)
 3. **At most three sections per screen**, each with a heading. A fourth thing means a new screen.
 4. **A section holds at most three controls.** More is a list or its own screen. A group that works as one tool (the colour slider, the two tone sliders and the swatches) counts as one control, "the colour picker".
 5. **A new feature needs a home before code.** Which screen, which section? If none fits, this guide changes first.
