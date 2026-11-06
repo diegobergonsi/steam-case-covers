@@ -6,7 +6,7 @@ import threading
 
 from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui.filepicker import pick_file
 from qtui.i18n import N_, tr
 

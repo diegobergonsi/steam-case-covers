@@ -3,12 +3,12 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Maintainers only: write assets/cases/cases.json from the frames in assets/cases/<platform>.png (600x900, a see-through art window).
 "window" is the see-through part joined to the middle of the picture; "overlay", only if a tab of the frame still covers part of it (the Switch's tab, the Series X's tab),
-is the box of that tab: the same measure the app uses for a case a user brings (steamcase.check_case_file, caseframe.py). Run it after replacing a frame. Needs Pillow.
+is the box of that tab: the same measure the app uses for a case a user brings (steamcase.check_case_file, engine/caseframe.py). Run it after replacing a frame. Needs Pillow.
 Users of steamcase.py do NOT need this: the files are committed."""
 import json, os, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-import steamcase as sc
+from engine import steamcase as sc
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "cases")
 

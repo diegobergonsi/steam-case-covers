@@ -6,7 +6,7 @@ import threading
 
 from PySide6.QtCore import Property, QAbstractListModel, QModelIndex, QObject, Qt, Signal, Slot
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
 NO_GAMES = N_("No games found. Install a game first, or load your userdata.json.")

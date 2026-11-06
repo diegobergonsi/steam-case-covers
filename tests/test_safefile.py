@@ -5,7 +5,7 @@ import os, shutil, subprocess, sys, tempfile, unittest
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
-import safefile
+from engine import safefile
 
 
 def run_python(code, limit_mb=800, timeout=15):
@@ -13,7 +13,7 @@ def run_python(code, limit_mb=800, timeout=15):
     Returns (finished, output): finished is False when the time ran out."""
     script = ("try:\n    import resource; resource.setrlimit(resource.RLIMIT_AS, (%d << 20, %d << 20))\n"
               "except (ImportError, ValueError, OSError):\n    pass\n"
-              "import sys; sys.path.insert(0, %r)\nimport safefile\n%s\n") % (limit_mb, limit_mb, HERE, code)
+              "import sys; sys.path.insert(0, %r)\nfrom engine import safefile\n%s\n") % (limit_mb, limit_mb, HERE, code)
     try:
         r = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -92,7 +92,7 @@ class Callers(unittest.TestCase):
         zero = os.path.join(self.tmp, "z.json")
         os.symlink("/dev/zero", zero)
         for path in (pipe, zero, "/dev/zero"):
-            finished, out = run_python("import steamcase as sc\ntry:\n    sc.owned_ids(%r)\nexcept sc.SteamcaseError as e:\n    print(e)" % path)
+            finished, out = run_python("from engine import steamcase as sc\ntry:\n    sc.owned_ids(%r)\nexcept sc.SteamcaseError as e:\n    print(e)" % path)
             self.assertTrue(finished, path)
             self.assertIn("not a regular file", out, path)
 
@@ -100,7 +100,7 @@ class Callers(unittest.TestCase):
     def test_the_games_page_reader_refuses_a_pipe(self):
         pipe = os.path.join(self.tmp, "games.html")
         os.mkfifo(pipe)
-        finished, out = run_python("import completion\ntry:\n    completion.read_games_page(%r)\nexcept completion.PageError as e:\n    print(e)" % pipe)
+        finished, out = run_python("from engine import completion\ntry:\n    completion.read_games_page(%r)\nexcept completion.PageError as e:\n    print(e)" % pipe)
         self.assertEqual((finished, out), (True, "That is not a plain file. Pick the .html file you saved."))
 
 

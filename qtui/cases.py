@@ -4,8 +4,8 @@
 kept per game until Make; the covers themselves (and the 100% marks, which have their own step) are made by Make, which also saves the groups (groups.py)."""
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-import groups
-import steamcase as sc
+from engine import groups
+from engine import steamcase as sc
 from qtui import tones
 from qtui.i18n import N_, tr, trn
 

@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui import system
 
 

@@ -5,8 +5,8 @@ A group is {"id", "name", "case", "games"}: "case" is {"platform": one of steamc
 in that colour; gold is the tone of steamcase.GOLD_HUE). A game is in one group only. The file may be damaged or edited: load() never raises, it keeps what is good."""
 import json, os, re, uuid
 
-import safefile
-import steamcase as sc
+from engine import safefile
+from engine import steamcase as sc
 
 FILE = "groups.json"
 MAX_NAME = 40

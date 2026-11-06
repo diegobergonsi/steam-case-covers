@@ -10,7 +10,7 @@ import tempfile
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QGuiApplication
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui import selfcheck, steps, system
 from qtui.app import check_preview, close_engine, create_engine, find_item, report_error
 from qtui.assets import missing_assets

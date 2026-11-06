@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Maintainers only: render assets/default_art.png (600x900) from tools/src/default_art.svg.
 The window uses this original artwork to preview the case colour before any game's art has been downloaded.
-Needs rsvg-convert (librsvg) and Pillow. Users of steamcase.py do NOT need this: default_art.png is committed."""
+Needs rsvg-convert (librsvg) and Pillow. Users of the engine do NOT need this: default_art.png is committed."""
 import os, subprocess, tempfile
 from PIL import Image
 

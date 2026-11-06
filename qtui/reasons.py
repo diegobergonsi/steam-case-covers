@@ -3,7 +3,7 @@
 """The sentences of the question "replace the covers you made?": why Make covers would rebuild covers that are already in the folder.
 The words are those the app has always used, covered by tests in tests/test_steamcase.py (ReplaceReason)."""
 
-import steamcase as sc
+from engine import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
 STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("ribbon", N_("Normal case")), ("none", N_("No special case"))]    # values: sc.CASES, or "none"

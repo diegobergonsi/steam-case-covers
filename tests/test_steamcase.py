@@ -6,8 +6,8 @@ import http.server, json, os, re, shutil, socketserver, struct, sys, tempfile, t
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import steamcase as sc
-import completion as cp
+from engine import steamcase as sc
+from engine import completion as cp
 
 
 def make_png(path, w, h):
@@ -699,7 +699,7 @@ class Attacks(Base):
     def test_only_takes_real_app_ids(self):
         import subprocess
         for bad in ("-1", "0", "99999999999"):
-            r = subprocess.run([sys.executable, os.path.join(sc.HERE, "steamcase.py"), "make", "--only", bad], capture_output=True, text=True)
+            r = subprocess.run([sys.executable, "-m", "engine", "make", "--only", bad], capture_output=True, text=True, cwd=sc.HERE)
             self.assertNotEqual(r.returncode, 0, bad)
             self.assertIn("--only", r.stderr, bad)
 
@@ -2886,7 +2886,7 @@ class ReadmeLanguages(unittest.TestCase):
         for pattern in (r'<a id="([a-z-]+)"', r'<details( id="[a-z-]+")?>', r"^## ", r"^### ", r"^```", r"^> \[!"):
             self.assertEqual(len(re.findall(pattern, en, re.M)), len(re.findall(pattern, pt, re.M)), pattern)
         self.assertEqual(re.findall(r'<a id="([a-z-]+)"', en), re.findall(r'<a id="([a-z-]+)"', pt))
-        self.assertEqual(re.findall(r"^python steamcase\.py [^#\n]*", en, re.M), re.findall(r"^python steamcase\.py [^#\n]*", pt, re.M))   # the commands are the same
+        self.assertEqual(re.findall(r"^python -m engine [^#\n]*", en, re.M), re.findall(r"^python -m engine [^#\n]*", pt, re.M))   # the commands are the same
 
     def test_the_portuguese_one_shows_the_program_in_portuguese(self):
         en, pt = self.read("README.md"), self.read("README.pt-BR.md")

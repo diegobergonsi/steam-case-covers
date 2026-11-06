@@ -10,8 +10,8 @@ import threading
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-import groups
-import steamcase as sc
+from engine import groups
+from engine import steamcase as sc
 from qtui.groupticks import GroupTicks
 from qtui.i18n import N_, tr, trn
 

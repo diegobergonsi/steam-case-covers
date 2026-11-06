@@ -14,7 +14,8 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-import argparse, caseframe, completion, filecmp, functools, hashlib, io, json, os, re, safefile, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+from engine import caseframe, completion, safefile
+import argparse, filecmp, functools, hashlib, io, json, os, re, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from typing import NamedTuple
 
 try:
@@ -32,7 +33,7 @@ for _s in (sys.stdout, sys.stderr):          # game names may hold non-ASCII; ne
     if _s is not None and hasattr(_s, "reconfigure"):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
-HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))   # _MEIPASS: inside a PyInstaller bundle
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # _MEIPASS: inside a PyInstaller bundle
 FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library

@@ -246,20 +246,20 @@ If you find a security problem, please [report it privately](docs/SECURITY.md).
 Everything the window does is also available in a terminal:
 
 ```bash
-python steamcase.py make --library userdata.json   # build covers
-python steamcase.py make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
-python steamcase.py make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
-python steamcase.py make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
-python steamcase.py make --library userdata.json --theme halloween   # ...with the Halloween theme (the case keeps its colour; --theme classic goes back)
-python steamcase.py make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
-python steamcase.py make --library userdata.json --use-custom-art   # ...with the art you set yourself inside the case, for the games that have it
-python steamcase.py make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
-python steamcase.py make --library userdata.json --games-page games.html --completed-marks rosette   # ...with the rosette only, no ribbon
-python steamcase.py make --library userdata.json --completed-style none   # ...and back to plain covers for 100% games
-python steamcase.py apply --close-steam            # install them
-python steamcase.py restore                        # undo the last apply
-python steamcase.py reset                          # back to Steam's default art
-python steamcase.py reset --everything             # ...also removing art from other sources
+python -m engine make --library userdata.json   # build covers
+python -m engine make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
+python -m engine make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
+python -m engine make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
+python -m engine make --library userdata.json --theme halloween   # ...with the Halloween theme (the case keeps its colour; --theme classic goes back)
+python -m engine make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
+python -m engine make --library userdata.json --use-custom-art   # ...with the art you set yourself inside the case, for the games that have it
+python -m engine make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
+python -m engine make --library userdata.json --games-page games.html --completed-marks rosette   # ...with the rosette only, no ribbon
+python -m engine make --library userdata.json --completed-style none   # ...and back to plain covers for 100% games
+python -m engine apply --close-steam            # install them
+python -m engine restore                        # undo the last apply
+python -m engine reset                          # back to Steam's default art
+python -m engine reset --everything             # ...also removing art from other sources
 ```
 
 | Command | What it does |
@@ -275,7 +275,7 @@ python steamcase.py reset --everything             # ...also removing art from o
 
 `--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the plain case; the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. `--completed-marks` is `full` (the rosette and the ribbon, the default), `rosette` (the rosette alone) or `none` (no marks: with `gold-case` or `gold-border` the gold alone) and works with every style except `none`. Without either option, covers keep the look they have.
 
-Run `python steamcase.py -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
+Run `python -m engine -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
 <a id="faq"></a>
 
