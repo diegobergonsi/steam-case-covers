@@ -457,7 +457,7 @@ PT_BR = {
     "Everything was reset to the starting point. Your saved cases, covers and groups were not changed.": "Tudo voltou ao ponto de partida. As suas cases salvas, as capas e os grupos não foram alteradas.",
     "Start over": "Recomeçar",
     "Start over?": "Recomeçar?",
-    "Go back to the starting point. Your saved cases, covers and groups are not changed.": "Volte ao ponto de partida. As suas cases salvas, as capas e os grupos não são alterados.",
+    "Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.": "Reinicie o programa com as configurações iniciais. As suas cases salvas, as capas e os grupos não são alterados.",
     "The way you chose, your progress, the game list, your look and the switches go back to the start.": "O caminho escolhido, o seu progresso, a lista de jogos, o seu visual e as opções voltam ao início.",
     "Your saved cases, covers and groups are not changed.": "As suas cases salvas, as capas e os grupos não são alterados.",
 }

@@ -172,7 +172,7 @@ class Hundred(QObject):
         """No page and the choices of a window just opened. A page being read is dropped when it arrives, and the Downloads folder is looked at afresh,
         so the page used before is not taken again."""
         self._req += 1
-        self._watcher = DownloadWatcher(self._downloads, "games", (".html", ".htm"), completion.MAX_GAMES_PAGE)
+        self._watcher.restart()
         self._path, self._completed = "", None
         self._style, self._marks, self._marks_before = "ribbon", "full", None
         self._status, self._kind, self._note = tr(WAITING), "wait", ""

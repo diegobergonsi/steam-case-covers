@@ -200,11 +200,12 @@ ScreenFrame {
         objectName: "home_section_start_over"
         heading: qsTr("Start over")
         Text {
+            objectName: "home_start_over_line"
             width: parent.width
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: qsTr("Go back to the starting point. Your saved cases, covers and groups are not changed.")
+            text: qsTr("Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
         }
         ButtonRow {
             QuietButton {

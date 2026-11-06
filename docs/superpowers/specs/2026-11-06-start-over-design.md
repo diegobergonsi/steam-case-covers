@@ -6,7 +6,7 @@ Approved by the user in chat on 2026-11-06.
 After a half-walked path, a wrong game list or old choices, the user wants one button that makes the window behave as if it had just been opened, without losing anything saved.
 
 ## What it does
-- A section "Start over" at the bottom of Home, always visible: one muted line and one quiet button, "Start over".
+- A section "Start over" at the bottom of Home, always visible: one muted line ("Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.") and one quiet button, "Start over".
 - The button opens the app's own "Are you sure?" dialog (Cancel has the focus). It says what is cleared and what is kept.
 - On confirm the window goes back to what a fresh start shows:
   - the way and the steps: the step-by-step way, nothing done, Home shown

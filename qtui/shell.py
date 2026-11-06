@@ -21,6 +21,11 @@ FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
 MANUAL_FACTS = ("picked", "assigned")           # only the manual flow reads these
 
 
+def no_facts():
+    """Nothing is done yet: what a window just opened knows."""
+    return {k: False for k in FACTS + MANUAL_FACTS}
+
+
 class Shell(QObject):
     stepsChanged = Signal()
     currentChanged = Signal()
@@ -38,7 +43,7 @@ class Shell(QObject):
         self._values = settings.load_settings(settings_path)
         i18n.set_language(settings.load_language(settings_path) or i18n.system_language())      # the saved choice wins over the system's language
         i18n.use_in_engine()
-        self._facts = {k: False for k in FACTS + MANUAL_FACTS}
+        self._facts = no_facts()
         self._flow = "natural"                  # or "manual": ticking games and giving them a console case
         self._current = 0
         self._steps = self._build()
@@ -107,7 +112,7 @@ class Shell(QObject):
         self._save()
         settings.forget_library(self._path)
         self._flow = "natural"
-        self._facts = {k: False for k in FACTS + MANUAL_FACTS}
+        self._facts = no_facts()
         self._steps = self._build()
         self._current = 0
         self._library.start_over()                  # also puts the facts of the list right

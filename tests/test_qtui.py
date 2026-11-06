@@ -196,6 +196,16 @@ class Watcher(unittest.TestCase):
         self.assertEqual(self.names(), [])
         self.assertEqual(self.names(), ["userdata.json"])
 
+    def test_restart_treats_what_is_there_as_stale_again(self):
+        self.put("userdata.json")
+        self.names(); self.names()
+        self.w.restart()
+        self.assertEqual(self.names(), [])
+        self.assertEqual(self.names(), [])                          # given before the restart, so it is stale now
+        self.put("userdata.json", b"changed")
+        self.names()
+        self.assertEqual(self.names(), ["userdata.json"])           # a new version still counts
+
     def test_forget_brings_a_file_back(self):
         p = self.put("userdata.json")
         self.names(); self.names()
@@ -9015,6 +9025,7 @@ class StartOver(WindowCase):
         self.shell.go(0)
         self.assertEqual(self.item("home_section_start_over").property("heading"), "Start over")
         self.assertEqual(self.item("home_start_over").property("text"), "Start over")
+        self.assertEqual(self.item("home_start_over_line").property("text"), "Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
         self.assertTrue(self.item("home_start_over").property("enabled"))
         self.shell.startPath("manual")
         self.shell.go(0)

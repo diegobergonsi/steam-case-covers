@@ -121,7 +121,7 @@ class Library(QObject):
     def start_over(self):
         """Back to a window that was just opened: no list, "installed only" off (the shell has saved the switch), and the Downloads folder is looked at afresh,
         so the file used before is not taken again."""
-        self._watcher = DownloadWatcher(self._downloads, "userdata", (".json",), sc.MAX_LIBRARY_FILE)
+        self._watcher.restart()
         self._reported, self._why, self._count = {}, "", 0
         path_was, installed_was = self._path, self._installed
         self._path, self._installed = "", False
