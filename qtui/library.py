@@ -118,6 +118,19 @@ class Library(QObject):
         if not why:
             self._accept(remembered, count, remember=False)
 
+    def start_over(self):
+        """Back to a window that was just opened: no list, "installed only" off (the shell has saved the switch), and the Downloads folder is looked at afresh,
+        so the file used before is not taken again."""
+        self._watcher.restart()
+        self._reported, self._why, self._count = {}, "", 0
+        path_was, installed_was = self._path, self._installed
+        self._path, self._installed = "", False
+        if path_was:
+            self.pathChanged.emit()
+        if installed_was:
+            self.installedOnlyChanged.emit()
+        self._after_change()
+
     def _accept(self, path, count, remember=True):
         self._path, self._count = path, count
         if remember:

@@ -27,25 +27,38 @@ class Look(QObject):
     def __init__(self, shell, covers_dir, parent=None):
         super().__init__(parent)
         self._shell = shell
-        self._tone = tones.ORIGINAL
-        self._theme = "classic"
         self._treatment = "none"            # set by Hundred: the look of a 100% game in the preview ("none" or an sc.TREATMENTS name)
         self._serial = 0
         self._own = False                   # "My own case" for every game (the Look step of the step-by-step way); the file itself is kept by shell.owncase
-        try:                                # reopening the window shows the colour and theme of the covers already made
-            found = sc.existing_cover_colour(covers_dir)
-            if found:
-                self._tone = tones.clamp_tone(*found)
-            theme = sc.existing_cover_theme(covers_dir)
-            if theme in sc.THEMES:
-                self._theme = theme
-        except Exception:
-            pass
+        self._covers = covers_dir
+        self._tone, self._theme = self._starting_look()
         self._source = self._make_source()
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(PREVIEW_DELAY_MS)
         self._timer.timeout.connect(self._refresh_source)
+
+    def _starting_look(self):
+        """(tone, theme) of a window just opened: reopening shows the colour and theme of the covers already made."""
+        tone, theme = tones.ORIGINAL, "classic"
+        try:
+            found = sc.existing_cover_colour(self._covers)
+            if found:
+                tone = tones.clamp_tone(*found)
+            made = sc.existing_cover_theme(self._covers)
+            if made in sc.THEMES:
+                theme = made
+        except Exception:
+            pass
+        return tone, theme
+
+    def start_over(self):
+        """The look of a window just opened. The shell has already put the two art switches back; the case file is kept."""
+        self._own = False
+        self._tone, self._theme = self._starting_look()
+        for signal in (self.hueChanged, self.satChanged, self.valChanged, self.toneChanged, self.themeChanged, self.ownCaseChanged, self.artChanged):
+            signal.emit()
+        self._schedule()
 
     # ----- the preview -----
     def _make_source(self):

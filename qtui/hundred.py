@@ -168,6 +168,18 @@ class Hundred(QObject):
         self.themeNoteChanged.emit()
         self._sync()
 
+    def start_over(self):
+        """No page and the choices of a window just opened. A page being read is dropped when it arrives, and the Downloads folder is looked at afresh,
+        so the page used before is not taken again."""
+        self._req += 1
+        self._watcher.restart()
+        self._path, self._completed = "", None
+        self._style, self._marks, self._marks_before = "ribbon", "full", None
+        self._status, self._kind, self._note = tr(WAITING), "wait", ""
+        for signal in (self.pathChanged, self.styleChanged, self.marksChanged, self.statusChanged):
+            signal.emit()
+        self._theme_changed()
+
     # ----- the page -----
     def _set_status(self, text, kind, note=None):
         note = self._note if note is None else note

@@ -56,6 +56,14 @@ def save_library(value, path=None):
         return False
 
 
+def forget_library(path=None):
+    """Forget the game list used last: remove only our own note of its path (the game list file stays where it is)."""
+    try:
+        os.remove(library_path(path))
+    except OSError:
+        pass
+
+
 def load_language(path=None):
     """The language the user chose last ("en" or "pt-BR"), or None when there is no choice yet (the system's language is then used)."""
     try:

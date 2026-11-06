@@ -15,6 +15,10 @@ class DownloadWatcher:
     def __init__(self, folder, prefix, suffixes, max_size):
         self.folder, self.prefix, self.suffixes = folder, prefix.lower(), tuple(s.lower() for s in suffixes)
         self.max_size = max_size
+        self.restart()
+
+    def restart(self):
+        """Look afresh, as when the watcher was made: what lies in the folder now is stale."""
         self._seen = {}                  # path -> signature at the last poll
         self._given = {}                 # path -> signature already handed over
         self._before = dict(self._scan())    # path -> signature of what was there at the start

@@ -53,6 +53,11 @@ class PreviewProvider(QQuickImageProvider):
         self._lock = threading.Lock()
         self._cache = OrderedDict()           # (hue, sat, val, theme, treatment, w, h) -> QImage
 
+    def clear(self):
+        """Drop the pictures kept in memory; the next request draws them again."""
+        with self._lock:
+            self._cache.clear()
+
     def requestImage(self, ident, size, requested):
         w, h = requested.width(), requested.height()
         want = DEFAULT_SIZE if w <= 0 or h <= 0 else QSize(min(w, MAX_SIDE), min(h, MAX_SIDE))

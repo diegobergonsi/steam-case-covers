@@ -234,6 +234,11 @@ class Picker(QObject):
             self._refresh()
             self.selectionChanged.emit()
 
+    def start_over(self):
+        """No ticks and no search. The list itself goes when the game list does (see _library_changed)."""
+        self.clearAll()
+        self.query = ""
+
     def untick(self, appids):
         """Take these games out of the selection (the Case step calls this once they have a case)."""
         gone = self._selected & set(appids)
