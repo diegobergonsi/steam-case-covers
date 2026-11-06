@@ -32,6 +32,22 @@ def _short(name):
     return name if len(name) <= MAX_NAME else name[:MAX_NAME - 1] + "…"
 
 
+def result_card(info):
+    """The words of the card that follows an Apply, built from the facts of the run each time they are asked for (so a change of language reaches them):
+    {"kind": "done" or "nothing", "title", "line", "details"}. `info` has kind, applied, replaced, unchanged, account, backup, jpg_moved, restart ("no", "started"
+    or "failed") and error (why Steam could not start)."""
+    restart = {"started": tr("Steam is starting."), "failed": tr("Could not start Steam (%s). Please open it yourself.") % info.get("error", "")}.get(info["restart"], "")
+    if info["kind"] == "nothing":
+        said = trn("The cover was already in the Steam account \u201c%s\u201d.|All %n covers were already in the Steam account \u201c%s\u201d.", info["unchanged"]) % info["account"]
+        return {"kind": "nothing", "title": tr("Nothing to change."), "line": " ".join(x for x in (said, restart) if x), "details": ""}
+    details = tr("%d replaced older art, %d already up to date.") % (info["replaced"], info["unchanged"]) + " " + tr("Backup saved in: %s") % info["backup"]
+    if info["jpg_moved"]:
+        details += " " + trn("Art you had set by hand in Steam (%n game) was moved into the backup; Restore brings it back.|"
+                             "Art you had set by hand in Steam (%n games) was moved into the backup; Restore brings it back.", info["jpg_moved"])
+    return {"kind": "done", "title": trn("%n cover added to \u201c%s\u201d.|%n covers added to \u201c%s\u201d.", info["applied"]) % info["account"],
+            "line": restart or tr("Start Steam to see them."), "details": details}
+
+
 class Apply(QObject):
     steamChanged = Signal()
     accountChanged = Signal()
@@ -42,6 +58,7 @@ class Apply(QObject):
     watchingChanged = Signal()
     failed = Signal(str)                    # the words of an error, for a box the user cannot miss wherever they are
     undoChanged = Signal()                  # whether there is anything to restore or reset
+    resultChanged = Signal()                # the card that follows an Apply came or went
     confirmNeeded = Signal(str, list, str, str)     # the title, the paragraphs [{"text", "kind"}], the label of the "yes" button and of a second way forward ("": none)
     _probed = Signal(bool)                  # whether Steam runs (from the probe thread)
     _stage = Signal(int, str)               # request, what the worker is doing now
@@ -64,8 +81,10 @@ class Apply(QObject):
         self._busy = self._asking = self._applied = False
         self._pending = None                            # (mode, names) waiting for the answer to the question
         self._mode = "apply"
+        self._job = None                                # the job the worker is doing; it leaves the facts of an Apply in job["result"]
         self._backup = self._art = self._undo_known = self._undoing = self._again = False
         self._status, self._kind = "", "wait"
+        self._result_info = None                        # the facts of the last Apply that worked, for the card (see result_card)
         self._req = 0
         self._probed.connect(self._on_probed)
         self._stage.connect(self._on_stage)
@@ -228,6 +247,20 @@ class Apply(QObject):
     def statusKind(self):
         return self._kind
 
+    @Property("QVariantMap", notify=resultChanged)
+    def result(self):
+        """The card that follows an Apply that worked, or {} (see result_card)."""
+        return result_card(self._result_info) if self._result_info else {}
+
+    @Property(bool, notify=resultChanged)
+    def hasResult(self):
+        return self._result_info is not None
+
+    def _set_result(self, info):
+        if info != self._result_info:
+            self._result_info = info
+            self.resultChanged.emit()
+
     def _set_status(self, text, kind):
         if (text, kind) != (self._status, self._kind):
             self._status, self._kind = text, kind
@@ -245,6 +278,7 @@ class Apply(QObject):
         if self._make.canCancel and (self._applied or self._status):         # only when covers are really being made, not when a question is asked
             self._set_applied(False)                    # new covers are coming: what was said about the old ones is no longer true
             self._set_status("", "wait")
+            self._set_result(None)
 
     # ----- undo: what can be restored or reset (probed off the UI thread when the screen opens and after every job) -----
     @Property(bool, notify=undoChanged)
@@ -464,6 +498,8 @@ class Apply(QObject):
         job = {"mode": mode, "restart": self.restart, "account": self._acc(), "files": self._make.files() if mode == "apply" else [],
                "names": (names or {}).get("names"), "everything": True if alternate else (names or {}).get("everything", False),
                "keep": (names or {}).get("keep") or []}
+        self._job = job
+        self._set_result(None)
         threading.Thread(target=self._work, args=(self._req, job), daemon=True).start()
 
     def _work(self, req, job):
@@ -480,6 +516,8 @@ class Apply(QObject):
             if job["mode"] == "apply":
                 say(tr("Backing up and copying covers\u2026"))
                 r = sc.apply_covers(steam, self._covers, job["account"], files=job["files"])
+                job["result"] = {"kind": "done" if r["applied"] else "nothing", "applied": r["applied"], "replaced": r["replaced"], "unchanged": r["unchanged"],
+                                 "account": r["account_name"], "backup": r.get("backup", ""), "jpg_moved": r["jpg_moved"], "restart": "no", "error": ""}
                 if r["applied"]:
                     text = trn("Done. %n cover added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s|"
                                "Done. %n covers added to the Steam account \u201c%s\u201d (%d replaced older art, %d already up to date). Backup saved in: %s",
@@ -510,8 +548,12 @@ class Apply(QObject):
                 try:
                     sc.start_steam(steam)
                     text += tr(" Steam is starting.")
+                    if job.get("result"):
+                        job["result"]["restart"] = "started"
                 except sc.SteamcaseError as e:
                     text += tr(" Could not start Steam (%s). Please open it yourself.") % e
+                    if job.get("result"):
+                        job["result"].update(restart="failed", error=str(e))
             else:
                 text += tr(" Start Steam to see the change.")
         except sc.SteamcaseError as e:
@@ -553,6 +595,10 @@ class Apply(QObject):
         else:
             self._set_status(text, "ok")
             self._set_applied(self._mode == "apply")         # a restore or a reset undoes what was applied
+            if self._mode == "apply":
+                self._set_result(self._job.get("result"))     # the card says it
+            else:
+                self._shell.toast.emit(text)                  # a restore or a reset says it in a toast
             if self._mode == "reset":
                 self._forget_reset_groups()
         self.refreshUndo()

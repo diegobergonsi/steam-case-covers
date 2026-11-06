@@ -6123,6 +6123,107 @@ class ApplyState(QtCase, FakeStore):
         self.assertEqual(self.ap.status, "Nothing to change: all 2 covers were already in the Steam account \u201cAlice\u201d. Start Steam to see the change.")
         self.assertEqual((self.ap.applied, self.log), (True, [("apply", None, ["Game_1_1.png", "Game_2_2.png"])]))
 
+    def test_a_done_result_has_a_title_a_line_and_details(self):
+        self.covers_ready()
+        self.assertFalse(self.ap.hasResult)
+        self.go()
+        r = self.ap.result
+        self.assertTrue(self.ap.hasResult)
+        self.assertEqual((r["kind"], r["title"], r["line"]), ("done", "2 covers added to \u201cAlice\u201d.", "Steam is starting."))
+        self.assertEqual(r["details"], "0 replaced older art, 0 already up to date. Backup saved in: /b")
+
+    def test_the_result_line_when_steam_is_not_asked_to_start(self):
+        self.covers_ready()
+        self.ap.restart = False
+        self.go()
+        self.assertEqual(self.ap.result["line"], "Start Steam to see them.")
+
+    def test_the_result_line_when_steam_cannot_start(self):
+        self.covers_ready()
+        self.start_error = "no launcher"
+        self.go()
+        self.assertEqual(self.ap.result["line"], "Could not start Steam (no launcher). Please open it yourself.")
+
+    def test_the_result_details_mention_art_set_by_hand(self):
+        self.covers_ready()
+        self.result = dict(self.result, jpg_moved=3, replaced=1, unchanged=1)
+        self.go()
+        self.assertEqual(self.ap.result["details"], "1 replaced older art, 1 already up to date. Backup saved in: /b "
+                                                    "Art you had set by hand in Steam (3 games) was moved into the backup; Restore brings it back.")
+
+    def test_one_cover_reads_in_the_singular(self):
+        self.covers_ready()
+        self.result = dict(self.result, applied=1)
+        self.go()
+        self.assertEqual(self.ap.result["title"], "1 cover added to \u201cAlice\u201d.")
+
+    def test_nothing_to_change_has_its_own_result(self):
+        self.covers_ready()
+        self.result = dict(self.result, applied=0, unchanged=2)
+        self.ap.restart = False
+        self.go()
+        r = self.ap.result
+        self.assertEqual((r["kind"], r["title"], r["line"], r["details"]), ("nothing", "Nothing to change.", "All 2 covers were already in the Steam account \u201cAlice\u201d.", ""))
+        self.result = dict(self.result, unchanged=1)
+        self.go()
+        self.assertEqual(self.ap.result["line"], "The cover was already in the Steam account \u201cAlice\u201d.")
+        self.ap.restart = True                                          # Steam was asked to start: its sentence follows
+        self.go()
+        self.assertEqual(self.ap.result["line"], "The cover was already in the Steam account \u201cAlice\u201d. Steam is starting.")
+
+    def test_there_is_no_result_after_a_failure_a_restore_or_new_covers(self):
+        self.covers_ready()
+        self.apply_error = self.sc.SteamcaseError("No covers found in x. Make them first.")
+        self.go()
+        self.assertEqual((self.ap.hasResult, self.ap.result), (False, {}))
+        self.apply_error = None
+        self.go()
+        self.assertTrue(self.ap.hasResult)
+        self.undo_ready(("b1",))
+        self.ask(self.ap.restore)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertFalse(self.ap.hasResult)                             # an undo takes the result with it
+        self.go()
+        self.assertTrue(self.ap.hasResult)
+        self.make.start()                                               # new covers are coming: what was said about the old ones is no longer true
+        self.assertFalse(self.ap.hasResult)
+        self.wait_for(lambda: not self.make.running)
+
+    def test_restore_and_reset_send_a_toast_with_the_status_sentence_and_apply_does_not(self):
+        said = []
+        self.shell.toast.connect(said.append)
+        self.covers_ready()
+        self.go()
+        self.assertEqual(said, [])                                      # the result card says it
+        self.undo_ready(("b1", "b2"))
+        self.ask(self.ap.restore)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(said, [self.ap.status])
+        self.assertTrue(said[0].startswith("Restored your previous artwork (5 files)."))
+        self.undo_ready()
+        self.ours = ["a", "b"]
+        self.ask(self.ap.reset)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertEqual(said[1:], [self.ap.status])
+        self.assertTrue(said[1].startswith("Done. 2 covers removed"))
+        self.apply_error = self.sc.SteamcaseError("boom")
+        self.go()
+        self.assertEqual(len(said), 2)                                  # an error is a message in a box, not a toast
+
+    def test_the_result_follows_a_change_of_language(self):
+        from qtui import i18n
+        self.addCleanup(i18n.set_language, "en")
+        self.covers_ready()
+        self.go()
+        self.assertEqual(self.ap.result["title"], "2 covers added to \u201cAlice\u201d.")
+        i18n.set_language("pt-BR")
+        r = self.ap.result                                              # read again: built from the facts, not saved as text
+        self.assertEqual((r["title"], r["line"]), ("2 capas adicionadas a \u201cAlice\u201d.", "A Steam est\u00e1 iniciando."))
+        self.assertEqual(r["details"], "0 substitu\u00edram arte antiga, 0 j\u00e1 estavam em dia. Backup salvo em: /b")
+
     def test_art_set_by_hand_is_said_to_be_in_the_backup(self):
         self.covers_ready()
         self.result = dict(self.result, jpg_moved=3, replaced=1, unchanged=1)
