@@ -33,12 +33,12 @@
 
 <table align="center">
   <tr>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="380" alt="Home: the steps on the left with the language flags, Pick games by hand, and the Undo section"></a><br><sub>Home</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="380" alt="Home the first time: two cards, the same case for every game on your list and Pick games, choose their cases, with the steps on the left and the language flags"></a><br><sub>Home</sub></td>
     <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look.png"><img src="assets/screenshot-look.png" width="380" alt="The Look step: a preview of the case and the colour choices"></a><br><sub>1. Choose the look</sub></td>
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100.png"><img src="assets/screenshot-100.png" width="380" alt="The 100% games step: a gold case with a rosette and ribbon, and the choices to mark those games"></a><br><sub>2. Highlight your 100% games</sub></td>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases.png"><img src="assets/screenshot-cases.png" width="380" alt="Pick a case: the Steam case and the PlayStation, Xbox and Nintendo cases, each with its own look"></a><br><sub>3. Or pick a console case by hand</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases.png"><img src="assets/screenshot-cases.png" width="380" alt="Pick a case: the Steam case, the PlayStation, Xbox and Nintendo cases and a case of your own, with a preview of the case you picked"></a><br><sub>3. Or pick a console case by hand</sub></td>
   </tr>
 </table>
 
@@ -211,7 +211,7 @@ Good to know:
 - Several Steam accounts on one computer: you choose which one gets the covers
 
 **The app itself**
-- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's
+- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's; buttons and controls are finger-sized (44 px) for a touchscreen, and the colours follow the recommended contrast rule (WCAG 2.2 level AA)
 - English and Brazilian Portuguese: the app starts in your system's language, and two small flags under the name switch it at any time (the command line stays in English; this README is also in [Brazilian Portuguese](README.pt-BR.md))
 - A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 - Free software: no ads, no account, no telemetry

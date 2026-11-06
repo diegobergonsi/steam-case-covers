@@ -33,12 +33,12 @@
 
 <table align="center">
   <tr>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home-pt.png"><img src="assets/screenshot-home-pt.png" width="380" alt="Início: os passos à esquerda com as bandeiras de idioma, Escolher jogos à mão e a seção Desfazer"></a><br><sub>Início</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home-pt.png"><img src="assets/screenshot-home-pt.png" width="380" alt="Início, na primeira vez: dois cartões, a mesma case para todos os jogos da sua lista e Escolha os jogos e as cases, com os passos à esquerda e as bandeiras de idioma"></a><br><sub>Início</sub></td>
     <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look-pt.png"><img src="assets/screenshot-look-pt.png" width="380" alt="O passo Visual: uma prévia da case e as opções de cor"></a><br><sub>1. Escolha o visual</sub></td>
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100-pt.png"><img src="assets/screenshot-100-pt.png" width="380" alt="O passo Jogos 100%: uma case dourada com roseta e faixa, e as opções para marcar esses jogos"></a><br><sub>2. Destaque os seus jogos com 100%</sub></td>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases-pt.png"><img src="assets/screenshot-cases-pt.png" width="380" alt="Escolha uma case: a case da Steam e as de PlayStation, Xbox e Nintendo, cada uma com o seu visual"></a><br><sub>3. Ou escolha uma case de console à mão</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases-pt.png"><img src="assets/screenshot-cases-pt.png" width="380" alt="Escolha uma case: a case da Steam, as de PlayStation, Xbox e Nintendo e uma case sua, com uma prévia da case escolhida"></a><br><sub>3. Ou escolha uma case de console à mão</sub></td>
   </tr>
 </table>
 
@@ -211,7 +211,7 @@ Bom saber:
 - Várias contas da Steam num computador: você escolhe qual recebe as capas
 
 **O programa em si**
-- Funciona com o teclado, ajusta-se a telas de alta resolução e cabe em telas pequenas como a do Steam Deck
+- Funciona com o teclado, ajusta-se a telas de alta resolução e cabe em telas pequenas como a do Steam Deck; botões e controles têm tamanho de dedo (44 px) para telas de toque, e as cores seguem a regra de contraste recomendada (WCAG 2.2 nível AA)
 - Inglês e português do Brasil: o programa começa no idioma do seu sistema, e duas bandeirinhas embaixo do nome trocam o idioma quando você quiser (a linha de comando continua em inglês)
 - Um botão "Verificar atualizações", só quando você clica: ele pergunta ao GitHub qual é a versão mais nova e nunca baixa nem instala nada
 - Software livre: sem anúncios, sem conta, sem telemetria
