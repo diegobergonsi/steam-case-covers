@@ -4769,7 +4769,7 @@ class AddScreen(AddWindow):
         self.accounts = [("111", "A" * 40)]
         self.start_window()
         real = self.sc.apply_covers
-        self.sc.apply_covers = lambda steam, covers, user=None, files=None: dict(real(steam, covers, user, files), backup="/home/someone/.local/share/Steam/userdata/123456789/config/" + "grid_backup_" * 4)
+        self.sc.apply_covers = lambda steam, covers, user=None, files=None: dict(real(steam, covers, user, files), account_name="A" * 40, backup="/home/someone/.local/share/Steam/userdata/123456789/config/" + "grid_backup_" * 4)
         self.addCleanup(lambda: setattr(self.sc, "apply_covers", real))
         self.root.setProperty("width", self.root.property("minimumWidth"))
         self.click("add_main")
@@ -4786,6 +4786,9 @@ class AddScreen(AddWindow):
         self.wait_for(lambda: all(right(self.item(n)) <= right(card) + 0.5 for n in names))
         for n in names:
             self.assertLessEqual(right(self.item(n)), right(card) + 0.5, n)
+        for n in ("add_done_title", "add_done_line", "add_done_details"):                       # the words themselves, not only their box
+            text = self.item(n)
+            self.assertLessEqual(text.property("contentWidth"), text.width() + 0.5, n)
         self.assertGreaterEqual(self.item("add_undo").height(), 44)
 
     def test_declining_the_question_changes_nothing(self):

@@ -72,7 +72,7 @@ ScreenFrame {
         Text {
             objectName: "add_done_title"
             width: parent.width
-            wrapMode: Text.WordWrap
+            wrapMode: Text.Wrap                             // a long name with no space breaks anywhere instead of leaving the card
             text: screen.apply.result.title || ""
             color: Theme.done
             font.pixelSize: Theme.sectionSize
@@ -87,7 +87,7 @@ ScreenFrame {
         Text {
             objectName: "add_done_line"
             width: parent.width
-            wrapMode: Text.WordWrap
+            wrapMode: Text.Wrap                             // a long name with no space breaks anywhere instead of leaving the card
             text: screen.apply.result.line || ""
             color: Theme.text
             font.pixelSize: Theme.bodySize
