@@ -11,7 +11,7 @@ A left navigation and one screen on the right. The navigation lists Home, then a
 1. **One job per screen.** Its title says it in four words or fewer ("Choose the look").
 2. **One primary button per screen**, always bottom right. Everything else is quiet. (Home has none: its two cards are the way in. On the Case step the footer button changes its words to the action of the moment: "Use this case for 3 games" while a case and games are ready, "Next →" otherwise.)
 3. **At most three sections per screen**, each with a heading. A fourth thing means a new screen.
-4. **A section holds at most three controls.** More is a list or its own screen. A group that works as one tool (the colour slider, the two tone sliders and the swatches) counts as one control, "the colour picker".
+4. **A section holds at most three controls.** More is a list or its own screen. A group that works as one tool (the colour slider, the two tone sliders and the swatches) counts as one control, "the colour picker". **One exception:** the "Add games to a group" section of the Case step holds the group cards, the colours, the name, "Pick more games" and "Delete this group" (up to five). They are one job, putting games in a group, and the section stays together so the page does not jump.
 5. **A new feature needs a home before code.** Which screen, which section? If none fits, this guide changes first.
 6. **Never hide, group.** Optional things are labelled "(optional)", not folded into a drawer.
 7. **Spacing says what belongs together.** Related items 8 px apart, sections 24 px, screen edges 32 px.
