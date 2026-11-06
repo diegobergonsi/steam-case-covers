@@ -17,6 +17,7 @@ ScreenFrame {
 
     Section {
         objectName: "add_section_before"
+        visible: !screen.apply.hasResult                  // after an Apply that worked there is nothing left to decide
         heading: qsTr("Before you apply")
         StatusLine {
             objectName: "add_note"
@@ -55,18 +56,73 @@ ScreenFrame {
     }
     Section {
         objectName: "add_section_result"
+        visible: !screen.apply.hasResult
         heading: qsTr("Result")
-        StatusLine {
+        StatusLine {                                  // progress and errors; a result is the Done card or a toast
             objectName: "add_status"
             text: screen.apply.status !== "" ? screen.apply.status : screen.apply.readyText
             kind: screen.apply.status !== "" ? screen.apply.statusKind : "wait"
         }
     }
+    Section {                                         // what an Apply that worked did: what was added, what to do next, and Undo in place
+        objectName: "add_section_done"
+        visible: screen.apply.hasResult
+        onVisibleChanged: if (!visible) Qt.callLater(function() { mainButton.forceActiveFocus() })      // Undo is gone: the keyboard goes to the main button
+        heading: qsTr("Done")
+        Text {
+            objectName: "add_done_title"
+            width: parent.width
+            wrapMode: Text.Wrap                             // a long name with no space breaks anywhere instead of leaving the card
+            text: screen.apply.result.title || ""
+            color: Theme.done
+            font.pixelSize: Theme.sectionSize
+            font.bold: true
+        }
+        CoverThumbs {
+            objectName: "add_thumbs"
+            prefix: "add_thumb_"
+            width: parent.width
+            model: screen.apply.result.kind === "done" ? screen.make.thumbs : []      // nothing was added otherwise
+        }
+        Text {
+            objectName: "add_done_line"
+            width: parent.width
+            wrapMode: Text.Wrap                             // a long name with no space breaks anywhere instead of leaving the card
+            text: screen.apply.result.line || ""
+            color: Theme.text
+            font.pixelSize: Theme.bodySize
+        }
+        TextEdit {                                    // selectable, so the folder of the backup can be copied
+            objectName: "add_done_details"
+            width: parent.width
+            visible: text !== ""
+            readOnly: true
+            selectByMouse: true
+            wrapMode: TextEdit.WrapAnywhere
+            text: screen.apply.result.details || ""
+            color: Theme.muted
+            selectionColor: Theme.accent
+            selectedTextColor: Theme.accentInk
+            font.pixelSize: Theme.smallSize
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+        ButtonRow {
+            QuietButton {
+                objectName: "add_undo"
+                height: Theme.touchMin
+                visible: screen.apply.result.kind === "done" && screen.apply.canRestore
+                text: qsTr("Undo")
+                onClicked: screen.apply.restore()
+            }
+        }
+    }
 
     footer: [
         PrimaryButton {                               // one button for the whole step, so the keyboard focus stays: Apply, then the way home
+            id: mainButton
             objectName: "add_main"
-            text: screen.apply.busy ? qsTr("Applying\u2026") : screen.apply.applied ? qsTr("Go to Home \u2192") : qsTr("Apply to Steam")
+            text: screen.apply.busy ? (screen.apply.mode === "apply" ? qsTr("Applying\u2026") : qsTr("Working\u2026")) : screen.apply.applied ? qsTr("Go to Home \u2192") : qsTr("Apply to Steam")
             enabled: screen.apply.applied || screen.apply.canApply
             onClicked: screen.apply.applied ? shell.go(0) : screen.apply.apply()
         }

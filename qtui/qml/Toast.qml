@@ -8,9 +8,11 @@ import "."
 Rectangle {
     id: toast
     property string message: ""
-    property int showMs: Theme.toastMs
+    property int showMs: Theme.toastMs                   // the least time it stays
     property int maxWidth: Theme.tipMaxWidth             // the parent narrows it on a small window
+    readonly property int shownMs: Math.min(Theme.toastMaxMs, showMs + message.length * Theme.toastCharMs)       // longer for a longer message
     readonly property bool active: timer.running
+    property alias timerInterval: timer.interval          // what the timer really waits (the tests read it)
     function show(text) {
         message = text
         opacity = 1
@@ -40,7 +42,7 @@ Rectangle {
     }
     Timer {
         id: timer
-        interval: toast.showMs
+        interval: toast.shownMs
         onTriggered: toast.opacity = 0
     }
 }

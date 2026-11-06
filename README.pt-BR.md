@@ -144,7 +144,7 @@ Os arquivos de cada versão vêm com uma lista `SHA256SUMS` para você conferir 
 > [!WARNING]
 > O passo 5 **fecha a Steam para você** (qualquer jogo aberto para e os downloads pausam), adiciona as capas e inicia a Steam de novo. Salve o seu jogo antes. O programa pergunta antes de fazer qualquer coisa.
 
-Mudou de ideia? No **Início** (a primeira entrada da lista à esquerda):
+Mudou de ideia? Logo depois do passo 5, aperte **Desfazer** no cartão Pronto. Mais tarde, use o **Início** (a primeira entrada da lista à esquerda), onde um cartão Desfazer aparece quando há algo para desfazer:
 
 * **Restaurar a arte anterior** desfaz o último Aplicar. Aperte de novo para voltar mais um passo.
 * **Voltar à arte padrão da Steam** remove as capas que este programa criou. Funciona mesmo que você não tenha backup. Se ele também encontrar arte personalizada que este programa não criou (do SteamGridDB, ou definida à mão na Steam), ele pergunta se deve remover essa também: **Remover só as capas deste programa** a mantém, **Remover todas** traz de volta a arte da própria Steam em todo lugar. Restaurar desfaz qualquer um dos dois.

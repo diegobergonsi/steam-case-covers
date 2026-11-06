@@ -144,7 +144,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 > [!WARNING]
 > Step 5 **closes Steam for you** (any running game stops and downloads pause), adds the covers, and starts Steam again. Save your game first. The app asks before it does anything.
 
-Changed your mind? On **Home** (the first entry in the left list):
+Changed your mind? Right after step 5, press **Undo** on the Done card. Later, use **Home** (the first entry in the left list), where an Undo card appears once there is something to undo:
 
 * **Restore previous artwork** undoes the last Apply. Press it again to go one step further back.
 * **Reset to Steam's default art** removes the covers this app made. It works even if you have no backup. If it also finds custom art that this app did not make (from SteamGridDB, or set by hand in Steam), it asks whether to remove that too: **Remove only ours** keeps it, **Remove all** brings back Steam's own art everywhere. Restore undoes either.
