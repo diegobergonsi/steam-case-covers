@@ -79,6 +79,11 @@ def main(argv=None):
             QCoreApplication.processEvents()
             time.sleep(0.02)
 
+    def expect(condition, what):
+        """The picture shows the state it is meant to show, or the run stops: a picture of the wrong state would only be found by looking."""
+        if not condition:
+            raise SystemExit("not ready for the picture: " + what)
+
     def shot(screen, suffix):
         width, height = SIZES[screen]
         root.setWidth(width)
@@ -90,15 +95,20 @@ def main(argv=None):
             raise SystemExit("could not write " + path)
         print(path)
 
-    page = write_games_page(downloads)
+    page_folder = os.path.join(home, "page")                                 # not Downloads: the window watches that folder and would load the page by itself
+    os.makedirs(page_folder)
+    page = write_games_page(page_folder)
     for code, suffix in LANGUAGES:                                          # Home and Look first, in both languages: the 100% step loads a games page, which Look would show
         shell.setLanguage(code)
         shell.library.installedOnly = False                                 # nothing done yet, so Home is the first-time Home
         shell.setFact("look_done", False)
         shell.go(0)
+        expect(not shell.returning, "Home is not the first-time Home")
         shot("home", suffix)
         shell.library.installedOnly = True                                  # the steps after the game list are open
         shell.go(shell.stepIndex("look"))
+        expect(shell.flow == "natural" and not shell.hundred.loaded, "Look would show a games page or the wrong way")
+        expect(shell.steps[shell.stepIndex("look")]["state"] == "active", "Look is not the current step")
         shot("look", suffix)
     for code, suffix in LANGUAGES:
         shell.setLanguage(code)
@@ -110,6 +120,8 @@ def main(argv=None):
         while shell.hundred.busy and time.time() < end:
             QCoreApplication.processEvents()
         shell.hundred.style = "gold-case"
+        expect(shell.hundred.loaded and shell.hundred.count == 1 and shell.hundred.style == "gold-case", "the games page is not loaded with one game at 100%")
+        expect(shell.steps[shell.stepIndex("hundred")]["state"] == "active", "100% games is not the current step")
         shot("100", suffix)
         shell.startPath("manual")                                           # the other way: pick games, then a case for them
         shell.picker.clearAll()
@@ -121,6 +133,8 @@ def main(argv=None):
         shell.picker.toggle(3)
         shell.go(shell.stepIndex("case"))
         shell.cases.pick("ps5")
+        expect(shell.flow == "manual" and shell.picker.selectedCount == 2 and shell.cases.groupName == "PlayStation 5", "two games are not ticked with a case chosen")
+        expect(shell.steps[shell.stepIndex("case")]["state"] == "active", "Case is not the current step")
         shot("cases", suffix)
     return 0
 
