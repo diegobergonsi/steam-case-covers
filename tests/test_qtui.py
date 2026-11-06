@@ -7220,6 +7220,18 @@ class CasesState(PickerBase):
         cases.pick("xbox360")
         self.assertEqual(cases.previewSource, "image://preview/platform/xbox360/1")
 
+    def test_the_chosen_case_has_a_label_for_the_new_group_card(self):
+        self.load()
+        cases = self.shell.cases
+        self.assertEqual(cases.selectedLabel, "")
+        cases.pick("ps5")
+        self.assertEqual(cases.selectedLabel, "PlayStation 5")
+        cases.pick("steam")
+        cases.pickColour(3)
+        self.assertEqual(cases.selectedLabel, "Steam case, red")
+        cases.pickGroup(self.saved_group(name="Mine"))
+        self.assertEqual(cases.selectedLabel, "Steam case, red")                 # the case of the saved group
+
     def test_so_far_lists_the_cases_in_use(self):
         self.load()
         cases = self.shell.cases
@@ -7272,6 +7284,9 @@ class ManualWindow(PickerBase):
         from qtui.app import find_item
         return find_item(self.root, name) is not None
 
+    def text(self, name):
+        return self.item(name).property("text")
+
     def settle(self, item, tries=40):
         """Wait until the item stops moving (a slow machine lays the screen out late): its place is the same twice in a row."""
         from PySide6.QtCore import QPointF
@@ -7290,7 +7305,7 @@ class ManualWindow(PickerBase):
         it = self.item(name)
         self.settle(it)                                                # the layout settles before the position is read
         scroller = self.item("screen_scroller") if self.has("screen_scroller") else None
-        if scroller is not None and it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y() >= 0 and not name.startswith(("games_next", "case_next")):
+        if scroller is not None and it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y() >= 0 and not name.startswith(("games_next", "case_main")):
             y = it.mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
             scroller.setProperty("contentY", max(0, y - 40))
             self.app.processEvents()
@@ -7388,15 +7403,15 @@ class ManualWindow(PickerBase):
         self.click("games_row_1")
         self.click("games_next")
         self.assertEqual(self.step(), "case")
-        self.assertFalse(self.item("case_assign").property("enabled"))
-        self.assertFalse(self.item("case_next").property("enabled"))
+        main = self.item("case_main")
+        self.assertEqual((main.property("text"), main.property("enabled")), ("Next \u2192", False))     # nothing chosen, nothing given yet
         self.click("case_ps5")
         self.assertEqual(self.shell.cases.selectedKey, "ps5")
-        self.assertTrue(self.item("case_assign").property("enabled"))
-        self.click("case_assign")
+        self.assertEqual((main.property("text"), main.property("enabled")), ("Use this case for 1 game", True))
+        self.click("case_main")
         self.assertEqual(self.shell.cases.assigned(), {1: "ps5"})
-        self.assertEqual(self.item("case_summary_0").property("text"), "PlayStation 5: 1 game")
-        self.assertTrue(self.item("case_next").property("enabled"))
+        self.assertEqual(self.item("case_so_far").property("text"), "So far: PlayStation 5 \u00b7 1 game")
+        self.assertEqual((main.property("text"), main.property("enabled")), ("Next \u2192", True))
         self.click("case_more")
         self.assertEqual(self.step(), "pick")
 
@@ -7440,44 +7455,124 @@ class ManualWindow(PickerBase):
         self.assertEqual(self.item("case_group_name").property("text"), "Xbox 360")
         self.type_into("case_group_name", "Old favourites")
         self.assertEqual(self.shell.cases.groupName, "Old favourites")
-        self.click("case_assign")
+        self.click("case_main")
         self.assertEqual([g["name"] for g in self.shell.cases.groupList], ["Old favourites"])
 
-    def test_saved_groups_are_chips_you_can_pick_and_delete(self):
+    def saved_red(self, name="Red Steam Cases", games=(9,)):
         import groups
-        saved, gid = groups.assign([], "Red Steam Cases", {"tone": [134, 100, 100]}, [9])
+        saved, gid = groups.assign([], name, {"tone": [134, 100, 100]}, list(games))
         groups.save(self.covers, saved)
+        return gid
+
+    def test_saved_groups_are_cards_you_can_pick(self):
+        gid = self.saved_red()
         self.open_case_screen(1)
         self.shell.cases.reloadGroups()
         self.app.processEvents()
-        self.assertTrue(self.has("case_group_" + gid))
-        self.click("case_group_" + gid)
+        card = self.item("case_card_" + gid)
+        self.assertEqual((self.text("case_card_%s_title" % gid), self.text("case_card_%s_subtitle" % gid)), ("Red Steam Cases", "Steam case, red \u00b7 1 game"))
+        self.assertFalse(self.item("case_no_groups").property("visible"))
+        self.assertTrue(self.item("case_card_new").property("chosen"))
+        self.click("case_card_" + gid)
         self.assertEqual((self.shell.cases.selectedGroup, self.shell.cases.selectedKey), (gid, "steam"))
-        self.assertFalse(self.item("case_group_name").property("visible"))                 # a saved group keeps its name and case
+        self.assertEqual((card.property("chosen"), self.item("case_card_new").property("chosen")), (True, False))
+        name = self.item("case_group_name")
+        self.assertEqual((name.property("visible"), name.property("readOnly"), name.property("text")), (True, True, "Red Steam Cases"))      # its name, not editable
         self.assertFalse(self.item("case_colours").property("visible"))
-        self.assertIn("Red Steam Cases", self.item("case_assign").property("text"))
-        self.click("case_assign")
+        self.assertTrue(self.item("case_delete").property("visible"))
+        self.assertEqual(self.item("case_main").property("text"), "Add 1 game to Red Steam Cases")
+        self.click("case_main")
         self.assertEqual(self.shell.cases.tones(), {1: (134, 100, 100)})
-        self.click("case_group_delete_" + gid)
-        self.assertEqual(self.shell.cases.groupList, [])
-        self.assertFalse(self.has("case_group_" + gid))
 
-    def test_a_group_with_a_long_name_keeps_its_delete_button_inside_the_window(self):
-        """On a computer with wide letters or a narrow window the two buttons of a group must wrap, not run off the screen."""
-        import groups
+    def test_with_no_saved_group_the_row_says_so_and_the_new_group_card_names_the_case(self):
+        self.open_case_screen(1)
+        self.assertEqual(self.text("case_no_groups"), "You don't have any groups yet.")
+        self.assertTrue(self.item("case_no_groups").property("visible"))
+        self.assertEqual(self.text("case_card_new_subtitle"), "Pick a case above")
+        self.click("case_ps5")
+        self.assertEqual(self.text("case_card_new_subtitle"), "PlayStation 5")
+        self.assertFalse(self.item("case_delete").property("visible"))
+
+    def test_picking_a_case_while_a_saved_group_is_chosen_unselects_it_and_says_so(self):
+        gid = self.saved_red()
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.app.processEvents()
+        self.click("case_card_" + gid)
+        self.assertFalse(self.item("toast").property("visible"))
+        self.click("case_ps5")
+        self.assertEqual(self.shell.cases.selectedGroup, "")
+        self.assertEqual((self.item("case_card_" + gid).property("chosen"), self.item("case_card_new").property("chosen")), (False, True))
+        self.assertTrue(self.item("toast").property("visible"))
+        self.assertEqual(self.text("toast_text"), "You picked a new case, so the saved group was unselected.")
+
+    def test_deleting_a_group_asks_first_and_cancel_changes_nothing(self):
+        gid = self.saved_red()
+        self.open_case_screen(1)
+        self.shell.cases.reloadGroups()
+        self.app.processEvents()
+        self.click("case_card_" + gid)
+        self.click("case_delete")
+        self.wait_for(lambda: self.item("case_delete_dlg_card").property("visible"))
+        self.assertEqual(self.text("case_delete_dlg_title"), "Delete the group \u201cRed Steam Cases\u201d?")
+        self.assertEqual(self.text("case_delete_dlg_p0"), "Its games lose this case here. Covers already on Steam stay until you Reset or make covers again.")
+        self.click("case_delete_dlg_cancel")
+        self.assertEqual([g["id"] for g in self.shell.cases.groupList], [gid])
+        self.assertEqual(self.shell.cases.selectedGroup, gid)
+        self.click("case_delete")
+        self.wait_for(lambda: self.item("case_delete_dlg_card").property("visible"))
+        self.click("case_delete_dlg_confirm")
+        self.assertEqual(self.shell.cases.groupList, [])
+        self.assertEqual((self.shell.cases.selectedGroup, self.shell.cases.selectedKey), ("", ""))
+        self.assertFalse(self.has("case_card_" + gid))
+        self.assertTrue(self.item("case_no_groups").property("visible"))
+
+    def test_the_case_screen_has_three_sections_one_filled_button_and_a_preview(self):
+        self.open_case_screen(1, 2, 3)
+        for name in ("case_section_grid", "case_section_group", "case_section_options"):
+            self.assertTrue(self.has(name), name)
+        for gone in ("case_section_games", "case_section_new_group", "case_section_groups", "case_assign", "case_next"):
+            self.assertFalse(self.has(gone), gone)
+        self.assertEqual(self.item("case_section_grid").property("heading"), "Choose a case")
+        self.assertEqual(self.item("case_section_group").property("heading"), "Add 3 games to a group")
+        self.assertEqual(self.item("case_section_options").property("heading"), "Options")
+        self.assertEqual(self.item("case_preview").property("source").toString(), self.shell.cases.previewSource)
+        self.click("case_ps5")
+        self.assertEqual(self.item("case_preview").property("source").toString(), "image://preview/platform/ps5/1")
+        self.assertTrue(self.item("case_main").property("filled"))
+        self.assertFalse(self.item("case_more").property("filled"))
+        self.assertFalse(self.item("case_delete").property("visible"))
+
+    def test_the_heading_of_the_group_section_without_ticked_games(self):
+        self.open_case_screen(1)                                                           # the step is locked until a game is ticked; assigning unticks it
+        self.click("case_ps5")
+        self.click("case_main")
+        self.assertEqual(self.item("case_section_group").property("heading"), "Add games to a group")
+
+    def test_a_case_without_ticked_games_never_blocks_next(self):
+        self.open_case_screen(1)
+        self.click("case_ps5")
+        self.click("case_main")                                                             # game 1 has a case; nothing is ticked now
+        self.click("case_xbox360")
+        main = self.item("case_main")
+        self.assertEqual((main.property("text"), main.property("enabled")), ("Next \u2192", True))
+        self.click("case_main")
+        self.assertEqual(self.step(), "hundred")
+
+    def test_a_group_with_a_long_name_keeps_its_card_inside_the_window(self):
+        """On a computer with wide letters or a narrow window a group's card must stay inside the window, with its lines cut."""
         from PySide6.QtCore import QPointF
-        saved, gid = groups.assign([], "x" * 40, {"tone": [134, 100, 100]}, [9])
-        groups.save(self.covers, saved)
+        gid = self.saved_red(name="x" * 40)
         self.open_case_screen(1)
         self.root.setProperty("width", self.root.property("minimumWidth"))
         self.shell.cases.reloadGroups()
         self.app.processEvents()
-        delete = self.item("case_group_delete_" + gid)
-        self.settle(delete)
-        right = delete.mapToScene(QPointF(delete.width(), 0)).x()
-        self.assertLessEqual(right, self.root.property("width"), (right, self.root.property("width")))
-        button = self.item("case_group_" + gid)
-        self.assertLessEqual(button.mapToScene(QPointF(button.width(), 0)).x(), self.root.property("width"))
+        card, title = self.item("case_card_" + gid), self.item("case_card_%s_title" % gid)
+        right = lambda it: it.mapToScene(QPointF(it.width(), 0)).x()
+        self.wait_for(lambda: right(card) <= self.root.property("width") and title.property("truncated"))
+        self.assertLessEqual(right(card), self.root.property("width"))
+        self.assertTrue(title.property("truncated") or title.property("contentWidth") <= title.width())
+        self.assertGreaterEqual(card.height(), 44)
 
     def test_a_refused_name_is_said_in_words(self):
         import groups
@@ -7487,7 +7582,7 @@ class ManualWindow(PickerBase):
         self.shell.cases.reloadGroups()
         self.click("case_ps5")
         self.type_into("case_group_name", "Mine")
-        self.click("case_assign")
+        self.click("case_main")
         self.assertTrue(self.item("case_error").property("visible"))
         self.assertIn("Mine", self.item("case_error").property("text"))
 

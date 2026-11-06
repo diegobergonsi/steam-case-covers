@@ -81,6 +81,11 @@ class Cases(QObject):
     def selectedKey(self):
         return self._key
 
+    @Property(str, notify=selectedKeyChanged)
+    def selectedLabel(self):
+        """How the case picked is named ("PlayStation 5", "Steam case, red"), or "" when none is."""
+        return self._case_label(self._key, self._tone) if self._key else ""
+
     @Slot(str)
     def pick(self, key):
         """Pick a case for a new group."""
