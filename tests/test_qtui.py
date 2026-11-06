@@ -1106,13 +1106,13 @@ class LibraryState(QtCase):
         """Antivirus or the browser may hold the file for a moment: the next poll must retry it, as the old window did."""
         from unittest import mock
         self.save("userdata.json", {"rgOwnedApps": [10, 20]})
-        real = __import__("steamcase").owned_ids
+        real = __import__("engine.steamcase", fromlist=["x"]).owned_ids
         calls = []
 
         def flaky(path):
             calls.append(path)
             if len(calls) == 1:
-                raise __import__("steamcase").SteamcaseError("Could not read userdata.json as a game list (PermissionError).")
+                raise __import__("engine.steamcase", fromlist=["x"]).SteamcaseError("Could not read userdata.json as a game list (PermissionError).")
             return real(path)
         with mock.patch("engine.steamcase.owned_ids", side_effect=flaky):
             self.poll(2)                                     # becomes finished on the second poll: the first read fails
@@ -1303,7 +1303,7 @@ class LookScreen(QtCase):
             self.app.processEvents()
         self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt)
         self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
-        self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("steamcase").AUTO_ART_HELP)
+        self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).AUTO_ART_HELP)
         self.assertTrue(self.shell.switchValue("use_custom_art") and self.shell.switchValue("skip_auto_art"))        # saved, not only shown
 
     def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
@@ -2850,7 +2850,7 @@ class HundredState(QtCase):
         bad = os.path.join(self.downloads, "games.html")
         with open(bad, "w") as f:
             f.write("<html>nothing</html>")
-        with mock.patch("engine.completion.read_games_page", wraps=__import__("completion").read_games_page) as read:
+        with mock.patch("engine.completion.read_games_page", wraps=__import__("engine.completion", fromlist=["x"]).read_games_page) as read:
             h.poll(); h.poll()
             self.wait_for(lambda: h.statusKind == "error")
             h.poll(); h.poll(); h.poll()
@@ -3534,7 +3534,7 @@ class NoTkLeft(unittest.TestCase):
 
     def test_the_engine_does_not_point_at_a_file_that_is_gone(self):
         for name in ("steamcase.py", "completion.py"):
-            self.assertNotIn("gui.py", self.read(name), name)
+            self.assertNotIn("gui.py", self.read("engine", name), name)
 
     def test_the_qt_texts_do_not_depend_on_a_function_that_no_longer_exists(self):
         self.assertNotIn("gui.App", self.read("qtui", "reasons.py"))
