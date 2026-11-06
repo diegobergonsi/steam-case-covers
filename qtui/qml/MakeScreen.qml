@@ -53,26 +53,11 @@ ScreenFrame {
             heading: qsTr("Progress")
             ProgressBar { objectName: "make_progress"; label: qsTr("Making the covers"); value: screen.make.progress }
             StatusLine { objectName: "make_status"; text: screen.make.status; kind: screen.make.statusKind }
-            Flow {                                    // what was built: the first covers of the run
+            CoverThumbs {                             // what was built: the first covers of the run
                 objectName: "make_thumbs"
+                prefix: "make_thumb_"
                 width: parent.width
-                visible: screen.make.thumbs.length > 0
-                spacing: Theme.s8
-                Repeater {
-                    model: screen.make.thumbs
-                    delegate: Image {
-                        objectName: "make_thumb_" + index
-                        width: Theme.thumbWidth
-                        height: Theme.thumbHeight
-                        source: modelData
-                        sourceSize.width: Theme.thumbPixels
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        cache: false                          // a cover made again under the same name must show the new picture
-                        Accessible.role: Accessible.Graphic
-                        Accessible.name: qsTr("Cover %1").arg(index + 1)
-                    }
-                }
+                model: screen.make.thumbs
             }
             ButtonRow {
                 QuietButton { objectName: "make_folder"; text: qsTr("Open covers folder"); enabled: screen.make.done; onClicked: screen.make.openFolder() }

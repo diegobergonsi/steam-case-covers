@@ -1932,6 +1932,14 @@ class Components(QtCase):
         self.wait_for(lambda: not toast.property("visible"))
         self.assertFalse(toast.property("visible"))
 
+    def test_a_long_toast_stays_longer_but_not_forever(self):
+        self.load(self.TOAST.replace("@R@", "true"), 420, 160)
+        toast = self.item("toast")                                                 # the harness sets showMs: 80, the minimum
+        self.root.setProperty("msg", "hello")
+        self.assertEqual(toast.property("shownMs"), 80 + 5 * 50)                   # 50 ms for each character
+        self.root.setProperty("msg", "x" * 400)
+        self.assertEqual(toast.property("shownMs"), 12000)                          # never more than Theme.toastMaxMs
+
     def test_a_second_toast_replaces_the_first_and_starts_the_time_again(self):
         self.load(self.TOAST.replace("@R@", "true"), 420, 160)
         self.root.setProperty("msg", "first")
@@ -1954,6 +1962,27 @@ class Components(QtCase):
         self.assertEqual(info.role(), QAccessible.Role.AlertMessage)
         self.assertIn("A long message", info.text(QAccessible.Text.Name))
         self.assertLessEqual(toast.width(), 360)                                  # Theme.tipMaxWidth
+
+    THUMBS = ('CoverThumbs { objectName: "ct"; x: 10; y: 10; width: 300; prefix: "ct_"; model: [@URLS@] }')
+
+    def test_cover_thumbs_show_the_pictures_and_wrap(self):
+        from PySide6.QtCore import QPointF, QUrl
+        from PySide6.QtGui import QAccessible
+        icon = QUrl.fromLocalFile(os.path.join(os.path.dirname(os.path.dirname(QML_DIR)), "assets", "icon.png")).toString()
+        self.load(self.THUMBS.replace("@URLS@", ", ".join('"%s"' % icon for _ in range(5))), 340, 260)
+        ys = set()
+        for i in range(5):
+            image = self.item("ct_%d" % i)
+            point = image.mapToScene(QPointF(0, 0))
+            self.assertLessEqual(point.x() + image.width(), 10 + 300 + 0.5, i)
+            ys.add(round(point.y()))
+            info = QAccessible.queryAccessibleInterface(image)
+            self.assertEqual((info.role(), info.text(QAccessible.Text.Name)), (QAccessible.Role.Graphic, "Cover %d" % (i + 1)))
+        self.assertGreater(len(ys), 1)                                              # 5 pictures do not fit in 300 px: they wrap
+        self.assertTrue(self.item("ct").property("visible"))
+        self.item("ct").setProperty("model", [])
+        self.app.processEvents()
+        self.assertFalse(self.item("ct").property("visible"))
 
     def test_a_progress_bar_shows_the_share_and_never_leaves_its_track(self):
         self.load('ProgressBar { objectName: "bar"; x: 10; y: 10; width: 300; value: 0.5 }', 340, 80)

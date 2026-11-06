@@ -69,6 +69,8 @@ QtObject {
     readonly property int groupCardWidth: 200            // a saved group on the Case step
     readonly property int touchMin: 44                   // a finger needs at least this (PRODUCT.md); new controls use it
     readonly property int toastMs: 4000                  // how long a toast stays
+    readonly property int toastCharMs: 50                // a toast stays this much longer for each character, so a long sentence can be read
+    readonly property int toastMaxMs: 12000              // but never longer than this
     readonly property int pathCardMinWidth: 260         // below two of these side by side, the cards of Home stack
     readonly property real pressedOpacity: 0.85         // a card of Home while it is pressed
     readonly property int minSpan: 1                   // a length that is never zero, to divide by
