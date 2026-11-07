@@ -367,6 +367,8 @@ PT_BR = {
     "Give every game in your Steam library a case, in about five minutes.": "Dê uma case a cada jogo da sua biblioteca da Steam, em uns cinco minutos.",
     "Your progress: %1": "O seu progresso: %1",
     "Undo": "Desfazer",
+    "Restore cases": "Restaurar cases",
+    "Account selection": "Escolha da conta",
     "Reset leaves the covers of these groups on Steam. Tick a group to reset it too. That deletes the group.": "Redefinir deixa na Steam as capas destes grupos. Marque um grupo para redefini-lo também. Isso apaga o grupo.",
     "Choose your way": "Escolha o seu caminho",
     "Best for most people": "A melhor para a maioria das pessoas",

@@ -3654,12 +3654,16 @@ class ShellWindow(WindowCase):
 
     def test_the_steps_are_evenly_spaced_with_or_without_a_hint(self):
         from PySide6.QtCore import QPointF
+        self.shell.startPath("natural")                                                                  # the steps show inside a way, not on Home
+        self.app.processEvents()
         ys = [self.item("nav_%s_label" % k).mapToScene(QPointF(0, 0)).y() for k in ("game_list", "look", "hundred", "make", "add")]
         gaps = [round(b - a, 1) for a, b in zip(ys, ys[1:])]
         self.assertEqual(len(set(gaps)), 1, gaps)
 
     def test_a_step_that_cannot_be_opened_looks_greyed_out_and_has_a_lock(self):
         from PySide6.QtGui import QColor
+        self.shell.startPath("natural")                                                                  # the steps show inside a way, not on Home
+        self.app.processEvents()
         colour = lambda key: QColor(self.item("nav_%s_label" % key).property("color")).name()
         self.assertEqual(colour("look"), THEME["faint"])                                                     # locked: grey
         self.assertEqual(colour("game_list"), THEME["text"])                                                # open: the normal text colour
@@ -3680,8 +3684,10 @@ class ShellWindow(WindowCase):
         self.app.processEvents()
 
     def test_a_locked_item_ignores_clicks_and_unlocks_with_the_game_list(self):
+        self.shell.startPath("natural")
+        self.app.processEvents()
         self.click("nav_look")
-        self.assertEqual(self.shell.current, 0)
+        self.assertEqual(self.shell.current, 1)
         self.shell.setFact("ready", True)
         self.app.processEvents()
         self.click("nav_look")
@@ -5116,6 +5122,57 @@ class HomeScreen(AddWindow):
         self.click("home_row_make")                                     # locked: nothing happens
         self.assertEqual(self.shell.current, 0)
 
+    def visible_links(self):
+        from qtui.app import find_item
+        return [k for k in ("account", "undo", "groups", "start_over") if (it := find_item(self.root, "nav_link_" + k)) is not None and it.property("visible")]
+
+    def test_on_home_the_menu_lists_the_sections_of_home_and_hides_the_steps(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.assertEqual(self.visible_links(), ["account", "undo", "start_over"])               # no groups yet: no link
+        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "undo", "start_over")], ["Account selection", "Restore cases", "Start over"])
+        self.assertFalse(any(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
+        self.assertFalse(self.item("nav_flow").property("visible"))
+        self.assertTrue(self.item("nav_home").property("visible"))
+
+    def test_with_one_account_the_menu_has_no_account_link(self):
+        self.open_home()
+        self.assertNotIn("account", self.visible_links())
+        self.assertEqual(self.item("home_section_undo").property("heading"), "Restore cases")
+
+    def test_the_account_has_its_own_section_apart_from_restore(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.assertEqual(self.item("home_section_account").property("heading"), "Account selection")
+        self.assertTrue(self.item("home_accounts").property("visible"))
+        self.assertTrue(self.item("home_section_account").property("visible"))
+
+    def test_a_link_in_the_menu_scrolls_home_to_its_section(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        self.undo_ready()
+        scroller = self.item("screen_scroller")
+        self.assertEqual(scroller.property("contentY"), 0)
+        self.item("nav_link_start_over").activated.emit()
+        self.app.processEvents()
+        self.assertGreater(scroller.property("contentY"), 0)
+        self.item("nav_link_undo").activated.emit()
+        self.app.processEvents()
+        top = self.item("home_section_undo").mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+        self.assertAlmostEqual(scroller.property("contentY"), min(top, scroller.property("contentHeight") - scroller.property("height")), delta=1)
+
+    def test_inside_a_path_the_menu_shows_its_steps_and_back_on_home_the_sections(self):
+        self.open_home(covers=True)
+        self.shell.go(2)
+        self.app.processEvents()
+        self.assertEqual(self.visible_links(), [])
+        self.assertTrue(all(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
+        self.assertTrue(self.item("nav_flow").property("visible"))
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertIn("start_over", self.visible_links())
+        self.assertFalse(self.item("nav_look").property("visible"))
+
     def test_the_undo_card_is_hidden_until_there_is_something_to_undo(self):
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
@@ -5326,7 +5383,9 @@ class HomeScreen(AddWindow):
     def test_the_navigation_names_the_way_in_use_under_home(self):
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QAccessible
-        self.open_home()
+        self.open_home(covers=True)
+        self.shell.go(2)                                                      # the heading shows with the steps, not on Home
+        self.app.processEvents()
         heading = self.item("nav_flow")
         self.assertEqual(heading.property("text"), "Same case \u00b7 5 steps")
         self.assertEqual(QAccessible.queryAccessibleInterface(heading).role(), QAccessible.Role.Heading)
