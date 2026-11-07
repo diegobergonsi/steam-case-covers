@@ -5142,6 +5142,25 @@ class HomeScreen(AddWindow):
         self.assertAlmostEqual(start.height(), start.property("implicitHeight"), delta=0.5)                                    # stacked, each is as tall as it needs
         self.assertAlmostEqual(progress.height(), progress.property("implicitHeight"), delta=0.5)
 
+    def bottom_gap(self, button, card):
+        """Pixels between the bottom of the button and the bottom of its card."""
+        return self.pos(card).y() + self.item(card).height() - (self.pos(button).y() + self.item(button).height())
+
+    def test_the_start_over_button_sits_at_the_bottom_of_its_card_side_by_side(self):
+        self.open_home(covers=True)
+        self.assertAlmostEqual(self.bottom_gap("home_start_over", "home_section_start_over"), 16, delta=1)            # the padding of every card
+        line = self.item("home_start_over_line")
+        text_bottom = self.pos("home_start_over_line").y() + line.height()
+        self.assertGreater(self.pos("home_start_over").y() - text_bottom, 40)                                       # the card is taller than its content: the button is apart from the text
+
+    def test_the_start_over_button_follows_its_text_when_the_card_is_only_as_tall_as_its_content(self):
+        self.open_home(covers=True)
+        self.root.setProperty("width", self.root.property("minimumWidth"))                                           # stacked
+        self.app.processEvents()
+        self.assertAlmostEqual(self.bottom_gap("home_start_over", "home_section_start_over"), 16, delta=1)
+        text_bottom = self.pos("home_start_over_line").y() + self.item("home_start_over_line").height()
+        self.assertLess(self.pos("home_start_over").y() - text_bottom, 24)
+
     def test_start_over_takes_the_whole_row_when_there_is_no_progress_to_show(self):
         self.open_home()
         self.assertFalse(self.item("home_section_progress").property("visible"))

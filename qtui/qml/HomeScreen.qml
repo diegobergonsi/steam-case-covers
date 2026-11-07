@@ -149,7 +149,7 @@ ScreenFrame {
                 font.pixelSize: Theme.bodySize
                 text: qsTr("Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
             }
-            ButtonRow {
+            footer: ButtonRow {
                 QuietButton {
                     id: startOver
                     objectName: "home_start_over"
