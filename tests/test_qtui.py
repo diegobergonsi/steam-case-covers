@@ -9504,6 +9504,22 @@ class ManageGroups(PickerBase):
         for name in ("manage_game_1", "manage_save", "manage_cancel", "manage_delete", "manage_rename", "manage_search", "manage_name"):
             self.assertGreaterEqual(self.item(name).property("height"), 44, name)
 
+    def test_names_from_a_file_are_drawn_as_plain_text(self):
+        from engine import groups
+        saved, red = groups.assign([], "<b>Red</b> games", {"tone": [134, 100, 100]}, [1])
+        saved, ps = groups.assign(saved, "<i>PS5</i>", {"platform": "ps5"}, [3])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.start_window()
+        self.open_manage(red)
+        from PySide6.QtGui import QFontMetricsF
+        def drawn_as_typed(name):                                                    # markup would draw narrower than the characters typed
+            it = self.item(name)
+            return abs(it.property("contentWidth") - QFontMetricsF(it.property("font")).horizontalAdvance(it.property("text"))) < 2
+        self.assertEqual(self.item("manage_game_3").property("tag"), "in <i>PS5</i>")
+        self.assertTrue(drawn_as_typed("manage_game_3_tag"))                         # the other group's name
+        self.assertTrue(drawn_as_typed("manage_title"))
+
     def test_a_tag_names_the_other_group_and_says_ticking_moves_it(self):
         red, ps = self.home_with_groups()
         self.open_manage(red)

@@ -58,6 +58,7 @@ Item {
         width: Math.min(Math.ceil(implicitWidth), row.width / 2)
         visible: row.tag !== ""
         text: row.tag
+        textFormat: Text.PlainText                      // a group name is the player's own words, never markup
         color: Theme.muted
         font.pixelSize: Theme.smallSize
         elide: Text.ElideRight
@@ -67,6 +68,7 @@ Item {
         width: parent.width - x - Theme.s8 - (tagText.visible ? tagText.width + Theme.s12 : 0)
         anchors.verticalCenter: parent.verticalCenter
         text: row.name
+        textFormat: Text.PlainText                      // so is a game's name
         color: Theme.text
         font.pixelSize: Theme.bodySize
         elide: Text.ElideRight

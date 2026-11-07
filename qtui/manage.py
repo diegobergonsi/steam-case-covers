@@ -102,8 +102,12 @@ class GroupManager(QObject):
             return
         self._open, self._gid, self._title, self._name, self._error, self._query = True, group_id, group["name"], group["name"], "", ""
         self._ticked, self._saved = set(group["games"]), list(group["games"])
+        self._read_others()
         self._shell.picker.ensureLoaded()
         self._rebuild()
+
+    def _read_others(self):
+        self._others = {a: g["name"] for g in groups.load(self._covers) if g["id"] != self._gid for a in g["games"]}
 
     def _close(self):
         self._open, self._ticked, self._saved, self._others = False, set(), [], {}
@@ -122,7 +126,6 @@ class GroupManager(QObject):
         listed = self._shell.picker.games()
         known = {a for a, _ in listed}
         every = listed + [(a, "Game %d" % a) for a in self._saved if a not in known]       # a game the store no longer names stays, so Save never drops it unseen
-        self._others = {a: g["name"] for g in groups.load(self._covers) if g["id"] != self._gid for a in g["games"]}
         words = self._query.casefold().split()
         rows = [{"appid": a, "name": n, "selected": a in self._ticked, "tag": self._others.get(a, "")}
                 for a, n in sorted(every, key=lambda r: (r[1].casefold(), r[0])) if all(w in n.casefold() for w in words)]
@@ -156,6 +159,7 @@ class GroupManager(QObject):
             return
         self._title, self._name, self._error = self._name.strip(), self._name.strip(), ""
         self._saved_everywhere()
+        self._read_others()
         self._rebuild()
 
     @Slot()
