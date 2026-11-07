@@ -57,7 +57,7 @@ Names and counts come from Steam's file, so they can be anything the player type
 ## Calls I made (the user can change these)
 - The account: see "How it fits the code". There is no account picker before the Games step, so on a computer with several Steam accounts the collections come from the Apply choice or the most recent account.
 - The pop-up wording (draft, in the mockup) and "Add them" as the filled button because it loses nothing.
-- Order of the buttons: the most games first, then by name (like the user's mockup). Collections with the same name stay separate buttons. A collection with an empty or missing name is skipped.
+- Order of the buttons: the most games first, then by name (like the user's mockup); Steam's Hidden is always last (asked by the user, 2026-11-07), found by its id, not its name, because it is usually the biggest. Collections with the same name stay separate buttons. A collection with an empty or missing name is skipped.
 - Two rows before "Show all" is measured from the layout, not a fixed number of buttons: the link shows only when the buttons do not fit in two rows, so a resize follows. While collapsed, the buttons in the hidden rows cannot be reached with Tab or a screen reader (they are not visible, not just clipped).
 - No pop-up when the click would change nothing.
 - Start over clears nothing extra: collections are read again when the game list reloads.

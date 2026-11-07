@@ -107,6 +107,12 @@ class OnList(unittest.TestCase):
         self.assertEqual([s.id[len("user-collections."):] for s in got], ["w", "x", "y", "z"])
         self.assertEqual(got[0].label, "Big (2)")
 
+    def test_hidden_is_always_last_however_many_games_it_has(self):
+        got = collections.on_list([self.make("hidden", "Hidden", range(1, 100)), self.make("a", "Few", [1]), self.make("b", "Some", [1, 2])], set(range(1, 100)))
+        self.assertEqual([s.name for s in got], ["Some", "Few", "Hidden"])
+        renamed = collections.on_list([self.make("hidden", "Ocultos", range(1, 100)), self.make("a", "Few", [1])], set(range(1, 100)))
+        self.assertEqual([s.name for s in renamed], ["Few", "Ocultos"])                      # Steam's own id counts, not the name it shows in your language
+
     def test_nothing_on_screen_means_nothing(self):
         self.assertEqual(collections.on_list([self.make("a", "A", [1])], set()), [])
         self.assertEqual(collections.on_list([], {1}), [])

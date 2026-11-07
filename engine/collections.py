@@ -14,6 +14,7 @@ from engine import safefile
 
 MAX_FILE = 8 * 1024 * 1024                       # a real file is some tens of KB; anything bigger is not it
 _KEY = "user-collections."
+HIDDEN = _KEY + "hidden"                         # Steam's own id of the Hidden collection (its name changes with the language)
 
 
 class Collection(NamedTuple):
@@ -34,9 +35,10 @@ class Shown(NamedTuple):
 
 
 def on_list(found, on_screen):
-    """[Shown] for the collections that have games among `on_screen` (a set of app ids): the most games first, then by name."""
+    """[Shown] for the collections that have games among `on_screen` (a set of app ids): the most games first, then by name.
+    Steam's "Hidden" is always last: it is usually the biggest and would push the player's own collections out of sight."""
     shown = [Shown(c.id, c.name, c.appids & on_screen) for c in found]
-    return sorted((s for s in shown if s.games), key=lambda s: (-len(s.games), s.name.casefold(), s.id))
+    return sorted((s for s in shown if s.games), key=lambda s: (s.id == HIDDEN, -len(s.games), s.name.casefold(), s.id))
 
 
 def _app_id(value):
