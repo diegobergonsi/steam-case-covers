@@ -177,7 +177,8 @@ class Picker(QObject):
     # ----- collections -----
     @Slot()
     def refreshCollections(self):
-        """Read Steam's collections again, for the account chosen on the Apply screen or else the one Steam used last."""
+        """Read Steam's collections again, for the account chosen on the Apply screen or else the one Steam used last.
+        shortcut: read on the UI thread, which is fine for a real file (some tens of KB, at most 8 MB by the engine's cap); move it into the worker if a slow disk ever shows."""
         try:
             steam = sc.steam_dir()
             found = steam_collections.read_collections(steam, sc.pick_account(steam, self._shell.apply.accountChoice()))

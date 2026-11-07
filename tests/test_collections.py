@@ -60,6 +60,15 @@ class ReadCollections(unittest.TestCase):
                 self.write(text, raw=True)
                 self.assertEqual(self.read(), [])
 
+    def test_hostile_numbers_and_nesting_do_not_raise(self):
+        self.write(json.dumps([["user-collections.a", {"value": json.dumps({"name": "N", "added": ["9" * 5000, 1]})}]]), raw=True)
+        self.assertEqual(self.read()[0].appids, frozenset({1}))                              # the id with 5000 digits is skipped, the rest stays
+        self.write("[" * 200000, raw=True)                                                  # fits under the size limit, nests far too deep
+        self.assertEqual(self.read(), [])
+        value = "[" * 200000
+        self.write(json.dumps([["user-collections.a", {"value": value}]]), raw=True)
+        self.assertEqual(self.read(), [])
+
     def test_a_missing_file_and_an_account_without_a_folder_give_nothing(self):
         self.assertEqual(self.read(), [])
         self.assertEqual(collections.read_collections(self.steam, "9999"), [])

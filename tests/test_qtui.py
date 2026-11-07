@@ -7076,6 +7076,14 @@ class CollectionTests(CollectionFiles, PickerBase):
         self.picker.applyCollection(many, "replace")
         self.assertEqual(self.picker.selection(), [1, 2])
 
+    def test_a_hostile_collections_file_does_not_stop_the_games_from_loading(self):
+        folder = os.path.join(self.tmp, "userdata", "1234", "config", "cloudstorage")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "cloud-storage-namespace-1.json"), "w") as f:
+            f.write("[" * 200000)
+        self.load()
+        self.assertEqual((len(self.picker.rows), self.picker.collections), (3, []))
+
     def test_a_new_game_list_drops_the_buttons_and_an_old_id_does_nothing(self):
         many = self.many()
         self.shell.library.installedOnly = not self.shell.library.installedOnly         # another game list: the picker starts again
@@ -8336,6 +8344,42 @@ class ManualWindow(CollectionFiles, PickerBase):
         self.assertEqual(more.property("text"), "Show fewer")
         self.click("games_collections_more")
         self.assertEqual((last.property("reachable"), more.property("text")), (False, "Show all 25 collections"))
+
+    def is_plain(self, name):
+        """Whether the item draws its text as plain text (Python cannot read a Qt enum, so the question is asked inside QML)."""
+        from PySide6.QtQml import QQmlEngine, QQmlExpression
+        item = self.item(name)
+        answer, error = QQmlExpression(QQmlEngine.contextForObject(item), item, "textFormat === Text.PlainText").evaluate()
+        return answer is True
+
+    def test_the_question_shows_a_name_as_typed_and_wraps_a_long_one(self):
+        self.open_games([("markup", "<b>Done</b>", [1, 2]), ("long", "x" * 200, [1, 2])])
+        self.click("games_row_3")
+        self.click(self.pill("markup"))
+        self.assertEqual(self.text("collections_dlg_p0"), "\u201c<b>Done</b>\u201d has 2 games on your list.")
+        for name in ("collections_dlg_title", "collections_dlg_p0", "collections_dlg_p1"):
+            self.assertTrue(self.is_plain(name), name)                                       # never read as markup
+        self.click("collections_dlg_cancel")
+        self.click(self.pill("long"))
+        words = self.item("collections_dlg_p0")
+        self.assertGreater(words.property("lineCount"), 1)                                   # a name with no spaces still wraps
+        self.assertLessEqual(words.property("contentWidth"), words.width())
+
+    def test_a_long_name_keeps_its_count_on_the_pill(self):
+        self.open_games([("long", "x" * 200, [1, 2])])
+        pill, count = self.item(self.pill("long")), self.item("games_collections_count_user-collections.long")
+        self.assertEqual(count.property("text"), "(2)")
+        self.assertLessEqual(count.x() + count.width(), pill.width())
+        self.assertTrue(self.item("games_collections_text_user-collections.long").property("truncated"))   # only the name is cut
+
+    def test_the_focus_ring_of_a_pill_is_not_cut_off(self):
+        from PySide6.QtCore import QPointF
+        self.open_games([("a", "A", [1]), ("b", "B", [2])])
+        pill = self.item(self.pill("a"))
+        pad = 5                                                                              # ringOffset + focusRing
+        shown = self.item("games_collections_shown")
+        at = pill.mapToItem(shown, QPointF(0, 0))
+        self.assertGreaterEqual((at.x(), at.y()), (pad, pad))
 
     def test_a_few_collections_have_no_link(self):
         self.open_games([("a", "A", [1]), ("b", "B", [2]), ("c", "C", [3])])

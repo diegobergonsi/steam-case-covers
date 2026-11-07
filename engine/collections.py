@@ -29,7 +29,10 @@ def _app_id(value):
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.isascii() and value.isdigit():
-        return int(value)
+        try:
+            return int(value)
+        except ValueError:                           # a string of thousands of digits: Python refuses to convert it
+            return None
     return None
 
 
@@ -43,7 +46,7 @@ def _collection(key, entry):
         return None
     try:
         value = json.loads(entry["value"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, RecursionError):      # RecursionError: a text nested far too deep
         return None
     if not isinstance(value, dict) or value.get("filterSpec"):
         return None
@@ -58,7 +61,7 @@ def read_collections(steam, account):
     path = os.path.join(steam, "userdata", str(account), "config", "cloudstorage", "cloud-storage-namespace-1.json")
     try:
         pairs = json.loads(safefile.read_small_file(path, MAX_FILE).decode("utf-8", errors="replace"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return []
     if not isinstance(pairs, list):
         return []
