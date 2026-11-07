@@ -692,12 +692,10 @@ def store_items(appids, log=None, cancelled=None, errors=None):
 def portrait_candidates(appid, item):
     a = (item or {}).get("assets") or {}
     fmt = a.get("asset_url_format")
-    urls, auto = [], False
-    for k in ("library_capsule_2x", "library_capsule"):      # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
-        if fmt and a.get(k):
-            urls.append(CDN + fmt.replace("${FILENAME}", a[k]))
-            auto = auto or a[k].endswith("portrait.png")     # Steam-generated from the header: blurry
+    listed = [a[k] for k in ("library_capsule_2x", "library_capsule") if fmt and a.get(k)]     # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
+    urls = [CDN + fmt.replace("${FILENAME}", f) for f in listed]
     urls += [OLD_CDN % appid + f for f in ("library_600x900_2x.jpg", "library_600x900.jpg")]
+    auto = bool(listed) and listed[0].endswith("portrait.png")     # the first listed file decides: Steam-generated from the header means blurry
     return urls, auto
 
 
