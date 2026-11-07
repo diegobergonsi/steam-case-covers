@@ -12,9 +12,11 @@ Item {
     property string tag: ""
     property bool selected: false
     readonly property int rowAppid: appid               // what a list's keyboard handler reads from its current row
+    property bool standalone: false                     // a row outside a list (the checklist of a question) is a stop of its own for Tab; Space ticks it
     signal toggled()
 
     height: Theme.touchMin
+    activeFocusOnTab: standalone && enabled
     Accessible.role: Accessible.CheckBox
     Accessible.name: tag === "" ? name : name + ". " + tag
     Accessible.checkable: true
@@ -25,6 +27,8 @@ Item {
         anchors.fill: parent
         radius: Theme.radiusField
         color: hover.containsMouse ? Theme.raised : "transparent"
+        border.width: row.activeFocus ? Theme.focusRing : 0                   // keyboard focus ring
+        border.color: Theme.text
     }
     Rectangle {                                       // the tick box
         id: box
@@ -66,6 +70,12 @@ Item {
         color: Theme.text
         font.pixelSize: Theme.bodySize
         elide: Text.ElideRight
+    }
+    Keys.onPressed: (event) => {
+        if (row.standalone && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+            if (!event.isAutoRepeat) row.toggled()
+            event.accepted = true
+        }
     }
     MouseArea {
         id: hover

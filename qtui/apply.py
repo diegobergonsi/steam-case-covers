@@ -57,6 +57,7 @@ class Apply(QObject):
     appliedChanged = Signal()
     watchingChanged = Signal()
     failed = Signal(str)                    # the words of an error, for a box the user cannot miss wherever they are
+    choicesChanged = Signal()               # the groups listed in the Reset question, or which of them are ticked
     undoChanged = Signal()                  # whether there is anything to restore or reset
     resultChanged = Signal()                # the card that follows an Apply came or went
     confirmNeeded = Signal(str, list, str, str)     # the title, the paragraphs [{"text", "kind"}], the label of the "yes" button and of a second way forward ("": none)
@@ -75,8 +76,11 @@ class Apply(QObject):
         self._watching, self._probing = False, False
         self._accounts, self._who, self._choice = [], "", None
         self._raw = {}                                  # folder id -> the name as Steam knows it
-        self._ticks = GroupTicks(covers_dir, self)      # the groups of the manual way, ticked to be reset with the rest
-        self._reset_ticked = set()                      # the groups ticked when the reset began
+        self._ticks = GroupTicks(covers_dir, self)      # the groups of the manual way; the Reset question ticks the ones to reset with the rest
+        self._reset_names = []                          # our covers on Steam (<appid>p.png) the question is about
+        self._reset_other = 0                           # how many covers of other origin were found next to them
+        self._reset_choices = []                        # [(group id, words)] the question lists: the groups that have covers on Steam
+        self._reset_ticked = set()                      # the groups ticked when the person answered
         self._reset_games = set()                       # the games whose covers this reset removes from Steam
         self._busy = self._asking = self._applied = False
         self._pending = None                            # (mode, names) waiting for the answer to the question
@@ -93,6 +97,21 @@ class Apply(QObject):
         make.runningChanged.connect(self._make_changed)
         make.doneChanged.connect(self.canApplyChanged)
         make.doneChanged.connect(self.undoChanged)       # the accounts are read when the screen opens (refresh), not at start-up
+
+    @Property("QVariantList", notify=choicesChanged)
+    def resetChoices(self):
+        """The checklist of the Reset question: {"id", "text", "ticked"} for each group that has covers on Steam; empty while no such question is open."""
+        if not (self._asking and self._pending and self._pending[0] == "reset"):
+            return []
+        ticked = self._ticks.ids()
+        return [{"id": gid, "text": text, "ticked": gid in ticked} for gid, text in self._reset_choices]
+
+    @Slot(str)
+    def toggleResetGroup(self, group_id):
+        """Tick or untick a group of the Reset question: a ticked group is reset with the rest and deleted."""
+        if any(gid == group_id for gid, _ in self._reset_choices) and self._asking and self._pending and self._pending[0] == "reset":
+            self._ticks.toggle(group_id)
+            self.choicesChanged.emit()
 
     @Property(QObject, constant=True)
     def groupTicks(self):
@@ -397,7 +416,7 @@ class Apply(QObject):
         self.canApplyChanged.emit()
         self.undoChanged.emit()
         self._ticks.refresh()
-        self._reset_ticked = self._ticks.ids()
+        self._ticks.clear()                             # every question starts with no group ticked
         self._req += 1
         self._set_status(tr("Looking for covers made by this app\u2026 (a few seconds)"), "wait")
         threading.Thread(target=self._scan_worker, args=(self._req, self._acc()), daemon=True).start()
@@ -437,24 +456,22 @@ class Apply(QObject):
             self.undoChanged.emit()
             self.failed.emit(error)
             return
-        names, keep, stay, going = self._by_groups(names)
-        if not names and not other:
+        self._reset_names, self._reset_other = list(names), other
+        names, keep, stay, going = self._by_groups(self._reset_names, set())      # nothing is ticked yet: the covers of groups are the ones kept
+        if not names and not other and not stay:
             self._busy = False
-            text = (tr("No custom covers were found in \u201c%s\u201d. Nothing to reset.") % who if not keep else
-                    tr("Nothing to reset: the covers left in \u201c%s\u201d are in your groups. Tick a group to reset it.") % who)
             self._set_status("", "wait")
-            self._shell.toast.emit(text)                        # a result, so a toast like the others
+            self._shell.toast.emit(tr("No custom covers were found in \u201c%s\u201d. Nothing to reset.") % who)      # a result, so a toast like the others
             self.canApplyChanged.emit()
             self.undoChanged.emit()
             return
+        self._reset_choices = [(g["id"], trn("%s (%n cover)|%s (%n covers)", n) % g["name"]) for g, n in stay]
         paragraphs = []
         if names:
             paragraphs.append({"text": trn("%n cover made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for it.|"
                                            "%n covers made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for them.", len(names)) % who, "kind": "main"})
         if stay:
-            paragraphs.append({"text": tr("Your groups are left as they are: %s.") % ", ".join("\u201c%s\u201d (%d)" % (g["name"], n) for g, n in stay), "kind": "main"})
-        for g, n in going:
-            paragraphs.append({"text": trn("The group \u201c%s\u201d (%n cover) will be reset and deleted.|The group \u201c%s\u201d (%n covers) will be reset and deleted.", n) % g["name"], "kind": "main"})
+            paragraphs.append({"text": tr("Your groups are left as they are unless you tick them. A ticked group is reset and deleted."), "kind": "muted"})
         if other:
             paragraphs.append({"text": trn("Found %n more custom cover that this app did not make (from SteamGridDB or set by hand in Steam).|"
                                            "Found %n more custom covers that this app did not make (from SteamGridDB or set by hand in Steam).", other), "kind": "main"})
@@ -466,30 +483,32 @@ class Apply(QObject):
             go, alt = tr("Close Steam and remove all") if closing else tr("Remove all"), ""
         else:
             go, alt = tr("Close Steam and reset") if closing else tr("Reset"), ""
-        self._reset_games = {a for a in map(_appid, names) if a is not None}
-        self._ask("reset", tr("Reset to Steam's default art"), paragraphs, go, alt, {"names": names, "everything": not names, "keep": keep})
+        self._ask("reset", tr("Reset to Steam's default art"), paragraphs, go, alt)
+        self.choicesChanged.emit()
 
-    def _by_groups(self, names):
+    def _by_groups(self, names, ticked):
         """(names to reset, names to keep, [(group, covers)] left as they are, [(group, covers)] ticked): `names` are our covers on Steam (<appid>p.png). A cover of a group
         that is not ticked stays; a cover of a ticked group goes with the rest."""
         saved = self._ticks.groups()
-        stay_games = {a: g for g in saved if g["id"] not in self._reset_ticked for a in g["games"]}
+        stay_games = {a: g for g in saved if g["id"] not in ticked for a in g["games"]}
         keep = [n for n in names if _appid(n) in stay_games]
         gone = [n for n in names if n not in keep]
         count = lambda group, among: sum(1 for n in among if _appid(n) in group["games"])
-        stay = [(g, count(g, keep)) for g in saved if g["id"] not in self._reset_ticked and count(g, keep)]
-        going = [(g, count(g, gone)) for g in saved if g["id"] in self._reset_ticked and count(g, gone)]
+        stay = [(g, count(g, keep)) for g in saved if g["id"] not in ticked and count(g, keep)]
+        going = [(g, count(g, gone)) for g in saved if g["id"] in ticked and count(g, gone)]
         return gone, keep, stay, going
 
     @Slot()
     def decline(self):
         if self._asking and self._pending and self._pending[0] == "reset":
             self._busy = False
+            self._ticks.clear()
             self._set_status("", "wait")
             self.canApplyChanged.emit()
         self._asking = False
         self._pending = None
         self.undoChanged.emit()
+        self.choicesChanged.emit()
 
     @Slot()
     def confirm(self):
@@ -504,6 +523,20 @@ class Apply(QObject):
             return
         mode, names = self._pending
         self._pending, self._asking = None, False
+        if mode == "reset":
+            self._reset_ticked = self._ticks.ids()
+            gone, keep, _, _ = self._by_groups(self._reset_names, self._reset_ticked)
+            self.choicesChanged.emit()                  # the question is closed: its checklist goes
+            if not gone and not self._reset_other:      # no group ticked and nothing else found: nothing to remove
+                self._busy = False
+                self._ticks.clear()
+                self._set_status("", "wait")
+                self._shell.toast.emit(tr("Nothing was reset: no group was ticked."))
+                self.canApplyChanged.emit()
+                self.undoChanged.emit()
+                return
+            self._reset_games = {a for a in map(_appid, gone) if a is not None}
+            names = {"names": gone, "everything": not gone, "keep": keep}
         self._busy = True
         self._mode = mode
         self.canApplyChanged.emit()
@@ -598,6 +631,9 @@ class Apply(QObject):
         self.canApplyChanged.emit()
         self.undoChanged.emit()
         if error:
+            if self._mode == "reset":
+                self._reset_games, self._reset_ticked = set(), set()
+                self._ticks.clear()                            # a failed reset ticks nothing for the next question
             self._set_status(error, "error")
             self.failed.emit(error)
         else:

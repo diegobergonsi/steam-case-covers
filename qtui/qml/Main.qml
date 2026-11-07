@@ -218,6 +218,8 @@ ApplicationWindow {
         objectName: "apply_dialog"
         prefix: "apply_dlg"
         focusBack: win.lastFocus
+        choices: shell.apply.resetChoices                             // the groups of the Reset question, to tick
+        onChoiceToggled: (id) => shell.apply.toggleResetGroup(id)
         onConfirmed: shell.apply.confirm()
         onDeclined: shell.apply.decline()
         onAlternated: shell.apply.confirmAlternate()

@@ -8626,49 +8626,102 @@ class GroupReset(PickerBase):
         return " ".join(p["text"] for p in self.asked[-1][1])
 
     def tick(self, group_id):
-        self.ap.groupTicks.refresh()                                       # the screen reads the file when it opens
-        self.ap.groupTicks.toggle(group_id)
+        """Tick a group in the question that is open (the ticks are the person's choice in the question itself)."""
+        self.ap.toggleResetGroup(group_id)
+
+    def choices(self):
+        return [(c["text"], c["ticked"]) for c in self.ap.resetChoices]
 
     def test_the_reset_lists_the_groups_unticked(self):
         self.ap.groupTicks.refresh()
         self.assertEqual([(g["name"], g["ticked"]) for g in self.ap.groupTicks.choices], [("Red games", False), ("PlayStation 5", False)])
 
-    def test_unticked_groups_stay_on_steam_and_the_question_says_so(self):
+    def test_the_reset_question_lists_groups_with_covers_unticked(self):
+        self.assertEqual(self.ap.resetChoices, [])                                       # no question open: no checklist
         self.reset()
         self.assertTrue(self.ap.asking, self.ap.status)
-        text = self.question()
-        self.assertIn("1 cover made by this app will be removed", text)
-        self.assertIn("Red games", text)
-        self.assertIn("PlayStation 5", text)
-        self.assertIn("left as they are", text)
+        self.assertEqual(self.choices(), [("Red games (1 cover)", False), ("PlayStation 5 (1 cover)", False)])
+        self.assertIn("1 cover made by this app will be removed", self.question())
+        self.assertIn("left as they are", self.question())
+
+    def test_an_unticked_group_stays_on_steam(self):
+        self.reset()
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # only the usual cover went
         self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["Red games", "PlayStation 5"])
 
-    def test_a_ticked_group_is_reset_and_deleted(self):
-        self.tick(self.red)
+    def test_ticking_a_group_in_the_question_removes_its_covers_and_deletes_the_group(self):
         self.reset()
-        text = self.question()
-        self.assertIn("Red games", text)
-        self.assertIn("deleted", text)
+        self.tick(self.red)
+        self.assertEqual(self.choices(), [("Red games (1 cover)", True), ("PlayStation 5 (1 cover)", False)])
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["3p.png"])
         self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["PlayStation 5"])
-        cover = os.path.join(self.covers, "Hades_1.png")
-        self.assertIsNone(self.sc.cover_group(cover))                                    # the cover in the covers folder is a usual one again
+        self.assertIsNone(self.sc.cover_group(os.path.join(self.covers, "Hades_1.png")))        # the cover in the covers folder is a usual one again
         self.assertEqual(self.ap.groupTicks.count, 0)
-        self.assertEqual([g["name"] for g in self.ap.groupTicks.choices], ["PlayStation 5"])
+        self.assertEqual(self.ap.resetChoices, [])                                       # the question is closed
 
-    def test_all_covers_in_unticked_groups_means_nothing_to_reset(self):
+    def test_the_question_shows_the_checklist_and_a_click_ticks_a_group(self):
+        self.start_window()
+        self.reset()
+        self.wait_for(lambda: self.item("apply_dialog").property("visible"))
+        row = "apply_dlg_choice_" + self.red
+        self.assertEqual(self.item(row).property("name"), "Red games (1 cover)")
+        self.assertFalse(self.item(row).property("selected"))
+        self.assertGreaterEqual(self.item(row).property("height"), 44)
+        self.click(row)
+        self.assertTrue(self.item(row).property("selected"))
+        self.assertEqual(self.choices(), [("Red games (1 cover)", True), ("PlayStation 5 (1 cover)", False)])
+
+    def test_choices_are_reachable_with_tab_and_space(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.start_window()
+        self.reset()
+        self.wait_for(lambda: self.item("apply_dialog").property("visible"))
+        send = lambda key: (QCoreApplication.sendEvent(self.root.activeFocusItem(), QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, "", False)), self.app.processEvents())
+        self.assertEqual(self.root.activeFocusItem().objectName(), "apply_dlg_cancel")           # the safe button first
+        send(Qt.Key_Backtab)
+        self.assertEqual(self.root.activeFocusItem().objectName(), "apply_dlg_choice_" + self.ps)
+        send(Qt.Key_Space)
+        self.assertEqual(self.choices(), [("Red games (1 cover)", False), ("PlayStation 5 (1 cover)", True)])
+
+    def test_a_dialog_without_choices_shows_none(self):
+        self.start_window()
+        self.app.processEvents()
+        self.assertFalse(self.has("apply_dlg_choice_" + self.red))
+
+    def test_declining_the_question_ticks_nothing_for_the_next_one(self):
+        self.reset()
+        self.tick(self.red)
+        self.ap.decline()
+        self.reset()
+        self.assertEqual(self.choices(), [("Red games (1 cover)", False), ("PlayStation 5 (1 cover)", False)])
+
+    def test_reset_without_groups_has_no_checklist(self):
+        os.remove(os.path.join(self.covers, "groups.json"))
+        self.reset()
+        self.assertTrue(self.ap.asking, self.ap.status)
+        self.assertEqual(self.ap.resetChoices, [])
+
+    def test_reset_with_only_group_covers_still_asks(self):
         os.remove(os.path.join(self.grid, "2p.png"))
+        self.reset()
+        self.assertTrue(self.ap.asking, self.ap.status)
+        self.assertNotIn("made by this app will be removed", self.question())
         said = []
         self.shell.toast.connect(said.append)
-        self.reset()
-        self.assertFalse(self.ap.asking)
-        self.assertTrue(said and "groups" in said[0], said)
+        self.ap.confirm()                                                                # nothing ticked: nothing to do, and the person is told
+        self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
+        self.assertTrue(said and "ticked" in said[0], said)
+        self.reset()
+        self.tick(self.red)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["3p.png"])
 
     def test_remove_all_also_spares_unticked_groups(self):
         with open(os.path.join(self.grid, "9p.png"), "wb") as f:
@@ -8680,16 +8733,16 @@ class GroupReset(PickerBase):
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # ours of the usual flow and the other art went, the groups stay
 
     def test_declining_changes_nothing(self):
-        self.tick(self.red)
         self.reset()
+        self.tick(self.red)
         self.ap.decline()
         self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
         self.assertEqual(len(self.groups.load(self.covers)), 2)
 
     def test_a_failed_reset_deletes_no_group(self):
         from unittest import mock
-        self.tick(self.red)
         self.reset()
+        self.tick(self.red)
         with mock.patch.object(self.sc, "reset_to_default", side_effect=self.sc.SteamcaseError("disk full")):
             self.ap.confirm()
             self.wait_for(lambda: not self.ap.busy, 10)
@@ -8774,13 +8827,14 @@ class GroupsEndToEnd(PickerBase):
         asked = []
         self.ap.confirmNeeded.connect(lambda title, paragraphs, go, alt: asked.append(paragraphs))
         self.ap.reset()
+        self.wait_for(lambda: self.ap.asking or not self.ap.busy, 10)
+        self.assertTrue(self.ap.asking)                                                    # only groups are on Steam: the question lists them, all unticked
+        self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
-        self.assertFalse(self.ap.asking)
         self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
-        self.ap.groupTicks.refresh()
-        self.ap.groupTicks.toggle(by_name["Red games"])
         self.ap.reset()
         self.wait_for(lambda: self.ap.asking or not self.ap.busy, 10)
+        self.ap.toggleResetGroup(by_name["Red games"])
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
