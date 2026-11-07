@@ -55,14 +55,14 @@
 
 ## What is it?
 
-Steam shows your library as tall portrait cards. This tool puts each game's own artwork inside a "box" (blue by default, or any colour and shade you pick, from vivid to dark grey and black) with a Steam banner and platform badges, like a boxed console game, and installs the result as your custom artwork.
+Steam shows your library as tall portrait cards. This tool puts each game's own artwork inside a box, like a boxed console game, with a Steam banner and platform badges. The box is blue by default, or any colour you pick, from vivid to dark grey and black. The result is installed as your custom artwork.
 
 The artwork comes from Steam's own servers. The covers are built on your computer and stay there.
 
 <p align="center">
   <a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/library-mixed.png"><img src="assets/library-mixed.png" width="560" alt="A Steam library with Steam cases, PlayStation 5 and Xbox One cases, games at 100% with a rosette and a gold border, and Leaf it Alone with a green family corner"></a>
   <br>
-  <em>How the covers look inside Steam: the Steam case, console cases (God of War, Horizon Zero Dawn and The Last of Us in PlayStation 5 cases, Hellblade and State of Decay 2 in Xbox One cases) and games at 100% with a rosette, some with the gold border option. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is owned in both libraries, so it does not (the small “2” is Steam's own badge).</em>
+  <em>How the covers look inside Steam: Steam cases, console cases (God of War, Horizon Zero Dawn and The Last of Us in PlayStation 5 cases, Hellblade and State of Decay 2 in Xbox One cases) and games at 100% with a rosette, some with the gold border. Leaf it Alone comes from a family member's library, so it has the green corner. Coral Island is in both libraries, so it does not (the small “2” is Steam's own badge).</em>
 </p>
 
 <a id="install"></a>
@@ -74,7 +74,7 @@ The artwork comes from Steam's own servers. The covers are built on your compute
 
 Download `SteamCaseCovers-windows.exe` from the [Releases page](https://github.com/diegobergonsi/steam-case-covers/releases) and double-click it.
 
-If "Windows protected your PC" appears, click **More info**, then **Run anyway**. The app isn't code-signed (that costs money), which is why Windows warns you. Some antivirus tools also flag apps of this kind.
+If "Windows protected your PC" appears, click **More info**, then **Run anyway**. Windows warns you because the app isn't code-signed, which costs money. Some antivirus tools also flag apps of this kind.
 
 </details>
 
@@ -87,9 +87,9 @@ Download `SteamCaseCovers-macos.zip` from the [Releases page](https://github.com
 xattr -dr com.apple.quarantine ~/Downloads/SteamCaseCovers.app
 ```
 
-Why: macOS blocks any app that doesn't come from a paid Apple developer (about 99 USD a year, which a free project can't justify). That command removes the "downloaded from the internet" mark, so macOS opens the app normally. The app isn't harmful or damaged, and its source code is here for anyone to read.
+macOS blocks apps from developers who don't pay Apple (about 99 USD a year, which a free project can't justify). The command removes the "downloaded from the internet" mark, so macOS opens the app. The app is not damaged, and its source code is here to read.
 
-If you open the app first instead, macOS shows **"SteamCaseCovers" Not Opened: Apple could not verify it is free of malware**. Click **Done** (not Move to Trash), then open **System Settings**, **Privacy & Security**, scroll to **Security**, and click **Open Anyway** next to the SteamCaseCovers message (it stays for about an hour; double-click the app again to bring it back). If the app then bounces in the Dock forever with no window, **restart your Mac** and use the Terminal command above instead. On macOS 14 or older you can also right-click the app and choose **Open**.
+If you open the app first, macOS shows **"SteamCaseCovers" Not Opened: Apple could not verify it is free of malware**. Click **Done** (not Move to Trash), then open **System Settings**, **Privacy & Security**, scroll to **Security**, and click **Open Anyway** next to the SteamCaseCovers message (it stays for about an hour; double-click the app again to bring it back). If the app then bounces in the Dock with no window, **restart your Mac** and use the Terminal command instead. On macOS 14 or older you can also right-click the app and choose **Open**.
 
 The first time you press **Apply to Steam**, macOS may say the app isn't allowed to control Steam. Allow it in the prompt (or in **System Settings**, **Privacy & Security**), then press the button again.
 
@@ -135,11 +135,11 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 
 ## 🔧 How it works
 
-1. **Get your game list.** Click **Open the page in my browser**. Your browser opens Steam: log in if it asks, and you'll land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. No browser opening? Click **Copy link** and paste it yourself. Or tick **Only my installed games** to skip this step: games that are not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving (or use Chrome or Firefox).
-2. **Choose the look.** Pick the look of the cases: drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. **Theme** can turn the cases into a **Halloween** one: a cobweb with a spider, a pumpkin and a spider hanging from the top, on top of whatever colour you picked. The Halloween case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. If you set your own art for some games (in Steam's menu, or from SteamGridDB), turn on **Use my own custom art where I have it** and your art goes inside the case instead of Steam's; games without art of your own keep Steam's. The app keeps a copy of your art in its own folder and never changes your files.
-3. **Highlight your 100% games (optional).** Load your Steam games page and the games where you unlocked every achievement get a mark. Details below. You can skip this step.
-4. **Make the covers.** Check your choices (each one leads back to its step) and click **Make covers**, then wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour or theme, the app asks before it replaces them.
-5. **Add them to Steam.** Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; pick another with the account buttons. Your current artwork is backed up first.
+1. Get your game list. Click **Open the page in my browser**. Steam opens in your browser: log in if it asks, and you land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. If no browser opens, click **Copy link** and paste it yourself. To skip this step, tick **Only my installed games**: games not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving, or use Chrome or Firefox.
+2. Choose the look. Drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. **Theme** can turn the cases into a **Halloween** one: a cobweb with a spider, a pumpkin and a spider hanging from the top, over whatever colour you picked. The Halloween case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. If you set your own art for some games (in Steam's menu or from SteamGridDB), turn on **Use my own custom art where I have it** and your art goes inside the case instead of Steam's. Games without art of your own keep Steam's. The app keeps a copy of your art in its own folder and never changes your files.
+3. Highlight your 100% games (optional). Load your Steam games page and the games where you unlocked every achievement get a mark. Details below. You can skip this step.
+4. Make the covers. Check your choices (each one leads back to its step) and click **Make covers**, then wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour or theme, the app asks before it replaces them.
+5. Add them to Steam. Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; pick another with the account buttons. Your current artwork is backed up first.
 
 > [!WARNING]
 > Step 5 **closes Steam for you** (any running game stops and downloads pause), adds the covers, and starts Steam again. Save your game first. The app asks before it does anything.
@@ -156,9 +156,9 @@ Some games belong in another box: The Last of Us is a PlayStation game, Forza is
 If you already sorted your games into Steam collections (Completed, Backlog, Favorites…), they show as buttons under the search box: one click ticks every game of that collection. If some games are already ticked, the app asks whether to add the collection's games or replace what you ticked. Collections that Steam fills by a rule (the automatic ones) are not supported. The app only reads them, it never changes them.
 
 * The console cases are fixed: no colour, brightness or theme. They are drawn to fill the same tall tile as the Steam case.
-* **Your own case.** Make a case yourself and use it: **My own case**, at the end of the list of cases. It is a PNG of **600 x 900 pixels** that is see-through where the game's art goes (at least 400 x 400), like the console cases, and the app finds the see-through part by itself. You pick the file each time you want a new case, and the last one is kept so you can make the covers again. The **Look** step of the step by step way has the same choice and uses it for every game; colour, theme and gold do not apply to it.
-* **Groups.** The games you give a case go in a **group** with a name you can change ("Dropped games", "Xbox 360"), and the app remembers it. Next time you can add games to a group you made, or delete it. A game is in one group only. Colours are only a look: gold is a colour like the others, and the rosette and ribbon only go on games that really are at 100% on the games page you loaded.
-* **The usual way leaves your groups alone.** When you make covers again with the card **The same case for every game on your list**, the covers of your groups are not repainted. On the **Make** step you can tick a group to repaint its covers with the look you chose; that deletes the group. **Reset to Steam's default art** (on Home) works the same way: it leaves your groups on Steam unless you tick them.
+* Your own case. Make a case yourself and use it: **My own case**, at the end of the list of cases. It is a PNG of **600 x 900 pixels** that is see-through where the game's art goes (at least 400 x 400), like the console cases, and the app finds the see-through part by itself. You pick the file each time you want a new case, and the last one is kept so you can make the covers again. The **Look** step of the step by step way has the same choice and uses it for every game; colour, theme and gold do not apply to it.
+* Groups. The games you give a case go in a **group** with a name you can change ("Dropped games", "Xbox 360"), and the app remembers it. Next time you can add games to a group you made, or delete it. A game is in one group only. Colours are only a look: gold is a colour like the others, and the rosette and ribbon only go on games that really are at 100% on the games page you loaded.
+* The usual way leaves your groups alone. When you make covers again with the card **The same case for every game on your list**, the covers of your groups are not repainted. On the **Make** step you can tick a group to repaint its covers with the look you chose; that deletes the group. **Reset to Steam's default art** (on Home) works the same way: it leaves your groups on Steam unless you tick them.
 * Games shared through Steam Family Sharing get the green corner only if you switch on **Mark family games** (it needs your game list file).
 * Your 100% games get the rosette and ribbon (or the rosette alone) if you load your games page in the **100% games** step of this way and keep **Highlight them**.
 * The natural way never changes or removes a console cover: only picking the game again here does.
@@ -188,7 +188,7 @@ Good to know:
 * Steam's page shows progress only for games where you have unlocked at least one achievement. That is why only games at 100% are marked: there are no marks for games you have only started.
 * Switching the choice, or saving the page again after you finish another game and clicking **Make covers**, rebuilds only the covers that change. If you make covers without loading a page, covers that are already highlighted keep their highlight.
 * The page lists most of a library but not all of it. On the author's library it listed about 99% of the covers (509 of 515): a few old, free or hidden games are not on it and cannot be highlighted.
-* This was only tried with Chrome, on Linux, with Steam set to Portuguese and to English; the saved pages gave exactly the same result. Firefox is expected to save the page the same way, and the app reads the progress without depending on the language of Steam's label, but other languages and browsers were not tested. Windows and macOS were not tested either, and neither was a real touchscreen.
+* This was tried only with Chrome on Linux, with Steam in Portuguese and in English; both gave the same result. Firefox should save the page the same way, and the app reads progress without depending on Steam's language, but other languages and browsers were not tested. Windows, macOS and a real touchscreen were not tested either.
 
 <a id="features"></a>
 
@@ -213,7 +213,7 @@ Good to know:
 - Several Steam accounts on one computer: you choose which one gets the covers
 
 **The app itself**
-- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's; buttons and controls are finger-sized (44 px) for a touchscreen, and the colours follow the recommended contrast rule (WCAG 2.2 level AA)
+- Works with the keyboard, scales on high-DPI screens and fits small screens like the Steam Deck's. Controls are finger-sized (44 px) and the colours meet WCAG 2.2 level AA contrast
 - English and Brazilian Portuguese: the app starts in your system's language, and two small flags under the name switch it at any time (the command line stays in English; this README is also in [Brazilian Portuguese](README.pt-BR.md))
 - A "Check for updates" button, only when you click it: it asks GitHub for the newest version and never downloads or installs anything
 - Free software: no ads, no account, no telemetry
@@ -273,7 +273,13 @@ python -m engine reset --everything             # ...also removing art from othe
 | `restore` | Undo the last apply (run again to go further back) |
 | `reset` | Remove the covers this app made from Steam (`--everything` also removes custom art from other sources) |
 
-`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`; an option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). `--use-custom-art` puts the art you set yourself inside the case for the games that have it (use `--user` with `make` to pick the account); `--no-custom-art` goes back to Steam's portrait for every cover; with neither, covers already made from your art keep it. `--theme` is `classic` or `halloween`, and without it the covers already in the folder keep their theme; with the Halloween theme, 100% games get the rosette only, so `--completed-marks full` is refused. Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case. `--case-file FILE` puts every game of the run in a case of your own (a 600 x 900 PNG, see-through where the art goes). It cannot be mixed with `--hue`, `--saturation`, `--brightness`, `--theme` or the gold styles, and a later `make` without it leaves those covers as they are (use another `--out`, or delete them).
+`list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`. An option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
+
+`--theme` is `classic` or `halloween`. Without it, covers already in the folder keep their theme. With Halloween, 100% games get the rosette only, so `--completed-marks full` is refused.
+
+`--use-custom-art` puts the art you set yourself inside the case for the games that have it (add `--user` to pick the account). `--no-custom-art` goes back to Steam's portrait for every cover. With neither, covers already made from your art keep it.
+
+`--case-file FILE` puts every game of the run in a case of your own (a 600 x 900 PNG, see-through where the art goes). It cannot be combined with `--hue`, `--saturation`, `--brightness`, `--theme` or the gold styles, and a later `make` without it leaves those covers as they are (use another `--out`, or delete them).
 
 `--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the plain case; the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. `--completed-marks` is `full` (the rosette and the ribbon, the default), `rosette` (the rosette alone) or `none` (no marks: with `gold-case` or `gold-border` the gold alone) and works with every style except `none`. Without either option, covers keep the look they have.
 
@@ -314,7 +320,7 @@ In your own user folder: `~/.local/share/steamcase/covers` on Linux, `%LOCALAPPD
 <details>
 <summary><b>A game from my family's library got no cover</b></summary>
 
-Games shared with you through Steam Family Sharing are not on your own game list, so the app has to compare Steam's own files with your list to tell them apart. Untick **Only my installed games** and load your game list (**Download your game list**, or **Browse…** to an older `userdata.json`: it does not need to contain the shared game). The shared games then get covers with a green corner. If the list is old, games you bought after saving it may be mistaken for shared ones, so save it again after you buy games. This is only tested on a small family: please [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) if games are missing.
+Games shared with you through Steam Family Sharing are not on your own game list, so the app compares Steam's own files with your list to tell them apart. Untick **Only my installed games** and load your game list (**Download your game list**, or **Browse…** to an older `userdata.json`: it does not need to contain the shared game). The shared games then get covers with a green corner. If the list is old, games you bought after saving it may be mistaken for shared ones, so save it again after you buy games. This is only tested on a small family: please [open an issue](https://github.com/diegobergonsi/steam-case-covers/issues) if games are missing.
 
 </details>
 
