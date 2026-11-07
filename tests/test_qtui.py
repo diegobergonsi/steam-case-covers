@@ -40,14 +40,17 @@ class QtCase(unittest.TestCase):
         from qtui.app import find_item
         return find_item(self.root, name) is not None
 
-    def wait_for(self, condition, seconds=3):
-        """Let Qt work until `condition()` is true or the time is up (layouts and images settle over several passes, slower on Windows); assert after it."""
+    def wait_for(self, condition, seconds=5):
+        """Let Qt work until `condition()` is true or the time is up (layouts and images settle over several passes, slower on Windows and macOS); assert after it.
+        When it is true the window may still be catching up with the model (queued signals, bindings, layouts), so a few more passes run before the test looks at it."""
         import time
         end = time.time() + seconds
         while time.time() < end and not condition():
             self.app.processEvents()
             time.sleep(0.02)
-        self.app.processEvents()
+        for _ in range(5):
+            self.app.processEvents()
+            time.sleep(0.01)
 
 class WindowCase(QtCase):
     """The real window (offscreen), over a fresh settings file, Downloads folder and covers folder. A test class says what it needs with class attributes:
@@ -4100,14 +4103,6 @@ class UpdatesState(QtCase):
         self.seen = []
         self.u.message.connect(lambda *a: self.seen.append(a))
 
-    def wait_for(self, condition, seconds=5):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
-
     def check(self, result=None, error=None):
         from unittest import mock
         from engine import steamcase as sc
@@ -4692,6 +4687,7 @@ class AddScreen(AddWindow):
         self.assertEqual(self.text("apply_dlg_title"), "Restore previous artwork")
         before = (list(self.log), self.ap.status, self.ap.statusKind, self.ap.applied)
         self.click("apply_dlg_cancel")
+        self.wait_for(lambda: not self.item("apply_dialog").isVisible())                                # the box is gone before the next question, or the click lands on a closing box
         self.assertTrue(self.item("add_section_done").property("visible"))                              # cancelling changes nothing
         self.assertEqual((list(self.log), self.ap.status, self.ap.statusKind, self.ap.applied), before)
         self.click("add_undo")
@@ -5747,14 +5743,6 @@ class MakeState(QtCase, FakeStore):
         self.wait_for(lambda: not self.make.running)
         super().tearDown()
 
-    def wait_for(self, condition, seconds=5):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
-
     def own_file(self):
         im = self.sc.Image.new("RGBA", self.sc.SIZE, (30, 60, 200, 255))
         im.paste((0, 0, 0, 0), (20, 100, 580, 880))
@@ -6247,14 +6235,6 @@ class ApplyState(QtCase, FakeStore):
         if progress:
             progress(1, 2)
         return list(self.ours)
-
-    def wait_for(self, condition, seconds=5):
-        import time
-        end = time.time() + seconds
-        while time.time() < end and not condition():
-            self.app.processEvents()
-            time.sleep(0.02)
-        self.app.processEvents()
 
     def covers_ready(self):
         self.make.start()
