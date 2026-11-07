@@ -62,5 +62,8 @@ Names and counts come from Steam's file, so they can be anything the player type
 - No pop-up when the click would change nothing.
 - Start over clears nothing extra: collections are read again when the game list reloads.
 
+## Later (the user, 2026-11-07)
+The account should come from an account choice on Home, which does not exist yet. Until then the account works as written above. Keep the reader of the collections taking the account as one argument, so that change is small.
+
 ## Left to the builder
 Exact sizes, names of objects and tests, how the model of the buttons is exposed to QML, the Portuguese texts, the README and changelog lines, a test for the packaged build if one applies.
