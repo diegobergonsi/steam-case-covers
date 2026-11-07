@@ -93,5 +93,24 @@ class ReadCollections(unittest.TestCase):
         self.assertEqual(self.read(), [])
 
 
+class OnList(unittest.TestCase):
+    """Which collections to show for the games on screen, and in which order."""
+    def make(self, key, name, ids):
+        return collections.Collection("user-collections." + key, name, frozenset(ids))
+
+    def test_only_games_on_screen_count_and_empty_ones_go(self):
+        got = collections.on_list([self.make("a", "Few", [1]), self.make("b", "Many", [1, 2, 99]), self.make("c", "Elsewhere", [98, 99])], {1, 2, 3})
+        self.assertEqual([(s.name, s.games) for s in got], [("Many", frozenset({1, 2})), ("Few", frozenset({1}))])
+
+    def test_most_games_first_then_name_then_id(self):
+        got = collections.on_list([self.make("z", "beta", [1]), self.make("y", "Alpha", [1]), self.make("x", "Alpha", [1]), self.make("w", "Big", [1, 2])], {1, 2})
+        self.assertEqual([s.id[len("user-collections."):] for s in got], ["w", "x", "y", "z"])
+        self.assertEqual(got[0].label, "Big (2)")
+
+    def test_nothing_on_screen_means_nothing(self):
+        self.assertEqual(collections.on_list([self.make("a", "A", [1])], set()), [])
+        self.assertEqual(collections.on_list([], {1}), [])
+
+
 if __name__ == "__main__":
     unittest.main()

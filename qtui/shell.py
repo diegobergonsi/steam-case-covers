@@ -52,7 +52,7 @@ class Shell(QObject):
         self._owncase = OwnCase(covers_dir or sc.default_covers_dir(), downloads or system.downloads_dir(), self, busy=lambda: self._make.running)
         self._look = Look(self, covers_dir or sc.default_covers_dir(), self)
         self._hundred = Hundred(self, downloads or system.downloads_dir(), self)
-        self._picker = Picker(self, self)
+        self._picker = Picker(self, lambda: self._apply.accountChoice(), self)
         covers = covers_dir or sc.default_covers_dir()
         self._cases = Cases(self, self, covers)
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)

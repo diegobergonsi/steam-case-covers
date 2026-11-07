@@ -22,6 +22,23 @@ class Collection(NamedTuple):
     appids: frozenset                            # `added` without `removed`
 
 
+class Shown(NamedTuple):
+    """A collection as the Games screen shows it: only its games that are on the screen."""
+    id: str
+    name: str
+    games: frozenset
+
+    @property
+    def label(self):
+        return "%s (%d)" % (self.name, len(self.games))
+
+
+def on_list(found, on_screen):
+    """[Shown] for the collections that have games among `on_screen` (a set of app ids): the most games first, then by name."""
+    shown = [Shown(c.id, c.name, c.appids & on_screen) for c in found]
+    return sorted((s for s in shown if s.games), key=lambda s: (-len(s.games), s.name.casefold(), s.id))
+
+
 def _app_id(value):
     """The app id a list item stands for, or None."""
     if isinstance(value, bool):

@@ -56,9 +56,10 @@ class Picker(QObject):
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss
     _loaded = Signal(int, object, object, object)           # request, [(appid, name)], the store errors, the words of an error (from the worker)
 
-    def __init__(self, shell, parent=None):
+    def __init__(self, shell, account=lambda: None, parent=None):
         super().__init__(parent)
         self._shell = shell
+        self._account = account             # () -> the Steam account folder the user chose, or None for the one Steam used last
         self._all = []                      # [(appid, name)] sorted by name
         self._selected = set()
         self._query = ""
@@ -69,7 +70,7 @@ class Picker(QObject):
         self._error = ""
         self._rows = []
         self._steam_collections = []        # [engine.collections.Collection] as read from Steam's file
-        self._collections = []              # what the screen shows: the ones with games on screen
+        self._shown = []                    # [engine.collections.Shown]: the ones with games on screen
         self._model = RowsModel(self)
         self._loaded.connect(self._on_loaded)
         self._library_seen = self._library_key()
@@ -128,7 +129,7 @@ class Picker(QObject):
     @Property("QVariantList", notify=collectionsChanged)
     def collections(self):
         """The Steam collections that have games on screen: {"id", "name", "label" (name and count), "count"}, the most games first, then by name."""
-        return self._collections
+        return [{"id": s.id, "name": s.name, "label": s.label, "count": len(s.games)} for s in self._shown]
 
     def selection(self):
         """The ticked games' app ids, sorted."""
@@ -181,7 +182,7 @@ class Picker(QObject):
         shortcut: read on the UI thread, which is fine for a real file (some tens of KB, at most 8 MB by the engine's cap); move it into the worker if a slow disk ever shows."""
         try:
             steam = sc.steam_dir()
-            found = steam_collections.read_collections(steam, sc.pick_account(steam, self._shell.apply.accountChoice()))
+            found = steam_collections.read_collections(steam, sc.pick_account(steam, self._account()))
         except (sc.SteamcaseError, OSError):
             found = []
         self._steam_collections = found
@@ -189,34 +190,28 @@ class Picker(QObject):
 
     def _show_collections(self):
         """The buttons for the collections that have games in the list on screen; tells the screen only when they changed."""
-        on_screen = {a for a, _ in self._all}
-        shown = [{"id": c.id, "name": c.name, "label": "%s (%d)" % (c.name, n), "count": n}
-                 for c in self._steam_collections for n in [len(c.appids & on_screen)] if n]
-        shown.sort(key=lambda c: (-c["count"], c["name"].casefold(), c["id"]))
-        if shown != self._collections:
-            self._collections = shown
+        shown = steam_collections.on_list(self._steam_collections, {a for a, _ in self._all})
+        if shown != self._shown:
+            self._shown = shown
             self.collectionsChanged.emit()
 
-    def _collection_games(self, collection_id):
-        """The games of one collection that are in the list on screen (nothing for an id that is not shown)."""
-        if not any(c["id"] == collection_id for c in self._collections):
-            return set()
-        on_screen = {a for a, _ in self._all}
-        return next(c.appids for c in self._steam_collections if c.id == collection_id) & on_screen
+    def _shown_collection(self, collection_id):
+        """The shown collection with this id, or an empty one (an id that is not shown, for example after the list changed, has no games)."""
+        return next((s for s in self._shown if s.id == collection_id), steam_collections.Shown(collection_id, "", frozenset()))
 
     @Slot(str, result="QVariantMap")
     def collectionPlan(self, collection_id):
         """What a click on this collection would do: its games on screen, the games ticked now, the total after Add, and whether to ask first
         (something is ticked, and the click would change it)."""
-        games = self._collection_games(collection_id)
-        name = next((c["name"] for c in self._collections if c["id"] == collection_id), "")
+        shown = self._shown_collection(collection_id)
+        games = shown.games
         ask = bool(games) and bool(self._selected) and self._selected != games
-        return {"name": name, "games": len(games), "ticked": len(self._selected), "afterAdd": len(self._selected | games), "ask": ask}
+        return {"name": shown.name, "games": len(games), "ticked": len(self._selected), "afterAdd": len(self._selected | games), "ask": ask}
 
     @Slot(str, str)
     def applyCollection(self, collection_id, mode):
         """Tick a collection's games: "add" keeps what is ticked, "replace" ticks only these. Anything else does nothing."""
-        games = self._collection_games(collection_id)
+        games = self._shown_collection(collection_id).games
         if not games or mode not in ("add", "replace"):
             return
         self._selected = set(games) if mode == "replace" else self._selected | games
