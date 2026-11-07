@@ -6999,6 +6999,113 @@ class PickerTests(PickerBase):
         self.assertLess(time.time() - start, 1.5)
 
 
+class CollectionFiles:
+    """Puts a Steam collections file in the fake Steam folder of a PickerBase test."""
+
+    def write_collections(self, collections, account="1234"):
+        """`collections` is [(key suffix, name, [app ids])]; a name with extra keys is a dict {"name", "added", "filterSpec"...}."""
+        folder = os.path.join(self.tmp, "userdata", account, "config", "cloudstorage")
+        os.makedirs(folder, exist_ok=True)
+        pairs = []
+        for key, name, added in collections:
+            pairs.append(["user-collections." + key, {"value": json.dumps({"id": key, "name": name, "added": added, "removed": []}), "version": "1"}])
+        with open(os.path.join(folder, "cloud-storage-namespace-1.json"), "w", encoding="utf-8") as f:
+            json.dump(pairs, f)
+
+    def labels(self):
+        return [c["label"] for c in self.picker.collections]
+
+
+@need_qt
+class CollectionTests(CollectionFiles, PickerBase):
+    """The Games step knows the player's Steam collections: buttons that tick a whole collection, adding or replacing."""
+
+    def many(self):
+        self.write_collections([("few", "Few", [1]), ("many", "Many", [1, 2, 99]), ("elsewhere", "Elsewhere", [98, 99]), ("apple", "Apple", [3])])
+        self.load()
+        return "user-collections.many"
+
+    def test_buttons_count_only_games_on_screen_sorted_and_labelled(self):
+        self.many()
+        self.assertEqual(self.labels(), ["Many (2)", "Apple (1)", "Few (1)"])          # most games first, then by name; "Elsewhere" has none on screen
+        self.assertEqual([c["count"] for c in self.picker.collections], [2, 1, 1])
+
+    def test_no_file_means_no_collections(self):
+        self.load()
+        self.assertEqual(self.picker.collections, [])
+
+    def test_installed_only_counts_installed_games(self):
+        self.library = {1: None}
+        self.many()
+        self.assertEqual(self.labels(), ["Few (1)", "Many (1)"])                           # equal counts: by name
+
+    def test_the_plan_asks_only_when_something_is_ticked_and_it_would_change(self):
+        many = self.many()
+        plan = self.picker.collectionPlan(many)
+        self.assertEqual((plan["name"], plan["games"], plan["ticked"], plan["afterAdd"], plan["ask"]), ("Many", 2, 0, 2, False))
+        self.picker.toggle(3)
+        plan = self.picker.collectionPlan(many)
+        self.assertEqual((plan["ticked"], plan["afterAdd"], plan["ask"]), (1, 3, True))
+        self.picker.applyCollection(many, "replace")
+        self.assertFalse(self.picker.collectionPlan(many)["ask"])                        # the click would change nothing
+
+    def test_an_unknown_collection_has_no_games_and_no_question(self):
+        self.many()
+        plan = self.picker.collectionPlan("user-collections.nope")
+        self.assertEqual((plan["games"], plan["ask"]), (0, False))
+
+    def test_add_and_replace(self):
+        many = self.many()
+        self.picker.toggle(3)
+        self.picker.applyCollection(many, "add")
+        self.assertEqual(self.picker.selection(), [1, 2, 3])
+        self.picker.applyCollection(many, "replace")
+        self.assertEqual(self.picker.selection(), [1, 2])
+        self.picker.applyCollection(many, "nonsense")
+        self.picker.applyCollection("user-collections.nope", "replace")
+        self.assertEqual(self.picker.selection(), [1, 2])
+
+    def test_the_search_does_not_matter(self):
+        many = self.many()
+        self.picker.toggle(3)
+        self.picker.query = "forza"                                                       # game 3 is ticked but hidden
+        plan = self.picker.collectionPlan(many)
+        self.assertEqual((plan["ticked"], plan["ask"]), (1, True))
+        self.picker.applyCollection(many, "add")
+        self.assertEqual((self.picker.selection(), self.picker.selectedCount), ([1, 2, 3], 3))
+        self.picker.applyCollection(many, "replace")
+        self.assertEqual(self.picker.selection(), [1, 2])
+
+    def test_a_new_game_list_drops_the_buttons_and_an_old_id_does_nothing(self):
+        many = self.many()
+        self.shell.library.installedOnly = not self.shell.library.installedOnly         # another game list: the picker starts again
+        self.assertEqual(self.picker.collections, [])
+        self.picker.applyCollection(many, "add")
+        self.assertEqual(self.picker.selection(), [])
+
+    def test_the_account_chosen_in_apply_is_used(self):
+        from unittest import mock
+        self.write_collections([("a", "First account", [1])], account="1111")
+        self.write_collections([("b", "Second account", [2])], account="2222")
+        self.load()
+        default = self.sc.pick_account(self.tmp)
+        self.assertEqual(self.picker.collections[0]["name"], "First account" if default == "1111" else "Second account")
+        other = "2222" if default == "1111" else "1111"
+        with mock.patch.object(self.shell.apply, "accountChoice", lambda: other):
+            self.picker.refreshCollections()
+        self.assertEqual(self.picker.collections[0]["name"], "Second account" if other == "2222" else "First account")
+
+    def test_a_collection_that_vanishes_from_the_file_is_gone_after_a_refresh(self):
+        self.many()
+        seen = []
+        self.picker.collectionsChanged.connect(lambda: seen.append(1))
+        self.picker.refreshCollections()
+        self.assertEqual(seen, [])                                                        # nothing changed, nobody is told
+        self.write_collections([("few", "Few", [1])])
+        self.picker.refreshCollections()
+        self.assertEqual((self.labels(), len(seen)), (["Few (1)"], 1))
+
+
 @need_qt
 class CaseGroups(PickerBase):
     """The Case step makes, names and reuses groups: a console case, or the Steam case in a colour (or gold)."""
