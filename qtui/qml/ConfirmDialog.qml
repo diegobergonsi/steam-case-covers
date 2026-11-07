@@ -85,11 +85,11 @@ FocusScope {
 
     Item {                                              // invisible copies of the words, only to measure them (see wanted)
         visible: false
-        Text { id: titleProbe; width: dialog.maxText; text: dialog.title; wrapMode: Text.WordWrap; font.pixelSize: Theme.sectionSize; font.bold: true }
+        Text { id: titleProbe; width: dialog.maxText; text: dialog.title; textFormat: Text.PlainText; wrapMode: Text.WrapAtWordBoundaryOrAnywhere; font.pixelSize: Theme.sectionSize; font.bold: true }
         Repeater {
             id: probes
             model: dialog.paragraphs
-            delegate: Text { width: dialog.maxText; text: modelData.text; wrapMode: Text.WordWrap; font.pixelSize: Theme.bodySize }
+            delegate: Text { width: dialog.maxText; text: modelData.text; textFormat: Text.PlainText; wrapMode: Text.WrapAtWordBoundaryOrAnywhere; font.pixelSize: Theme.bodySize }
         }
     }
     Rectangle {                                         // the dimmed window behind; it takes every click, so nothing behind can be reached
@@ -139,7 +139,8 @@ FocusScope {
                 objectName: dialog.prefix + "_title"
                 width: parent.width
                 text: dialog.title
-                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText                      // a name in a question is the player's own words, never markup
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere     // a long word with no spaces still wraps
                 color: Theme.text
                 font.pixelSize: Theme.sectionSize
                 font.bold: true
@@ -162,7 +163,8 @@ FocusScope {
                             objectName: dialog.prefix + "_p" + index
                             width: words.width
                             text: modelData.text
-                            wrapMode: Text.WordWrap
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                             font.pixelSize: Theme.bodySize
                             color: modelData.kind === "warn" ? Theme.warning : modelData.kind === "muted" ? Theme.muted : Theme.text
                         }

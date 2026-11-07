@@ -12,6 +12,19 @@ ScreenFrame {
     subtitle: qsTr("Tick the games that get a case. Games you do not tick are left alone.")
     Component.onCompleted: picker.ensureLoaded()
 
+    property string pendingCollection: ""               // the collection the question is about
+    function pickCollection(id) {
+        var plan = picker.collectionPlan(id)
+        if (plan.games === 0) return
+        if (!plan.ask) { picker.applyCollection(id, "add"); return }
+        pendingCollection = id
+        collectionDialog.ask(qsTr("You already ticked %n game|You already ticked %n games", "", plan.ticked), [
+            {text: qsTr("\u201c%1\u201d has %n game on your list.|\u201c%1\u201d has %n games on your list.", "", plan.games).arg(plan.name), kind: "main"},
+            {text: qsTr("Add keeps your ticks and ticks the collection too: %n game in total.|Add keeps your ticks and ticks the collection too: %n games in total.", "", plan.afterAdd), kind: "muted"},
+            {text: qsTr("Replace unticks your games first: %n game in total.|Replace unticks your games first: %n games in total.", "", plan.games), kind: "muted"}],
+            qsTr("Add them"), qsTr("Replace them"))
+    }
+
     Section {
         objectName: "games_section_search"
         heading: qsTr("Find games")
@@ -43,6 +56,21 @@ ScreenFrame {
         ButtonRow {
             QuietButton { objectName: "games_all"; text: qsTr("Select all shown"); enabled: list.count > 0; onClicked: screen.picker.selectAllShown() }
             QuietButton { objectName: "games_clear"; text: qsTr("Clear"); enabled: screen.picker.selectedCount > 0; onClicked: screen.picker.clearAll() }
+        }
+        Text {
+            objectName: "games_collections_label"
+            width: parent.width
+            visible: screen.picker.collections.length > 0
+            text: qsTr("Your collections")
+            color: Theme.muted
+            font.pixelSize: Theme.bodySize
+        }
+        CollectionPills {
+            objectName: "games_collections"
+            visible: screen.picker.collections.length > 0
+            model: screen.picker.collections
+            groupName: qsTr("Your collections")
+            onPicked: (id) => screen.pickCollection(id)
         }
     }
     Section {
@@ -135,6 +163,14 @@ ScreenFrame {
                 }
             }
         }
+    }
+
+    ConfirmDialog {                                       // the safe button (Cancel) has the focus; the confirm adds, the one between them replaces
+        id: collectionDialog
+        objectName: "collections_dialog"
+        prefix: "collections_dlg"
+        onConfirmed: screen.picker.applyCollection(screen.pendingCollection, "add")
+        onAlternated: screen.picker.applyCollection(screen.pendingCollection, "replace")
     }
 
     footer: [

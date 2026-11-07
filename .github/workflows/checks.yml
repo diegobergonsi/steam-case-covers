@@ -51,7 +51,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-image0
       - run: python -m pip install -r requirements-qt.txt
-      - run: python -m unittest tests.test_qtui tests.test_qtui_touch tests.test_tokens tests.test_i18n tests.test_screenshots -v
+      - run: python -m unittest tests.test_qtui tests.test_collections_ui tests.test_qtui_touch tests.test_tokens tests.test_i18n tests.test_screenshots -v
       - run: python -m qtui --selftest
 
   windows-console:

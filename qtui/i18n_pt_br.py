@@ -460,4 +460,12 @@ PT_BR = {
     "Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.": "Reinicie o programa com as configurações iniciais. As suas cases salvas, as capas e os grupos não são alterados.",
     "The way you chose, your progress, the game list, your look and the switches go back to the start.": "O caminho escolhido, o seu progresso, a lista de jogos, o seu visual e as opções voltam ao início.",
     "Your saved cases, covers and groups are not changed.": "As suas cases salvas, as capas e os grupos não são alterados.",
+    "Your collections": "Suas coleções",
+    "Show all %1 collections": "Mostrar as %1 coleções",
+    "Show fewer": "Mostrar menos",
+    "You already ticked %n game|You already ticked %n games": "Você já marcou %n jogo|Você já marcou %n jogos",
+    "\u201c%1\u201d has %n game on your list.|\u201c%1\u201d has %n games on your list.": "\u201c%1\u201d tem %n jogo na sua lista.|\u201c%1\u201d tem %n jogos na sua lista.",
+    "Add keeps your ticks and ticks the collection too: %n game in total.|Add keeps your ticks and ticks the collection too: %n games in total.": "Adicionar mantém o que você marcou e marca também a coleção: %n jogo no total.|Adicionar mantém o que você marcou e marca também a coleção: %n jogos no total.",
+    "Replace unticks your games first: %n game in total.|Replace unticks your games first: %n games in total.": "Substituir desmarca os seus jogos primeiro: %n jogo no total.|Substituir desmarca os seus jogos primeiro: %n jogos no total.",
+    "Replace them": "Substituir",
 }

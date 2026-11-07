@@ -6,6 +6,7 @@ import threading
 
 from PySide6.QtCore import Property, QAbstractListModel, QModelIndex, QObject, Qt, Signal, Slot
 
+from engine import collections as steam_collections
 from engine import steamcase as sc
 from qtui.i18n import N_, tr, trn
 
@@ -51,12 +52,14 @@ class Picker(QObject):
     queryChanged = Signal()
     selectionChanged = Signal()
     statusChanged = Signal()
+    collectionsChanged = Signal()
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss
     _loaded = Signal(int, object, object, object)           # request, [(appid, name)], the store errors, the words of an error (from the worker)
 
-    def __init__(self, shell, parent=None):
+    def __init__(self, shell, account=lambda: None, parent=None):
         super().__init__(parent)
         self._shell = shell
+        self._account = account             # () -> the Steam account folder the user chose, or None for the one Steam used last
         self._all = []                      # [(appid, name)] sorted by name
         self._selected = set()
         self._query = ""
@@ -66,6 +69,8 @@ class Picker(QObject):
         self._note = ""                     # a sentence about the last load (names that could not be loaded)
         self._error = ""
         self._rows = []
+        self._steam_collections = []        # [engine.collections.Collection] as read from Steam's file
+        self._shown = []                    # [engine.collections.Shown]: the ones with games on screen
         self._model = RowsModel(self)
         self._loaded.connect(self._on_loaded)
         self._library_seen = self._library_key()
@@ -121,6 +126,11 @@ class Picker(QObject):
             return "wait"
         return "error" if self._error or (self._key is not None and not self._all) else "ok"
 
+    @Property("QVariantList", notify=collectionsChanged)
+    def collections(self):
+        """The Steam collections that have games on screen: {"id", "name", "label" (name and count), "count"}, the most games first, then by name."""
+        return [{"id": s.id, "name": s.name, "label": s.label, "count": len(s.games)} for s in self._shown]
+
     def selection(self):
         """The ticked games' app ids, sorted."""
         return sorted(self._selected)
@@ -141,6 +151,7 @@ class Picker(QObject):
         was_loading, self._loading = self._loading, False
         self._all, self._rows, self._key, self._note, self._error = [], [], None, "", ""
         self._model.set_rows([])
+        self._show_collections()
         if was_loading:
             self.loadingChanged.emit()
         if self._selected:
@@ -158,9 +169,54 @@ class Picker(QObject):
 
     @Slot()
     def ensureLoaded(self):
-        """Read the games unless the list on screen is already the one for this game list."""
+        """Read the games unless the list on screen is already the one for this game list. The collections are read every time: Steam may have changed them."""
         if not self._loading and self._key != self._library_key():
             self.load()
+        elif not self._loading:
+            self.refreshCollections()
+
+    # ----- collections -----
+    @Slot()
+    def refreshCollections(self):
+        """Read Steam's collections again, for the account chosen on the Apply screen or else the one Steam used last.
+        shortcut: read on the UI thread, which is fine for a real file (some tens of KB, at most 8 MB by the engine's cap); move it into the worker if a slow disk ever shows."""
+        try:
+            steam = sc.steam_dir()
+            found = steam_collections.read_collections(steam, sc.pick_account(steam, self._account()))
+        except (sc.SteamcaseError, OSError):
+            found = []
+        self._steam_collections = found
+        self._show_collections()
+
+    def _show_collections(self):
+        """The buttons for the collections that have games in the list on screen; tells the screen only when they changed."""
+        shown = steam_collections.on_list(self._steam_collections, {a for a, _ in self._all})
+        if shown != self._shown:
+            self._shown = shown
+            self.collectionsChanged.emit()
+
+    def _shown_collection(self, collection_id):
+        """The shown collection with this id, or an empty one (an id that is not shown, for example after the list changed, has no games)."""
+        return next((s for s in self._shown if s.id == collection_id), steam_collections.Shown(collection_id, "", frozenset()))
+
+    @Slot(str, result="QVariantMap")
+    def collectionPlan(self, collection_id):
+        """What a click on this collection would do: its games on screen, the games ticked now, the total after Add, and whether to ask first
+        (something is ticked, and the click would change it)."""
+        shown = self._shown_collection(collection_id)
+        games = shown.games
+        ask = bool(games) and bool(self._selected) and self._selected != games
+        return {"name": shown.name, "games": len(games), "ticked": len(self._selected), "afterAdd": len(self._selected | games), "ask": ask}
+
+    @Slot(str, str)
+    def applyCollection(self, collection_id, mode):
+        """Tick a collection's games: "add" keeps what is ticked, "replace" ticks only these. Anything else does nothing."""
+        games = self._shown_collection(collection_id).games
+        if not games or mode not in ("add", "replace"):
+            return
+        self._selected = set(games) if mode == "replace" else self._selected | games
+        self._refresh()
+        self.selectionChanged.emit()
 
     @Slot()
     def load(self):
@@ -168,6 +224,7 @@ class Picker(QObject):
             return
         key = self._library_key()
         self._req += 1
+        self.refreshCollections()
         self._loading, self._error, self._note = True, "", ""
         self.loadingChanged.emit()
         self.statusChanged.emit()
@@ -205,6 +262,7 @@ class Picker(QObject):
         self._key = key
         self._all = sorted(rows, key=lambda r: (r[1].casefold(), r[0]))
         self._selected &= {a for a, _ in self._all}
+        self._show_collections()
         if errors and not self._all:
             self._error = tr("Could not reach Steam's servers: %s.") % sc.explain_error(errors[-1]).rstrip(".")
             self._key = None

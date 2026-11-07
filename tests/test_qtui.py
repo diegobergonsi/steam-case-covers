@@ -7613,13 +7613,8 @@ class CasesState(PickerBase):
         self.assertEqual(len(said), 1)
 
 
-@need_qt
-class ManualWindow(PickerBase):
-    """The manual flow in the real window: Home, the Games step and the Case step."""
-    def setUp(self):
-        super().setUp()
-        self.start_window()
-
+class WindowClicks:
+    """Helpers for tests of the real window: the text of an item, waiting for the layout to settle, a click as a hand makes it."""
     def text(self, name):
         return self.item(name).property("text")
 
@@ -7651,6 +7646,14 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, point)
         self.app.processEvents()
+
+
+@need_qt
+class ManualWindow(WindowClicks, PickerBase):
+    """The manual flow in the real window: Home, the Games step and the Case step."""
+    def setUp(self):
+        super().setUp()
+        self.start_window()
 
     def test_a_long_games_list_always_shows_its_scroll_bar(self):
         self.NAMES = {i: "Game %d" % i for i in range(1, 41)}
