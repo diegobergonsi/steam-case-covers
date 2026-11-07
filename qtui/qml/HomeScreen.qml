@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-// Home: a Welcome the first time, a Dashboard after that. Two cards (the ways to make covers), the progress of the way in use, the account, the Restore Cases section (Restore, Reset), your groups and Start over.
+// Home: a Welcome the first time, a Dashboard after that. Two cards (the ways to make covers), then the progress of the way in use beside Start over, the account, the Restore Cases section (Restore, Reset) and your groups.
 import QtQuick
 import "."
 
@@ -14,10 +14,12 @@ ScreenFrame {
 
     // the sections the menu on the left links to, only those on the page
     readonly property var links: [
+        {"key": "paths", "label": qsTr("Choose Your Way"), "section": pathsSection},
+        {"key": "progress", "label": qsTr("Your Progress"), "section": progressSection},
+        {"key": "start_over", "label": qsTr("Start Over"), "section": startOverSection},
         {"key": "account", "label": qsTr("Account Selection"), "section": accountSection},
         {"key": "restore", "label": qsTr("Restore Cases"), "section": restoreSection},
-        {"key": "groups", "label": qsTr("Your Groups"), "section": groupsSection},
-        {"key": "start_over", "label": qsTr("Start Over"), "section": startOverSection}].filter(function(l) { return l.section.visible })
+        {"key": "groups", "label": qsTr("Your Groups"), "section": groupsSection}].filter(function(l) { return l.section.visible })
 
     Component.onCompleted: { apply.refresh(); apply.watching = true; apply.groupTicks.refresh() }
     Component.onDestruction: apply.watching = false
@@ -29,8 +31,9 @@ ScreenFrame {
     }
 
     Section {
+        id: pathsSection
         objectName: "home_section_paths"
-        heading: qsTr("Choose your way")
+        heading: qsTr("Choose Your Way")
         Grid {
             id: paths
             width: parent.width
@@ -66,58 +69,92 @@ ScreenFrame {
             }
         }
     }
-    Section {
-        objectName: "home_section_progress"
-        visible: shell.returning
-        heading: qsTr("Your progress: %1").arg(shell.flowName)
-        Column {
-            width: parent.width
-            Repeater {
-                model: shell.returning ? shell.steps.slice(1) : []
-                delegate: Item {
-                    id: row
-                    objectName: "home_row_" + modelData.key
-                    readonly property bool locked: modelData.state === "locked"
-                    width: parent.width
-                    height: Theme.touchMin
-                    activeFocusOnTab: !locked
-                    Accessible.role: Accessible.Button
-                    Accessible.name: qsTr("%1, %2").arg(modelData.label).arg(screen.stateText[modelData.state])
-                    enabled: !locked                          // a disabled item is announced as unavailable
-                    Accessible.onPressAction: if (!locked) shell.go(index + 1)
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Theme.radiusField
-                        color: "transparent"
-                        border.width: row.activeFocus ? Theme.focusRing : 0
-                        border.color: Theme.text
-                    }
-                    Text {
-                        x: Theme.s8
-                        width: parent.width - stateLabel.width - Theme.s24
-                        anchors.verticalCenter: parent.verticalCenter
-                        elide: Text.ElideRight
-                        text: modelData.label + (modelData.hint !== "" ? " " + modelData.hint : "")
-                        color: row.locked ? Theme.faint : Theme.text
-                        font.pixelSize: Theme.bodySize
-                    }
-                    Text {
-                        id: stateLabel
-                        objectName: "home_state_" + modelData.key
-                        x: parent.width - width - Theme.s8
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: screen.stateText[modelData.state]
-                        color: modelData.state === "done" ? Theme.done : modelData.state === "active" ? Theme.accent : Theme.faint
-                        font.pixelSize: Theme.bodySize
-                        font.bold: modelData.state !== "locked"
-                    }
-                    MouseArea { anchors.fill: parent; enabled: !row.locked; cursorShape: Qt.PointingHandCursor; onClicked: shell.go(index + 1) }
-                    Keys.onPressed: (event) => {
-                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
-                            if (!event.isAutoRepeat && !row.locked) shell.go(index + 1)
-                            event.accepted = true
+    Grid {                                                // the progress and Start Over, two cards in two columns (one below the other in a narrow window)
+        id: lower
+        width: parent.width
+        columns: progressSection.visible && width >= 2 * Theme.pathCardMinWidth + spacing ? 2 : 1
+        spacing: Theme.s24
+        readonly property real cardWidth: columns === 2 ? (width - spacing) / 2 : width
+        Section {
+            id: progressSection
+            objectName: "home_section_progress"
+            width: lower.cardWidth
+            visible: shell.returning
+            heading: qsTr("Your Progress: %1").arg(shell.flowName)
+            Column {
+                width: parent.width
+                Repeater {
+                    model: shell.returning ? shell.steps.slice(1) : []
+                    delegate: Item {
+                        id: row
+                        objectName: "home_row_" + modelData.key
+                        readonly property bool locked: modelData.state === "locked"
+                        width: parent.width
+                        height: Theme.touchMin
+                        activeFocusOnTab: !locked
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("%1, %2").arg(modelData.label).arg(screen.stateText[modelData.state])
+                        enabled: !locked                          // a disabled item is announced as unavailable
+                        Accessible.onPressAction: if (!locked) shell.go(index + 1)
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: Theme.radiusField
+                            color: "transparent"
+                            border.width: row.activeFocus ? Theme.focusRing : 0
+                            border.color: Theme.text
+                        }
+                        Text {
+                            x: Theme.s8
+                            width: parent.width - stateLabel.width - Theme.s24
+                            anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
+                            text: modelData.label + (modelData.hint !== "" ? " " + modelData.hint : "")
+                            color: row.locked ? Theme.faint : Theme.text
+                            font.pixelSize: Theme.bodySize
+                        }
+                        Text {
+                            id: stateLabel
+                            objectName: "home_state_" + modelData.key
+                            x: parent.width - width - Theme.s8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: screen.stateText[modelData.state]
+                            color: modelData.state === "done" ? Theme.done : modelData.state === "active" ? Theme.accent : Theme.faint
+                            font.pixelSize: Theme.bodySize
+                            font.bold: modelData.state !== "locked"
+                        }
+                        MouseArea { anchors.fill: parent; enabled: !row.locked; cursorShape: Qt.PointingHandCursor; onClicked: shell.go(index + 1) }
+                        Keys.onPressed: (event) => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                if (!event.isAutoRepeat && !row.locked) shell.go(index + 1)
+                                event.accepted = true
+                            }
                         }
                     }
+                }
+            }
+        }
+        Section {
+            id: startOverSection
+            width: lower.cardWidth
+            objectName: "home_section_start_over"
+            heading: qsTr("Start Over")
+            Text {
+                objectName: "home_start_over_line"
+                width: parent.width
+                wrapMode: Text.WordWrap
+                color: Theme.muted
+                font.pixelSize: Theme.bodySize
+                text: qsTr("Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
+            }
+            ButtonRow {
+                QuietButton {
+                    id: startOver
+                    objectName: "home_start_over"
+                    text: qsTr("Start over")
+                    enabled: shell.canSwitch                  // not while covers are made or added to Steam
+                    onClicked: startOverDialog.ask(qsTr("Start over?"), [
+                        {text: qsTr("The way you chose, your progress, the game list, your look and the switches go back to the start."), kind: "main"},
+                        {text: qsTr("Your saved cases, covers and groups are not changed."), kind: "muted"}], qsTr("Start over"))
                 }
             }
         }
@@ -226,30 +263,6 @@ ScreenFrame {
                     enabled: shell.manage.canOpen
                     onClicked: shell.manage.open(modelData.id)
                 }
-            }
-        }
-    }
-    Section {
-        id: startOverSection
-        objectName: "home_section_start_over"
-        heading: qsTr("Start Over")
-        Text {
-            objectName: "home_start_over_line"
-            width: parent.width
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.bodySize
-            text: qsTr("Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
-        }
-        ButtonRow {
-            QuietButton {
-                id: startOver
-                objectName: "home_start_over"
-                text: qsTr("Start over")
-                enabled: shell.canSwitch                  // not while covers are made or added to Steam
-                onClicked: startOverDialog.ask(qsTr("Start over?"), [
-                    {text: qsTr("The way you chose, your progress, the game list, your look and the switches go back to the start."), kind: "main"},
-                    {text: qsTr("Your saved cases, covers and groups are not changed."), kind: "muted"}], qsTr("Start over"))
             }
         }
     }

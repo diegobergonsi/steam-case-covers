@@ -4957,7 +4957,7 @@ class HomeScreen(AddWindow):
     def test_the_first_visit_is_a_welcome_with_two_cards_and_no_filled_button(self):
         self.open_home()
         self.assertEqual(self.text("screen_title"), "Cases for your games")
-        self.assertEqual(self.item("home_section_paths").property("heading"), "Choose your way")
+        self.assertEqual(self.item("home_section_paths").property("heading"), "Choose Your Way")
         self.assertEqual((self.text("home_card_natural_title"), self.text("home_card_manual_title")),
                          ("The same case for every game on your list", "Pick games, choose their cases"))
         self.assertEqual((self.text("home_card_natural_steps"), self.text("home_card_manual_steps")), ("5 steps", "6 steps"))
@@ -4983,7 +4983,7 @@ class HomeScreen(AddWindow):
         self.open_home(covers=True)
         self.assertEqual(self.text("screen_title"), "Welcome back")
         self.assertEqual((self.text("home_card_natural_cue"), self.text("home_card_manual_cue")), ("Continue \u2192", "Start \u2192"))
-        self.assertEqual(self.item("home_section_progress").property("heading"), "Your progress: Same case")
+        self.assertEqual(self.item("home_section_progress").property("heading"), "Your Progress: Same case")
         self.assertEqual([self.text("home_state_" + k) for k in ("game_list", "look", "hundred", "make", "add")], ["Done", "Next", "Locked", "Locked", "Locked"])
         self.click("home_card_natural")
         self.assertEqual(self.shell.current, 2)
@@ -4993,7 +4993,7 @@ class HomeScreen(AddWindow):
         self.shell.startPath("manual")
         self.shell.go(0)
         self.app.processEvents()
-        self.assertEqual(self.item("home_section_progress").property("heading"), "Your progress: Pick games")
+        self.assertEqual(self.item("home_section_progress").property("heading"), "Your Progress: Pick games")
         self.assertEqual((self.text("home_card_manual_cue"), self.text("home_card_natural_cue")), ("Continue \u2192", "Start \u2192"))
 
     def test_the_other_way_waits_while_covers_are_made_or_added(self):
@@ -5121,18 +5121,66 @@ class HomeScreen(AddWindow):
         self.click("home_row_make")                                     # locked: nothing happens
         self.assertEqual(self.shell.current, 0)
 
+    def test_the_progress_and_start_over_sit_side_by_side_in_a_wide_window(self):
+        self.open_home(covers=True)
+        progress, start, paths = (self.item(n) for n in ("home_section_progress", "home_section_start_over", "home_section_paths"))
+        self.assertTrue(progress.property("visible") and start.property("visible"))
+        self.assertGreater(self.pos("home_section_start_over").x(), self.pos("home_section_progress").x() + progress.width() - 1)
+        self.assertAlmostEqual(self.pos("home_section_start_over").y(), self.pos("home_section_progress").y(), delta=1)       # two cards, each as tall as it needs
+        self.assertAlmostEqual(progress.width() + start.width() + 24, paths.width(), delta=1)                                 # the row is as wide as the one above
+
+    def test_the_progress_and_start_over_stack_in_a_narrow_window(self):
+        self.open_home(covers=True)
+        self.root.setProperty("width", self.root.property("minimumWidth"))
+        self.app.processEvents()
+        progress, start = self.item("home_section_progress"), self.item("home_section_start_over")
+        self.assertAlmostEqual(self.pos("home_section_start_over").x(), self.pos("home_section_progress").x(), delta=1)
+        self.assertGreaterEqual(self.pos("home_section_start_over").y(), self.pos("home_section_progress").y() + progress.height())
+        self.assertAlmostEqual(start.width(), progress.width(), delta=1)
+
+    def test_start_over_takes_the_whole_row_when_there_is_no_progress_to_show(self):
+        self.open_home()
+        self.assertFalse(self.item("home_section_progress").property("visible"))
+        self.assertAlmostEqual(self.item("home_section_start_over").width(), self.item("home_section_paths").width(), delta=1)
+
+    def test_the_menu_lists_the_sections_in_the_order_of_the_page(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home(covers=True)
+        self.undo_ready()
+        self.assertEqual(self.visible_links(), ["paths", "progress", "start_over", "account", "restore"])
+        ys = [self.pos("nav_link_" + k).y() for k in self.visible_links()]
+        self.assertEqual(ys, sorted(ys))
+        tops = [self.pos("home_section_" + k).y() for k in ("paths", "progress", "account", "restore")]
+        self.assertEqual(tops, sorted(tops))                                                       # the page has them in the same order
+
     def visible_links(self):
         from qtui.app import find_item
-        return [k for k in ("account", "restore", "groups", "start_over") if (it := find_item(self.root, "nav_link_" + k)) is not None and it.property("visible")]
+        return [k for k in ("paths", "progress", "start_over", "account", "restore", "groups") if (it := find_item(self.root, "nav_link_" + k)) is not None and it.property("visible")]
 
     def test_on_home_the_menu_lists_the_sections_of_home_and_hides_the_steps(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.open_home()
-        self.assertEqual(self.visible_links(), ["account", "restore", "start_over"])               # no groups yet: no link
-        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "restore", "start_over")], ["Account Selection", "Restore Cases", "Start Over"])
+        self.assertEqual(self.visible_links(), ["paths", "start_over", "account", "restore"])      # a first visit has no progress, and there are no groups yet: no links
+        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("paths", "start_over", "account", "restore")], ["Choose Your Way", "Start Over", "Account Selection", "Restore Cases"])
         self.assertFalse(any(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
         self.assertFalse(self.item("nav_flow").property("visible"))
         self.assertTrue(self.item("nav_home").property("visible"))
+
+    def test_a_returning_user_has_the_progress_link_between_the_ways_and_start_over(self):
+        self.open_home(covers=True)
+        self.assertEqual(self.visible_links()[:3], ["paths", "progress", "start_over"])
+        self.assertEqual(self.item("nav_link_progress").property("label"), "Your Progress")
+
+    def test_the_links_of_the_ways_and_of_the_progress_scroll_to_their_cards(self):
+        from PySide6.QtCore import QPointF
+        self.open_home(covers=True)
+        self.undo_ready()
+        scroller = self.item("screen_scroller")
+        for key, card in (("start_over", "home_section_start_over"), ("progress", "home_section_progress"), ("paths", "home_section_paths")):
+            self.item("nav_link_" + key).activated.emit()
+            self.app.processEvents()
+            top = self.item(card).mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+            self.assertAlmostEqual(scroller.property("contentY"), max(0, min(top, scroller.property("contentHeight") - scroller.property("height"))), delta=1, msg=key)
 
     def test_with_one_account_the_menu_has_no_account_link(self):
         self.open_home()
