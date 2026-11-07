@@ -212,6 +212,7 @@ ApplicationWindow {
     function next() {
         if (!applyDialog.visible && !messages.visible && waiting.length > 0) present(waiting.shift())
     }
+    ManageGroup { objectName: "manage_dialog" }                   // the window of one group, opened from Home; the boxes below stay above it
     ConfirmDialog {                                               // the questions of Apply: add to Steam, restore, reset (wherever the user is)
         id: applyDialog
         objectName: "apply_dialog"
@@ -234,6 +235,10 @@ ApplicationWindow {
         target: shell.apply
         function onConfirmNeeded(title, paragraphs, go, alt) { win.show(applyDialog, [title, paragraphs, go, alt]) }
         function onFailed(text) { win.show(messages, [qsTr("Could not finish"), [{"text": text, "kind": "main"}], "OK", "", true]) }
+    }
+    Connections {
+        target: shell.manage
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
     }
     Connections {
         target: shell.library

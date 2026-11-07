@@ -8106,20 +8106,6 @@ class ManualWindow(WindowClicks, PickerBase):
         self.wait_for(lambda: not self.shell.apply.busy)
         self.assertEqual(self.item("home_group_" + same).property("label"), "Xbox One \u00b7 1 game")
 
-    def test_home_lists_the_groups_to_reset(self):
-        red, ps = self.saved_groups()
-        self.shell.startPath("manual")                                          # away from Home and back: the screen reads the groups when it opens
-        self.app.processEvents()
-        self.shell.go(0)
-        self.app.processEvents()
-        self.wait_for(lambda: not self.shell.apply.busy)                    # the boxes are greyed while Steam is being looked at
-        self.assertTrue(self.has("home_group_" + red) and self.has("home_group_" + ps))
-        self.assertTrue(self.item("home_section_groups").property("visible"))
-        self.assertFalse(self.item("home_group_" + red).property("checked"))
-        self.click("home_group_" + red)
-        self.assertTrue(self.item("home_group_" + red).property("checked"))
-        self.assertEqual(self.shell.apply.groupTicks.count, 1)
-
     def test_home_has_no_group_section_without_groups(self):
         self.shell.go(0)
         self.app.processEvents()
@@ -9363,6 +9349,113 @@ class ManageGroups(PickerBase):
             self.shell.manage.save()
         self.assertTrue(self.shell.manage.isOpen)
         self.assertIn("disk full", said[0])
+
+    # ----- the window -----
+    NOTICE = "Changes show on your covers the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d. Nothing on Steam changes until then."
+
+    def home_with_groups(self):
+        red, ps = self.saved()
+        self.start_window()
+        self.app.processEvents()
+        return red, ps
+
+    def open_manage(self, gid):
+        self.click("home_manage_" + gid)
+        self.wait_for(lambda: self.shell.manage.isOpen and self.shell.manage.canSave)
+        return self.item("manage_dialog")
+
+    def test_home_lists_each_group_with_a_manage_button_and_no_switch(self):
+        red, ps = self.home_with_groups()
+        self.assertTrue(self.has("home_group_" + red) and self.has("home_manage_" + red) and self.has("home_manage_" + ps))
+        self.assertIn("Red games", self.item("home_group_" + red).property("label"))
+        self.assertIsNone(self.item("home_group_" + red).property("checked"))                  # the row is not a switch any more
+        self.assertEqual(self.item("home_manage_" + red).property("text"), "Manage")
+
+    def test_manage_opens_the_window_with_the_name_and_ticked_games(self):
+        red, ps = self.home_with_groups()
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+        self.open_manage(red)
+        self.assertTrue(self.item("manage_dialog").property("visible"))
+        self.assertEqual(self.item("manage_name").property("text"), "Red games")
+        self.assertTrue(self.item("manage_game_1").property("selected") and self.item("manage_game_2").property("selected"))
+        self.assertFalse(self.item("manage_game_3").property("selected"))
+
+    def test_the_notice_is_always_shown_above_save(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.assertEqual(self.item("manage_notice").property("text"), self.NOTICE)
+        self.assertTrue(self.item("manage_notice").property("visible"))
+        self.assertLess(self.pos("manage_notice").y(), self.pos("manage_save").y())
+
+    def test_the_warning_shows_when_nothing_is_ticked(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(ps)
+        self.assertFalse(self.item("manage_warning").property("visible"))
+        self.click("manage_game_3")
+        self.assertTrue(self.item("manage_warning").property("visible"))
+        self.assertEqual(self.item("manage_warning").property("text"), self.WARNING)
+
+    def test_save_and_cancel_close_the_window(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.click("manage_game_1")
+        self.click("manage_cancel")
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+        self.assertEqual(self.games_of(red), [1, 2])
+        self.open_manage(red)
+        self.click("manage_game_1")
+        self.click("manage_save")
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+        self.assertEqual(self.games_of(red), [2])
+
+    def test_delete_asks_first_and_cancel_keeps_the_group(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(ps)
+        self.click("manage_delete")
+        self.assertTrue(self.item("manage_delete_dialog").property("visible"))
+        self.assertEqual(self.item("manage_delete_dlg_title").property("text"), "Delete \u201cPS5 games\u201d?")
+        self.click("manage_delete_dlg_cancel")
+        self.assertEqual(self.games_of(ps), [3])
+        self.assertTrue(self.shell.manage.isOpen)
+        self.click("manage_delete")
+        self.click("manage_delete_dlg_confirm")
+        self.assertIsNone(self.games_of(ps))
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+
+    def test_escape_closes_without_saving(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.click("manage_game_1")
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier, "", False))
+        self.app.processEvents()
+        self.assertFalse(self.shell.manage.isOpen)
+        self.assertEqual(self.games_of(red), [1, 2])
+
+    def test_manage_is_greyed_while_apply_is_busy(self):
+        red, ps = self.home_with_groups()
+        self.assertTrue(self.item("home_manage_" + red).property("enabled"))
+        self.shell.apply._busy = True
+        self.shell.apply.canApplyChanged.emit()
+        self.app.processEvents()
+        self.assertFalse(self.item("home_manage_" + red).property("enabled"))
+
+    def test_manage_buttons_and_rows_are_44_tall(self):
+        red, ps = self.home_with_groups()
+        for name in ("home_manage_" + red, "home_group_" + red):
+            self.assertGreaterEqual(self.item(name).property("height"), 44, name)
+        self.assertGreaterEqual(self.item("home_manage_" + red).property("width"), 44)
+        self.open_manage(red)
+        for name in ("manage_game_1", "manage_save", "manage_cancel", "manage_delete", "manage_rename", "manage_search", "manage_name"):
+            self.assertGreaterEqual(self.item(name).property("height"), 44, name)
+
+    def test_a_tag_names_the_other_group_and_says_ticking_moves_it(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.assertEqual(self.item("manage_game_3").property("tag"), "in PS5 games")
+        self.click("manage_game_3")
+        self.assertEqual(self.item("manage_game_3").property("tag"), "moves from PS5 games")
 
     def cover(self, appid):
         return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))

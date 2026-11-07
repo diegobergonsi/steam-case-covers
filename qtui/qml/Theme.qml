@@ -80,6 +80,8 @@ QtObject {
     readonly property int ringOffset: 3
     readonly property int slideOffset: 30
     readonly property int dialogWidth: 440
+    readonly property int manageWidth: 520               // the Manage window of a group: wider than a question, for the names of games
+    readonly property int manageRows: 4                  // how many games it shows at once, so it fits the shortest window
     readonly property int progressHeight: 8
     readonly property int lockWidth: 12                  // the padlock of a locked step: its body, the height of the body and the rise of the shackle
     readonly property int lockHeight: 9

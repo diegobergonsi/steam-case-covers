@@ -109,58 +109,13 @@ ScreenFrame {
                     event.accepted = true
                 }
             }
-            delegate: Item {
-                id: row
+            delegate: GameRow {
                 objectName: "games_row_" + model.appid
-                readonly property int rowAppid: model.appid
                 width: list.width
-                height: Theme.touchMin
-                Accessible.role: Accessible.CheckBox
-                Accessible.name: model.name
-                Accessible.checkable: true
-                Accessible.checked: model.selected
-                Accessible.onToggleAction: screen.picker.toggle(model.appid)
-                Accessible.onPressAction: screen.picker.toggle(model.appid)
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.radiusField
-                    color: hover.containsMouse ? Theme.raised : "transparent"
-                }
-                Rectangle {                                   // the tick box
-                    id: box
-                    x: Theme.s8
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.iconSize
-                    height: Theme.iconSize
-                    radius: Theme.s4
-                    color: model.selected ? Theme.accent : "transparent"
-                    border.width: Theme.focusRing
-                    border.color: model.selected ? Theme.accent : Theme.edge
-                    Text {
-                        anchors.centerIn: parent
-                        visible: model.selected
-                        text: "✓"
-                        color: Theme.accentInk
-                        font.pixelSize: Theme.bodySize
-                        font.bold: true
-                    }
-                }
-                Text {
-                    x: box.x + box.width + Theme.s12
-                    width: parent.width - x - Theme.s8
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: model.name
-                    color: Theme.text
-                    font.pixelSize: Theme.bodySize
-                    elide: Text.ElideRight
-                }
-                MouseArea {
-                    id: hover
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: { list.currentIndex = index; list.forceActiveFocus(); screen.picker.toggle(model.appid) }
-                }
+                appid: model.appid
+                name: model.name
+                selected: model.selected
+                onToggled: { list.currentIndex = index; list.forceActiveFocus(); screen.picker.toggle(model.appid) }
             }
         }
     }
