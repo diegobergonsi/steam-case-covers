@@ -9156,3 +9156,213 @@ class ManageGroups(PickerBase):
         cases.reloadGroups()
         self.assertEqual(self.count_in_cases(ps), 2)
         self.assertEqual(cases.assignedCount, 1)
+
+    # ----- the GroupManager behind the window -----
+    WARNING = "No games ticked. Saving would delete this group."
+    TOAST = "Saved. Your covers change the next time you make covers, with “Same case” or “Pick games”."
+
+    def rows(self):
+        from qtui.picker import RowsModel
+        m = self.shell.manage.model
+        return [(m.data(m.index(i, 0), RowsModel.Appid), m.data(m.index(i, 0), RowsModel.Name), m.data(m.index(i, 0), RowsModel.Selected), m.data(m.index(i, 0), RowsModel.Tag))
+                for i in range(m.rowCount())]
+
+    def made_group(self):
+        """A group of games 1 and 2 that was really made: the covers exist and carry its id."""
+        self.load()
+        self.shell.startPath("manual")
+        self.picker.toggle(1)
+        self.picker.toggle(2)
+        self.shell.cases.pick("steam")
+        self.shell.cases.pickColour(3)
+        self.shell.cases.groupName = "Red games"
+        self.shell.cases.assign()
+        self.shell.make.start()
+        self.wait_for(lambda: not self.shell.make.running, 8)
+        self.shell.cases.reset()
+        return next(g["id"] for g in __import__("engine.groups", fromlist=["load"]).load(self.covers) if g["name"] == "Red games")
+
+    def test_open_ticks_the_groups_games(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        self.assertTrue(manage.isOpen)
+        self.assertEqual((manage.title, manage.name, manage.tickedCount, manage.groupId), ("Red games", "Red games", 2, red))
+        self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (3, "God of War", False, "PS5 games"), (1, "Hades", True, "")])
+
+    def test_open_is_refused_while_apply_is_busy(self):
+        red, ps = self.saved()
+        self.load()
+        self.shell.apply._busy = True
+        self.shell.manage.open(red)
+        self.assertFalse(self.shell.manage.isOpen)
+
+    def test_a_game_without_a_store_name_stays_listed_and_ticked(self):
+        from engine import groups
+        saved, old = groups.assign([], "Old", {"tone": [134, 100, 100]}, [1, 9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.load()
+        self.shell.manage.open(old)
+        self.assertIn((9, "Game 9", True, ""), self.rows())
+        self.assertEqual(self.shell.manage.tickedCount, 2)
+
+    def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
+        gid = self.made_group()
+        self.assertEqual(self.sc.cover_group(self.cover(1)), gid)
+        manage = self.shell.manage
+        manage.open(gid)
+        manage.toggle(1)
+        manage.save()
+        self.assertEqual(self.games_of(gid), [2])
+        self.assertIsNone(self.sc.cover_group(self.cover(1)))
+        self.assertEqual(self.sc.cover_group(self.cover(2)), gid)
+        self.assertFalse(manage.isOpen)
+
+    def test_ticking_a_game_of_another_group_stages_it_and_tags_the_row(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(3)
+        self.assertEqual(manage.tickedCount, 3)
+        manage.save()
+        self.assertEqual((self.shell.cases.assignedCount, self.shell.cases.groupIds()), (1, {3: red}))
+        self.assertEqual((self.games_of(red), self.games_of(ps)), ([1, 2], [3]))                       # nothing is saved before Make
+        self.assertFalse(manage.isOpen)
+
+    def test_untick_all_shows_the_warning_and_save_deletes_the_group(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(ps)
+        self.assertEqual(manage.warning, "")
+        manage.toggle(3)
+        self.assertEqual(manage.warning, self.WARNING)
+        manage.save()
+        self.assertIsNone(self.games_of(ps))
+        self.assertEqual(self.games_of(red), [1, 2])
+        self.assertFalse(manage.isOpen)
+
+    def test_save_with_no_change_writes_nothing_and_shows_no_toast(self):
+        red, ps = self.saved()
+        self.load()
+        toasts = []
+        self.shell.toast.connect(toasts.append)
+        path = os.path.join(self.covers, "groups.json")
+        read = lambda: __import__("pathlib").Path(path).read_bytes()
+        before = read()
+        self.shell.manage.open(red)
+        self.shell.manage.save()
+        self.assertEqual((read(), toasts, self.shell.manage.isOpen), (before, [], False))
+
+    def test_a_save_that_changed_something_says_when_it_shows(self):
+        red, ps = self.saved()
+        self.load()
+        toasts = []
+        self.shell.toast.connect(toasts.append)
+        self.shell.manage.open(red)
+        self.shell.manage.toggle(1)
+        self.shell.manage.save()
+        self.assertEqual(toasts, [self.TOAST])
+
+    def test_rename_saves_at_once_and_a_taken_name_sets_error(self):
+        red, ps = self.saved()
+        self.load()
+        from engine import groups
+        manage = self.shell.manage
+        manage.open(red)
+        manage.name = "Crimson"
+        manage.rename()
+        self.assertEqual(([g["name"] for g in groups.load(self.covers)], manage.title, manage.error), (["Crimson", "PS5 games"], "Crimson", ""))
+        manage.name = "ps5 GAMES"
+        manage.rename()
+        self.assertIn("PS5 games", manage.error)
+        self.assertEqual([g["name"] for g in groups.load(self.covers)], ["Crimson", "PS5 games"])
+
+    def test_a_staged_add_survives_a_later_rename(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(3)
+        manage.save()
+        manage.open(red)
+        manage.name = "Crimson"
+        manage.rename()
+        self.assertEqual(self.count_in_cases(red), 3)
+        self.assertIn("Crimson", [g["name"] for g in self.shell.cases.groupList])
+
+    def test_replacing_every_game_keeps_the_group_with_the_new_ones(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(ps)
+        manage.toggle(3)
+        manage.toggle(1)
+        manage.save()
+        self.assertIsNone(self.games_of(ps))                                        # a group is never saved without games
+        self.assertEqual((self.count_in_cases(ps), self.shell.cases.groupIds()), (1, {1: ps}))
+
+    def test_cancel_drops_the_ticks(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(1)
+        manage.cancel()
+        self.assertFalse(manage.isOpen)
+        manage.open(red)
+        self.assertEqual(manage.tickedCount, 2)
+
+    def test_search_filters_rows_but_keeps_ticks(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.query = "hades"
+        self.assertEqual([r[0] for r in self.rows()], [1])
+        manage.query = ""
+        self.assertEqual((manage.tickedCount, len(self.rows())), (2, 3))
+
+    def test_save_is_disabled_until_the_library_is_listed(self):
+        red, ps = self.saved()
+        manage = self.shell.manage
+        manage.open(red)
+        self.assertFalse(manage.canSave)
+        self.wait_for(lambda: manage.canSave)
+        self.assertTrue(manage.canSave)
+
+    def test_save_stays_disabled_when_no_games_could_be_listed(self):
+        red, ps = self.saved()
+        self.library.clear()
+        manage = self.shell.manage
+        manage.open(red)
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertFalse(manage.canSave)
+
+    def test_delete_removes_the_group_and_its_cover_notes(self):
+        gid = self.made_group()
+        manage = self.shell.manage
+        manage.open(gid)
+        manage.deleteGroup()
+        self.assertIsNone(self.games_of(gid))
+        self.assertIsNone(self.sc.cover_group(self.cover(1)))
+        self.assertFalse(manage.isOpen)
+
+    def test_a_failed_write_keeps_the_window_open_and_says_why(self):
+        from unittest import mock
+        red, ps = self.saved()
+        self.load()
+        said = []
+        self.shell.manage.failed.connect(lambda title, text: said.append(text))
+        self.shell.manage.open(red)
+        self.shell.manage.toggle(1)
+        with mock.patch("engine.groups.save", side_effect=OSError("disk full")):
+            self.shell.manage.save()
+        self.assertTrue(self.shell.manage.isOpen)
+        self.assertIn("disk full", said[0])
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))

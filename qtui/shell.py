@@ -12,6 +12,7 @@ from qtui.i18n import N_, tr
 from qtui.library import Library
 from qtui.look import Look
 from qtui.make import Make
+from qtui.manage import GroupManager
 from qtui.owncase import OwnCase
 from qtui.picker import Picker
 from qtui.updates import Updates
@@ -57,6 +58,7 @@ class Shell(QObject):
         self._cases = Cases(self, self, covers)
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
+        self._manage = GroupManager(self, covers, self)
         self._apply.canApplyChanged.connect(self._make._availability)
         self.flowChanged.connect(self.flowNameChanged)
         self.languageChanged.connect(self.flowNameChanged)
@@ -212,6 +214,10 @@ class Shell(QObject):
     @Property(QObject, constant=True)
     def cases(self):
         return self._cases
+
+    @Property(QObject, constant=True)
+    def manage(self):
+        return self._manage
 
     @Property(QObject, constant=True)
     def make(self):
