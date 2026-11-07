@@ -15,14 +15,14 @@ NO_GAMES = N_("No games found. Install a game first, or load your userdata.json.
 
 class RowsModel(QAbstractListModel):
     """The rows the search shows, for the list on screen. Ticking a game only changes that row's data: the list keeps its place."""
-    Appid, Name, Selected = Qt.UserRole + 1, Qt.UserRole + 2, Qt.UserRole + 3
+    Appid, Name, Selected, Tag = Qt.UserRole + 1, Qt.UserRole + 2, Qt.UserRole + 3, Qt.UserRole + 4
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._rows = []
 
     def roleNames(self):
-        return {self.Appid: b"appid", self.Name: b"name", self.Selected: b"selected"}
+        return {self.Appid: b"appid", self.Name: b"name", self.Selected: b"selected", self.Tag: b"tag"}
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._rows)
@@ -31,15 +31,15 @@ class RowsModel(QAbstractListModel):
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         row = self._rows[index.row()]
-        return {self.Appid: row["appid"], self.Name: row["name"], self.Selected: row["selected"]}.get(role)
+        return {self.Appid: row["appid"], self.Name: row["name"], self.Selected: row["selected"], self.Tag: row.get("tag", "")}.get(role)
 
     def set_rows(self, rows):
         """Show these rows: only the tick of a row that is still there changes in place, any other set of rows is a reset."""
         if [r["appid"] for r in rows] == [r["appid"] for r in self._rows]:
             old, self._rows = self._rows, rows
             for i, (a, b) in enumerate(zip(old, rows)):
-                if a["selected"] != b["selected"]:
-                    self.dataChanged.emit(self.index(i, 0), self.index(i, 0), [self.Selected])
+                if a["selected"] != b["selected"] or a.get("tag", "") != b.get("tag", ""):
+                    self.dataChanged.emit(self.index(i, 0), self.index(i, 0), [self.Selected, self.Tag])
             return
         self.beginResetModel()
         self._rows = rows
@@ -130,6 +130,10 @@ class Picker(QObject):
     def collections(self):
         """The Steam collections that have games on screen: {"id", "name", "label" (name and count), "count"}, the most games first, then by name."""
         return [{"id": s.id, "name": s.name, "label": s.label, "count": len(s.games)} for s in self._shown]
+
+    def games(self):
+        """[(appid, name)] of the games listed now, by name (empty while loading or when none could be listed): what Manage shows with its own ticks."""
+        return list(self._all)
 
     def selection(self):
         """The ticked games' app ids, sorted."""

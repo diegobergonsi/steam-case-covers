@@ -147,7 +147,7 @@ Press and hover 90 to 120ms, the navigation highlight and switches 200ms, a scre
 ## Components
 
 - **Buttons:** `PrimaryButton` (the one filled button; `quiet: true` is the outlined look) and `QuietButton`. At least 44px tall, bold text, a ring on keyboard focus.
-- **Choices:** `ChoiceChips` (one choice out of a few, arrow keys move it), `SwitchRow`, `Swatch`, `GradientSlider`, `ChoiceSummary` (what earlier steps chose, each leading back to its step).
+- **Choices:** `ChoiceChips` (one choice out of a few, arrow keys move it), `InputField` (a line of text), `GameRow` (a game with a tick box), `SwitchRow`, `Swatch`, `GradientSlider`, `ChoiceSummary` (what earlier steps chose, each leading back to its step).
 - **Frame:** `ScreenFrame`, `Section`, `Card`, `ButtonRow`, `PreviewCard` (the sample cover, the old picture stays while the next one loads).
 - **Cover pictures:** `CoverThumbs` (the first covers of a run as small pictures, wrapping on a narrow window; Make and Add).
 - **Preview layout:** `PreviewLayout` (the preview beside the sections, above them on a narrow window; one rule for Look, 100% games, Case and Make).
@@ -156,7 +156,7 @@ Press and hover 90 to 120ms, the navigation highlight and switches 200ms, a scre
 - **Tapping:** `TapArea` (the part of a small control that reacts to a tap, at least 44px wide and high, centred on the control; the "i" and the language flags use it).
 - **Information:** `StatusLine`, `InfoTip`, `ProgressBar`.
 - **Navigation:** a heading under Home with the name of the way in use and its steps ("Same case · 5 steps"), `NavItem` (a name, a small grey note after it such as "(optional)", a tick or a padlock) and `NavLink` (Discord, Check for updates).
-- **Questions:** `ConfirmDialog`, which dims the window, puts the safe button in focus and keeps Tab inside.
+- **Questions:** `ConfirmDialog`, which dims the window, puts the safe button in focus and keeps Tab inside (it can hold a checklist). `ManageGroup`, the window of one group, built the same way.
 - **Cover thumbnails (signature):** the covers just made, in a row under the status on the Make screen. They are the product's output and the only saturated imagery in the window.
 
 ## Do's and Don'ts

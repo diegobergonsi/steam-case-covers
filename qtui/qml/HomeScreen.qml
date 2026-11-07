@@ -197,16 +197,35 @@ ScreenFrame {
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.bodySize
-            text: qsTr("Reset leaves the covers of these groups on Steam. Tick a group to reset it too. That deletes the group.")
+            text: qsTr("Groups hold games that share a case. Manage changes which games are in a group, its name, or deletes it.")
         }
         Repeater {
             model: screen.apply.groupTicks.choices
-            delegate: SwitchRow {
+            delegate: Item {
+                id: groupRow
                 objectName: "home_group_" + modelData.id
-                label: modelData.caption
-                checked: modelData.ticked
-                enabled: !screen.apply.busy
-                onToggled: screen.apply.groupTicks.toggle(modelData.id)
+                readonly property string label: modelData.caption
+                width: parent.width
+                height: Math.max(Theme.touchMin, caption.contentHeight + 2 * Theme.s4)
+                Text {
+                    id: caption
+                    width: parent.width - manageButton.width - Theme.s12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: groupRow.label
+                    textFormat: Text.PlainText                  // a group name is the player's own words, never markup
+                    wrapMode: Text.WordWrap
+                    color: Theme.text
+                    font.pixelSize: Theme.bodySize
+                }
+                QuietButton {
+                    id: manageButton
+                    objectName: "home_manage_" + modelData.id
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Manage")
+                    enabled: shell.manage.canOpen
+                    onClicked: shell.manage.open(modelData.id)
+                }
             }
         }
     }

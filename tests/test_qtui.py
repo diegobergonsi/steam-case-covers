@@ -8106,20 +8106,6 @@ class ManualWindow(WindowClicks, PickerBase):
         self.wait_for(lambda: not self.shell.apply.busy)
         self.assertEqual(self.item("home_group_" + same).property("label"), "Xbox One \u00b7 1 game")
 
-    def test_home_lists_the_groups_to_reset(self):
-        red, ps = self.saved_groups()
-        self.shell.startPath("manual")                                          # away from Home and back: the screen reads the groups when it opens
-        self.app.processEvents()
-        self.shell.go(0)
-        self.app.processEvents()
-        self.wait_for(lambda: not self.shell.apply.busy)                    # the boxes are greyed while Steam is being looked at
-        self.assertTrue(self.has("home_group_" + red) and self.has("home_group_" + ps))
-        self.assertTrue(self.item("home_section_groups").property("visible"))
-        self.assertFalse(self.item("home_group_" + red).property("checked"))
-        self.click("home_group_" + red)
-        self.assertTrue(self.item("home_group_" + red).property("checked"))
-        self.assertEqual(self.shell.apply.groupTicks.count, 1)
-
     def test_home_has_no_group_section_without_groups(self):
         self.shell.go(0)
         self.app.processEvents()
@@ -8640,49 +8626,102 @@ class GroupReset(PickerBase):
         return " ".join(p["text"] for p in self.asked[-1][1])
 
     def tick(self, group_id):
-        self.ap.groupTicks.refresh()                                       # the screen reads the file when it opens
-        self.ap.groupTicks.toggle(group_id)
+        """Tick a group in the question that is open (the ticks are the person's choice in the question itself)."""
+        self.ap.toggleResetGroup(group_id)
+
+    def choices(self):
+        return [(c["text"], c["ticked"]) for c in self.ap.resetChoices]
 
     def test_the_reset_lists_the_groups_unticked(self):
         self.ap.groupTicks.refresh()
         self.assertEqual([(g["name"], g["ticked"]) for g in self.ap.groupTicks.choices], [("Red games", False), ("PlayStation 5", False)])
 
-    def test_unticked_groups_stay_on_steam_and_the_question_says_so(self):
+    def test_the_reset_question_lists_groups_with_covers_unticked(self):
+        self.assertEqual(self.ap.resetChoices, [])                                       # no question open: no checklist
         self.reset()
         self.assertTrue(self.ap.asking, self.ap.status)
-        text = self.question()
-        self.assertIn("1 cover made by this app will be removed", text)
-        self.assertIn("Red games", text)
-        self.assertIn("PlayStation 5", text)
-        self.assertIn("left as they are", text)
+        self.assertEqual(self.choices(), [("Red games (1 cover)", False), ("PlayStation 5 (1 cover)", False)])
+        self.assertIn("1 cover made by this app will be removed", self.question())
+        self.assertIn("left as they are", self.question())
+
+    def test_an_unticked_group_stays_on_steam(self):
+        self.reset()
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # only the usual cover went
         self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["Red games", "PlayStation 5"])
 
-    def test_a_ticked_group_is_reset_and_deleted(self):
-        self.tick(self.red)
+    def test_ticking_a_group_in_the_question_removes_its_covers_and_deletes_the_group(self):
         self.reset()
-        text = self.question()
-        self.assertIn("Red games", text)
-        self.assertIn("deleted", text)
+        self.tick(self.red)
+        self.assertEqual(self.choices(), [("Red games (1 cover)", True), ("PlayStation 5 (1 cover)", False)])
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["3p.png"])
         self.assertEqual([g["name"] for g in self.groups.load(self.covers)], ["PlayStation 5"])
-        cover = os.path.join(self.covers, "Hades_1.png")
-        self.assertIsNone(self.sc.cover_group(cover))                                    # the cover in the covers folder is a usual one again
+        self.assertIsNone(self.sc.cover_group(os.path.join(self.covers, "Hades_1.png")))        # the cover in the covers folder is a usual one again
         self.assertEqual(self.ap.groupTicks.count, 0)
-        self.assertEqual([g["name"] for g in self.ap.groupTicks.choices], ["PlayStation 5"])
+        self.assertEqual(self.ap.resetChoices, [])                                       # the question is closed
 
-    def test_all_covers_in_unticked_groups_means_nothing_to_reset(self):
+    def test_the_question_shows_the_checklist_and_a_click_ticks_a_group(self):
+        self.start_window()
+        self.reset()
+        self.wait_for(lambda: self.item("apply_dialog").property("visible"))
+        row = "apply_dlg_choice_" + self.red
+        self.assertEqual(self.item(row).property("name"), "Red games (1 cover)")
+        self.assertFalse(self.item(row).property("selected"))
+        self.assertGreaterEqual(self.item(row).property("height"), 44)
+        self.click(row)
+        self.assertTrue(self.item(row).property("selected"))
+        self.assertEqual(self.choices(), [("Red games (1 cover)", True), ("PlayStation 5 (1 cover)", False)])
+
+    def test_choices_are_reachable_with_tab_and_space(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        self.start_window()
+        self.reset()
+        self.wait_for(lambda: self.item("apply_dialog").property("visible"))
+        send = lambda key: (QCoreApplication.sendEvent(self.root.activeFocusItem(), QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, "", False)), self.app.processEvents())
+        self.assertEqual(self.root.activeFocusItem().objectName(), "apply_dlg_cancel")           # the safe button first
+        send(Qt.Key_Backtab)
+        self.assertEqual(self.root.activeFocusItem().objectName(), "apply_dlg_choice_" + self.ps)
+        send(Qt.Key_Space)
+        self.assertEqual(self.choices(), [("Red games (1 cover)", False), ("PlayStation 5 (1 cover)", True)])
+
+    def test_a_dialog_without_choices_shows_none(self):
+        self.start_window()
+        self.app.processEvents()
+        self.assertFalse(self.has("apply_dlg_choice_" + self.red))
+
+    def test_declining_the_question_ticks_nothing_for_the_next_one(self):
+        self.reset()
+        self.tick(self.red)
+        self.ap.decline()
+        self.reset()
+        self.assertEqual(self.choices(), [("Red games (1 cover)", False), ("PlayStation 5 (1 cover)", False)])
+
+    def test_reset_without_groups_has_no_checklist(self):
+        os.remove(os.path.join(self.covers, "groups.json"))
+        self.reset()
+        self.assertTrue(self.ap.asking, self.ap.status)
+        self.assertEqual(self.ap.resetChoices, [])
+
+    def test_reset_with_only_group_covers_still_asks(self):
         os.remove(os.path.join(self.grid, "2p.png"))
+        self.reset()
+        self.assertTrue(self.ap.asking, self.ap.status)
+        self.assertNotIn("made by this app will be removed", self.question())
         said = []
         self.shell.toast.connect(said.append)
-        self.reset()
-        self.assertFalse(self.ap.asking)
-        self.assertTrue(said and "groups" in said[0], said)
+        self.ap.confirm()                                                                # nothing ticked: nothing to do, and the person is told
+        self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
+        self.assertTrue(said and "ticked" in said[0], said)
+        self.reset()
+        self.tick(self.red)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertEqual(self.on_steam(), ["3p.png"])
 
     def test_remove_all_also_spares_unticked_groups(self):
         with open(os.path.join(self.grid, "9p.png"), "wb") as f:
@@ -8694,16 +8733,16 @@ class GroupReset(PickerBase):
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # ours of the usual flow and the other art went, the groups stay
 
     def test_declining_changes_nothing(self):
-        self.tick(self.red)
         self.reset()
+        self.tick(self.red)
         self.ap.decline()
         self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
         self.assertEqual(len(self.groups.load(self.covers)), 2)
 
     def test_a_failed_reset_deletes_no_group(self):
         from unittest import mock
-        self.tick(self.red)
         self.reset()
+        self.tick(self.red)
         with mock.patch.object(self.sc, "reset_to_default", side_effect=self.sc.SteamcaseError("disk full")):
             self.ap.confirm()
             self.wait_for(lambda: not self.ap.busy, 10)
@@ -8788,13 +8827,14 @@ class GroupsEndToEnd(PickerBase):
         asked = []
         self.ap.confirmNeeded.connect(lambda title, paragraphs, go, alt: asked.append(paragraphs))
         self.ap.reset()
+        self.wait_for(lambda: self.ap.asking or not self.ap.busy, 10)
+        self.assertTrue(self.ap.asking)                                                    # only groups are on Steam: the question lists them, all unticked
+        self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
-        self.assertFalse(self.ap.asking)
         self.assertEqual(self.on_steam(), ["1p.png", "2p.png", "3p.png"])
-        self.ap.groupTicks.refresh()
-        self.ap.groupTicks.toggle(by_name["Red games"])
         self.ap.reset()
         self.wait_for(lambda: self.ap.asking or not self.ap.busy, 10)
+        self.ap.toggleResetGroup(by_name["Red games"])
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
@@ -9105,3 +9145,407 @@ class StartOver(WindowCase):
 
     def text(self, name):
         return self.item(name).property("text")
+
+
+@need_qt
+class ManageGroups(PickerBase):
+    """The Manage window of a group on Home: what it saves at once (rename, removals, delete) and what it holds until the next make (added games)."""
+    def saved(self):
+        from engine import groups
+        saved, red = groups.assign([], "Red games", {"tone": [134, 100, 100]}, [1, 2])
+        saved, ps = groups.assign(saved, "PS5 games", {"platform": "ps5"}, [3])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        return red, ps
+
+    def games_of(self, gid):
+        from engine import groups
+        return next((g["games"] for g in groups.load(self.covers) if g["id"] == gid), None)
+
+    def count_in_cases(self, gid):
+        return next(g["count"] for g in self.shell.cases.groupList if g["id"] == gid)
+
+    def test_stage_puts_games_in_the_group_and_counts_them_as_given_a_case(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        self.assertEqual(cases.assignedCount, 0)
+        cases.stage(ps, [4])
+        self.assertEqual((cases.assignedCount, self.count_in_cases(ps)), (1, 2))
+        self.assertEqual(cases.groupIds(), {4: ps})
+        self.assertEqual(self.games_of(ps), [3])                               # nothing is saved before Make
+
+    def test_stage_moves_a_game_from_another_group_and_drops_that_group_when_empty(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        cases.stage(red, [3])
+        self.assertEqual(self.count_in_cases(red), 3)
+        self.assertNotIn(ps, [g["id"] for g in cases.groupList])
+
+    def test_stage_of_an_unknown_group_changes_nothing(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        cases.stage("nope", [4])
+        cases.stage(red, [])
+        self.assertEqual(cases.assignedCount, 0)
+        self.assertEqual([g["count"] for g in cases.groupList], [2, 1])
+
+    def test_reloading_groups_keeps_the_staged_games(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        cases.stage(ps, [4])
+        cases.reloadGroups()
+        self.assertEqual(self.count_in_cases(ps), 2)
+        self.assertEqual(cases.assignedCount, 1)
+
+    # ----- the GroupManager behind the window -----
+    WARNING = "No games ticked. Saving would delete this group."
+    TOAST = "Saved. Your covers change the next time you make covers, with “Same case” or “Pick games”."
+
+    def rows(self):
+        from qtui.picker import RowsModel
+        m = self.shell.manage.model
+        return [(m.data(m.index(i, 0), RowsModel.Appid), m.data(m.index(i, 0), RowsModel.Name), m.data(m.index(i, 0), RowsModel.Selected), m.data(m.index(i, 0), RowsModel.Tag))
+                for i in range(m.rowCount())]
+
+    def made_group(self):
+        """A group of games 1 and 2 that was really made: the covers exist and carry its id."""
+        self.load()
+        self.shell.startPath("manual")
+        self.picker.toggle(1)
+        self.picker.toggle(2)
+        self.shell.cases.pick("steam")
+        self.shell.cases.pickColour(3)
+        self.shell.cases.groupName = "Red games"
+        self.shell.cases.assign()
+        self.shell.make.start()
+        self.wait_for(lambda: not self.shell.make.running, 8)
+        self.shell.cases.reset()
+        from engine import groups
+        return next(g["id"] for g in groups.load(self.covers) if g["name"] == "Red games")
+
+    def test_open_ticks_the_groups_games(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        self.assertTrue(manage.isOpen)
+        self.assertEqual((manage.title, manage.name, manage.tickedCount, manage.groupId), ("Red games", "Red games", 2, red))
+        self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (3, "God of War", False, "PS5 games"), (1, "Hades", True, "")])
+
+    def test_open_is_refused_while_apply_is_busy(self):
+        red, ps = self.saved()
+        self.load()
+        self.shell.apply._busy = True
+        self.shell.manage.open(red)
+        self.assertFalse(self.shell.manage.isOpen)
+
+    def test_a_game_without_a_store_name_stays_listed_and_ticked(self):
+        from engine import groups
+        saved, old = groups.assign([], "Old", {"tone": [134, 100, 100]}, [1, 9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.load()
+        self.shell.manage.open(old)
+        self.assertIn((9, "Game 9", True, ""), self.rows())
+        self.assertEqual(self.shell.manage.tickedCount, 2)
+
+    def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
+        gid = self.made_group()
+        self.assertEqual(self.sc.cover_group(self.cover(1)), gid)
+        manage = self.shell.manage
+        manage.open(gid)
+        manage.toggle(1)
+        manage.save()
+        self.assertEqual(self.games_of(gid), [2])
+        self.assertIsNone(self.sc.cover_group(self.cover(1)))
+        self.assertEqual(self.sc.cover_group(self.cover(2)), gid)
+        self.assertFalse(manage.isOpen)
+
+    def test_ticking_a_game_of_another_group_stages_it_and_tags_the_row(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(3)
+        self.assertEqual(manage.tickedCount, 3)
+        manage.save()
+        self.assertEqual((self.shell.cases.assignedCount, self.shell.cases.groupIds()), (1, {3: red}))
+        self.assertEqual((self.games_of(red), self.games_of(ps)), ([1, 2], [3]))                       # nothing is saved before Make
+        self.assertFalse(manage.isOpen)
+
+    def test_untick_all_shows_the_warning_and_save_deletes_the_group(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(ps)
+        self.assertEqual(manage.warning, "")
+        manage.toggle(3)
+        self.assertEqual(manage.warning, self.WARNING)
+        manage.save()
+        self.assertIsNone(self.games_of(ps))
+        self.assertEqual(self.games_of(red), [1, 2])
+        self.assertFalse(manage.isOpen)
+
+    def test_save_with_no_change_writes_nothing_and_shows_no_toast(self):
+        red, ps = self.saved()
+        self.load()
+        toasts = []
+        self.shell.toast.connect(toasts.append)
+        path = os.path.join(self.covers, "groups.json")
+        read = lambda: __import__("pathlib").Path(path).read_bytes()
+        before = read()
+        self.shell.manage.open(red)
+        self.shell.manage.save()
+        self.assertEqual((read(), toasts, self.shell.manage.isOpen), (before, [], False))
+
+    def test_a_save_that_changed_something_says_when_it_shows(self):
+        red, ps = self.saved()
+        self.load()
+        toasts = []
+        self.shell.toast.connect(toasts.append)
+        self.shell.manage.open(red)
+        self.shell.manage.toggle(1)
+        self.shell.manage.save()
+        self.assertEqual(toasts, [self.TOAST])
+
+    def test_rename_saves_at_once_and_a_taken_name_sets_error(self):
+        red, ps = self.saved()
+        self.load()
+        from engine import groups
+        manage = self.shell.manage
+        manage.open(red)
+        manage.name = "Crimson"
+        manage.rename()
+        self.assertEqual(([g["name"] for g in groups.load(self.covers)], manage.title, manage.error), (["Crimson", "PS5 games"], "Crimson", ""))
+        manage.name = "ps5 GAMES"
+        manage.rename()
+        self.assertIn("PS5 games", manage.error)
+        self.assertEqual([g["name"] for g in groups.load(self.covers)], ["Crimson", "PS5 games"])
+
+    def test_a_staged_add_survives_a_later_rename(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(3)
+        manage.save()
+        manage.open(red)
+        manage.name = "Crimson"
+        manage.rename()
+        self.assertEqual(self.count_in_cases(red), 3)
+        self.assertIn("Crimson", [g["name"] for g in self.shell.cases.groupList])
+
+    def test_replacing_every_game_keeps_the_group_with_the_new_ones(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(ps)
+        manage.toggle(3)
+        manage.toggle(1)
+        manage.save()
+        self.assertIsNone(self.games_of(ps))                                        # a group is never saved without games
+        self.assertEqual((self.count_in_cases(ps), self.shell.cases.groupIds()), (1, {1: ps}))
+
+    def test_a_group_deleted_in_the_case_step_stays_deleted_after_a_manage_write(self):
+        red, ps = self.saved()
+        self.load()
+        cases = self.shell.cases
+        cases.deleteGroup(ps)
+        manage = self.shell.manage
+        manage.open(red)
+        manage.name = "Crimson"
+        manage.rename()
+        self.assertNotIn(ps, [g["id"] for g in cases.groupList])
+        self.assertEqual(cases.released(), {3})                                      # the make still lets its games go
+
+    def test_manage_can_open_only_when_nothing_else_is_running(self):
+        red, ps = self.saved()
+        self.assertTrue(self.shell.manage.canOpen)
+        self.shell.apply._busy = True
+        self.shell.apply.canApplyChanged.emit()
+        self.assertFalse(self.shell.manage.canOpen)
+
+    def test_cancel_drops_the_ticks(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(1)
+        manage.cancel()
+        self.assertFalse(manage.isOpen)
+        manage.open(red)
+        self.assertEqual(manage.tickedCount, 2)
+
+    def test_search_filters_rows_but_keeps_ticks(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.query = "hades"
+        self.assertEqual([r[0] for r in self.rows()], [1])
+        manage.query = ""
+        self.assertEqual((manage.tickedCount, len(self.rows())), (2, 3))
+
+    def test_save_is_disabled_until_the_library_is_listed(self):
+        red, ps = self.saved()
+        manage = self.shell.manage
+        manage.open(red)
+        self.assertFalse(manage.canSave)
+        self.wait_for(lambda: manage.canSave)
+        self.assertTrue(manage.canSave)
+
+    def test_save_stays_disabled_when_no_games_could_be_listed(self):
+        red, ps = self.saved()
+        self.library.clear()
+        manage = self.shell.manage
+        manage.open(red)
+        self.wait_for(lambda: not self.picker.loading)
+        self.assertFalse(manage.canSave)
+
+    def test_delete_removes_the_group_and_its_cover_notes(self):
+        gid = self.made_group()
+        manage = self.shell.manage
+        manage.open(gid)
+        manage.deleteGroup()
+        self.assertIsNone(self.games_of(gid))
+        self.assertIsNone(self.sc.cover_group(self.cover(1)))
+        self.assertFalse(manage.isOpen)
+
+    def test_a_failed_write_keeps_the_window_open_and_says_why(self):
+        from unittest import mock
+        red, ps = self.saved()
+        self.load()
+        said = []
+        self.shell.manage.failed.connect(lambda title, text: said.append(text))
+        self.shell.manage.open(red)
+        self.shell.manage.toggle(1)
+        with mock.patch("engine.groups.save", side_effect=OSError("disk full")):
+            self.shell.manage.save()
+        self.assertTrue(self.shell.manage.isOpen)
+        self.assertIn("disk full", said[0])
+
+    # ----- the window -----
+    NOTICE = "Changes show on your covers the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d. Nothing on Steam changes until then."
+
+    def home_with_groups(self):
+        red, ps = self.saved()
+        self.start_window()
+        self.app.processEvents()
+        return red, ps
+
+    def open_manage(self, gid):
+        self.click("home_manage_" + gid)
+        self.wait_for(lambda: self.shell.manage.isOpen and self.shell.manage.canSave)
+        return self.item("manage_dialog")
+
+    def test_home_lists_each_group_with_a_manage_button_and_no_switch(self):
+        red, ps = self.home_with_groups()
+        self.assertTrue(self.has("home_group_" + red) and self.has("home_manage_" + red) and self.has("home_manage_" + ps))
+        self.assertIn("Red games", self.item("home_group_" + red).property("label"))
+        self.assertIsNone(self.item("home_group_" + red).property("checked"))                  # the row is not a switch any more
+        self.assertEqual(self.item("home_manage_" + red).property("text"), "Manage")
+
+    def test_manage_opens_the_window_with_the_name_and_ticked_games(self):
+        red, ps = self.home_with_groups()
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+        self.open_manage(red)
+        self.assertTrue(self.item("manage_dialog").property("visible"))
+        self.assertEqual(self.item("manage_name").property("text"), "Red games")
+        self.assertTrue(self.item("manage_game_1").property("selected") and self.item("manage_game_2").property("selected"))
+        self.assertFalse(self.item("manage_game_3").property("selected"))
+
+    def test_the_notice_is_always_shown_above_save(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.assertEqual(self.item("manage_notice").property("text"), self.NOTICE)
+        self.assertTrue(self.item("manage_notice").property("visible"))
+        self.assertLess(self.pos("manage_notice").y(), self.pos("manage_save").y())
+
+    def test_the_warning_shows_when_nothing_is_ticked(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(ps)
+        self.assertFalse(self.item("manage_warning").property("visible"))
+        self.click("manage_game_3")
+        self.assertTrue(self.item("manage_warning").property("visible"))
+        self.assertEqual(self.item("manage_warning").property("text"), self.WARNING)
+
+    def test_save_and_cancel_close_the_window(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.click("manage_game_1")
+        self.click("manage_cancel")
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+        self.assertEqual(self.games_of(red), [1, 2])
+        self.open_manage(red)
+        self.click("manage_game_1")
+        self.click("manage_save")
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+        self.assertEqual(self.games_of(red), [2])
+
+    def test_delete_asks_first_and_cancel_keeps_the_group(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(ps)
+        self.click("manage_delete")
+        self.assertTrue(self.item("manage_delete_dialog").property("visible"))
+        self.assertEqual(self.item("manage_delete_dlg_title").property("text"), "Delete \u201cPS5 games\u201d?")
+        self.click("manage_delete_dlg_cancel")
+        self.assertEqual(self.games_of(ps), [3])
+        self.assertTrue(self.shell.manage.isOpen)
+        self.click("manage_delete")
+        self.click("manage_delete_dlg_confirm")
+        self.assertIsNone(self.games_of(ps))
+        self.assertFalse(self.item("manage_dialog").property("visible"))
+
+    def test_escape_closes_without_saving(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.click("manage_game_1")
+        QCoreApplication.sendEvent(self.root, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier, "", False))
+        self.app.processEvents()
+        self.assertFalse(self.shell.manage.isOpen)
+        self.assertEqual(self.games_of(red), [1, 2])
+
+    def test_manage_is_greyed_while_apply_is_busy(self):
+        red, ps = self.home_with_groups()
+        self.assertTrue(self.item("home_manage_" + red).property("enabled"))
+        self.shell.apply._busy = True
+        self.shell.apply.canApplyChanged.emit()
+        self.app.processEvents()
+        self.assertFalse(self.item("home_manage_" + red).property("enabled"))
+
+    def test_manage_buttons_and_rows_are_44_tall(self):
+        red, ps = self.home_with_groups()
+        for name in ("home_manage_" + red, "home_group_" + red):
+            self.assertGreaterEqual(self.item(name).property("height"), 44, name)
+        self.assertGreaterEqual(self.item("home_manage_" + red).property("width"), 44)
+        self.open_manage(red)
+        for name in ("manage_game_1", "manage_save", "manage_cancel", "manage_delete", "manage_rename", "manage_search", "manage_name"):
+            self.assertGreaterEqual(self.item(name).property("height"), 44, name)
+
+    def test_names_from_a_file_are_drawn_as_plain_text(self):
+        from engine import groups
+        saved, red = groups.assign([], "<b>Red</b> games", {"tone": [134, 100, 100]}, [1])
+        saved, ps = groups.assign(saved, "<i>PS5</i>", {"platform": "ps5"}, [3])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.start_window()
+        self.open_manage(red)
+        from PySide6.QtGui import QFontMetricsF
+        def drawn_as_typed(name):                                                    # markup would draw narrower than the characters typed
+            it = self.item(name)
+            return abs(it.property("contentWidth") - QFontMetricsF(it.property("font")).horizontalAdvance(it.property("text"))) < 2
+        self.assertEqual(self.item("manage_game_3").property("tag"), "in <i>PS5</i>")
+        self.assertTrue(drawn_as_typed("manage_game_3_tag"))                         # the other group's name
+        self.assertTrue(drawn_as_typed("manage_title"))
+
+    def test_a_tag_names_the_other_group_and_says_ticking_moves_it(self):
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.assertEqual(self.item("manage_game_3").property("tag"), "in PS5 games")
+        self.click("manage_game_3")
+        self.assertEqual(self.item("manage_game_3").property("tag"), "moves from PS5 games")
+
+    def cover(self, appid):
+        return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))

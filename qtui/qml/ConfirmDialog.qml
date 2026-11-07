@@ -19,6 +19,8 @@ FocusScope {
     signal alternated()
     property string prefix: "dlg"                       // the objectName prefix of the parts, so two dialogs in one window can be told apart
     property string alternateText: ""                  // a third choice between Cancel and the confirm; empty: none
+    property var choices: []                            // a checklist under the words: [{id, text, ticked}]; the owner ticks (choiceToggled) and sends the list again
+    signal choiceToggled(string id)
     property bool single: false                          // an information box: only the confirm button ("OK")
 
     parent: Window.contentItem
@@ -55,6 +57,7 @@ FocusScope {
     }
     function step(delta) {                              // the focus moves between the visible buttons and never leaves the dialog
         var list = []
+        for (var c = 0; c < choiceRows.count; c++) list.push(choiceRows.itemAt(c))
         if (cancel.visible) list.push(cancel)
         if (alternate.visible) list.push(alternate)
         list.push(confirm)
@@ -167,6 +170,18 @@ FocusScope {
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                             font.pixelSize: Theme.bodySize
                             color: modelData.kind === "warn" ? Theme.warning : modelData.kind === "muted" ? Theme.muted : Theme.text
+                        }
+                    }
+                    Repeater {
+                        id: choiceRows                          // after the words; the model is a count, so a tick changes a row and never rebuilds it (the focus stays)
+                        model: dialog.choices.length
+                        delegate: GameRow {
+                            objectName: dialog.prefix + "_choice_" + dialog.choices[index].id
+                            standalone: true
+                            width: words.width
+                            name: dialog.choices[index].text
+                            selected: dialog.choices[index].ticked
+                            onToggled: dialog.choiceToggled(dialog.choices[index].id)
                         }
                     }
                 }
