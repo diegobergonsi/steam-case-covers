@@ -123,6 +123,20 @@ def assign(groups, name, case, appids):
     return [g for g in out if g["games"]], target["id"]
 
 
+def rename(groups, group_id, name):
+    """`groups` with the group `group_id` called `name`. ValueError, in words, if the name is not valid, if another group has it (compared without regard to
+    capitals; the group's own name in other capitals is fine) or if there is no such group. The list given is not changed."""
+    clean = _name(name)
+    if clean is None:
+        raise ValueError("A group name has 1 to %d letters, with no line breaks." % MAX_NAME)
+    if not any(g["id"] == group_id for g in groups):
+        raise ValueError("That group is not there any more.")
+    other = next((g for g in groups if g["id"] != group_id and g["name"].lower() == clean.lower()), None)
+    if other is not None:
+        raise ValueError("There is already a group called \u201c%s\u201d." % other["name"])
+    return [dict(g, name=clean) if g["id"] == group_id else dict(g) for g in groups]
+
+
 def delete(groups, group_id):
     """`groups` without the group with this id."""
     return [dict(g) for g in groups if g["id"] != group_id]

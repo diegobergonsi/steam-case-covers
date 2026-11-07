@@ -180,6 +180,48 @@ class Edit(unittest.TestCase):
 
 
 
+class Rename(unittest.TestCase):
+    def two(self):
+        groups, red = gr.assign([], "Red games", RED, [1, 2])
+        groups, ps = gr.assign(groups, "Sony", PS5, [3])
+        return groups, red, ps
+
+    def test_rename_changes_only_the_name(self):
+        groups, red, ps = self.two()
+        out = gr.rename(groups, red, "  Crimson  ")
+        self.assertEqual([(g["id"], g["name"], g["case"], g["games"]) for g in out],
+                         [(red, "Crimson", RED, [1, 2]), (ps, "Sony", PS5, [3])])
+
+    def test_rename_to_the_same_name_in_other_capitals_is_allowed(self):
+        groups, red, _ = self.two()
+        self.assertEqual(gr.rename(groups, red, "RED GAMES")[0]["name"], "RED GAMES")
+
+    def test_rename_to_another_groups_name_is_refused(self):
+        groups, red, _ = self.two()
+        for taken in ("Sony", "sony", "  SONY "):
+            with self.assertRaises(ValueError) as caught:
+                gr.rename(groups, red, taken)
+            self.assertIn("Sony", str(caught.exception))
+
+    def test_rename_refuses_empty_41_letters_and_line_breaks(self):
+        groups, red, _ = self.two()
+        for bad in ("", "   ", "x" * 41, "two\nlines"):
+            with self.assertRaises(ValueError):
+                gr.rename(groups, red, bad)
+        self.assertEqual(gr.rename(groups, red, "x" * 40)[0]["name"], "x" * 40)
+
+    def test_rename_of_an_unknown_id_is_refused(self):
+        groups, _, _ = self.two()
+        with self.assertRaises(ValueError):
+            gr.rename(groups, "nope", "Fine")
+
+    def test_rename_does_not_change_the_list_it_was_given(self):
+        groups, red, _ = self.two()
+        before = json.dumps(groups)
+        gr.rename(groups, red, "Other")
+        self.assertEqual(json.dumps(groups), before)
+
+
 class DamagedFile(unittest.TestCase):
     """groups.json is read when the window opens, so a damaged, huge or odd file must give no groups, quickly, and never take the app down."""
     def setUp(self):
