@@ -4698,6 +4698,7 @@ class AddScreen(AddWindow):
         self.wait_for(lambda: self.item("apply_dialog").isVisible())
         self.click("apply_dlg_confirm")
         self.wait_for(lambda: not self.ap.applied and not self.ap.busy)
+        self.wait_for(lambda: not self.item("add_section_done").property("visible") and self.item("toast").property("visible"))     # the window follows the model a moment later, later still on a slow machine
         self.assertFalse(self.item("add_section_done").property("visible"))
         self.assertEqual((self.text("add_main"), self.text("add_status")), ("Apply to Steam", "2 covers are ready to add."))      # the sentence is not repeated here
         self.assertTrue(self.item("toast").property("visible"))
