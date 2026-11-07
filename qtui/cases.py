@@ -223,9 +223,30 @@ class Cases(QObject):
         """The groups as Make saves them: the saved ones and this run's changes."""
         return [dict(g, games=list(g["games"])) for g in self._groups]
 
+    def _restage(self, previous):
+        """After the saved groups were read again: the games put in groups during this run are in them again (found by id, so a group renamed meanwhile still gets them)."""
+        staged = {}
+        for appid, gid in self._gids.items():
+            staged.setdefault(gid, []).append(appid)
+        for gid, games in staged.items():
+            target = next((g for g in self._groups if g["id"] == gid), None)
+            if target is None:
+                old = next((g for g in previous if g["id"] == gid), None)
+                if old is None:
+                    continue
+                target = dict(old, games=[])
+                self._groups.append(target)
+            for g in self._groups:
+                if g is not target:
+                    g["games"] = [a for a in g["games"] if a not in games]
+            target["games"] = target["games"] + [a for a in games if a not in target["games"]]
+        self._groups = [g for g in self._groups if g["games"]]
+
     @Slot()
     def reloadGroups(self):
+        previous = self._groups
         self._groups, self._deleted = groups.load(self._covers), []
+        self._restage(previous)
         if self._gid and not any(g["id"] == self._gid for g in self._groups):
             self._gid, self._key = "", ""
             self.selectedKeyChanged.emit()
@@ -245,17 +266,10 @@ class Cases(QObject):
         group = next((g for g in self._groups if g["id"] == self._gid), None)
         case = group["case"] if group else ({"tone": list(self._tone)} if self._key == "steam" else {"platform": self._key})
         try:
-            self._groups, gid = groups.assign(self._groups, group["name"] if group else self._name, case, games)
+            self._put(group["name"] if group else self._name, case, games)
         except ValueError as e:
             self._set_error(str(e))
             return
-        for appid in games:
-            self._assigned[appid] = None if self._key == "steam" else self._key
-            if self._key == "steam":
-                self._tones[appid] = tuple(case["tone"])
-            else:
-                self._tones.pop(appid, None)
-            self._gids[appid] = gid
         self._key, self._gid, self._name, self._typed, self._tone = "", "", "", False, (0, 100, 100)
         self._set_error("")
         self.groupsChanged.emit()
@@ -264,6 +278,30 @@ class Cases(QObject):
         self.selectedKeyChanged.emit()
         self.groupNameChanged.emit()
         self.colourChanged.emit()
+
+    def _put(self, name, case, games):
+        """The games are in the group called `name` with this case (made if there is none): this run's lists know it. ValueError, in words, as groups.assign."""
+        self._groups, gid = groups.assign(self._groups, name, case, games)
+        key = case.get("platform")                  # None: the Steam case
+        for appid in games:
+            self._assigned[appid] = key
+            if "tone" in case:
+                self._tones[appid] = tuple(case["tone"])
+            else:
+                self._tones.pop(appid, None)
+            self._gids[appid] = gid
+
+    @Slot(str, "QVariantList")
+    def stage(self, group_id, appids):
+        """Manage: put these games in the saved group with this id, to be painted at the next make (the covers do not exist yet, so nothing is saved now). An
+        unknown group or no games changes nothing."""
+        group = next((g for g in self._groups if g["id"] == group_id), None)
+        games = [int(a) for a in appids]
+        if group is None or not games:
+            return
+        self._put(group["name"], group["case"], games)
+        self.groupsChanged.emit()
+        self.assignmentsChanged.emit()
 
     def assigned(self):
         """{appid: platform or None (the Steam case)} for make_covers."""

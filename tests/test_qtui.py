@@ -9105,3 +9105,54 @@ class StartOver(WindowCase):
 
     def text(self, name):
         return self.item(name).property("text")
+
+
+@need_qt
+class ManageGroups(PickerBase):
+    """The Manage window of a group on Home: what it saves at once (rename, removals, delete) and what it holds until the next make (added games)."""
+    def saved(self):
+        from engine import groups
+        saved, red = groups.assign([], "Red games", {"tone": [134, 100, 100]}, [1, 2])
+        saved, ps = groups.assign(saved, "PS5 games", {"platform": "ps5"}, [3])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        return red, ps
+
+    def games_of(self, gid):
+        from engine import groups
+        return next((g["games"] for g in groups.load(self.covers) if g["id"] == gid), None)
+
+    def count_in_cases(self, gid):
+        return next(g["count"] for g in self.shell.cases.groupList if g["id"] == gid)
+
+    def test_stage_puts_games_in_the_group_and_counts_them_as_given_a_case(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        self.assertEqual(cases.assignedCount, 0)
+        cases.stage(ps, [4])
+        self.assertEqual((cases.assignedCount, self.count_in_cases(ps)), (1, 2))
+        self.assertEqual(cases.groupIds(), {4: ps})
+        self.assertEqual(self.games_of(ps), [3])                               # nothing is saved before Make
+
+    def test_stage_moves_a_game_from_another_group_and_drops_that_group_when_empty(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        cases.stage(red, [3])
+        self.assertEqual(self.count_in_cases(red), 3)
+        self.assertNotIn(ps, [g["id"] for g in cases.groupList])
+
+    def test_stage_of_an_unknown_group_changes_nothing(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        cases.stage("nope", [4])
+        cases.stage(red, [])
+        self.assertEqual(cases.assignedCount, 0)
+        self.assertEqual([g["count"] for g in cases.groupList], [2, 1])
+
+    def test_reloading_groups_keeps_the_staged_games(self):
+        red, ps = self.saved()
+        cases = self.shell.cases
+        cases.stage(ps, [4])
+        cases.reloadGroups()
+        self.assertEqual(self.count_in_cases(ps), 2)
+        self.assertEqual(cases.assignedCount, 1)
