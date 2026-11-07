@@ -28,22 +28,11 @@ ScreenFrame {
     Section {
         objectName: "games_section_search"
         heading: qsTr("Find games")
-        TextField {
+        InputField {
             objectName: "games_search"
             width: parent.width
-            height: Theme.touchMin
             placeholderText: qsTr("Search by name…")
-            placeholderTextColor: Theme.faint
-            color: Theme.text
-            font.pixelSize: Theme.bodySize
-            selectByMouse: true
             Accessible.name: qsTr("Search your games by name")
-            background: Rectangle {
-                radius: Theme.radiusField
-                color: Theme.bg
-                border.width: parent.activeFocus ? Theme.focusRing : Theme.hairline
-                border.color: parent.activeFocus ? Theme.accent : Theme.edge
-            }
             onTextChanged: screen.picker.query = text
         }
         Text {

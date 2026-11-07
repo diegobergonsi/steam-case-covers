@@ -9220,7 +9220,8 @@ class ManageGroups(PickerBase):
         self.shell.make.start()
         self.wait_for(lambda: not self.shell.make.running, 8)
         self.shell.cases.reset()
-        return next(g["id"] for g in __import__("engine.groups", fromlist=["load"]).load(self.covers) if g["name"] == "Red games")
+        from engine import groups
+        return next(g["id"] for g in groups.load(self.covers) if g["name"] == "Red games")
 
     def test_open_ticks_the_groups_games(self):
         red, ps = self.saved()
@@ -9344,6 +9345,25 @@ class ManageGroups(PickerBase):
         manage.save()
         self.assertIsNone(self.games_of(ps))                                        # a group is never saved without games
         self.assertEqual((self.count_in_cases(ps), self.shell.cases.groupIds()), (1, {1: ps}))
+
+    def test_a_group_deleted_in_the_case_step_stays_deleted_after_a_manage_write(self):
+        red, ps = self.saved()
+        self.load()
+        cases = self.shell.cases
+        cases.deleteGroup(ps)
+        manage = self.shell.manage
+        manage.open(red)
+        manage.name = "Crimson"
+        manage.rename()
+        self.assertNotIn(ps, [g["id"] for g in cases.groupList])
+        self.assertEqual(cases.released(), {3})                                      # the make still lets its games go
+
+    def test_manage_can_open_only_when_nothing_else_is_running(self):
+        red, ps = self.saved()
+        self.assertTrue(self.shell.manage.canOpen)
+        self.shell.apply._busy = True
+        self.shell.apply.canApplyChanged.emit()
+        self.assertFalse(self.shell.manage.canOpen)
 
     def test_cancel_drops_the_ticks(self):
         red, ps = self.saved()

@@ -59,6 +59,10 @@ class Shell(QObject):
         self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
         self._apply = Apply(self, self._make, covers, self)
         self._manage = GroupManager(self, covers, self)
+        self._manage.saved.connect(self._cases.reloadGroups)         # Home, the Reset question and the Case step read the groups again
+        self._manage.saved.connect(self._apply.groupTicks.refresh)
+        self._apply.canApplyChanged.connect(self._manage.changed)    # Manage opens only while nothing else is running
+        self._make.runningChanged.connect(self._manage.changed)
         self._apply.canApplyChanged.connect(self._make._availability)
         self.flowChanged.connect(self.flowNameChanged)
         self.languageChanged.connect(self.flowNameChanged)

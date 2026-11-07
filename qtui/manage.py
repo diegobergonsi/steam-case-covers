@@ -17,6 +17,7 @@ DELETED = N_("Deleted. Your covers change the next time you make covers, with \u
 
 class GroupManager(QObject):
     changed = Signal()
+    saved = Signal()                        # the groups file changed: whoever shows or keeps the groups reads them again (the shell connects them)
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss
 
     def __init__(self, shell, covers_dir, parent=None):
@@ -39,6 +40,11 @@ class GroupManager(QObject):
     @Property(bool, notify=changed)
     def isOpen(self):
         return self._open
+
+    @Property(bool, notify=changed)
+    def canOpen(self):
+        """Not while Steam is being worked on or covers are being made (the shell tells `changed` when that changes)."""
+        return not self._shell.apply.busy and not self._shell.make.running
 
     @Property(str, notify=changed)
     def groupId(self):
@@ -95,7 +101,7 @@ class GroupManager(QObject):
     # ----- opening and closing -----
     @Slot(str)
     def open(self, group_id):
-        if self._open or self._shell.apply.busy or self._shell.make.running:
+        if self._open or not self.canOpen:
             return
         group = next((g for g in groups.load(self._covers) if g["id"] == group_id), None)
         if group is None:
@@ -125,10 +131,11 @@ class GroupManager(QObject):
             return
         listed = self._shell.picker.games()
         known = {a for a, _ in listed}
-        every = listed + [(a, "Game %d" % a) for a in self._saved if a not in known]       # a game the store no longer names stays, so Save never drops it unseen
+        missing = [(a, "Game %d" % a) for a in self._saved if a not in known]         # a game the store no longer names stays, so Save never drops it unseen
+        every = sorted(listed + missing, key=lambda r: (r[1].casefold(), r[0])) if missing else listed       # the library comes sorted
         words = self._query.casefold().split()
         rows = [{"appid": a, "name": n, "selected": a in self._ticked, "tag": self._others.get(a, "")}
-                for a, n in sorted(every, key=lambda r: (r[1].casefold(), r[0])) if all(w in n.casefold() for w in words)]
+                for a, n in every if all(w in n.casefold() for w in words)]
         self._model.set_rows(rows)
         self.changed.emit()
 
@@ -139,26 +146,34 @@ class GroupManager(QObject):
             self._rebuild()
 
     # ----- saving -----
-    def _saved_everywhere(self):
-        """What Home, Make and the Case step read again after the file changed."""
-        self._shell.cases.reloadGroups()
-        self._shell.apply.groupTicks.refresh()
+    def _persist(self, change):
+        """Run a change of the files; False, and a box for the person, if the disk refused it."""
+        try:
+            change()
+        except OSError as e:
+            self.failed.emit(tr("Could not save your groups"), tr("Your groups could not be saved: %s") % e)
+            return False
+        return True
+
+    def _write(self, remaining, let_go):
+        """Save the groups that remain, then take the group note off the covers of the games that left (a note too many does no harm if the first step fails)."""
+        groups.save(self._covers, remaining)
+        sc.forget_group(self._covers, set(let_go))
 
     @Slot()
     def rename(self):
         if not self._open:
             return
         try:
-            groups.save(self._covers, groups.rename(groups.load(self._covers), self._gid, self._name))
+            renamed = groups.rename(groups.load(self._covers), self._gid, self._name)
         except ValueError as e:
             self._error = str(e)
             self.changed.emit()
             return
-        except OSError as e:
-            self.failed.emit(tr("Could not save your groups"), tr("Your groups could not be saved: %s") % e)
+        if not self._persist(lambda: groups.save(self._covers, renamed)):
             return
         self._title, self._name, self._error = self._name.strip(), self._name.strip(), ""
-        self._saved_everywhere()
+        self.saved.emit()
         self._read_others()
         self._rebuild()
 
@@ -179,16 +194,11 @@ class GroupManager(QObject):
         if not removed and not added:
             self._close()
             return
-        try:
-            if removed:
-                groups.save(self._covers, groups.drop_games(fresh, removed))
-                sc.forget_group(self._covers, set(removed))
-        except OSError as e:
-            self.failed.emit(tr("Could not save your groups"), tr("Your groups could not be saved: %s") % e)
+        if removed and not self._persist(lambda: self._write(groups.drop_games(fresh, removed), removed)):
             return
         if added:
             self._shell.cases.stage(self._gid, added)       # before the groups are read again, so a group left empty by the removals still gets them
-        self._saved_everywhere()
+        self.saved.emit()
         self._close()
         self._shell.toast.emit(tr(SAVED))
 
@@ -198,14 +208,9 @@ class GroupManager(QObject):
             return
         fresh = groups.load(self._covers)
         group = next((g for g in fresh if g["id"] == self._gid), None)
-        try:
-            if group is not None:
-                groups.save(self._covers, groups.delete(fresh, self._gid))
-                sc.forget_group(self._covers, set(group["games"]))
-        except OSError as e:
-            self.failed.emit(tr("Could not save your groups"), tr("Your groups could not be saved: %s") % e)
+        if group is not None and not self._persist(lambda: self._write(groups.delete(fresh, self._gid), group["games"])):
             return
         self._shell.cases.deleteGroup(self._gid)            # games put in it earlier in this run are let go too
-        self._saved_everywhere()
+        self.saved.emit()
         self._close()
         self._shell.toast.emit(tr(DELETED))

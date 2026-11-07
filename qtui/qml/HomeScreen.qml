@@ -223,7 +223,7 @@ ScreenFrame {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Manage")
-                    enabled: !screen.apply.busy && !shell.make.running
+                    enabled: shell.manage.canOpen
                     onClicked: shell.manage.open(modelData.id)
                 }
             }

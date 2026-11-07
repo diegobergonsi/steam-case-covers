@@ -222,6 +222,38 @@ class Rename(unittest.TestCase):
         self.assertEqual(json.dumps(groups), before)
 
 
+class AddGames(unittest.TestCase):
+    def three(self):
+        groups, red = gr.assign([], "Red games", RED, [1, 2])
+        groups, ps = gr.assign(groups, "Sony", PS5, [3])
+        return groups, red, ps
+
+    def test_the_games_move_into_the_group_with_this_id(self):
+        groups, red, ps = self.three()
+        out = gr.add_games(groups, ps, [1])
+        self.assertEqual([(g["id"], g["games"]) for g in out], [(red, [2]), (ps, [3, 1])])
+
+    def test_a_group_left_without_games_goes(self):
+        groups, red, ps = self.three()
+        self.assertEqual([g["id"] for g in gr.add_games(groups, red, [3])], [red])
+
+    def test_each_game_once_and_in_order(self):
+        groups, red, ps = self.three()
+        self.assertEqual(gr.add_games(groups, red, [2, 5, 5])[0]["games"], [1, 2, 5])
+
+    def test_an_unknown_group_or_no_games_is_refused(self):
+        groups, red, ps = self.three()
+        for bad in (("nope", [1]), (red, []), (red, [0]), (red, ["x"])):
+            with self.assertRaises(ValueError):
+                gr.add_games(groups, *bad)
+
+    def test_it_does_not_change_the_list_it_was_given(self):
+        groups, red, ps = self.three()
+        before = json.dumps(groups)
+        gr.add_games(groups, red, [3])
+        self.assertEqual(json.dumps(groups), before)
+
+
 class DamagedFile(unittest.TestCase):
     """groups.json is read when the window opens, so a damaged, huge or odd file must give no groups, quickly, and never take the app down."""
     def setUp(self):

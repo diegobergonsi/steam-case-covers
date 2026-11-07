@@ -172,26 +172,15 @@ ScreenFrame {
                     }
                 }
             }
-            TextField {                               // the name of a new group, which can be changed; a saved group shows its own, locked
+            InputField {                              // the name of a new group, which can be changed; a saved group shows its own, locked
                 objectName: "case_group_name"
                 visible: screen.cases.selectedKey !== ""
                 readOnly: screen.cases.selectedGroup !== ""
                 width: parent.width
-                height: Theme.touchMin
                 placeholderText: qsTr("Name this group")
-                placeholderTextColor: Theme.faint
-                color: readOnly ? Theme.muted : Theme.text
-                font.pixelSize: Theme.bodySize
-                selectByMouse: true
                 maximumLength: 40
                 text: screen.cases.groupName
                 Accessible.name: qsTr("Name of this group")
-                background: Rectangle {
-                    radius: Theme.radiusField
-                    color: Theme.bg
-                    border.width: parent.activeFocus ? Theme.focusRing : Theme.hairline
-                    border.color: parent.activeFocus ? Theme.accent : Theme.edge
-                }
                 onTextEdited: screen.cases.groupName = text
             }
             StatusLine {

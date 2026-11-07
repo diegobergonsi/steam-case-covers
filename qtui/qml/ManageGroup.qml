@@ -110,22 +110,13 @@ FocusScope {
                 Row {
                     width: parent.width
                     spacing: Theme.s8
-                    TextField {
+                    InputField {
                         id: nameField
                         objectName: "manage_name"
                         width: parent.width - renameButton.width - Theme.s8
-                        height: Theme.touchMin
+                        maximumLength: 40
                         text: dialog.manage.name
-                        color: Theme.text
-                        font.pixelSize: Theme.bodySize
-                        selectByMouse: true
                         Accessible.name: qsTr("Group name")
-                        background: Rectangle {
-                            radius: Theme.radiusField
-                            color: Theme.bg
-                            border.width: parent.activeFocus ? Theme.focusRing : Theme.hairline
-                            border.color: parent.activeFocus ? Theme.accent : Theme.edge
-                        }
                         onTextEdited: dialog.manage.name = text
                         onAccepted: if (renameButton.enabled) dialog.manage.rename()
                     }
@@ -153,24 +144,13 @@ FocusScope {
                     color: Theme.muted
                     font.pixelSize: Theme.bodySize
                 }
-                TextField {
+                InputField {
                     id: search
                     objectName: "manage_search"
                     width: parent.width
-                    height: Theme.touchMin
                     placeholderText: qsTr("Search by name…")
-                    placeholderTextColor: Theme.faint
                     text: dialog.manage.query
-                    color: Theme.text
-                    font.pixelSize: Theme.bodySize
-                    selectByMouse: true
                     Accessible.name: qsTr("Search your games by name")
-                    background: Rectangle {
-                        radius: Theme.radiusField
-                        color: Theme.bg
-                        border.width: parent.activeFocus ? Theme.focusRing : Theme.hairline
-                        border.color: parent.activeFocus ? Theme.accent : Theme.edge
-                    }
                     onTextEdited: dialog.manage.query = text
                 }
                 StatusLine {
