@@ -13,6 +13,23 @@ Card {
     implicitHeight: headingText.height + inner.implicitHeight + 2 * Theme.s16 + Theme.s8
     height: implicitHeight
 
+    function flash() {                                 // outline the card for a moment: the menu's link was clicked, and the card may already be in view
+        flashFade.stop()
+        flashLine.opacity = 1
+        flashHold.restart()
+    }
+    Rectangle {
+        id: flashLine
+        objectName: section.objectName + "_flash"
+        anchors.fill: parent
+        radius: section.radius
+        color: "transparent"
+        border.width: Theme.focusRing
+        border.color: Theme.accent
+        opacity: 0
+        Timer { id: flashHold; interval: 600; onTriggered: flashFade.start() }          // held in full even with reduced effects: it is not motion, and it is the only sign
+        NumberAnimation { id: flashFade; target: flashLine; property: "opacity"; to: 0; duration: Theme.dur(260) }
+    }
     Text {
         id: headingText
         x: Theme.s16

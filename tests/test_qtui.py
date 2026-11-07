@@ -5130,7 +5130,7 @@ class HomeScreen(AddWindow):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.open_home()
         self.assertEqual(self.visible_links(), ["account", "restore", "start_over"])               # no groups yet: no link
-        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "restore", "start_over")], ["Account selection", "Restore cases", "Start over"])
+        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "restore", "start_over")], ["Account Selection", "Restore Cases", "Start Over"])
         self.assertFalse(any(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
         self.assertFalse(self.item("nav_flow").property("visible"))
         self.assertTrue(self.item("nav_home").property("visible"))
@@ -5138,12 +5138,12 @@ class HomeScreen(AddWindow):
     def test_with_one_account_the_menu_has_no_account_link(self):
         self.open_home()
         self.assertNotIn("account", self.visible_links())
-        self.assertEqual(self.item("home_section_restore").property("heading"), "Restore cases")
+        self.assertEqual(self.item("home_section_restore").property("heading"), "Restore Cases")
 
     def test_the_account_has_its_own_section_apart_from_restore(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.open_home()
-        self.assertEqual(self.item("home_section_account").property("heading"), "Account selection")
+        self.assertEqual(self.item("home_section_account").property("heading"), "Account Selection")
         self.assertTrue(self.item("home_accounts").property("visible"))
         self.assertTrue(self.item("home_section_account").property("visible"))
 
@@ -5160,6 +5160,15 @@ class HomeScreen(AddWindow):
         self.app.processEvents()
         top = self.item("home_section_restore").mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
         self.assertAlmostEqual(scroller.property("contentY"), min(top, scroller.property("contentHeight") - scroller.property("height")), delta=1)
+
+    def test_a_link_in_the_menu_flashes_its_section_for_a_moment(self):
+        self.open_home()
+        flash = self.item("home_section_start_over_flash")
+        self.assertEqual(flash.property("opacity"), 0)
+        self.item("nav_link_start_over").activated.emit()                                     # the section may already be in view: the page cannot show that it was meant
+        self.app.processEvents()
+        self.assertEqual(flash.property("opacity"), 1)
+        self.wait_for(lambda: flash.property("opacity") == 0, seconds=4)
 
     def test_inside_a_path_the_menu_shows_its_steps_and_back_on_home_the_sections(self):
         self.open_home(covers=True)
@@ -9085,7 +9094,7 @@ class StartOver(WindowCase):
         from PySide6.QtTest import QTest
         self.start_window()
         self.shell.go(0)
-        self.assertEqual(self.item("home_section_start_over").property("heading"), "Start over")
+        self.assertEqual(self.item("home_section_start_over").property("heading"), "Start Over")
         self.assertEqual(self.item("home_start_over").property("text"), "Start over")
         self.assertEqual(self.item("home_start_over_line").property("text"), "Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
         self.assertTrue(self.item("home_start_over").property("enabled"))
