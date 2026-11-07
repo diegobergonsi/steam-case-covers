@@ -75,10 +75,12 @@ ScreenFrame {
         columns: progressSection.visible && width >= 2 * Theme.pathCardMinWidth + spacing ? 2 : 1
         spacing: Theme.s24
         readonly property real cardWidth: columns === 2 ? (width - spacing) / 2 : width
+        readonly property real cardHeight: Math.max(progressSection.implicitHeight, startOverSection.implicitHeight)
         Section {
             id: progressSection
             objectName: "home_section_progress"
             width: lower.cardWidth
+            height: lower.columns === 2 ? lower.cardHeight : implicitHeight      // side by side, the two are as tall as the taller
             visible: shell.returning
             heading: qsTr("Your Progress: %1").arg(shell.flowName)
             Column {
@@ -136,6 +138,7 @@ ScreenFrame {
         Section {
             id: startOverSection
             width: lower.cardWidth
+            height: lower.columns === 2 ? lower.cardHeight : implicitHeight      // side by side, the two are as tall as the taller
             objectName: "home_section_start_over"
             heading: qsTr("Start Over")
             Text {

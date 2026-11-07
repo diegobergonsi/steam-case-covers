@@ -5126,7 +5126,9 @@ class HomeScreen(AddWindow):
         progress, start, paths = (self.item(n) for n in ("home_section_progress", "home_section_start_over", "home_section_paths"))
         self.assertTrue(progress.property("visible") and start.property("visible"))
         self.assertGreater(self.pos("home_section_start_over").x(), self.pos("home_section_progress").x() + progress.width() - 1)
-        self.assertAlmostEqual(self.pos("home_section_start_over").y(), self.pos("home_section_progress").y(), delta=1)       # two cards, each as tall as it needs
+        self.assertAlmostEqual(self.pos("home_section_start_over").y(), self.pos("home_section_progress").y(), delta=1)
+        self.assertAlmostEqual(progress.height(), start.height(), delta=0.5)                                                  # side by side, the two cards are as tall as the taller
+        self.assertAlmostEqual(progress.height(), max(progress.property("implicitHeight"), start.property("implicitHeight")), delta=0.5)
         self.assertAlmostEqual(progress.width() + start.width() + 24, paths.width(), delta=1)                                 # the row is as wide as the one above
 
     def test_the_progress_and_start_over_stack_in_a_narrow_window(self):
@@ -5137,11 +5139,14 @@ class HomeScreen(AddWindow):
         self.assertAlmostEqual(self.pos("home_section_start_over").x(), self.pos("home_section_progress").x(), delta=1)
         self.assertGreaterEqual(self.pos("home_section_start_over").y(), self.pos("home_section_progress").y() + progress.height())
         self.assertAlmostEqual(start.width(), progress.width(), delta=1)
+        self.assertAlmostEqual(start.height(), start.property("implicitHeight"), delta=0.5)                                    # stacked, each is as tall as it needs
+        self.assertAlmostEqual(progress.height(), progress.property("implicitHeight"), delta=0.5)
 
     def test_start_over_takes_the_whole_row_when_there_is_no_progress_to_show(self):
         self.open_home()
         self.assertFalse(self.item("home_section_progress").property("visible"))
         self.assertAlmostEqual(self.item("home_section_start_over").width(), self.item("home_section_paths").width(), delta=1)
+        self.assertAlmostEqual(self.item("home_section_start_over").height(), self.item("home_section_start_over").property("implicitHeight"), delta=0.5)
 
     def test_the_menu_lists_the_sections_in_the_order_of_the_page(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
