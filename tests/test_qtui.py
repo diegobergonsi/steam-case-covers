@@ -7721,7 +7721,7 @@ class CasesState(PickerBase):
 
 
 @need_qt
-class ManualWindow(PickerBase):
+class ManualWindow(CollectionFiles, PickerBase):
     """The manual flow in the real window: Home, the Games step and the Case step."""
     def setUp(self):
         super().setUp()
@@ -8251,6 +8251,114 @@ class ManualWindow(PickerBase):
         self.app.processEvents()
         self.assertFalse(self.item("games_search").property("enabled"))
         self.shell._make._set_state(running=False)
+
+    # ----- Steam collections on the Games screen -----
+
+    def open_games(self, collections):
+        """Put these collections ([(key, name, [app ids])]) in the fake Steam and open the Games step; the buttons are there when it returns."""
+        if collections:
+            self.write_collections(collections)
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows and (self.picker.collections or not collections))
+        self.app.processEvents()
+
+    def pill(self, key):
+        return "games_collections_pill_user-collections." + key
+
+    def test_no_collections_no_row(self):
+        self.open_games([])
+        self.assertFalse(self.item("games_collections").property("visible"))
+        self.assertFalse(self.item("games_collections_label").property("visible"))
+
+    def test_clicking_a_collection_ticks_its_games_without_a_question(self):
+        self.open_games([("many", "Many", [1, 2])])
+        self.assertEqual(self.item(self.pill("many")).property("text"), "Many (2)")
+        self.click(self.pill("many"))
+        self.assertEqual(self.picker.selection(), [1, 2])
+        self.assertFalse(self.item("collections_dialog").property("visible"))
+
+    def ask(self):
+        """3 is ticked by hand, then the collection {1, 2} is clicked: the question is open."""
+        self.open_games([("many", "Many", [1, 2])])
+        self.click("games_row_3")
+        self.click(self.pill("many"))
+        self.assertTrue(self.item("collections_dialog").property("visible"))
+
+    def test_with_ticks_the_dialog_asks_and_add_keeps_them(self):
+        self.ask()
+        self.assertEqual(self.text("collections_dlg_title"), "You already ticked 1 game")
+        self.assertEqual(self.text("collections_dlg_p0"), "“Many” has 2 games on your list.")
+        self.assertEqual(self.text("collections_dlg_p1"), "Add keeps your ticks and ticks the collection too: 3 games in total.")
+        self.assertEqual(self.text("collections_dlg_p2"), "Replace unticks your games first: 2 games in total.")
+        self.assertEqual([self.text("collections_dlg_confirm"), self.text("collections_dlg_alternate"), self.text("collections_dlg_cancel")],
+                         ["Add them", "Replace them", "Cancel"])
+        self.assertTrue(self.item("collections_dlg_cancel").property("activeFocus"))
+        self.assertTrue(self.item("collections_dlg_confirm").property("filled"))
+        self.click("collections_dlg_confirm")
+        self.assertEqual(self.picker.selection(), [1, 2, 3])
+
+    def test_replace_ticks_only_the_collection(self):
+        self.ask()
+        self.click("collections_dlg_alternate")
+        self.assertEqual(self.picker.selection(), [1, 2])
+
+    def test_cancel_and_escape_change_nothing(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.ask()
+        self.click("collections_dlg_cancel")
+        self.assertEqual((self.picker.selection(), self.item("collections_dialog").property("visible")), ([3], False))
+        self.click(self.pill("many"))
+        QTest.keyClick(self.root, Qt.Key_Escape)
+        self.app.processEvents()
+        self.assertEqual((self.picker.selection(), self.item("collections_dialog").property("visible")), ([3], False))
+
+    def test_a_markup_name_is_plain_text_and_a_long_name_fits(self):
+        self.open_games([("markup", "<b>Done</b>", [1]), ("long", "x" * 200, [1, 2])])
+        pill = self.item(self.pill("markup"))
+        self.assertEqual(pill.property("text"), "<b>Done</b> (1)")
+        self.assertTrue(pill.property("plain"))                                              # drawn as text, not as markup
+        self.assertLessEqual(self.item(self.pill("long")).width(), self.item("games_collections").width())
+
+    def test_more_than_two_rows_show_the_link_and_hide_the_rest(self):
+        self.open_games([("c%02d" % i, "Collection %02d" % i, [1]) for i in range(1, 26)])
+        more = self.item("games_collections_more")
+        self.assertTrue(more.property("visible"))
+        self.assertEqual(more.property("text"), "Show all 25 collections")
+        self.assertGreaterEqual(more.height(), 44)                                          # touch targets (docs/PRODUCT.md)
+        self.assertGreaterEqual(self.item(self.pill("c01")).height(), 44)
+        first, last = self.item(self.pill("c01")), self.item(self.pill("c25"))
+        self.assertTrue(first.property("reachable"))
+        self.assertEqual([last.property(p) for p in ("reachable", "enabled", "activeFocusOnTab")], [False, False, False])
+        self.assertEqual(last.property("opacity"), 0)
+        self.click("games_collections_more")
+        self.assertTrue(last.property("reachable") and last.property("enabled") and last.property("activeFocusOnTab"))
+        self.assertEqual(more.property("text"), "Show fewer")
+        self.click("games_collections_more")
+        self.assertEqual((last.property("reachable"), more.property("text")), (False, "Show all 25 collections"))
+
+    def test_a_few_collections_have_no_link(self):
+        self.open_games([("a", "A", [1]), ("b", "B", [2]), ("c", "C", [3])])
+        self.assertFalse(self.item("games_collections_more").property("visible"))
+
+    def test_the_dialog_survives_a_collection_that_is_gone(self):
+        self.ask()
+        self.write_collections([("other", "Other", [1])])                                # Steam changed the file while the question was open
+        self.picker.refreshCollections()
+        self.click("collections_dlg_confirm")
+        self.assertEqual(self.picker.selection(), [3])                                  # nothing was added, nothing broke
+        self.assertFalse(self.item("collections_dialog").property("visible"))
+
+    def test_the_new_texts_are_translated(self):
+        self.open_games([("c%02d" % i, "Collection %02d" % i, [1]) for i in range(1, 26)])
+        self.shell.setLanguage("pt-BR")                                                  # an open question keeps the words it was opened with
+        self.app.processEvents()
+        self.click("games_row_3")
+        self.click(self.pill("c02"))
+        for name in ("games_collections_label", "games_collections_more", "collections_dlg_title", "collections_dlg_p0", "collections_dlg_p1", "collections_dlg_p2",
+                     "collections_dlg_confirm", "collections_dlg_alternate"):
+            with self.subTest(name):
+                self.assertNotRegex(self.text(name), r"^(Your collections|Show all|You already|“.*” has|Add keeps|Replace unticks|Add them|Replace them)")
 
 
 @need_qt
