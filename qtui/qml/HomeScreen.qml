@@ -15,7 +15,7 @@ ScreenFrame {
     // the sections the menu on the left links to, only those on the page
     readonly property var links: [
         {"key": "account", "label": qsTr("Account selection"), "section": accountSection},
-        {"key": "undo", "label": qsTr("Restore cases"), "section": undoSection},
+        {"key": "restore", "label": qsTr("Restore cases"), "section": restoreSection},
         {"key": "groups", "label": qsTr("Your groups"), "section": groupsSection},
         {"key": "start_over", "label": qsTr("Start over"), "section": startOverSection}].filter(function(l) { return l.section.visible })
 
@@ -138,8 +138,8 @@ ScreenFrame {
         }
     }
     Section {
-        id: undoSection
-        objectName: "home_section_undo"
+        id: restoreSection
+        objectName: "home_section_restore"
         // only when there is something to restore; with two or more accounts always, so the account in use is named and the hint says why nothing can be restored
         visible: screen.apply.canChoose || screen.apply.canRestore || screen.apply.canReset || screen.apply.busy || screen.apply.asking || shell.make.running
         heading: qsTr("Restore cases")

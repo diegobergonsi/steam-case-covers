@@ -5124,13 +5124,13 @@ class HomeScreen(AddWindow):
 
     def visible_links(self):
         from qtui.app import find_item
-        return [k for k in ("account", "undo", "groups", "start_over") if (it := find_item(self.root, "nav_link_" + k)) is not None and it.property("visible")]
+        return [k for k in ("account", "restore", "groups", "start_over") if (it := find_item(self.root, "nav_link_" + k)) is not None and it.property("visible")]
 
     def test_on_home_the_menu_lists_the_sections_of_home_and_hides_the_steps(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.open_home()
-        self.assertEqual(self.visible_links(), ["account", "undo", "start_over"])               # no groups yet: no link
-        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "undo", "start_over")], ["Account selection", "Restore cases", "Start over"])
+        self.assertEqual(self.visible_links(), ["account", "restore", "start_over"])               # no groups yet: no link
+        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "restore", "start_over")], ["Account selection", "Restore cases", "Start over"])
         self.assertFalse(any(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
         self.assertFalse(self.item("nav_flow").property("visible"))
         self.assertTrue(self.item("nav_home").property("visible"))
@@ -5138,7 +5138,7 @@ class HomeScreen(AddWindow):
     def test_with_one_account_the_menu_has_no_account_link(self):
         self.open_home()
         self.assertNotIn("account", self.visible_links())
-        self.assertEqual(self.item("home_section_undo").property("heading"), "Restore cases")
+        self.assertEqual(self.item("home_section_restore").property("heading"), "Restore cases")
 
     def test_the_account_has_its_own_section_apart_from_restore(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
@@ -5156,9 +5156,9 @@ class HomeScreen(AddWindow):
         self.item("nav_link_start_over").activated.emit()
         self.app.processEvents()
         self.assertGreater(scroller.property("contentY"), 0)
-        self.item("nav_link_undo").activated.emit()
+        self.item("nav_link_restore").activated.emit()
         self.app.processEvents()
-        top = self.item("home_section_undo").mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+        top = self.item("home_section_restore").mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
         self.assertAlmostEqual(scroller.property("contentY"), min(top, scroller.property("contentHeight") - scroller.property("height")), delta=1)
 
     def test_inside_a_path_the_menu_shows_its_steps_and_back_on_home_the_sections(self):
@@ -5176,9 +5176,9 @@ class HomeScreen(AddWindow):
     def test_the_undo_card_is_hidden_until_there_is_something_to_undo(self):
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertFalse(self.item("home_section_undo").property("visible"))                 # one account, nothing to undo: nothing to show
+        self.assertFalse(self.item("home_section_restore").property("visible"))                 # one account, nothing to undo: nothing to show
         self.undo_ready()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [True, True])
         self.assertEqual(self.text("home_hint"), "")
         self.assertFalse(self.item("home_restore").property("filled"))      # Home has no filled button
@@ -5187,32 +5187,32 @@ class HomeScreen(AddWindow):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
         self.assertTrue(self.text("home_hint").startswith("Nothing to undo yet"))
 
     def test_the_undo_card_shows_while_a_job_runs_or_a_question_is_open(self):
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertFalse(self.item("home_section_undo").property("visible"))
+        self.assertFalse(self.item("home_section_restore").property("visible"))
         self.ap._busy = True
         self.ap.canApplyChanged.emit()
         self.ap.undoChanged.emit()
         self.app.processEvents()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.ap._busy = False
         self.ap.canApplyChanged.emit()
         self.ap.undoChanged.emit()
         self.app.processEvents()
-        self.assertFalse(self.item("home_section_undo").property("visible"))
+        self.assertFalse(self.item("home_section_restore").property("visible"))
 
     def test_the_undo_card_does_not_vanish_while_covers_are_made(self):
         self.open_home()
         self.undo_ready()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.shell.make._set_state(running=True)                        # nothing can be restored meanwhile, but the card stays
         self.app.processEvents()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.shell.make._set_state(running=False)
 
     def test_the_line_in_the_undo_card_is_only_for_progress_and_errors(self):
@@ -5297,7 +5297,7 @@ class HomeScreen(AddWindow):
         self.root.setProperty("width", self.root.property("minimumWidth"))
         self.root.setProperty("height", self.root.property("minimumHeight"))
         self.app.processEvents()
-        for sec, names in (("home_section_paths", ("home_card_natural", "home_card_manual")), ("home_section_progress", ("home_row_look", "home_state_look")), ("home_section_undo", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
+        for sec, names in (("home_section_paths", ("home_card_natural", "home_card_manual")), ("home_section_progress", ("home_row_look", "home_state_look")), ("home_section_restore", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
             card = self.item(sec)
             right = card.mapToScene(QPointF(card.width(), 0)).x()
             for n in names:
@@ -5610,7 +5610,7 @@ class HomeScreen(AddWindow):
 
     def test_the_hint_has_its_line_before_the_probe_answers_so_nothing_jumps(self):
         self.open_home()
-        card = self.item("home_section_undo")
+        card = self.item("home_section_restore")
         before = card.height()
         self.wait_for(lambda: self.ap.undoKnown)
         self.app.processEvents()
