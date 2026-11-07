@@ -826,6 +826,34 @@ class Attacks(Base):
             sc.store_items, sc.http_get = real_store, real_get
         self.assertEqual((len(r["failed"]), len(r["missing"])), (1, 0))
 
+    def test_a_missing_2x_image_falls_back_to_the_1x_one(self):
+        # ARK: Survival Evolved lists a 2x portrait that Steam answers 404 for, while the 1x one exists
+        assets = {"asset_url_format": "steam/apps/1/${FILENAME}", "library_capsule_2x": "library_600x900_2x.jpg", "library_capsule": "library_600x900.jpg"}
+        urls, _ = sc.portrait_candidates(1, {"assets": assets})
+        self.assertTrue(any(u.split("?")[0].endswith("/library_600x900.jpg") for u in urls))
+        self.assertTrue(urls[-1].endswith("/steam/apps/1/library_600x900.jpg"))
+
+    def test_a_real_2x_portrait_is_not_called_blurry_because_of_the_1x_one(self):
+        assets = {"asset_url_format": "steam/apps/1/${FILENAME}", "library_capsule_2x": "library_600x900_2x.jpg", "library_capsule": "portrait.png"}
+        self.assertFalse(sc.portrait_candidates(1, {"assets": assets})[1])
+
+    def test_a_cover_is_made_from_the_1x_image_when_the_2x_one_is_a_404(self):
+        import io, urllib.error
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), "red").save(buf, "PNG")
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {1: {"type": 0, "name": "G", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "p_2x.jpg", "library_capsule": "p.jpg"}}}
+        def get(url, tries=3):
+            if "_2x" in url:
+                raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+            return buf.getvalue()
+        sc.http_get = get
+        try:
+            r = sc.make_covers({1: "G"}, os.path.join(self.tmp, "cv"))
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+        self.assertEqual((r["ok"], r["missing"], r["failed"]), (1, [], []))
+
     def test_hostile_api_data_cannot_change_the_download_host(self):
         import urllib.parse
         for key in ("../../../x", "@evil.example/p.jpg", "p.jpg\r\nHost: evil.example"):
