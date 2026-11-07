@@ -826,6 +826,13 @@ class Attacks(Base):
             sc.store_items, sc.http_get = real_store, real_get
         self.assertEqual((len(r["failed"]), len(r["missing"])), (1, 0))
 
+    def test_a_missing_2x_image_falls_back_to_the_1x_one(self):
+        # ARK: Survival Evolved lists a 2x portrait that Steam answers 404 for, while the 1x one exists
+        assets = {"asset_url_format": "steam/apps/1/${FILENAME}", "library_capsule_2x": "library_600x900_2x.jpg", "library_capsule": "library_600x900.jpg"}
+        urls, _ = sc.portrait_candidates(1, {"assets": assets})
+        self.assertTrue(any(u.split("?")[0].endswith("/library_600x900.jpg") for u in urls))
+        self.assertTrue(urls[-1].endswith("/steam/apps/1/library_600x900.jpg"))
+
     def test_hostile_api_data_cannot_change_the_download_host(self):
         import urllib.parse
         for key in ("../../../x", "@evil.example/p.jpg", "p.jpg\r\nHost: evil.example"):

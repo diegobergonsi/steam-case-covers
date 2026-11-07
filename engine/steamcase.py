@@ -71,7 +71,7 @@ WINDOW = (14, 96, 586, 872)                 # art window inside frame.png (x0, y
 SIZE = (600, 900)
 STEAMID64_BASE = 76561197960265728
 CDN = "https://shared.fastly.steamstatic.com/store_item_assets/"
-OLD_CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/%d/library_600x900_2x.jpg"
+OLD_CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/%d/"
 STORE_API = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1?"
 LIBRARY_JSON_URL = "https://store.steampowered.com/dynamicstore/userdata/"
 # The data page returns an EMPTY list (not an error) when you are logged out, and Steam lets the browser keep that
@@ -693,12 +693,11 @@ def portrait_candidates(appid, item):
     a = (item or {}).get("assets") or {}
     fmt = a.get("asset_url_format")
     urls, auto = [], False
-    for k in ("library_capsule_2x", "library_capsule"):
+    for k in ("library_capsule_2x", "library_capsule"):      # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
         if fmt and a.get(k):
             urls.append(CDN + fmt.replace("${FILENAME}", a[k]))
-            auto = a[k].endswith("portrait.png")     # Steam-generated from the header: blurry
-            break
-    urls.append(OLD_CDN % appid)
+            auto = auto or a[k].endswith("portrait.png")     # Steam-generated from the header: blurry
+    urls += [OLD_CDN % appid + f for f in ("library_600x900_2x.jpg", "library_600x900.jpg")]
     return urls, auto
 
 
