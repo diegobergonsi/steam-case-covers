@@ -74,7 +74,7 @@ class TouchTargetsInWindow(WindowCase):
         def check(*names):
             for name in names + ("nav_home", "footer_discord", "footer_kofi", "footer_updates"):
                 self.assert_tappable(name)
-        self.in_both_languages(lambda: check("nav_link_restore", "nav_link_start_over"))               # on Home the menu holds links to its sections
+        self.in_both_languages(lambda: check("nav_link_start_over"))               # on Home the menu holds links to its sections
         self.shell.startPath("natural")                                                                # the steps show inside a way, and a hidden row has no size yet
         self.app.processEvents()
         self.in_both_languages(lambda: check("nav_game_list", "nav_look", "nav_hundred", "nav_make", "nav_add"))

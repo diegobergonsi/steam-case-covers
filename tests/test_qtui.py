@@ -5438,8 +5438,10 @@ class HomeScreen(AddWindow):
                 self.shell.go(index)
                 self.app.processEvents()
                 name = "nav_" + self.shell.steps[index]["key"]
-                light = self.item("nav_highlight").mapToScene(QPointF(0, 0)).y()
-                self.assertEqual(light, self.item(name).mapToScene(QPointF(0, 0)).y() + 3, flow + " " + name)      # Theme.navHighlightInset
+                light = lambda: self.item("nav_highlight").mapToScene(QPointF(0, 0)).y()
+                row = lambda: self.item(name).mapToScene(QPointF(0, 0)).y() + 3                        # Theme.navHighlightInset
+                self.wait_for(lambda: light() == row())                                                # the rows of the steps are placed when they show, and the highlight glides
+                self.assertEqual(light(), row(), flow + " " + name)
 
     def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):
         import re
