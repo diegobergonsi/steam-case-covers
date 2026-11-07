@@ -3619,6 +3619,8 @@ class ShellWindow(WindowCase):
     def test_optional_sits_on_the_title_line_of_its_step_small_and_grey(self):
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QAccessible, QColor
+        self.shell.startPath("natural")                                                                # the steps show inside a way, and a hidden row has no size yet
+        self.app.processEvents()
         for key in ("home", "game_list", "look", "make", "add"):
             self.assertEqual(self.item("nav_" + key).property("hint"), "", key)
         row, label, hint = self.item("nav_hundred"), self.item("nav_hundred_label"), self.item("nav_hundred_hint")
