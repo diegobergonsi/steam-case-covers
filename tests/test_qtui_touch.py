@@ -71,10 +71,13 @@ class TouchTargetsInWindow(WindowCase):
     # sizes of what is tapped
 
     def test_the_menu_the_links_and_the_buttons_are_tappable(self):
-        def check():
-            for name in ("nav_home", "nav_game_list", "nav_look", "nav_hundred", "nav_make", "nav_add", "footer_discord", "footer_kofi", "footer_updates"):
+        def check(*names):
+            for name in names + ("nav_home", "footer_discord", "footer_kofi", "footer_updates"):
                 self.assert_tappable(name)
-        self.in_both_languages(check)
+        self.in_both_languages(lambda: check("nav_link_start_over"))               # on Home the menu holds links to its sections
+        self.shell.startPath("natural")                                                                # the steps show inside a way, and a hidden row has no size yet
+        self.app.processEvents()
+        self.in_both_languages(lambda: check("nav_game_list", "nav_look", "nav_hundred", "nav_make", "nav_add"))
         self.shell.go(1)
         self.assert_tappable("gamelist_next")
         self.assert_tappable("gamelist_installed")

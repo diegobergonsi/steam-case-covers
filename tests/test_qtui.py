@@ -3619,6 +3619,8 @@ class ShellWindow(WindowCase):
     def test_optional_sits_on_the_title_line_of_its_step_small_and_grey(self):
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QAccessible, QColor
+        self.shell.startPath("natural")                                                                # the steps show inside a way, and a hidden row has no size yet
+        self.app.processEvents()
         for key in ("home", "game_list", "look", "make", "add"):
             self.assertEqual(self.item("nav_" + key).property("hint"), "", key)
         row, label, hint = self.item("nav_hundred"), self.item("nav_hundred_label"), self.item("nav_hundred_hint")
@@ -3654,12 +3656,16 @@ class ShellWindow(WindowCase):
 
     def test_the_steps_are_evenly_spaced_with_or_without_a_hint(self):
         from PySide6.QtCore import QPointF
+        self.shell.startPath("natural")                                                                  # the steps show inside a way, not on Home
+        self.app.processEvents()
         ys = [self.item("nav_%s_label" % k).mapToScene(QPointF(0, 0)).y() for k in ("game_list", "look", "hundred", "make", "add")]
         gaps = [round(b - a, 1) for a, b in zip(ys, ys[1:])]
         self.assertEqual(len(set(gaps)), 1, gaps)
 
     def test_a_step_that_cannot_be_opened_looks_greyed_out_and_has_a_lock(self):
         from PySide6.QtGui import QColor
+        self.shell.startPath("natural")                                                                  # the steps show inside a way, not on Home
+        self.app.processEvents()
         colour = lambda key: QColor(self.item("nav_%s_label" % key).property("color")).name()
         self.assertEqual(colour("look"), THEME["faint"])                                                     # locked: grey
         self.assertEqual(colour("game_list"), THEME["text"])                                                # open: the normal text colour
@@ -3680,8 +3686,10 @@ class ShellWindow(WindowCase):
         self.app.processEvents()
 
     def test_a_locked_item_ignores_clicks_and_unlocks_with_the_game_list(self):
+        self.shell.startPath("natural")
+        self.app.processEvents()
         self.click("nav_look")
-        self.assertEqual(self.shell.current, 0)
+        self.assertEqual(self.shell.current, 1)
         self.shell.setFact("ready", True)
         self.app.processEvents()
         self.click("nav_look")
@@ -5116,12 +5124,72 @@ class HomeScreen(AddWindow):
         self.click("home_row_make")                                     # locked: nothing happens
         self.assertEqual(self.shell.current, 0)
 
+    def visible_links(self):
+        from qtui.app import find_item
+        return [k for k in ("account", "restore", "groups", "start_over") if (it := find_item(self.root, "nav_link_" + k)) is not None and it.property("visible")]
+
+    def test_on_home_the_menu_lists_the_sections_of_home_and_hides_the_steps(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.assertEqual(self.visible_links(), ["account", "restore", "start_over"])               # no groups yet: no link
+        self.assertEqual([self.item("nav_link_" + k).property("label") for k in ("account", "restore", "start_over")], ["Account Selection", "Restore Cases", "Start Over"])
+        self.assertFalse(any(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
+        self.assertFalse(self.item("nav_flow").property("visible"))
+        self.assertTrue(self.item("nav_home").property("visible"))
+
+    def test_with_one_account_the_menu_has_no_account_link(self):
+        self.open_home()
+        self.assertNotIn("account", self.visible_links())
+        self.assertEqual(self.item("home_section_restore").property("heading"), "Restore Cases")
+
+    def test_the_account_has_its_own_section_apart_from_restore(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        self.open_home()
+        self.assertEqual(self.item("home_section_account").property("heading"), "Account Selection")
+        self.assertTrue(self.item("home_accounts").property("visible"))
+        self.assertTrue(self.item("home_section_account").property("visible"))
+
+    def test_a_link_in_the_menu_scrolls_home_to_its_section(self):
+        from PySide6.QtCore import QPointF
+        self.open_home()
+        self.undo_ready()
+        scroller = self.item("screen_scroller")
+        self.assertEqual(scroller.property("contentY"), 0)
+        self.item("nav_link_start_over").activated.emit()
+        self.app.processEvents()
+        self.assertGreater(scroller.property("contentY"), 0)
+        self.item("nav_link_restore").activated.emit()
+        self.app.processEvents()
+        top = self.item("home_section_restore").mapToItem(scroller.property("contentItem"), QPointF(0, 0)).y()
+        self.assertAlmostEqual(scroller.property("contentY"), min(top, scroller.property("contentHeight") - scroller.property("height")), delta=1)
+
+    def test_a_link_in_the_menu_flashes_its_section_for_a_moment(self):
+        self.open_home()
+        flash = self.item("home_section_start_over_flash")
+        self.assertEqual(flash.property("opacity"), 0)
+        self.item("nav_link_start_over").activated.emit()                                     # the section may already be in view: the page cannot show that it was meant
+        self.app.processEvents()
+        self.assertEqual(flash.property("opacity"), 1)
+        self.wait_for(lambda: flash.property("opacity") == 0, seconds=4)
+
+    def test_inside_a_path_the_menu_shows_its_steps_and_back_on_home_the_sections(self):
+        self.open_home(covers=True)
+        self.shell.go(2)
+        self.app.processEvents()
+        self.assertEqual(self.visible_links(), [])
+        self.assertTrue(all(self.item("nav_" + k).property("visible") for k in ("game_list", "look", "hundred", "make", "add")))
+        self.assertTrue(self.item("nav_flow").property("visible"))
+        self.shell.go(0)
+        self.app.processEvents()
+        self.assertIn("start_over", self.visible_links())
+        self.assertFalse(self.item("nav_look").property("visible"))
+
     def test_the_undo_card_is_hidden_until_there_is_something_to_undo(self):
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertFalse(self.item("home_section_undo").property("visible"))                 # one account, nothing to undo: nothing to show
+        self.assertFalse(self.item("home_section_restore").property("visible"))                 # one account, nothing to undo: nothing to show
         self.undo_ready()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [True, True])
         self.assertEqual(self.text("home_hint"), "")
         self.assertFalse(self.item("home_restore").property("filled"))      # Home has no filled button
@@ -5130,32 +5198,32 @@ class HomeScreen(AddWindow):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.assertEqual([self.item(n).property("enabled") for n in ("home_restore", "home_reset")], [False, False])
         self.assertTrue(self.text("home_hint").startswith("Nothing to undo yet"))
 
     def test_the_undo_card_shows_while_a_job_runs_or_a_question_is_open(self):
         self.open_home()
         self.wait_for(lambda: self.ap.undoKnown)
-        self.assertFalse(self.item("home_section_undo").property("visible"))
+        self.assertFalse(self.item("home_section_restore").property("visible"))
         self.ap._busy = True
         self.ap.canApplyChanged.emit()
         self.ap.undoChanged.emit()
         self.app.processEvents()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.ap._busy = False
         self.ap.canApplyChanged.emit()
         self.ap.undoChanged.emit()
         self.app.processEvents()
-        self.assertFalse(self.item("home_section_undo").property("visible"))
+        self.assertFalse(self.item("home_section_restore").property("visible"))
 
     def test_the_undo_card_does_not_vanish_while_covers_are_made(self):
         self.open_home()
         self.undo_ready()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.shell.make._set_state(running=True)                        # nothing can be restored meanwhile, but the card stays
         self.app.processEvents()
-        self.assertTrue(self.item("home_section_undo").property("visible"))
+        self.assertTrue(self.item("home_section_restore").property("visible"))
         self.shell.make._set_state(running=False)
 
     def test_the_line_in_the_undo_card_is_only_for_progress_and_errors(self):
@@ -5240,7 +5308,7 @@ class HomeScreen(AddWindow):
         self.root.setProperty("width", self.root.property("minimumWidth"))
         self.root.setProperty("height", self.root.property("minimumHeight"))
         self.app.processEvents()
-        for sec, names in (("home_section_paths", ("home_card_natural", "home_card_manual")), ("home_section_progress", ("home_row_look", "home_state_look")), ("home_section_undo", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
+        for sec, names in (("home_section_paths", ("home_card_natural", "home_card_manual")), ("home_section_progress", ("home_row_look", "home_state_look")), ("home_section_restore", ("home_note", "home_account", "home_restore", "home_reset", "home_restart", "home_status"))):
             card = self.item(sec)
             right = card.mapToScene(QPointF(card.width(), 0)).x()
             for n in names:
@@ -5326,7 +5394,9 @@ class HomeScreen(AddWindow):
     def test_the_navigation_names_the_way_in_use_under_home(self):
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QAccessible
-        self.open_home()
+        self.open_home(covers=True)
+        self.shell.go(2)                                                      # the heading shows with the steps, not on Home
+        self.app.processEvents()
         heading = self.item("nav_flow")
         self.assertEqual(heading.property("text"), "Same case \u00b7 5 steps")
         self.assertEqual(QAccessible.queryAccessibleInterface(heading).role(), QAccessible.Role.Heading)
@@ -5368,8 +5438,10 @@ class HomeScreen(AddWindow):
                 self.shell.go(index)
                 self.app.processEvents()
                 name = "nav_" + self.shell.steps[index]["key"]
-                light = self.item("nav_highlight").mapToScene(QPointF(0, 0)).y()
-                self.assertEqual(light, self.item(name).mapToScene(QPointF(0, 0)).y() + 3, flow + " " + name)      # Theme.navHighlightInset
+                light = lambda: self.item("nav_highlight").mapToScene(QPointF(0, 0)).y()
+                row = lambda: self.item(name).mapToScene(QPointF(0, 0)).y() + 3                        # Theme.navHighlightInset
+                self.wait_for(lambda: light() == row())                                                # the rows of the steps are placed when they show, and the highlight glides
+                self.assertEqual(light(), row(), flow + " " + name)
 
     def test_every_step_in_the_navigation_has_a_dot_after_its_number(self):
         import re
@@ -5551,7 +5623,7 @@ class HomeScreen(AddWindow):
 
     def test_the_hint_has_its_line_before_the_probe_answers_so_nothing_jumps(self):
         self.open_home()
-        card = self.item("home_section_undo")
+        card = self.item("home_section_restore")
         before = card.height()
         self.wait_for(lambda: self.ap.undoKnown)
         self.app.processEvents()
@@ -9026,7 +9098,7 @@ class StartOver(WindowCase):
         from PySide6.QtTest import QTest
         self.start_window()
         self.shell.go(0)
-        self.assertEqual(self.item("home_section_start_over").property("heading"), "Start over")
+        self.assertEqual(self.item("home_section_start_over").property("heading"), "Start Over")
         self.assertEqual(self.item("home_start_over").property("text"), "Start over")
         self.assertEqual(self.item("home_start_over_line").property("text"), "Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
         self.assertTrue(self.item("home_start_over").property("enabled"))

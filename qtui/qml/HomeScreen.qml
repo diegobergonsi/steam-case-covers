@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-// Home: a Welcome the first time, a Dashboard after that. Two cards (the ways to make covers), the progress of the way in use, and the Undo section (Restore, Reset) always.
+// Home: a Welcome the first time, a Dashboard after that. Two cards (the ways to make covers), the progress of the way in use, the account, the Restore Cases section (Restore, Reset), your groups and Start over.
 import QtQuick
 import "."
 
@@ -11,6 +11,13 @@ ScreenFrame {
     readonly property var stateText: ({"done": qsTr("Done"), "active": qsTr("Next"), "open": qsTr("Open"), "locked": qsTr("Locked")})
     title: shell.returning ? qsTr("Welcome back") : qsTr("Cases for your games")
     subtitle: shell.returning ? qsTr("Pick up where you left off.") : qsTr("Give every game in your Steam library a case, in about five minutes.")
+
+    // the sections the menu on the left links to, only those on the page
+    readonly property var links: [
+        {"key": "account", "label": qsTr("Account Selection"), "section": accountSection},
+        {"key": "restore", "label": qsTr("Restore Cases"), "section": restoreSection},
+        {"key": "groups", "label": qsTr("Your Groups"), "section": groupsSection},
+        {"key": "start_over", "label": qsTr("Start Over"), "section": startOverSection}].filter(function(l) { return l.section.visible })
 
     Component.onCompleted: { apply.refresh(); apply.watching = true; apply.groupTicks.refresh() }
     Component.onDestruction: apply.watching = false
@@ -116,10 +123,26 @@ ScreenFrame {
         }
     }
     Section {
-        objectName: "home_section_undo"
-        // only when there is something to undo; with two or more accounts always, because the account is chosen in this card
+        id: accountSection
+        objectName: "home_section_account"
+        visible: screen.apply.canChoose                           // only with two or more Steam accounts; Restore and Reset use the one chosen here
+        heading: qsTr("Account Selection")
+        ChoiceChips {
+            objectName: "home_accounts"
+            groupName: qsTr("Steam account")
+            width: parent.width
+            enabled: !screen.apply.busy && !shell.make.running
+            model: screen.apply.accounts
+            current: screen.apply.accountId !== "" ? screen.apply.accountId : screen.apply.accounts.length ? screen.apply.accounts[0].key : ""
+            onChosen: (key) => screen.apply.chooseAccount(key)
+        }
+    }
+    Section {
+        id: restoreSection
+        objectName: "home_section_restore"
+        // only when there is something to restore; with two or more accounts always, so the account in use is named and the hint says why nothing can be restored
         visible: screen.apply.canChoose || screen.apply.canRestore || screen.apply.canReset || screen.apply.busy || screen.apply.asking || shell.make.running
-        heading: qsTr("Undo")
+        heading: qsTr("Restore Cases")
         StatusLine {
             objectName: "home_note"
             text: screen.apply.note
@@ -136,16 +159,6 @@ ScreenFrame {
             color: Theme.text
             font.pixelSize: Theme.bodySize
             text: screen.apply.accountLabel
-        }
-        ChoiceChips {                                 // only with two or more Steam accounts; Restore and Reset change the account chosen here
-            objectName: "home_accounts"
-            groupName: qsTr("Steam account")
-            width: parent.width
-            visible: screen.apply.canChoose
-            enabled: !screen.apply.busy && !shell.make.running
-            model: screen.apply.accounts
-            current: screen.apply.accountId !== "" ? screen.apply.accountId : screen.apply.accounts.length ? screen.apply.accounts[0].key : ""
-            onChosen: (key) => screen.apply.chooseAccount(key)
         }
         ButtonRow {
             QuietButton { objectName: "home_restore"; text: qsTr("Restore previous artwork"); enabled: screen.apply.canRestore; onClicked: screen.apply.restore() }
@@ -175,8 +188,9 @@ ScreenFrame {
     }
 
     Section {
+        id: groupsSection
         objectName: "home_section_groups"
-        heading: qsTr("Your groups")
+        heading: qsTr("Your Groups")
         visible: screen.apply.groupTicks.choices.length > 0
         Text {
             width: parent.width
@@ -197,8 +211,9 @@ ScreenFrame {
         }
     }
     Section {
+        id: startOverSection
         objectName: "home_section_start_over"
-        heading: qsTr("Start over")
+        heading: qsTr("Start Over")
         Text {
             objectName: "home_start_over_line"
             width: parent.width

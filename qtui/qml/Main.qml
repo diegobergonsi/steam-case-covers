@@ -85,6 +85,7 @@ ApplicationWindow {
             Repeater {
                 model: shell.steps
                 delegate: Item {                                  // the row after Home also holds the heading of the way, above it
+                    visible: index === 0 || shell.current !== 0   // on Home the steps give way to the links to its sections
                     width: nav.width
                     height: Theme.navRowHeight + (index === 1 ? Theme.navHeadingHeight : 0)
                     Text {                                        // which way you are on: its name and how many steps it has
@@ -112,6 +113,16 @@ ApplicationWindow {
                         selected: index === shell.current
                         onActivated: shell.go(index)
                     }
+                }
+            }
+            Repeater {                                                // on Home: the sections of the page, not numbered
+                model: shell.current === 0 && page.item && page.item.links ? page.item.links : []
+                delegate: NavItem {
+                    objectName: "nav_link_" + modelData.key
+                    width: nav.width
+                    label: modelData.label
+                    stepState: "open"
+                    onActivated: page.item.scrollTo(modelData.section)
                 }
             }
         }

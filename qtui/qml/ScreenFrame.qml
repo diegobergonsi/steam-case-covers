@@ -16,6 +16,11 @@ Item {
     property alias footer: footerRow.data
     readonly property real footerTop: footerRow.y     // where the footer buttons start: a message may sit above it
 
+    function scrollTo(item) {                         // bring a section to the top of the page (the end of the page stops it short), and flash it
+        scroller.contentY = Math.max(0, Math.min(item.mapToItem(body, 0, 0).y, scroller.contentHeight - scroller.height))
+        if (item.flash) item.flash()
+    }
+
     Text {
         id: heading
         objectName: "screen_title"
