@@ -3492,6 +3492,27 @@ class CustomArt(Base):
         self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
         self.assertFalse(os.path.exists(self.kept(106)))
 
+    def cover_from_art(self, dest, **kw):
+        """A cover of the user's own art, as Make writes it: with the art note."""
+        src = self.art("src.jpg", folder=self.tmp)
+        sc.build_cover(src, dest, kw.pop("frame"), from_art=sc.art_note(src), **kw)
+
+    def test_our_covers_made_from_own_art_in_a_console_case_or_by_hand_are_still_ours(self):
+        for name, kw in (("console", dict(frame=sc.load_platform_frame("ps5"), platform="ps5")), ("group", dict(frame=sc.load_frame(0), group="abc")),
+                         ("console group", dict(frame=sc.load_platform_frame("ps5"), platform="ps5", group="abc"))):
+            with self.subTest(name):
+                dest = os.path.join(self.grid, "100p.png")
+                self.cover_from_art(dest, **kw)
+                self.assertTrue(sc.is_steamcase_cover(dest))
+                self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})       # and never taken as the user's art
+
+    def test_a_stored_original_that_is_one_of_our_covers_is_never_used_as_art(self):
+        self.applied(100)                                           # Steam holds our cover ...
+        kept = self.kept(100, "png")
+        os.makedirs(os.path.dirname(kept))
+        self.cover_from_art(kept, frame=sc.load_platform_frame("ps5"), platform="ps5")          # ... and the copy kept as the "original" is a cover too (an older version did that)
+        self.assertEqual(sc.find_custom_art(self.steam, originals=self.originals), {})
+
     def test_an_original_is_not_used_once_steam_no_longer_holds_our_cover(self):
         src = self.art("100p.jpg")
         sc.find_custom_art(self.steam, originals=self.originals)

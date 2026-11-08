@@ -2012,8 +2012,8 @@ def is_steamcase_cover(path):
     A cover with a treatment note (a 100% game) or a theme note must name exactly one of TREATMENTS and one of THEMES (a theme never with full marks),
     have colour notes we write, and match the cover regenerated in that colour, tone, treatment and theme on every pixel the game's art does not reach
     (frame, rosette, ribbon, border, the theme's decorations).
-    A cover by hand (a group note) must have a note we wrote, no theme and no art note, and otherwise match as a console or a Steam cover does.
-    A console cover (a platform note) must name one of PLATFORMS, carry no colour, tone, theme or art note, have no treatment or "ribbon" or "rosette", and match that
+    A cover by hand (a group note) must have a note we wrote and no theme, and otherwise match as a console or a Steam cover does.
+    A console cover (a platform note) must name one of PLATFORMS, carry no colour, tone or theme note, have no treatment or "ribbon" or "rosette", and match that
     case on every pixel the art does not reach.
     Otherwise, a cover with a tone note must match, pixel for pixel, the frame regenerated in the colour and tone its notes give; one
     without (made before tones existed) must have the shape of the frame in full tone, whatever its hue (its notes are not read). Next to
@@ -2027,12 +2027,12 @@ def is_steamcase_cover(path):
             if im.size != SIZE:
                 return False
             toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
-            platform, strange = im.info.get(PLATFORM_CHUNK), any(k in im.info for k in (HUE_CHUNK, TONE_CHUNK, THEME_CHUNK, ART_CHUNK))
+            platform, strange = im.info.get(PLATFORM_CHUNK), any(k in im.info for k in (HUE_CHUNK, TONE_CHUNK, THEME_CHUNK))
             case = im.info.get(CASE_CHUNK)
-            group, own_art = im.info.get(GROUP_CHUNK), ART_CHUNK in im.info
+            group = im.info.get(GROUP_CHUNK)
             im = im.convert("RGBA")
-        if group is not None and (not GROUP_ID.fullmatch(group) or theme is not None or own_art):
-            return False                                            # a cover by hand has a group note we wrote, no theme and no art of the user's
+        if group is not None and (not GROUP_ID.fullmatch(group) or theme is not None):
+            return False                                            # a cover by hand has a group note we wrote and no theme
         if platform is not None:                                    # a console cover: its case and marks decide, never a colour, tone, theme or art note
             if platform not in PLATFORMS and platform != CUSTOM or strange or done not in (None, "ribbon", "rosette"):
                 return False
@@ -2301,7 +2301,7 @@ def find_custom_art(steam, user=None, originals=None, problems=None):
     for n in stored:
         m = _ORIGINAL_NAME.match(n)
         path = os.path.join(originals, n)
-        if m and int(m.group(1)) not in found and _usable_art(path):
+        if m and int(m.group(1)) not in found and _usable_art(path) and not is_steamcase_cover(path):     # a copy that is one of our covers (an older version kept those) is no art
             ours = os.path.join(grid, "%sp.png" % m.group(1))
             if _is_plain_file(ours) and is_steamcase_cover(ours):
                 found[int(m.group(1))] = path
