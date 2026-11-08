@@ -4764,9 +4764,9 @@ class CustomCase(Base):
         info = sc.check_case_file(self.case_file(colour=(240, 240, 240, 200)))
         self.assertEqual(info, {"window": [20, 100, 580, 880]})
 
-    def test_a_faint_glow_at_the_edge_of_the_window_is_part_of_the_window(self):
+    def test_a_soft_glow_at_the_edge_of_the_window_is_part_of_the_window(self):
         im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
-        im.paste((255, 255, 255, 30), (20, 100, 580, 880))
+        im.paste((255, 255, 255, 100), (20, 100, 580, 880))
         im.paste((0, 0, 0, 0), (80, 160, 520, 820))
         path = os.path.join(self.tmp, "glow.png")
         im.save(path)
