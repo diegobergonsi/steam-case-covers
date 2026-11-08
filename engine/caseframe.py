@@ -12,7 +12,8 @@ except ImportError:                     # engine/steamcase.py says what is missi
 _t = lambda text: text                  # the window replaces this with its own tr(), so a message is in its language; the command line stays English
 
 MAX_FILE = 8 * 1024 * 1024              # a case is a 600 x 900 picture; anything bigger is not one
-MIN_FRAME = 0.02                        # a case shows at least this much opaque frame (of the whole picture), or there is no case to speak of
+FRAME_ALPHA = 128                       # a pixel is frame from this opacity, and the art window is everything below it: glass cases are never fully opaque, and the art may run under a soft glow along the frame
+MIN_FRAME = 0.02                        # a case shows at least this much visible frame (of the whole picture), or there is no case to speak of
 CELL = 6                                # the see-through map of a case is read in cells of this many pixels: fast, then the edges are made exact
 TAB_FILL = 0.5                          # a part of the frame inside the window is a tab (like the Switch's) only if it fills this much of its own box: rounded corners and shadows do not
 
@@ -59,7 +60,7 @@ def _parts(cells):
 
 def _find_window(alpha, min_window):
     """The box (x0, y0, x1, y1) of the see-through part joined to the middle of the picture: transparent corners and margins outside the case are not the window."""
-    clear = alpha.point(lambda a: 255 if a == 0 else 0)
+    clear = alpha.point(lambda a: 255 if a < FRAME_ALPHA else 0)
     cols, rows, empty = _cells(clear, full=True)
     if not empty:
         raise CaseFileError(_t("The art window is missing: the part where the cover goes must be fully see-through (a PNG with transparency)."))
@@ -74,7 +75,7 @@ def _find_window(alpha, min_window):
 def _find_tab(alpha, window):
     """The box of the tabs of the frame inside `window` (the Switch's red tab), or None. Only a part that fills TAB_FILL of its own box counts: the corners of a
     rounded window and a faint shadow along an edge do not."""
-    covered = alpha.crop(window).point(lambda a: 255 if a else 0)
+    covered = alpha.crop(window).point(lambda a: 255 if a >= FRAME_ALPHA else 0)
     _, _, cells = _cells(covered)
     tabs = []
     for part in _parts(cells):
@@ -85,7 +86,7 @@ def _find_tab(alpha, window):
     if not tabs:
         return None
     left, top = min(b[0] for b in tabs) * CELL, min(b[1] for b in tabs) * CELL
-    tab = covered.crop((left, top, max(b[2] for b in tabs) * CELL, max(b[3] for b in tabs) * CELL)).getbbox()
+    tab = alpha.crop(window).point(lambda a: 255 if a else 0).crop((left, top, max(b[2] for b in tabs) * CELL, max(b[3] for b in tabs) * CELL)).getbbox()
     return None if tab is None else (tab[0] + left + window[0], tab[1] + top + window[1], tab[2] + left + window[0], tab[3] + top + window[1])
 
 
@@ -104,7 +105,7 @@ def measure(data, size, min_window):
     except Exception:
         raise CaseFileError(_t("That is not a PNG picture I can read."))
     alpha = frame.getchannel("A")
-    if sum(alpha.histogram()[253:]) < MIN_FRAME * size[0] * size[1]:
+    if sum(alpha.histogram()[FRAME_ALPHA:]) < MIN_FRAME * size[0] * size[1]:
         raise CaseFileError(_t("The case is almost all see-through: it needs a visible frame around the art window."))
     window = _find_window(alpha, min_window)
     info = {"window": list(window)}

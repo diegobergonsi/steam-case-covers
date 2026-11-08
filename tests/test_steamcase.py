@@ -4760,6 +4760,22 @@ class CustomCase(Base):
         self.assertEqual(info, {"window": [20, 100, 580, 880], "overlay": [30, 110, 70, 150]})
         self.assertEqual(sc.check_case_file(self.case_file("b.png")), {"window": [20, 100, 580, 880]})
 
+    def test_a_frosted_glass_frame_that_is_never_fully_opaque_is_a_case(self):
+        info = sc.check_case_file(self.case_file(colour=(240, 240, 240, 200)))
+        self.assertEqual(info, {"window": [20, 100, 580, 880]})
+
+    def test_a_soft_glow_at_the_edge_of_the_window_is_part_of_the_window(self):
+        im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
+        im.paste((255, 255, 255, 100), (20, 100, 580, 880))
+        im.paste((0, 0, 0, 0), (80, 160, 520, 820))
+        path = os.path.join(self.tmp, "glow.png")
+        im.save(path)
+        self.assertEqual(sc.check_case_file(path), {"window": [20, 100, 580, 880]})
+
+    def test_a_frame_of_faint_shadow_is_still_not_a_case(self):
+        with self.assertRaises(sc.SteamcaseError):
+            sc.check_case_file(self.case_file(colour=(0, 0, 0, 40)))
+
     def test_transparent_corners_and_margins_outside_the_case_are_not_the_window(self):
         im = sc.Image.new("RGBA", sc.SIZE, (30, 60, 200, 255))
         im.paste((0, 0, 0, 0), (40, 120, 560, 860))
