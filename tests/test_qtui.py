@@ -8191,6 +8191,15 @@ class ManualWindow(WindowClicks, PickerBase):
         self.assertFalse(self.item("case_family").property("enabled"))
         self.assertTrue(self.item("case_family_note").property("visible"))
 
+    def test_the_case_step_has_the_own_art_switch_and_it_is_the_look_steps_switch(self):
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertFalse(self.shell.switchValue("use_custom_art"))
+        self.click("case_custom_art")
+        self.assertTrue(self.shell.look.useCustomArt)
+
     def give_a_case(self):
         self.shell.startPath("manual")
         self.wait_for(lambda: self.picker.rows)
@@ -8296,6 +8305,16 @@ class ManualMake(PickerBase):
         (games, kw), = calls
         self.assertEqual((sorted(games), kw["platforms"], kw["theme"], kw["custom_art"], kw["skip_auto_art"]), ([1, 2, 3], {1: "ps5", 3: "ps5"}, None, {}, False))
         self.assertEqual((kw["treatment"], kw["completed"], kw["family"]), (None, None, set()))
+
+    def test_own_art_found_for_the_ticked_games_goes_to_the_engine(self):
+        from unittest import mock
+        calls = self.spy()
+        self.shell.setSwitch("use_custom_art", True)
+        with mock.patch.object(self.sc, "steam_dir", return_value="x"), mock.patch.object(self.sc, "find_custom_art", return_value={1: "/a.png", 99: "/b.png"}):
+            self.give("ps5", 1, 3)
+            self.run_make()
+        (games, kw), = calls
+        self.assertEqual((kw["custom_art"], kw["platforms"], kw["skip_auto_art"]), ({1: "/a.png"}, {1: "ps5", 3: "ps5"}, False))
 
     def test_only_the_ticked_games_get_covers_and_only_those_are_offered_to_apply(self):
         self.give("ps5", 1, 3)

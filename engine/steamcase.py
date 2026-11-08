@@ -1264,10 +1264,10 @@ def _drawing_for(treatment, family=False):
 
 
 def _spec_for(platform, colour, treatment, theme, art, group):
-    """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour, theme or art to compare, and an earlier gold
-    look keeps only its marks there."""
+    """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour or theme to compare, and an earlier gold
+    look keeps only its marks there; its art is compared like any other (KEEP: not at all)."""
     if platform:
-        return CoverSpec(treatment=_console_marks(treatment), platform=platform, group=group, case=_case_digest(platform))
+        return CoverSpec(treatment=_console_marks(treatment), art=art, platform=platform, group=group, case=_case_digest(platform))
     return CoverSpec(colour, treatment, theme, art, None, group, _drawing_for(treatment))
 
 
@@ -1446,7 +1446,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     marks: a `treatment` whose marks are "full" raises ValueError.
     custom_art: {appid: path} of the user's own portraits (see find_custom_art): those games get that picture in the case and nothing is downloaded
     for them (even a blurry auto-art, whatever `skip_auto_art` says); None: every cover is made from Steam's portrait, and a cover built from
-    custom art before is rebuilt. Games in a console case never use custom art.
+    custom art before is rebuilt. Games in a console case (and in the user's own case) use it too.
     platforms: None (the natural flow): a game whose cover is already in a console case keeps it untouched, whatever `force` says, and is counted in "platforms".
     A dict {appid: one of PLATFORMS, or None for the Steam case}: only these games are made, each in its case (a console case has no colour, tone or theme,
     and only the "ribbon" and "rosette" `treatment` go with it: ValueError otherwise, before any lookup). A cover that already has the wanted case,
@@ -1564,7 +1564,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         urls, auto = portrait_candidates(appid, it)
         try:
-            wanted_art = art_note(custom_art[appid]) if appid in custom_art and not want_p else None
+            wanted_art = art_note(custom_art[appid]) if appid in custom_art else None
         except OSError as e:                                              # the file went away since it was found
             res["failed"].append((appid, name))
             if log:
@@ -1663,19 +1663,20 @@ def covers_in_own_case(covers_dir):
     return {appid for appid, path in scan_covers(covers_dir) for notes in [read_notes(path)] if notes and notes.platform == CUSTOM and not notes.group}
 
 
-def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None, tones=None, groups=None):
+def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=None, completed=None, tones=None, groups=None, custom_art=KEEP):
     """How many covers already in the folder `make_covers(platforms=platforms, ...)` would rebuild: of the games in `platforms` ({appid: platform or None for the
     Steam case}) those with a cover in another case (another console, or the Steam case instead), with other marks (`treatment` for the apps in `completed`, as in
     make_covers) or, for the Steam case, in another colour (`tone`: (hue, sat, val)) or theme. A garbled platform note counts as another case.
     `tones` ({appid: colour}) and `groups` ({appid: group id}) are those of make_covers: a cover in another colour of its own, or in another group (or in one when none
-    is wanted), is counted."""
+    is wanted), is counted. Unless `custom_art` is KEEP, a cover whose art differs ({appid: path}, as for make_covers) is counted too."""
     count = 0
     for appid, path in scan_covers(covers_dir):
         if appid not in platforms:
             continue
         notes = read_notes(path)
         target, colour = _wanted_look(appid, notes, (tones or {}).get(appid, tone), completed, treatment)
-        count += not matches(notes, _spec_for(platforms[appid], colour, target, None, None, (groups or {}).get(appid)))
+        art = KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
+        count += not matches(notes, _spec_for(platforms[appid], colour, target, None, art, (groups or {}).get(appid)))
     return count
 
 

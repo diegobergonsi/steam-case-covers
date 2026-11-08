@@ -247,11 +247,11 @@ class Make(QObject):
                 "theme": None if look.theme == "classic" else look.theme,
                 "skip": shell.switchValue("skip_auto_art"), "custom": shell.switchValue("use_custom_art"),
                 "lib": None if library.installedOnly else library.path, "account": self._account()}
-        if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme and art switches do not count
+        if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme and blurry-art switches do not count (own art does: the Case step has the switch)
             if not shell.cases.assignedCount:
                 return
             snap.update(manual=True, platforms=shell.cases.assigned(), tones=shell.cases.tones(), groups=shell.cases.groupIds(), save=shell.cases.groupsToSave(),
-                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, custom=False,
+                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False,
                         treatment=_marks_only(treatment))
         else:
             self._ticks.refresh()
@@ -302,9 +302,9 @@ class Make(QObject):
     def _begin(self, snap, custom_art, games, problems):
         """The rest of start() once the art is known: ask before replacing covers, then make them."""
         if snap.get("own_case"):
-            why = reasons.own_case_reason(self._covers, True, snap["treatment"], snap["completed"])
+            why = reasons.own_case_reason(self._covers, True, snap["treatment"], snap["completed"], custom_art)
         elif snap.get("manual"):
-            why = reasons.platform_replace_reason(self._covers, snap["platforms"], snap["tone"], snap["treatment"], snap["completed"], snap["tones"], snap["groups"])
+            why = reasons.platform_replace_reason(self._covers, snap["platforms"], snap["tone"], snap["treatment"], snap["completed"], snap["tones"], snap["groups"], custom_art)
         else:
             why = reasons.replace_reason(self._covers, snap["tone"], snap["completed"], snap["treatment"], snap["theme"], custom_art, games)
             for more in (reasons.group_repaint_reason(snap["repaint"]), reasons.own_case_reason(self._covers, False)):
