@@ -132,7 +132,7 @@ class GroupManager(QObject):
         listed = self._shell.picker.games()
         known = {a for a, _ in listed}
         missing = [(a, "Game %d" % a) for a in self._saved if a not in known]         # a game the store no longer names stays, so Save never drops it unseen
-        every = sorted(listed + missing, key=lambda r: (r[1].casefold(), r[0])) if missing else listed       # the library comes sorted
+        every = sorted(listed + missing, key=lambda r: (r[0] not in self._saved, r[1].casefold(), r[0]))      # the group's own games first, each part by name; fixed while open, so rows do not jump when ticking
         words = self._query.casefold().split()
         rows = [{"appid": a, "name": n, "selected": a in self._ticked, "tag": self._others.get(a, "")}
                 for a, n in every if all(w in n.casefold() for w in words)]

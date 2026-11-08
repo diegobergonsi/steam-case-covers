@@ -9302,7 +9302,19 @@ class ManageGroups(PickerBase):
         manage.open(red)
         self.assertTrue(manage.isOpen)
         self.assertEqual((manage.title, manage.name, manage.tickedCount, manage.groupId), ("Red games", "Red games", 2, red))
-        self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (3, "God of War", False, "PS5 games"), (1, "Hades", True, "")])
+        self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (1, "Hades", True, ""), (3, "God of War", False, "PS5 games")])    # the group's games first
+
+    def test_the_groups_games_stay_on_top_while_ticking_and_searching(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(1)                                                        # unticked, but it stays where it was
+        self.assertEqual([r[0] for r in self.rows()], [2, 1, 3])
+        manage.toggle(3)
+        self.assertEqual([r[0] for r in self.rows()], [2, 1, 3])
+        manage.query = "o"
+        self.assertEqual([r[0] for r in self.rows()], [2, 3])
 
     def test_open_is_refused_while_apply_is_busy(self):
         red, ps = self.saved()
