@@ -142,9 +142,7 @@ class GroupManager(QObject):
         listed = self._shell.picker.games()
         known = {a for a, _ in listed}
         gone = [a for a in self._saved if a not in known]
-        unnamed = [a for a in gone if a not in self._names]
-        if unnamed and not self._asked and not self._shell.picker.loading:
-            self._ask_names(unnamed)
+        self._ask_names([a for a in gone if a not in self._names])
         placeholder = tr(LOADING_NAME) if self._waiting or self._shell.picker.loading else None
         missing = [(a, self._names.get(a) or placeholder or "Game %d" % a) for a in gone]         # a game the store does not name stays as "Game N", so Save never drops it unseen
         mine = set(self._saved)                                                       # a set: the sort asks about every game of the library, on every key typed
@@ -157,6 +155,8 @@ class GroupManager(QObject):
 
     def _ask_names(self, appids):
         """The library on screen (for example only the installed games) may lack games the group was made with: ask the store for their names, off the UI thread."""
+        if not appids or self._asked or self._shell.picker.loading:     # once per window, and not before the library has said which games it lacks
+            return
         self._asked = self._waiting = True
         window = self._window
 

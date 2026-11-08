@@ -9349,6 +9349,21 @@ class ManageGroups(PickerBase):
         manage.open(old)
         self.assertIn((9, "Old Game", True, ""), self.rows())                   # remembered: the second open needs no wait
 
+    def test_a_store_that_cannot_be_reached_leaves_the_number(self):
+        from engine import groups
+        saved, old = groups.assign([], "Old", {"tone": [134, 100, 100]}, [1, 9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.load()
+
+        def offline(ids, log=None, cancelled=None, errors=None):
+            raise OSError("no network")
+        self.sc.store_items = offline
+        manage = self.shell.manage
+        manage.open(old)
+        self.wait_for(lambda: (9, "Game 9", True, "") in self.rows())
+        self.assertEqual(manage.tickedCount, 2)
+
     def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
         gid = self.made_group()
         self.assertEqual(self.sc.cover_group(self.cover(1)), gid)
