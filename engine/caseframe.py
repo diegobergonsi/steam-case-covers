@@ -15,6 +15,7 @@ MAX_FILE = 8 * 1024 * 1024              # a case is a 600 x 900 picture; anythin
 FRAME_ALPHA = 128                       # a pixel is frame from this opacity, and the art window is everything below it: glass cases are never fully opaque, and the art may run under a soft glow along the frame
 MIN_FRAME = 0.02                        # a case shows at least this much visible frame (of the whole picture), or there is no case to speak of
 CELL = 6                                # the see-through map of a case is read in cells of this many pixels: fast, then the edges are made exact
+GLOW_OPAQUE = 250                       # a soft glow along the window ends where the frame is this opaque (a crisp frame, a tab) or stops getting more opaque (a flat frosted frame)
 TAB_FILL = 0.5                          # a part of the frame inside the window is a tab (like the Switch's) only if it fills this much of its own box: rounded corners and shadows do not
 
 
@@ -72,6 +73,28 @@ def _find_window(alpha, min_window):
     return x0, y0, x1, y1
 
 
+def _grow_window(alpha, window):
+    """`window` grown outward over the soft glow around it. A glass case fades its frame out towards the art (the opacity rises as you move away from the window) up to a
+    sharp edge, and the art runs up to that edge, under the glow. Each side grows while the opacity along it (the median of the middle half of the side) keeps rising and stays
+    below GLOW_OPAQUE: a crisp frame, a flat one or a tab does not grow it."""
+    x0, y0, x1, y1 = window
+    xa, xb, ya, yb = x0 + (x1 - x0) // 4, x1 - (x1 - x0) // 4, y0 + (y1 - y0) // 4, y1 - (y1 - y0) // 4
+    def median(box):
+        values = sorted(alpha.crop(box).getdata())
+        return values[len(values) // 2]
+    def grow(edge, step, line, limit):             # step -1: `edge` is the first line of the window; step 1: one past its last line
+        pos = edge - 1 if step < 0 else edge         # the first line of frame outside the window
+        if not 0 <= pos < limit:
+            return edge
+        value, rising = line(pos), False
+        while 0 <= pos + step < limit and value < (nxt := line(pos + step)) < GLOW_OPAQUE:
+            pos, value, rising = pos + step, nxt, True
+        return (pos if step < 0 else pos + 1) if rising else edge
+    w, h = alpha.size
+    column, row = (lambda x: median((x, ya, x + 1, yb))), (lambda y: median((xa, y, xb, y + 1)))
+    return grow(x0, -1, column, w), grow(y0, -1, row, h), grow(x1, 1, column, w), grow(y1, 1, row, h)
+
+
 def _find_tab(alpha, window):
     """The box of the tabs of the frame inside `window` (the Switch's red tab), or None. Only a part that fills TAB_FILL of its own box counts: the corners of a
     rounded window and a faint shadow along an edge do not."""
@@ -108,8 +131,8 @@ def measure(data, size, min_window):
     if sum(alpha.histogram()[FRAME_ALPHA:]) < MIN_FRAME * size[0] * size[1]:
         raise CaseFileError(_t("The case is almost all see-through: it needs a visible frame around the art window."))
     window = _find_window(alpha, min_window)
-    info = {"window": list(window)}
-    tab = _find_tab(alpha, window)
+    tab = _find_tab(alpha, window)                  # read before the window grows: the glow joined to a tab would make it look like a thin ring
+    info = {"window": list(_grow_window(alpha, window))}
     if tab:
         info["overlay"] = list(tab)
     return info, frame

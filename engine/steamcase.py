@@ -58,7 +58,10 @@ PLATFORM_LABELS = {"ps3": "PlayStation 3", "ps4": "PlayStation 4", "ps5": "PlayS
 GROUP_CHUNK = "steamcase-group"            # PNG note naming the group (groups.py) of a cover made by hand; a short id of lower-case letters and digits
 GROUP_ID = re.compile(r"[a-z0-9]{1,12}")
 LAYOUT_CHUNK = "steamcase-layout"           # PNG note naming how a cover was drawn (LAYOUT); covers made before v1.6.0 carry none
-LAYOUT = "3"                                # v1.6.0: the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round); "3": the whole art is stretched to the case window instead of cropped (every cover, marks or not)
+# How a cover was drawn. "2" (v1.6.0): the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round).
+# "3": the whole art is stretched to the case window instead of cropped, on every cover (marks or not).
+# "4": the window of an own glass case runs up to the sharp edge under its glow (caseframe._grow_window), so the art reaches the top as well.
+LAYOUT = "4"
 STRETCH_LIMIT = 1.25                        # an art whose shape is within this factor of the window's is stretched to fill it; a wider or narrower one is cropped
 CASE_CHUNK = "steamcase-case"               # PNG note with the digest of the user's own case file, on covers whose platform note is "custom"
 PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
@@ -1579,9 +1582,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
-            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g, layout=LAYOUT, case=_case_digest(want_p))
-        else:
-            spec = CoverSpec(colour, target, theme, wanted_art, None, want_g, LAYOUT)
+        spec = _spec_for(want_p, colour, target, theme, wanted_art, want_g)
         if not force and matches(notes, spec):
             res["ok"] += 1
             res["platforms"] += bool(want_p)

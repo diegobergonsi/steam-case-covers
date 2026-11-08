@@ -4808,6 +4808,15 @@ class CustomCase(Base):
         im.save(path)
         self.assertEqual(sc.check_case_file(path), {"window": [20, 100, 580, 880]})
 
+    def test_the_window_runs_up_to_the_sharp_edge_under_a_glass_glow(self):
+        im = sc.Image.new("RGBA", sc.SIZE, (240, 240, 240, 60))       # a glass case: a rim of faint frame, then a pocket whose frame fades out towards the art
+        draw = sc.ImageDraw.Draw(im)
+        for d in range(40):
+            draw.rectangle((20 + d, 100 + d, 579 - d, 879 - d), fill=(240, 240, 240, 220 - d * 3), outline=None)
+        path = os.path.join(self.tmp, "glass.png")
+        im.save(path)
+        self.assertEqual(sc.check_case_file(path), {"window": [20, 100, 580, 880]})
+
     def test_a_frame_of_faint_shadow_is_still_not_a_case(self):
         with self.assertRaises(sc.SteamcaseError):
             sc.check_case_file(self.case_file(colour=(0, 0, 0, 40)))
