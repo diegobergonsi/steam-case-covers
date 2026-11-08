@@ -3,6 +3,8 @@
 """Manage a group from Home: its name and its games, kept in a window of their own. Rename, removing games and deleting are saved at once (groups.json and the
 group note of the covers); games added are held in Cases until the next make, because their covers do not exist yet and a group is saved only with games that
 have one. The ticks here are Manage's own: they never touch the ticks of the Pick games step."""
+import threading
+
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from engine import groups
@@ -19,6 +21,7 @@ class GroupManager(QObject):
     changed = Signal()
     saved = Signal()                        # the groups file changed: whoever shows or keeps the groups reads them again (the shell connects them)
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss
+    _named = Signal(int, object)            # window number, {appid: name} (from the worker that asks the store)
 
     def __init__(self, shell, covers_dir, parent=None):
         super().__init__(parent)
@@ -29,6 +32,10 @@ class GroupManager(QObject):
         self._ticked = set()
         self._saved = []                    # the group's games as the file had them when the window opened
         self._others = {}                   # appid -> name of the group it is in now, for the games of other groups
+        self._names = {}                    # appid -> name from the store, for games of the group that the library on screen does not list
+        self._asked = False                 # the store was asked for those names in this window
+        self._window = 0                    # counts the windows opened, so a late answer for a closed one is dropped
+        self._named.connect(self._on_named)
         shell.picker.rowsChanged.connect(self._rebuild)
         shell.picker.loadingChanged.connect(self._rebuild)
 
@@ -108,6 +115,7 @@ class GroupManager(QObject):
             return
         self._open, self._gid, self._title, self._name, self._error, self._query = True, group_id, group["name"], group["name"], "", ""
         self._ticked, self._saved = set(group["games"]), list(group["games"])
+        self._names, self._asked, self._window = {}, False, self._window + 1
         self._read_others()
         self._shell.picker.ensureLoaded()
         self._rebuild()
@@ -131,7 +139,9 @@ class GroupManager(QObject):
             return
         listed = self._shell.picker.games()
         known = {a for a, _ in listed}
-        missing = [(a, "Game %d" % a) for a in self._saved if a not in known]         # a game the store no longer names stays, so Save never drops it unseen
+        missing = [(a, self._names.get(a, "Game %d" % a)) for a in self._saved if a not in known]         # a game the store does not name stays as "Game N", so Save never drops it unseen
+        if missing and not self._asked and not self._shell.picker.loading:
+            self._ask_names([a for a, _ in missing])
         mine = set(self._saved)                                                       # a set: the sort asks about every game of the library, on every key typed
         every = sorted(listed + missing, key=lambda r: (r[0] not in mine, r[1].casefold(), r[0]))      # the group's own games first, each part by name; fixed while open, so rows do not jump when ticking
         words = self._query.casefold().split()
@@ -139,6 +149,27 @@ class GroupManager(QObject):
                 for a, n in every if all(w in n.casefold() for w in words)]
         self._model.set_rows(rows)
         self.changed.emit()
+
+    def _ask_names(self, appids):
+        """The library on screen (for example only the installed games) may lack games the group was made with: ask the store for their names, off the UI thread."""
+        self._asked = True
+        window = self._window
+
+        def work():
+            try:
+                items = sc.store_items(appids)
+            except Exception:                               # the names are a nicety; the rows stay as "Game N"
+                items = {}
+            try:
+                self._named.emit(window, {a: it["name"] for a, it in items.items() if it.get("name")})
+            except RuntimeError:
+                pass                                        # the window is closing: nobody is left to hear the answer
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_named(self, window, names):
+        if window == self._window and self._open:
+            self._names = names
+            self._rebuild()
 
     @Slot(int)
     def toggle(self, appid):

@@ -9333,6 +9333,17 @@ class ManageGroups(PickerBase):
         self.assertIn((9, "Game 9", True, ""), self.rows())
         self.assertEqual(self.shell.manage.tickedCount, 2)
 
+    def test_a_game_outside_the_listed_library_gets_its_name_from_the_store(self):
+        from engine import groups
+        saved, old = groups.assign([], "Old", {"tone": [134, 100, 100]}, [1, 9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.NAMES = {**self.NAMES, 9: "Old Game"}                              # the store knows it; the library on screen (installed games) does not list it
+        self.load()
+        self.shell.manage.open(old)
+        self.wait_for(lambda: (9, "Old Game", True, "") in self.rows())
+        self.assertEqual([r[0] for r in self.rows()], [1, 9, 2, 3])
+
     def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
         gid = self.made_group()
         self.assertEqual(self.sc.cover_group(self.cover(1)), gid)
