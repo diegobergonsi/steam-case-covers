@@ -134,6 +134,7 @@ PT_BR = {
     "blurry art skipped": "arte borrada ignorada",
     "The covers are made, but your groups could not be saved: %s": "As capas foram criadas, mas não foi possível salvar os seus grupos: %s",
     "Loading your games…": "Carregando os seus jogos…",
+    "Loading name…": "Carregando o nome…",
     "No games match “%s”.": "Nenhum jogo combina com “%s”.",
     "Cannot list your games": "Não foi possível listar os seus jogos",
     "Could not reach Steam's servers: %s.": "Não foi possível alcançar os servidores da Steam: %s.",

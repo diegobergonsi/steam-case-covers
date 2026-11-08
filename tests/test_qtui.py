@@ -9302,7 +9302,19 @@ class ManageGroups(PickerBase):
         manage.open(red)
         self.assertTrue(manage.isOpen)
         self.assertEqual((manage.title, manage.name, manage.tickedCount, manage.groupId), ("Red games", "Red games", 2, red))
-        self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (3, "God of War", False, "PS5 games"), (1, "Hades", True, "")])
+        self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (1, "Hades", True, ""), (3, "God of War", False, "PS5 games")])    # the group's games first
+
+    def test_the_groups_games_stay_on_top_while_ticking_and_searching(self):
+        red, ps = self.saved()
+        self.load()
+        manage = self.shell.manage
+        manage.open(red)
+        manage.toggle(1)                                                        # unticked, but it stays where it was
+        self.assertEqual([r[0] for r in self.rows()], [2, 1, 3])
+        manage.toggle(3)
+        self.assertEqual([r[0] for r in self.rows()], [2, 1, 3])
+        manage.query = "o"
+        self.assertEqual([r[0] for r in self.rows()], [2, 3])
 
     def test_open_is_refused_while_apply_is_busy(self):
         red, ps = self.saved()
@@ -9318,8 +9330,39 @@ class ManageGroups(PickerBase):
         self.shell.cases.reloadGroups()
         self.load()
         self.shell.manage.open(old)
-        self.assertIn((9, "Game 9", True, ""), self.rows())
+        self.wait_for(lambda: (9, "Game 9", True, "") in self.rows())            # the store gave no name: the number stays, after the wait
         self.assertEqual(self.shell.manage.tickedCount, 2)
+
+    def test_a_game_outside_the_listed_library_gets_its_name_from_the_store(self):
+        from engine import groups
+        saved, old = groups.assign([], "Old", {"tone": [134, 100, 100]}, [1, 9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.NAMES = {**self.NAMES, 9: "Old Game"}                              # the store knows it; the library on screen (installed games) does not list it
+        self.load()
+        manage = self.shell.manage
+        manage.open(old)
+        self.assertIn((9, "Loading name…", True, ""), self.rows())              # until the store answers, never the bare number
+        self.wait_for(lambda: (9, "Old Game", True, "") in self.rows())
+        self.assertEqual([r[0] for r in self.rows()], [1, 9, 2, 3])
+        manage.cancel()
+        manage.open(old)
+        self.assertIn((9, "Old Game", True, ""), self.rows())                   # remembered: the second open needs no wait
+
+    def test_a_store_that_cannot_be_reached_leaves_the_number(self):
+        from engine import groups
+        saved, old = groups.assign([], "Old", {"tone": [134, 100, 100]}, [1, 9])
+        groups.save(self.covers, saved)
+        self.shell.cases.reloadGroups()
+        self.load()
+
+        def offline(ids, log=None, cancelled=None, errors=None):
+            raise OSError("no network")
+        self.sc.store_items = offline
+        manage = self.shell.manage
+        manage.open(old)
+        self.wait_for(lambda: (9, "Game 9", True, "") in self.rows())
+        self.assertEqual(manage.tickedCount, 2)
 
     def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
         gid = self.made_group()
