@@ -9330,7 +9330,7 @@ class ManageGroups(PickerBase):
         self.shell.cases.reloadGroups()
         self.load()
         self.shell.manage.open(old)
-        self.assertIn((9, "Game 9", True, ""), self.rows())
+        self.wait_for(lambda: (9, "Game 9", True, "") in self.rows())            # the store gave no name: the number stays, after the wait
         self.assertEqual(self.shell.manage.tickedCount, 2)
 
     def test_a_game_outside_the_listed_library_gets_its_name_from_the_store(self):
@@ -9340,9 +9340,14 @@ class ManageGroups(PickerBase):
         self.shell.cases.reloadGroups()
         self.NAMES = {**self.NAMES, 9: "Old Game"}                              # the store knows it; the library on screen (installed games) does not list it
         self.load()
-        self.shell.manage.open(old)
+        manage = self.shell.manage
+        manage.open(old)
+        self.assertIn((9, "Loading name…", True, ""), self.rows())              # until the store answers, never the bare number
         self.wait_for(lambda: (9, "Old Game", True, "") in self.rows())
         self.assertEqual([r[0] for r in self.rows()], [1, 9, 2, 3])
+        manage.cancel()
+        manage.open(old)
+        self.assertIn((9, "Old Game", True, ""), self.rows())                   # remembered: the second open needs no wait
 
     def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
         gid = self.made_group()

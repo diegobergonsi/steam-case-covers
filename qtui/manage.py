@@ -13,6 +13,7 @@ from qtui.i18n import N_, tr
 from qtui.picker import RowsModel
 
 NO_GAMES_TICKED = N_("No games ticked. Saving would delete this group.")
+LOADING_NAME = N_("Loading name…")
 SAVED = N_("Saved. Your covers change the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d.")
 DELETED = N_("Deleted. Your covers change the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d.")
 
@@ -32,8 +33,9 @@ class GroupManager(QObject):
         self._ticked = set()
         self._saved = []                    # the group's games as the file had them when the window opened
         self._others = {}                   # appid -> name of the group it is in now, for the games of other groups
-        self._names = {}                    # appid -> name from the store, for games of the group that the library on screen does not list
+        self._names = {}                    # appid -> name from the store, for games of a group that the library on screen does not list; kept between windows
         self._asked = False                 # the store was asked for those names in this window
+        self._waiting = False               # ... and has not answered yet
         self._window = 0                    # counts the windows opened, so a late answer for a closed one is dropped
         self._named.connect(self._on_named)
         shell.picker.rowsChanged.connect(self._rebuild)
@@ -115,7 +117,7 @@ class GroupManager(QObject):
             return
         self._open, self._gid, self._title, self._name, self._error, self._query = True, group_id, group["name"], group["name"], "", ""
         self._ticked, self._saved = set(group["games"]), list(group["games"])
-        self._names, self._asked, self._window = {}, False, self._window + 1
+        self._asked, self._waiting, self._window = False, False, self._window + 1
         self._read_others()
         self._shell.picker.ensureLoaded()
         self._rebuild()
@@ -139,9 +141,12 @@ class GroupManager(QObject):
             return
         listed = self._shell.picker.games()
         known = {a for a, _ in listed}
-        missing = [(a, self._names.get(a, "Game %d" % a)) for a in self._saved if a not in known]         # a game the store does not name stays as "Game N", so Save never drops it unseen
-        if missing and not self._asked and not self._shell.picker.loading:
-            self._ask_names([a for a, _ in missing])
+        gone = [a for a in self._saved if a not in known]
+        unnamed = [a for a in gone if a not in self._names]
+        if unnamed and not self._asked and not self._shell.picker.loading:
+            self._ask_names(unnamed)
+        placeholder = tr(LOADING_NAME) if self._waiting or self._shell.picker.loading else None
+        missing = [(a, self._names.get(a) or placeholder or "Game %d" % a) for a in gone]         # a game the store does not name stays as "Game N", so Save never drops it unseen
         mine = set(self._saved)                                                       # a set: the sort asks about every game of the library, on every key typed
         every = sorted(listed + missing, key=lambda r: (r[0] not in mine, r[1].casefold(), r[0]))      # the group's own games first, each part by name; fixed while open, so rows do not jump when ticking
         words = self._query.casefold().split()
@@ -152,7 +157,7 @@ class GroupManager(QObject):
 
     def _ask_names(self, appids):
         """The library on screen (for example only the installed games) may lack games the group was made with: ask the store for their names, off the UI thread."""
-        self._asked = True
+        self._asked = self._waiting = True
         window = self._window
 
         def work():
@@ -168,7 +173,8 @@ class GroupManager(QObject):
 
     def _on_named(self, window, names):
         if window == self._window and self._open:
-            self._names = names
+            self._names.update(names)
+            self._waiting = False
             self._rebuild()
 
     @Slot(int)
