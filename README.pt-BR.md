@@ -136,7 +136,7 @@ Os arquivos de cada versão vêm com uma lista `SHA256SUMS` para você conferir 
 ## 🔧 Como funciona
 
 1. Pegue a sua lista de jogos. Clique em **Abrir a página no meu navegador**. A Steam abre no navegador: entre na sua conta se pedir, e você cai numa página de texto simples. Salve ela (Ctrl+S, ou Cmd+S no Mac) como `userdata.json`. O programa percebe o arquivo sozinho pelo nome. Se o navegador não abrir, clique em **Copiar link** e cole você mesmo. Para pular este passo, selecione **Só os meus jogos instalados**: os jogos que não estão instalados no computador, inclusive os compartilhados por alguém da família, ficam de fora (passe o mouse no **i** ao lado). No Mac com Safari, escolha o formato **Código-Fonte da Página** ao salvar, ou use Chrome ou Firefox.
-2. Escolha o visual. Arraste os controles de Cor, Intensidade da cor e Brilho ou toque numa das nove amostras (seis cores, depois Preto, Grafite e Prata), e a prévia mostra o resultado. A Intensidade da cor e o Brilho só descem a partir do azul original, então a case pode ter qualquer tom, do vivo ao cinza-escuro e ao preto; o logo e o texto brancos continuam brancos. O **Tema** pode transformar as cases numa de **Halloween**: uma teia com uma aranha, uma abóbora e uma aranha pendurada no alto, por cima da cor que você escolheu. A case de Halloween mostra só a roseta nos seus jogos com 100% (a faixa esconderia os enfeites), e a janela escolhe isso por você. Se você definiu a sua própria arte para alguns jogos (no menu da Steam ou pelo SteamGridDB), selecione **Usar a minha própria arte onde eu tiver** e a sua arte vai para dentro da case no lugar da arte da Steam. Os jogos sem arte sua ficam com a da Steam. O programa guarda uma cópia da sua arte na pasta dele e nunca muda os seus arquivos.
+2. Escolha o visual. Arraste os controles de Cor, Intensidade da cor e Brilho ou toque numa das nove amostras (seis cores, depois Preto, Grafite e Prata), e a prévia mostra o resultado. A Intensidade da cor e o Brilho só descem a partir do azul original, então a case pode ter qualquer tom, do vivo ao cinza-escuro e ao preto; o logo e o texto brancos continuam brancos. O **Tema** pode transformar as cases numa de **Natal**: um gorro de Papai Noel no alto, uma árvore embaixo à esquerda e presentes embaixo à direita, por cima da cor que você escolheu. A case de Natal mostra só a roseta nos seus jogos com 100% (a faixa esconderia os enfeites), e a janela escolhe isso por você. Se você definiu a sua própria arte para alguns jogos (no menu da Steam ou pelo SteamGridDB), selecione **Usar a minha própria arte onde eu tiver** e a sua arte vai para dentro da case no lugar da arte da Steam. Os jogos sem arte sua ficam com a da Steam. O programa guarda uma cópia da sua arte na pasta dele e nunca muda os seus arquivos.
 3. Destaque os seus jogos com 100% (opcional). Carregue a sua página de jogos da Steam e os jogos em que você desbloqueou todas as conquistas ganham uma marca. Detalhes mais abaixo. Você pode pular este passo.
 4. Crie as capas. Confira as suas escolhas (cada uma leva de volta ao seu passo) e clique em **Criar capas**, depois espere. Você pode cancelar e rodar de novo mais tarde: as capas prontas são mantidas, então ele continua de onde parou. Se você já criou capas em outra cor ou tema, o programa pergunta antes de substituí-las.
 5. Adicione-as à Steam. Clique em **Aplicar na Steam**. Se houver mais de uma conta da Steam no computador, a janela mostra qual será alterada; escolha outra com os botões de conta. A sua arte atual é copiada para um backup antes.
@@ -203,7 +203,7 @@ Bom saber:
 **Deixe do seu jeito**
 - Escolha jogos à mão e coloque-os numa case de PlayStation, Xbox ou Nintendo, ou numa cor sua, em grupos que o programa lembra
 - Se quiser, coloque a arte que você mesmo definiu (no menu da Steam ou do SteamGridDB) dentro da case, para os jogos que a têm
-- Escolha a cor, a intensidade da cor e o brilho das cases com três controles ou uma amostra pronta (inclusive preto, grafite e prata), com prévia ao vivo e, se quiser, um tema de Halloween (uma teia com uma aranha, uma abóbora e uma aranha pendurada) em qualquer cor
+- Escolha a cor, a intensidade da cor e o brilho das cases com três controles ou uma amostra pronta (inclusive preto, grafite e prata), com prévia ao vivo e, se quiser, um tema de Natal (um gorro de Papai Noel, uma árvore e presentes) em qualquer cor
 - Opcional: os jogos em que você desbloqueou todas as conquistas ganham uma roseta e uma faixa "100% Complete" (ou só a roseta) e, se quiser, uma case dourada ou uma borda dourada ([como funciona](#optional-highlight-your-100-games))
 
 **Instale com segurança**
@@ -252,7 +252,7 @@ python -m engine make --library userdata.json   # build covers
 python -m engine make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
 python -m engine make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
 python -m engine make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
-python -m engine make --library userdata.json --theme halloween   # ...with the Halloween theme (the case keeps its colour; --theme classic goes back)
+python -m engine make --library userdata.json --theme christmas   # ...with the Christmas theme (the case keeps its colour; --theme classic goes back)
 python -m engine make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
 python -m engine make --library userdata.json --use-custom-art   # ...with the art you set yourself inside the case, for the games that have it
 python -m engine make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
@@ -277,7 +277,7 @@ A linha de comando fala inglês (os comentários acima são do próprio comando)
 
 O `list` marca com `(family)` os jogos da sua biblioteca de Família da Steam. O `make` mantém a cor das capas que já estão na pasta, a não ser que você passe `--hue`, `--saturation` ou `--brightness`. Uma opção que você deixa de fora mantém o valor das capas que já estão lá, ou o original (`--hue 0 --saturation 100 --brightness 100` pede o azul original). A saturação e o brilho vão de 0 a 100, onde 100 é o original e valores menores dão uma case mais cinza ou mais escura.
 
-O `--theme` é `classic` ou `halloween`. Sem ele, as capas que já estão na pasta mantêm o tema. Com o tema de Halloween, os jogos com 100% ganham só a roseta, então `--completed-marks full` é recusado.
+O `--theme` é `classic` ou `christmas`. Sem ele, as capas que já estão na pasta mantêm o tema. Com o tema de Christmas, os jogos com 100% ganham só a roseta, então `--completed-marks full` é recusado.
 
 O `--use-custom-art` coloca a arte que você mesmo definiu dentro da case, para os jogos que a têm (use `--user` com `make` para escolher a conta). O `--no-custom-art` volta ao retrato da Steam em todas as capas. Sem nenhum dos dois, as capas já feitas com a sua arte continuam com ela.
 

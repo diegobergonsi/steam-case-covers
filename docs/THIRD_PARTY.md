@@ -18,7 +18,7 @@ The console cases in `assets/cases/` (PlayStation 3, 4 and 5, Xbox 360, Xbox One
 
 `assets/family_corner.png` is a green corner with a three-person icon drawn to resemble the Family icon in Steam's settings. It is original artwork and is not Valve's file.
 
-`assets/halloween_overlay.png` (source: `tools/src/halloween.svg`) holds the decorations of the Halloween case theme: a cobweb, two spiders and a pumpkin. It is original artwork drawn for this project and released under the project's licence; it is not taken from any game or brand.
+`assets/christmas_overlay.png` (source: `tools/src/christmas.svg`) holds the decorations of the Christmas case theme: a Santa hat, a Christmas tree and gifts. It is original artwork drawn for this project and released under the project's licence; it is not taken from any game or brand.
 
 `assets/completion_overlay.png` holds the rosette and the "100% Complete" ribbon drawn on covers of games where every achievement is unlocked. The rosette is an original drawing inspired by the look of Steam's old achievement ribbon; it is not Valve's artwork. The file is built by `tools/build_completion_overlay.py` with the Nunito Sans font credited below.
 

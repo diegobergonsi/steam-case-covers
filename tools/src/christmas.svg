@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900"><!-- The Christmas case theme: a Santa hat (top centre), a Christmas tree (bottom-left) and gifts (bottom-right). Original artwork drawn for steam-case-covers. assets/christmas_overlay.png is rendered from this file by tools/build_christmas_overlay.py. -->
+<defs>
+<linearGradient id="hat" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8323b"/><stop offset="1" stop-color="#b3141f"/></linearGradient>
+<linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fae5a"/><stop offset="1" stop-color="#1f7a3d"/></linearGradient>
+</defs>
+<g stroke-linejoin="round" stroke-linecap="round">
+<!-- Santa hat: the red body leans to the right, white band across the top edge, pompom -->
+<path d="M246 86 Q250 30 300 6 Q345 -8 372 40 Q380 58 382 74 Q312 100 246 86 Z" fill="url(#hat)" stroke="#8c0f18" stroke-width="3"/>
+<path d="M238 82 Q312 108 392 80 Q396 100 386 110 Q312 134 240 112 Q228 98 238 82 Z" fill="#fdfdfd" stroke="#c9ccd1" stroke-width="3"/>
+<circle cx="380" cy="40" r="19" fill="#fdfdfd" stroke="#c9ccd1" stroke-width="3"/>
+<!-- Christmas tree -->
+<rect x="73" y="860" width="24" height="34" rx="3" fill="#7a4a24" stroke="#4d2c12" stroke-width="3"/>
+<path d="M85 742 L140 812 L30 812 Z" fill="url(#g1)" stroke="#145a2b" stroke-width="3"/>
+<path d="M85 774 L148 848 L22 848 Z" fill="url(#g1)" stroke="#145a2b" stroke-width="3"/>
+<path d="M85 806 L158 868 L12 868 Z" fill="url(#g1)" stroke="#145a2b" stroke-width="3"/>
+<path d="M44 800 Q85 822 126 800" fill="none" stroke="#ffd34d" stroke-width="4"/>
+<path d="M34 836 Q85 862 136 836" fill="none" stroke="#ffd34d" stroke-width="4"/>
+<path d="M85 718 L90.5 733 L106 733 L93.5 742 L98 757 L85 748 L72 757 L76.5 742 L64 733 L79.5 733 Z" fill="#ffd34d" stroke="#c9922b" stroke-width="2.5"/>
+<circle cx="70" cy="796" r="6" fill="#e8323b"/><circle cx="104" cy="824" r="6" fill="#3a8dde"/><circle cx="52" cy="850" r="6" fill="#ffd34d"/><circle cx="118" cy="854" r="6" fill="#e8323b"/><circle cx="82" cy="838" r="5" fill="#fff"/>
+<!-- Gifts -->
+<rect x="448" y="826" width="96" height="68" rx="5" fill="#d9262f" stroke="#8c0f18" stroke-width="3"/>
+<rect x="485" y="826" width="22" height="68" fill="#ffd34d"/><rect x="448" y="852" width="96" height="16" fill="#ffd34d"/>
+<path d="M496 826 Q462 796 470 818 Q474 828 496 826 Z M496 826 Q530 796 522 818 Q518 828 496 826 Z" fill="#ffd34d" stroke="#c9922b" stroke-width="3"/>
+<rect x="538" y="846" width="56" height="48" rx="4" fill="#2f7fd1" stroke="#1b4f8a" stroke-width="3"/>
+<rect x="559" y="846" width="14" height="48" fill="#fff"/><rect x="538" y="862" width="56" height="10" fill="#fff"/>
+<path d="M566 846 Q544 826 548 840 Q551 847 566 846 Z M566 846 Q588 826 584 840 Q581 847 566 846 Z" fill="#fff" stroke="#c9ccd1" stroke-width="3"/>
+<rect x="466" y="782" width="58" height="44" rx="4" fill="#2fa04f" stroke="#17692d" stroke-width="3"/>
+<rect x="487" y="782" width="14" height="44" fill="#e8323b"/><rect x="466" y="798" width="58" height="10" fill="#e8323b"/>
+<path d="M494 782 Q472 762 476 776 Q479 783 494 782 Z M494 782 Q516 762 512 776 Q509 783 494 782 Z" fill="#e8323b" stroke="#8c0f18" stroke-width="3"/>
+</g></svg>

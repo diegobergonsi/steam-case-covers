@@ -38,7 +38,7 @@ FRAME = os.path.join(HERE, "assets", "frame.png")
 DEFAULT_ART = os.path.join(HERE, "assets", "default_art.png")     # original artwork, only used for the colour preview
 FAMILY_CORNER = os.path.join(HERE, "assets", "family_corner.png")    # green triangle and icon, laid over the frame for games from the Steam Family library
 COMPLETION_OVERLAY = os.path.join(HERE, "assets", "completion_overlay.png")    # rosette and "100% Complete" ribbon, laid over the covers of games with every achievement
-HALLOWEEN_OVERLAY = os.path.join(HERE, "assets", "halloween_overlay.png")    # web, spiders and a pumpkin, laid over the case for the Halloween theme
+CHRISTMAS_OVERLAY = os.path.join(HERE, "assets", "christmas_overlay.png")    # a Santa hat, a tree and gifts, laid over the case for the Christmas theme
 CASES = ("ribbon", "gold-case", "gold-border")           # the case of a 100% cover: the marks only, the marks on a gold case, the marks inside a gold border
 MARKS = ("full", "rosette", "none")                      # the marks: the rosette and the ribbon, the rosette alone, or neither (only the gold case or border says it)
 _PARTS = {"ribbon": ("ribbon", "full"), "rosette": ("ribbon", "rosette"),            # every treatment and the (case, marks) it is made of: how a 100% cover looks
@@ -49,7 +49,7 @@ ROSETTE_ROWS = 450                                       # the rosette-only mark
 GOLD_HUE = 176                              # the gold of the colour swatches (#c89817), used whole for the "gold-case" treatment
 BORDER = 14                                 # width of the "gold-border" treatment's border, in cover pixels
 DONE_CHUNK = "steamcase-done"               # PNG note naming a cover's treatment; plain covers have none
-THEMES = ("halloween",)                     # case themes: decorations drawn on the case, whatever its colour; the classic case has none
+THEMES = ("christmas",)                     # case themes: decorations drawn on the case, whatever its colour; the classic case has none
 ART_CHUNK = "steamcase-art"                 # PNG note naming the source file of a cover built from the user's own art; covers from Steam's portrait carry none
 THEME_CHUNK = "steamcase-theme"             # PNG note naming a cover's theme; classic covers carry none
 PLATFORMS = ("ps3", "ps4", "ps5", "xbox360", "xboxone", "xboxseries", "switch", "switch2")      # the console cases (assets/cases); the Steam case is the one without a platform
@@ -1062,8 +1062,8 @@ def _completion_overlay():
 
 
 @functools.lru_cache(maxsize=1)
-def _halloween_overlay():
-    with Image.open(HALLOWEEN_OVERLAY) as im:
+def _christmas_overlay():
+    with Image.open(CHRISTMAS_OVERLAY) as im:
         return im.convert("RGBA")
 
 
@@ -1074,7 +1074,7 @@ def apply_theme(cover, theme):
         return cover
     if theme not in THEMES:
         raise ValueError("unknown theme: %r" % (theme,))
-    marks = _halloween_overlay().copy()
+    marks = _christmas_overlay().copy()
     marks.putalpha(ImageChops.multiply(marks.getchannel("A"), cover.getchannel("A")))     # nothing reaches past the rounded case
     return Image.alpha_composite(cover, marks)
 
@@ -1507,7 +1507,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if treatment is not None or completed is None:
         _completion_overlay()                   # so does a missing overlay: otherwise every 100% cover would count as a failed download
     if theme is not None:
-        _halloween_overlay()                    # and a missing theme overlay: otherwise every cover would
+        _christmas_overlay()                    # and a missing theme overlay: otherwise every cover would
 
     ids = sorted(games)
     if platforms is not None:
@@ -2436,7 +2436,7 @@ def cmd_apply(args):
                              "Run make again with the colour you want (--hue, --saturation, --brightness) to finish it, then apply.") % args.covers)
     if mixed_cover_themes(args.covers):
         raise SteamcaseError(_t("The covers in %s are in more than one theme (a theme change was probably interrupted). Nothing was changed. "
-                             "Run make again with the theme you want (--theme classic or --theme halloween) to finish it, then apply.") % args.covers)
+                             "Run make again with the theme you want (--theme classic or --theme christmas) to finish it, then apply.") % args.covers)
     steam = steam_dir(args.steam_dir)
     if steam_running() and not args.yes:
         if args.close_steam:
@@ -2554,8 +2554,8 @@ def main():
         p.add_argument("--case-file", metavar="PNG", default=None,
                        help="put every game of this run in a case of your own: a 600 x 900 PNG that is see-through where the art goes (at least 400 x 400). A checked copy is kept "
                             "in --out. Covers made without it are not changed back by later runs without it; use another --out, or delete them")
-        p.add_argument("--theme", choices=("classic", "halloween"), default=None,
-                       help="the case theme: classic (the plain case) or halloween (a cobweb with a spider, a pumpkin and a spider hanging from the top; the case keeps its colour). "
+        p.add_argument("--theme", choices=("classic", "christmas"), default=None,
+                       help="the case theme: classic (the plain case) or christmas (a Santa hat at the top, a tree and gifts at the bottom; the case keeps its colour). "
                             "Without it the covers already in the folder keep their theme. Games at 100%% get the rosette alone with a theme (see --completed-marks)")
         p.add_argument("--completed-marks", choices=MARKS, default=None,
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) rosette (the rosette alone) or none (no marks: the gold case or border alone; with the normal case it is the same as --completed-style none). "
