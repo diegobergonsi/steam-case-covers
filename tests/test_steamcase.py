@@ -2465,13 +2465,12 @@ class DrawingVersion(unittest.TestCase):
         self.make(completed={11}, treatment="ribbon")                        # the very same choices
         self.assertEqual(sc.read_notes(self.path(11)).layout, sc.LAYOUT)
 
-    def test_a_plain_cover_of_the_old_drawing_is_kept(self):                # nothing drawn on it has moved, and the changelog promises old covers stay
+    def test_a_plain_cover_of_the_old_drawing_is_drawn_again(self):           # its art was cropped; now the whole art is stretched to the case
         self.make(completed={11}, treatment="ribbon")
         self.make_old(12)
-        before = self.read(12)
+        self.assertTrue(sc.covers_in_other_look(self.out, 0, 100, 100, completed={11}, treatment="ribbon"))
         self.make(completed={11}, treatment="ribbon")
-        self.assertEqual(self.read(12), before)
-        self.assertIsNone(sc.read_notes(self.path(12)).layout)
+        self.assertEqual(sc.read_notes(self.path(12)).layout, sc.LAYOUT)
 
     def test_a_family_cover_of_the_old_drawing_is_drawn_again(self):         # the green corner moved from the top left to the top right
         self.make(family={13})
@@ -2500,10 +2499,26 @@ class DrawingVersion(unittest.TestCase):
         title, text = reasons.replace_reason(self.out, (0, 100, 100), {11}, "ribbon")
         self.assertIn("again", title)
         self.assertIn("earlier version", text)
-        self.assertIn("top left", text)
-        self.assertTrue(sc.covers_with_old_drawing(self.out))
+        self.assertIn("whole art", text)
         self.make(completed={11}, treatment="ribbon")
-        self.assertFalse(sc.covers_with_old_drawing(self.out))
+        self.assertIsNone(reasons.replace_reason(self.out, (0, 100, 100), {11}, "ribbon"))
+
+    def test_the_question_for_plain_covers_of_the_old_drawing_says_why(self):
+        from qtui import reasons
+        self.make()
+        self.assertIsNone(reasons.replace_reason(self.out, (0, 100, 100), None, None))
+        self.make_old(12)
+        title, text = reasons.replace_reason(self.out, (0, 100, 100), None, None)
+        self.assertEqual(title, "Draw your covers again?")
+        self.assertIn("whole art", text)
+
+    def test_a_console_cover_of_the_old_drawing_is_drawn_again_when_the_game_is_picked_again(self):
+        self.make(platforms={11: "ps5"})
+        self.assertEqual(sc.covers_in_other_case(self.out, {11: "ps5"}), 0)
+        self.make_old(11)
+        self.assertEqual(sc.covers_in_other_case(self.out, {11: "ps5"}), 1)
+        self.make(platforms={11: "ps5"})
+        self.assertEqual(sc.read_notes(self.path(11)).layout, sc.LAYOUT)
 
     def test_a_garbled_drawing_note_counts_as_an_old_one(self):
         self.make(completed={11}, treatment="ribbon")
@@ -3106,7 +3121,7 @@ class CoverNotesAndSpec(unittest.TestCase):
         self.assertTrue(sc.matches(notes, sc.CoverSpec(colour=(200, 0, 50))))            # the hue means nothing at 0 sat
 
     def test_a_console_spec_ignores_the_colour_and_the_theme(self):
-        notes = sc.read_notes(self.png("c_1.png", **{sc.PLATFORM_CHUNK: "ps4", sc.DONE_CHUNK: "ribbon"}))
+        notes = sc.read_notes(self.png("c_1.png", **{sc.PLATFORM_CHUNK: "ps4", sc.DONE_CHUNK: "ribbon", sc.LAYOUT_CHUNK: sc.LAYOUT}))
         self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "gold-case-rosette", "christmas", None, None)) is False)
         self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "ribbon", "christmas", None, None)))
 
@@ -3915,19 +3930,22 @@ class PlatformCases(Base):
         r, g, b = im.crop(window).convert("RGB").split()
         return sc.ImageChops.darker(sc.ImageChops.darker(r, g), b).point(lambda v: 255 if v > 240 else 0).getbbox()
 
-    def test_a_tall_art_is_half_squeezed_and_half_cropped_to_fit_the_window(self):
-        """A 2:3 art is wider than the case's window allows: the art is squeezed by half of what it would take to fit it whole, and cropped by the other half."""
+    def test_a_portrait_close_to_the_window_is_stretched_to_fill_it_and_nothing_is_cut(self):
+        """A 2:3 art is a little narrower than the case's window: it is stretched to the window's shape, so its top line and its disc are all there."""
         frame = sc.Image.new("RGBA", sc.SIZE, (0, 0, 0, 0))
         window = (14, 96, 586, 872)
-        art = self.circle_art((600, 900))
-        got = sc._compose(art, frame, window)
+        got = sc._compose(self.circle_art((600, 900)), frame, window)
         box = self.white_box(got, window)
-        width, height = box[2] - box[0], box[3] - box[1]
-        self.assertAlmostEqual(width / height, 858 / 817, delta=0.02)                       # the disc is 5% wider than tall: squeezed by 5%, not by 10%
+        self.assertAlmostEqual((box[2] - box[0]) / (box[3] - box[1]), (572 / 600) / (776 / 900), delta=0.02)     # the disc is stretched by the same 10% as the whole art
         r, g, _ = got.crop(window).convert("RGB").split()
         line = sc.ImageChops.darker(r.point(lambda v: 255 if v > 200 else 0), g.point(lambda v: 255 if v < 80 else 0)).getbbox()
-        self.assertIsNotNone(line)
-        self.assertAlmostEqual(line[1], round(30 * 817 / 900) - 20, delta=2)                # 20 rows are cropped at the top (and at the bottom)
+        self.assertAlmostEqual(line[1], round(30 * 776 / 900), delta=2)                      # no row is cropped at the top
+
+    def test_an_art_far_from_the_windows_shape_is_cropped_not_stretched(self):
+        frame = sc.Image.new("RGBA", sc.SIZE, (0, 0, 0, 0))
+        window = (14, 96, 586, 872)
+        box = self.white_box(sc._compose(self.circle_art((800, 800)), frame, window), window)        # a square art: 1.36 times wider than the window
+        self.assertAlmostEqual((box[2] - box[0]) / (box[3] - box[1]), 1.0, delta=0.03)
 
     def test_a_wide_art_is_only_cropped(self):
         frame = sc.Image.new("RGBA", sc.SIZE, (0, 0, 0, 0))

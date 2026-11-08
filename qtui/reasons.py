@@ -76,6 +76,8 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     """The colour, 100% highlight and theme part of replace_reason; None when none of them rebuilds a cover."""
     if not sc.covers_in_other_look(covers_dir, *tone, completed=completed, treatment=treatment, theme=theme):
         return None
+    if not sc.covers_in_other_look(covers_dir, *tone, completed=completed, treatment=treatment, theme=theme, drawing=False):       # only how they were drawn is old
+        return tr("Draw your covers again?"), tr("Your covers were made by an earlier version, which cut part of the art to fit the case. They are made again with the whole art stretched to fit.")
     colour = sc.covers_in_other_colour(covers_dir, *tone)
     marks_note = ""                                          # what a theme does to full-marks 100% covers when no games page decides their look
     if theme and completed is None and sc.covers_with_marks(covers_dir, "full"):
@@ -112,9 +114,6 @@ def _look_reason(covers_dir, tone, completed, treatment, theme=None):
     elif not styles:
         what = tr("your 100%% games get highlighted covers (“%s”)") % label
         title, one = tr("Highlight your 100% games?"), tr("This replaces the covers of your 100%% games with highlighted ones (“%s”).") % label
-    elif not changed and sc.covers_with_old_drawing(covers_dir):
-        what = tr("your 100% covers are drawn again")
-        title, one = tr("Draw your 100% covers again?"), tr("Your 100% covers were made by an earlier version, which drew the rosette at the top right. They are made again with the rosette at the top left.")
     else:
         what = tr("your 100% covers are updated to match your games page")
         title, one = tr("Update your 100% covers?"), (tr("Some covers you already made are made again to match your games page: "

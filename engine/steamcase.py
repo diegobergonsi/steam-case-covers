@@ -58,7 +58,8 @@ PLATFORM_LABELS = {"ps3": "PlayStation 3", "ps4": "PlayStation 4", "ps5": "PlayS
 GROUP_CHUNK = "steamcase-group"            # PNG note naming the group (groups.py) of a cover made by hand; a short id of lower-case letters and digits
 GROUP_ID = re.compile(r"[a-z0-9]{1,12}")
 LAYOUT_CHUNK = "steamcase-layout"           # PNG note naming how a cover was drawn (LAYOUT); covers made before v1.6.0 carry none
-LAYOUT = "2"                                # v1.6.0: the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round)
+LAYOUT = "3"                                # v1.6.0: the rosette at the top left, the family corner at the top right (v1.5.0 had them the other way round); "3": the whole art is stretched to the case window instead of cropped (every cover, marks or not)
+STRETCH_LIMIT = 1.25                        # an art whose shape is within this factor of the window's is stretched to fill it; a wider or narrower one is cropped
 CASE_CHUNK = "steamcase-case"               # PNG note with the digest of the user's own case file, on covers whose platform note is "custom"
 PLATFORM_CHUNK = "steamcase-platform"       # PNG note naming a cover's console case; Steam-case covers have none (and a console cover has no colour, tone or theme note)
 CASES_DIR = os.path.join(HERE, "assets", "cases")    # one <platform>.png per case (transparent art window) and cases.json (the window of each)
@@ -986,17 +987,17 @@ TONE_CHUNK = "steamcase-tone"                 # "<sat> <val>"; covers without it
 
 
 def _compose(art, frame, window=WINDOW):
-    """A portrait scaled to cover the frame's art window (centre-cropped; a tall one is also squeezed a little, see below), with the frame on top. Real covers and the window's preview both use this.
-    `window` is the frame's art window; the Steam case's unless the frame is a console case's (platform_window)."""
+    """A portrait stretched to fill the frame's art window, with the frame on top (an art far from the window's shape, see STRETCH_LIMIT, is scaled to cover it and
+    centre-cropped instead). Real covers and the window's preview both use this. `window` is the frame's art window; the Steam case's unless the frame is a console case's (platform_window)."""
     x0, y0, x1, y1 = window
     ww, wh = x1 - x0, y1 - y0
-    s = max(ww / art.width, wh / art.height)                      # scale to cover, then center-crop
-    size = (max(ww, round(art.width * s)), max(wh, round(art.height * s)))
-    if size[1] > wh:                                              # a tall art (the usual 2:3) is taller than the window once it is as wide: squeeze it by half of the excess and crop the other half
-        size = (size[0], (size[1] + wh) // 2)
-    art = art.resize(size, Image.LANCZOS)
-    cx, cy = (art.width - ww) // 2, (art.height - wh) // 2
-    art = art.crop((cx, cy, cx + ww, cy + wh))
+    if 1 / STRETCH_LIMIT <= (art.width * wh) / (art.height * ww) <= STRETCH_LIMIT:
+        art = art.resize((ww, wh), Image.LANCZOS)
+    else:
+        s = max(ww / art.width, wh / art.height)
+        art = art.resize((max(ww, round(art.width * s)), max(wh, round(art.height * s))), Image.LANCZOS)
+        cx, cy = (art.width - ww) // 2, (art.height - wh) // 2
+        art = art.crop((cx, cy, cx + ww, cy + wh))
     canvas = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     canvas.paste(art, (x0, y0))
     return Image.alpha_composite(canvas, frame)
@@ -1245,7 +1246,7 @@ class CoverSpec(NamedTuple):
     art: object = KEEP
     platform: object = KEEP         # None: the Steam case
     group: object = KEEP
-    layout: object = KEEP           # LAYOUT for a cover with marks or a family corner: those were drawn in other places before v1.6.0, so an older cover is not kept
+    layout: object = KEEP           # LAYOUT: a cover drawn the way this version draws it (older covers had marks elsewhere or the art cropped), so an older cover is not kept
     case: object = KEEP             # the digest of the active custom case, for a cover in CUSTOM
 
 
@@ -1258,11 +1259,6 @@ def matches(notes, spec):
                                                                 (notes.platform, spec.platform), (notes.group, spec.group), (notes.layout, spec.layout), (notes.case, spec.case)))
 
 
-def _drawing_for(treatment, family=False):
-    """What a cover with these marks (and a family corner or not) must say about its drawing: marks and the family corner moved in v1.6.0, a plain cover did not."""
-    return LAYOUT if treatment is not None or family else KEEP
-
-
 def _art_wanted(custom_art, appid):
     """The art note a cover of `appid` must carry when make_covers gets `custom_art` ({appid: path}): KEEP when it is KEEP (art is not compared), None for Steam's portrait."""
     return KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
@@ -1272,8 +1268,8 @@ def _spec_for(platform, colour, treatment, theme, art, group):
     """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour or theme to compare, and an earlier gold
     look keeps only its marks there; its art is compared like any other (KEEP: not at all)."""
     if platform:
-        return CoverSpec(treatment=_console_marks(treatment), art=art, platform=platform, group=group, case=_case_digest(platform))
-    return CoverSpec(colour, treatment, theme, art, None, group, _drawing_for(treatment))
+        return CoverSpec(treatment=_console_marks(treatment), art=art, platform=platform, group=group, layout=LAYOUT, case=_case_digest(platform))
+    return CoverSpec(colour, treatment, theme, art, None, group, LAYOUT)
 
 
 
@@ -1583,9 +1579,9 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
             target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
-            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g, case=_case_digest(want_p))
+            spec = CoverSpec(treatment=target, art=wanted_art, platform=want_p, group=want_g, layout=LAYOUT, case=_case_digest(want_p))
         else:
-            spec = CoverSpec(colour, target, theme, wanted_art, None, want_g, _drawing_for(target, appid in family))
+            spec = CoverSpec(colour, target, theme, wanted_art, None, want_g, LAYOUT)
         if not force and matches(notes, spec):
             res["ok"] += 1
             res["platforms"] += bool(want_p)
@@ -1657,7 +1653,7 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
             continue
         target, colour = _wanted_look(appid, notes, (hue, sat, val), completed, treatment, theme)
         art = _art_wanted(custom_art, appid)
-        if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art, layout=_drawing_for(target) if drawing else KEEP)):
+        if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art, layout=LAYOUT if drawing else KEEP)):
             return True
     return False
 
@@ -1702,11 +1698,6 @@ def covers_in_other_colour(covers_dir, hue, sat=100, val=100):
     """True if the covers folder already holds a cover made in a different case colour than (`hue`, `sat`, `val`) (stops at the first one).
     No page loaded: each cover keeps its treatment, so a "gold-case" cover stays gold and is not counted (see covers_in_other_look)."""
     return covers_in_other_look(covers_dir, hue, sat, val, drawing=False)
-
-
-def covers_with_old_drawing(covers_dir):
-    """True if a cover with marks (a 100% game) in the folder was drawn by an earlier version: the next make draws it again, even with the same choices."""
-    return any(notes.treatment and notes.layout != LAYOUT for _, _, notes in usual_covers(covers_dir))
 
 
 def existing_cover_colour(covers_dir):
