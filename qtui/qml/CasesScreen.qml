@@ -226,6 +226,13 @@ ScreenFrame {
                 visible: !screen.cases.familyAvailable
                 text: qsTr("Load your game list file in step 1 to use this (family games cannot be told apart without it).")
             }
+            SwitchRow {
+                objectName: "case_custom_art"
+                label: qsTr("Use my own custom art where I have it")
+                tip: customArtHelp
+                checked: shell.look.useCustomArt
+                onToggled: (value) => shell.look.useCustomArt = value
+            }
         }
     }
     ConfirmDialog {                                       // deleting a group asks first; the safe button (Cancel) has the focus

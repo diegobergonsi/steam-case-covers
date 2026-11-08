@@ -24,6 +24,7 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - The faint grey text (a locked step, the grey label of a switched-off main button), the green of a finished step and the thin outlines are a little brighter, so they are easier to see on the lighter blue parts of the window (the open step in the menu, the help bubble, the short messages). The grey subtitles are unchanged.
 
 ### 🛠 Fixed
+- **Use my own custom art where I have it** now works when you pick games by hand: the Case step has the switch, and your art goes inside any case (a console case, the Steam case or your own case). It also works with your own case in the step by step way, where the switch did nothing before.
 - A screen reader in Portuguese now reads the range of a slider in Portuguese ("0 a 359"); before, the word "to" stayed in English.
 - The help text that opens from an "i" circle now opens right above it. Before, it could open far to the left, further for longer texts.
 

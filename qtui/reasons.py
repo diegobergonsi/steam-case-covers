@@ -19,20 +19,20 @@ def theme_label(key):
     return tr(THEME_LABELS[key])
 
 
-def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None):
+def platform_replace_reason(covers_dir, platforms, tone, treatment, completed, tones=None, groups=None, custom_art=sc.KEEP):
     """(title, sentence) for the question of the manual flow, or None when no cover already made would be rebuilt. `platforms`, `tone`, `treatment`,
-    `completed`, `tones` and `groups` are what make_covers gets (see sc.covers_in_other_case)."""
-    n = sc.covers_in_other_case(covers_dir, platforms, tone, treatment, completed, tones, groups)
+    `completed`, `tones`, `groups` and `custom_art` are what make_covers gets (see sc.covers_in_other_case)."""
+    n = sc.covers_in_other_case(covers_dir, platforms, tone, treatment, completed, tones, groups, custom_art)
     if not n:
         return None
     return tr("Replace the covers you made?"), trn("This replaces %n cover you already made with a new one in the case you picked.|"
                                                     "This replaces %n covers you already made with new ones in the cases you picked.", n)
 
 
-def own_case_reason(covers_dir, own, treatment=None, completed=None):
+def own_case_reason(covers_dir, own, treatment=None, completed=None, custom_art=sc.KEEP):
     """(title, sentence) for the question of the Look step's "My own case" switch, or None when no cover already made would be rebuilt. `own`: the switch is on."""
     if own:
-        n = sc.covers_in_other_case(covers_dir, {appid: sc.CUSTOM for appid, _ in sc.scan_covers(covers_dir)}, treatment=treatment, completed=completed)
+        n = sc.covers_in_other_case(covers_dir, {appid: sc.CUSTOM for appid, _ in sc.scan_covers(covers_dir)}, treatment=treatment, completed=completed, custom_art=custom_art)
         return None if not n else (tr("Draw your covers again?"), trn("This replaces %n cover you already made with a new one in your own case.|"
                                                                     "This replaces %n covers you already made with new ones in your own case.", n))
     n = len(sc.covers_in_own_case(covers_dir))

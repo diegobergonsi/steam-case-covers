@@ -3107,8 +3107,8 @@ class CoverNotesAndSpec(unittest.TestCase):
 
     def test_a_console_spec_ignores_the_colour_and_the_theme(self):
         notes = sc.read_notes(self.png("c_1.png", **{sc.PLATFORM_CHUNK: "ps4", sc.DONE_CHUNK: "ribbon"}))
-        self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "gold-case-rosette", "christmas", "custom x", None)) is False)
-        self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "ribbon", "christmas", "custom x", None)))
+        self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "gold-case-rosette", "christmas", None, None)) is False)
+        self.assertTrue(sc.matches(notes, sc._spec_for("ps4", (0, 100, 100), "ribbon", "christmas", None, None)))
 
     def test_scan_covers_lists_only_cover_files_by_name(self):
         self.png("B_Game_20.png"), self.png("A_Game_3.png"), self.png("notes.png"), self.png("C_Game_4.PNG")
@@ -3619,6 +3619,14 @@ class MakeFromCustomArt(StoreMocks):
         self.assertTrue(g > r + 60 and g > b + 60, (r, g, b))
         self.assertEqual(sc.cover_art(self.cover(1)), sc.art_note(mine))
         self.assertEqual(self.downloads, [])
+
+    def test_a_game_in_a_console_case_uses_custom_art_too(self):
+        mine = self.art()
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, custom_art={1: mine})
+        self.assertEqual(sc.cover_art(self.cover(1)), sc.art_note(mine))
+        self.assertEqual(self.downloads, [])
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, custom_art={})        # the option off: Steam's portrait comes back
+        self.assertIsNone(sc.cover_art(self.cover(1)))
 
     def test_other_games_keep_steams_portrait(self):
         sc.make_covers({1: None, 2: None}, self.covers, custom_art={1: self.art()})
@@ -4219,6 +4227,16 @@ class ConsoleMake(StoreMocks):
         self.assertEqual(count({2: None}, tone=(134, 100, 100)), 1)              # the Steam case in another colour
         self.assertEqual(count({1: "ps5"}, tone=(134, 100, 100)), 0)             # a console case has no colour
 
+    def test_covers_in_other_case_sees_other_art(self):
+        mine = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), (10, 160, 30)).save(mine, format="JPEG")
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, custom_art={1: mine})
+        count = lambda **kw: sc.covers_in_other_case(self.covers, {1: "ps5"}, **kw)
+        self.assertEqual((count(), count(custom_art={1: mine})), (0, 0))              # art not asked about is not compared
+        self.assertEqual(count(custom_art={}), 1)                                     # the option turned off
+        sc.make_covers({1: None}, self.covers, force=True, platforms={1: "ps5"})
+        self.assertEqual(count(custom_art={1: mine}), 1)                              # the option turned on
+
     def test_covers_in_other_case_sees_other_marks(self):
         sc.make_covers({1: None, 2: None}, self.covers, platforms={1: "ps5", 2: "ps5"}, completed={1}, treatment="ribbon")
         count = lambda **kw: sc.covers_in_other_case(self.covers, {1: "ps5", 2: "ps5"}, **kw)
@@ -4252,13 +4270,13 @@ class ConsoleMake(StoreMocks):
         self.assertEqual(sc.existing_cover_theme(self.covers), "christmas")
 
     def test_a_steam_case_choice_replaces_a_cover_made_from_own_art(self):
-        """Review finding 5: Make passes no own art in the manual flow, so such a cover is rebuilt and the user must be asked."""
+        """Review finding 5: Make passes no own art when the option is off, so such a cover is rebuilt and the user must be asked."""
         art = os.path.join(self.tmp, "mine.jpg")
         sc.Image.new("RGB", (100, 150), (10, 160, 30)).save(art, format="JPEG")
         sc.make_covers({1: None}, self.covers, custom_art={1: art})
-        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}), 1)
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}, custom_art={}), 1)
         sc.make_covers({1: None}, self.covers, platforms={1: None})
-        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}), 0)
+        self.assertEqual(sc.covers_in_other_case(self.covers, {1: None}, custom_art={}), 0)
 
     def test_a_cover_with_a_garbled_console_note_is_a_reason_to_ask_before_the_natural_run_rebuilds_it(self):
         """Review finding 6: the natural run rebuilds it, so covers_in_other_look must say so (it skipped it silently)."""
@@ -4924,6 +4942,14 @@ class CustomCaseCovers(StoreMocks):
         with sc.Image.open(self.cv(1)) as im:
             self.assertNotIn(sc.HUE_CHUNK, im.info)
         self.assertEqual(sc.cover_platform(self.cv(1)), sc.CUSTOM)
+
+    def test_a_cover_in_the_users_own_case_can_hold_custom_art(self):
+        digest = sc.save_custom_case(self.case_file(), self.covers)
+        mine = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), (10, 160, 30)).save(mine, format="JPEG")
+        sc.make_covers({1: None}, self.covers, platforms={1: sc.CUSTOM}, custom_art={1: mine})
+        notes = sc.read_notes(self.cv(1))
+        self.assertEqual((notes.platform, notes.case, notes.art), (sc.CUSTOM, digest, sc.art_note(mine)))
 
     def test_a_cover_in_a_console_case_has_no_case_note(self):
         sc.save_custom_case(self.case_file(), self.covers)
