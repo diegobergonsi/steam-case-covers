@@ -43,14 +43,14 @@ class Hundred(QObject):
         self._pending = 0
         self._choosing = False
         self._style, self._marks = "ribbon", "full"
-        self._marks_before = None           # the marks chosen before Halloween forced the rosette
+        self._marks_before = None           # the marks chosen before Christmas forced the rosette
         self._status, self._kind, self._note = tr(WAITING), "wait", ""
         self._picked.connect(self._on_picked)
         self._read.connect(self._on_read)
         self._look.themeChanged.connect(self._theme_changed)
         self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case or in the manual flow (no gold there)
         shell.flowChanged.connect(self._sync)
-        self._theme_changed()               # the folder may hold Halloween covers already
+        self._theme_changed()               # the folder may hold Christmas covers already
 
     # ----- properties -----
     @Property(str, notify=pathChanged)
@@ -110,7 +110,7 @@ class Hundred(QObject):
 
     @Property(bool, notify=choicesChanged)
     def marksEnabled(self):
-        """Marks can be chosen with a page loaded, a case to put them on, and the classic theme (Halloween has the rosette alone)."""
+        """Marks can be chosen with a page loaded, a case to put them on, and the classic theme (Christmas has the rosette alone)."""
         return self._completed is not None and self._style in sc.CASES and self._look.theme == "classic"
 
     @Property(str, notify=themeNoteChanged)
@@ -133,7 +133,7 @@ class Hundred(QObject):
         return "full" if self._marks == "none" and self._no_gold() else self._marks       # what was chosen before counts as the full marks where "No marks" is not offered
 
     def _set_marks(self, value):
-        if value in sc.MARKS and value != self._marks and self._look.theme == "classic" and (value != "none" or not self._no_gold()):      # under Halloween the choice is greyed and fixed
+        if value in sc.MARKS and value != self._marks and self._look.theme == "classic" and (value != "none" or not self._no_gold()):      # under Christmas the choice is greyed and fixed
             self._marks = value
             self.marksChanged.emit()
             self._sync()
@@ -155,7 +155,7 @@ class Hundred(QObject):
         self.choicesChanged.emit()
 
     def _theme_changed(self):
-        """Halloween goes with the rosette alone: choosing it picks that and greys the marks out; going back restores what was picked before."""
+        """Christmas goes with the rosette alone: choosing it picks that and greys the marks out; going back restores what was picked before."""
         before = self._marks
         if self._look.theme != "classic":
             if self._marks_before is None:

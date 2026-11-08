@@ -11,7 +11,7 @@ STYLES = [("gold-case", N_("Gold case")), ("gold-border", N_("Gold border")), ("
 MARKS = [("full", N_("Rosette and ribbon")), ("rosette", N_("Rosette only")), ("none", N_("No marks"))]                    # values: sc.MARKS
 
 
-THEME_LABELS = {"classic": N_("Classic"), "halloween": N_("Halloween")}
+THEME_LABELS = {"classic": N_("Classic"), "christmas": N_("Christmas")}
 
 
 def theme_label(key):

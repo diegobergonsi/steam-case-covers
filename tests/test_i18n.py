@@ -157,8 +157,11 @@ class Table(unittest.TestCase):
             self.assertEqual((key[:1] == " ", key[-1:] == " "), (text[:1] == " ", text[-1:] == " "), repr(key[:50]))
 
     def test_the_words_that_must_stay_the_same_did_not_change(self):
-        for word in ("Steam Case Covers", "Halloween"):
+        for word in ("Steam Case Covers",):
             self.assertIn(self.table.get(word, word), (word,))
+
+    def test_the_christmas_theme_is_natal_in_portuguese(self):
+        self.assertEqual(self.table["Christmas"], "Natal")
 
 
 @need_qt

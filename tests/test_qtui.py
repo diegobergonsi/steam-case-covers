@@ -1329,8 +1329,8 @@ class LookScreen(WindowCase):
         self.assertLessEqual(len(re.findall(r"Theme\.smallSize", text)), 1)       # only the readable-text note
 
     def test_the_theme_chips_set_the_theme(self):
-        self.click("look_theme_chip_halloween")
-        self.assertEqual(self.look.theme, "halloween")
+        self.click("look_theme_chip_christmas")
+        self.assertEqual(self.look.theme, "christmas")
         self.click("look_theme_chip_classic")
         self.assertEqual(self.look.theme, "classic")
 
@@ -1428,8 +1428,8 @@ class LookFlow(QtCase):
         self.assertNotEqual(look.hue, 90)
         click("look_swatch_4")                                  # a ready-made colour
         self.assertEqual((look.hue, look.sat, look.val), (176, 100, 100))
-        click("look_theme_chip_halloween")
-        self.assertEqual(look.theme, "halloween")
+        click("look_theme_chip_christmas")
+        self.assertEqual(look.theme, "christmas")
         click("look_custom_art", 60)
         click("look_skip_blurry", 60)
         self.assertTrue(look.useCustomArt and look.skipAutoArt)
@@ -1437,7 +1437,7 @@ class LookFlow(QtCase):
         while time.time() < end and look.previewSource == before:
             self.app.processEvents()
             time.sleep(0.02)
-        self.assertIn("/176/100/100/halloween/none/", look.previewSource)     # one picture, in the final choice
+        self.assertIn("/176/100/100/christmas/none/", look.previewSource)     # one picture, in the final choice
         self.assertEqual(shell.steps[3]["state"], "locked")
         click("look_next")
         self.assertEqual(shell.current, 3)
@@ -2190,29 +2190,29 @@ class Components(QtCase):
         self.app.processEvents()
         self.assertTrue(QAccessible.queryAccessibleInterface(w).state().checked)
 
-    CHIPS = ('ChoiceChips { objectName: "c"; x: 20; y: 20; width: 380; model: [{"key": "classic", "label": "Classic"}, {"key": "halloween", "label": "Halloween"}];\n'
+    CHIPS = ('ChoiceChips { objectName: "c"; x: 20; y: 20; width: 380; model: [{"key": "classic", "label": "Classic"}, {"key": "christmas", "label": "Christmas"}];\n'
              '  current: "classic"; property string last: ""; onChosen: (k) => last = k }')
 
     def test_chips_report_the_choice_and_leave_it_to_the_owner(self):
         from PySide6.QtCore import Qt
         self.load(self.CHIPS)
         c = self.item("c")
-        chip = self.item("c_chip_halloween")
+        chip = self.item("c_chip_christmas")
         self.assertGreaterEqual(chip.height(), 44)
         from PySide6.QtCore import QPointF
         centre = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
         self.mouse("click", centre.x(), centre.y())
-        self.assertEqual(c.property("last"), "halloween")
+        self.assertEqual(c.property("last"), "christmas")
         self.assertEqual(c.property("current"), "classic")            # the owner decides
         c.setProperty("last", "")
         self.key("c_chip_classic", Qt.Key_Right)
-        self.assertEqual(c.property("last"), "halloween")
+        self.assertEqual(c.property("last"), "christmas")
         c.setProperty("last", "")
-        c.setProperty("current", "halloween")
-        self.key("c_chip_halloween", Qt.Key_Left)
+        c.setProperty("current", "christmas")
+        self.key("c_chip_christmas", Qt.Key_Left)
         self.assertEqual(c.property("last"), "classic")
         c.setProperty("last", "")
-        self.key("c_chip_halloween", Qt.Key_Right)                    # nothing after the last one
+        self.key("c_chip_christmas", Qt.Key_Right)                    # nothing after the last one
         self.assertEqual(c.property("last"), "")
 
     def test_arrow_keys_move_the_focus_with_the_choice_and_warn_about_nothing(self):
@@ -2239,7 +2239,7 @@ class Components(QtCase):
         from PySide6.QtGui import QAccessible
         self.load(self.CHIPS)
         self.assertTrue(self.item("c_chip_classic").property("activeFocusOnTab"))
-        self.assertFalse(self.item("c_chip_halloween").property("activeFocusOnTab"))
+        self.assertFalse(self.item("c_chip_christmas").property("activeFocusOnTab"))
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
         iface = QAccessible.queryAccessibleInterface(self.item("c_chip_classic"))
@@ -2251,7 +2251,7 @@ class Components(QtCase):
         self.load(self.CHIPS.replace('current: "classic";', 'current: "classic"; enabled: false;'))
         c = self.item("c")
         self.assertEqual(c.property("opacity"), 0.6)                  # the token for a disabled control
-        chip = self.item("c_chip_halloween")
+        chip = self.item("c_chip_christmas")
         centre = chip.mapToScene(QPointF(chip.width() / 2, chip.height() / 2))
         self.mouse("click", centre.x(), centre.y())
         self.assertEqual(c.property("last"), "")
@@ -2259,7 +2259,7 @@ class Components(QtCase):
         self.key("c_chip_classic", Qt.Key_Space)
         self.assertEqual(c.property("last"), "")
         self.assertFalse(self.item("c_chip_classic").property("activeFocusOnTab"))
-        self.assertFalse(self.item("c_chip_halloween").property("activeFocusOnTab"))
+        self.assertFalse(self.item("c_chip_christmas").property("activeFocusOnTab"))
         self.assertTrue(self.item("c_chip_classic").property("selected"))          # the choice still shows
         QAccessible.setActive(True)
         self.addCleanup(QAccessible.setActive, False)
@@ -2270,7 +2270,7 @@ class Components(QtCase):
         self.assertEqual(c.property("opacity"), 1)
         self.assertTrue(self.item("c_chip_classic").property("activeFocusOnTab"))
         self.mouse("click", centre.x(), centre.y())
-        self.assertEqual(c.property("last"), "halloween")
+        self.assertEqual(c.property("last"), "christmas")
 
     def test_the_preview_card_shows_the_engines_picture(self):
         import time
@@ -2334,7 +2334,7 @@ class PreviewImages(QtCase):
     def test_a_theme_and_a_treatment_change_the_picture(self):
         from engine import steamcase as sc
         plain = self.get("0/100/100/classic/none/1")
-        themed = self.get("0/100/100/halloween/none/2")
+        themed = self.get("0/100/100/christmas/none/2")
         marked = self.get("0/100/100/classic/%s/3" % sc.TREATMENTS[0])
         self.assertNotEqual(bytes(plain.constBits()), bytes(themed.constBits()))
         self.assertNotEqual(bytes(plain.constBits()), bytes(marked.constBits()))
@@ -2505,8 +2505,8 @@ class LookState(QtCase):
         self.assertEqual((look.hue, look.sat, look.val), (90, 80, 70))
 
     def test_the_theme_of_the_covers_already_made_is_shown_at_start(self):
-        self.make_cover(theme="halloween")
-        self.assertEqual(self.new_shell().look.theme, "halloween")
+        self.make_cover(theme="christmas")
+        self.assertEqual(self.new_shell().look.theme, "christmas")
 
     def test_a_missing_empty_or_garbage_covers_folder_gives_the_defaults(self):
         for setup in (lambda: shutil.rmtree(self.covers), lambda: None, lambda: (os.makedirs(self.covers, exist_ok=True), open(os.path.join(self.covers, "Game_1_1.png"), "w").write("garbage"))):
@@ -2515,8 +2515,8 @@ class LookState(QtCase):
             self.assertEqual((look.hue, look.sat, look.val, look.theme), (0, 100, 100, "classic"))
 
     def test_the_themes_come_from_python(self):
-        self.assertEqual([t["key"] for t in self.look.themes], ["classic", "halloween"])
-        self.assertEqual([t["label"] for t in self.look.themes], ["Classic", "Halloween"])
+        self.assertEqual([t["key"] for t in self.look.themes], ["classic", "christmas"])
+        self.assertEqual([t["label"] for t in self.look.themes], ["Classic", "Christmas"])
 
     def test_the_swatch_list_is_constant_and_the_selection_is_a_number(self):
         before = self.look.swatchList
@@ -2535,10 +2535,10 @@ class LookState(QtCase):
         self.assertEqual(len(set(names)), 9)
 
     def test_the_theme_takes_only_the_known_values(self):
-        self.look.theme = "halloween"
-        self.assertEqual(self.look.theme, "halloween")
+        self.look.theme = "christmas"
+        self.assertEqual(self.look.theme, "christmas")
         self.look.theme = "pumpkin"
-        self.assertEqual(self.look.theme, "halloween")
+        self.assertEqual(self.look.theme, "christmas")
         self.look.theme = "classic"
         self.assertEqual(self.look.theme, "classic")
 
@@ -2764,13 +2764,13 @@ class HundredState(QtCase):
         self.assertEqual(seen[-1], (True, False))
         self.shell.look.theme = "classic"                              # no change: no signal
         self.assertEqual(marks, [])
-        self.shell.look.theme = "halloween"
+        self.shell.look.theme = "christmas"
         self.assertEqual(marks, ["rosette"])
 
-    def test_marks_changed_under_halloween_are_ignored_and_the_ones_before_come_back(self):
+    def test_marks_changed_under_christmas_are_ignored_and_the_ones_before_come_back(self):
         h, look = self.h, self.shell.look
         h.marks = "rosette"
-        look.theme = "halloween"
+        look.theme = "christmas"
         h.marks = "full"                                              # greyed: ignored
         look.theme = "classic"
         self.assertEqual(h.marks, "rosette")
@@ -2825,11 +2825,11 @@ class HundredState(QtCase):
         self.assertEqual(h.marks, "rosette")
         self.shell.startPath("natural")
 
-    def test_halloween_still_forces_the_rosette_when_no_marks_was_chosen(self):
+    def test_christmas_still_forces_the_rosette_when_no_marks_was_chosen(self):
         h, look = self.h, self.shell.look
         self.load(self.page({1: (1, 1)}))
         h.style, h.marks = "gold-case", "none"
-        look.theme = "halloween"
+        look.theme = "christmas"
         self.assertEqual((h.marks, h.marksEnabled), ("rosette", False))
         h.marks = "none"
         self.assertEqual(h.marks, "rosette")
@@ -2846,36 +2846,36 @@ class HundredState(QtCase):
         self.assertEqual([x["label"] for x in self.h.styles], ["Gold case", "Gold border", "Normal case", "No special case"])
         self.assertEqual([(x["key"], x["label"]) for x in self.h.markChoices], [("full", "Rosette and ribbon"), ("rosette", "Rosette only"), ("none", "No marks")])
 
-    def test_halloween_forces_the_rosette_and_going_back_restores_the_marks(self):
+    def test_christmas_forces_the_rosette_and_going_back_restores_the_marks(self):
         h, look = self.h, self.shell.look
         self.load(self.page({1: (1, 1)}))
         h.marks = "full"
-        look.theme = "halloween"
-        self.assertEqual((h.marks, h.marksEnabled, h.themeNote), ("rosette", False, "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web."))
+        look.theme = "christmas"
+        self.assertEqual((h.marks, h.marksEnabled, h.themeNote), ("rosette", False, "The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts."))
         h.marks = "full"                                              # the greyed choice cannot be changed
         self.assertEqual(h.marks, "rosette")
         look.theme = "classic"
         self.assertEqual((h.marks, h.marksEnabled, h.themeNote), ("full", True, ""))
         h.marks = "rosette"
-        look.theme = "halloween"
+        look.theme = "christmas"
         look.theme = "classic"
         self.assertEqual(h.marks, "rosette")                          # what was chosen before, whatever it was
 
-    def test_a_page_loaded_under_halloween_keeps_the_marks_greyed(self):
+    def test_a_page_loaded_under_christmas_keeps_the_marks_greyed(self):
         h, look = self.h, self.shell.look
-        look.theme = "halloween"
+        look.theme = "christmas"
         self.load(self.page({1: (1, 1)}))
         self.assertEqual((h.styleEnabled, h.marksEnabled, h.marks), (True, False, "rosette"))
         from engine import steamcase as sc
         self.assertEqual(h.values()[1], sc.compose_treatment("ribbon", "rosette"))
 
-    def test_covers_made_in_halloween_open_the_window_in_halloween(self):
+    def test_covers_made_in_christmas_open_the_window_in_christmas(self):
         from engine import steamcase as sc
         if sc.Image is None:
             self.skipTest("Pillow missing")
         art = os.path.join(self.tmp, "art.png")
         sc.Image.new("RGB", (100, 150), (10, 120, 30)).save(art)
-        sc.build_cover(art, os.path.join(self.covers, "Game_1_1.png"), sc.load_frame(0), 0, theme="halloween")
+        sc.build_cover(art, os.path.join(self.covers, "Game_1_1.png"), sc.load_frame(0), 0, theme="christmas")
         h = self.new_shell().hundred
         self.assertEqual((h.marks, h.marksEnabled, h.themeNote != ""), ("rosette", False, True))
 
@@ -2891,7 +2891,7 @@ class HundredState(QtCase):
         h.style = "none"
         self.assertEqual(look.treatment, "none")
         h.style = "gold-border"
-        look.theme = "halloween"
+        look.theme = "christmas"
         self.assertEqual(look.treatment, "gold-border-rosette")
 
     def test_a_page_saved_by_the_browser_is_noticed_once_when_finished(self):
@@ -2985,7 +2985,7 @@ class HundredState(QtCase):
         from qtui import system
         self.assertIn("The saved file contains a temporary login token for your Steam account.", system.PAGE_HELP)
         self.assertIn(system.SAVE_KEY, system.PAGE_HELP)
-        self.assertEqual(system.THEME_NOTE, "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web.")
+        self.assertEqual(system.THEME_NOTE, "The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts.")
         self.assertEqual(system.GAMES_PAGE_URL, "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
 
 
@@ -3113,15 +3113,15 @@ class HundredScreen(WindowCase):
         self.assertFalse(self.item("hundred_marks").property("enabled"))          # no special case: no marks to choose
         self.assertTrue(self.item("hundred_marks_chip_full").property("selected"))      # the choice still shows
 
-    def test_halloween_greys_the_marks_shows_the_note_and_classic_brings_the_marks_back(self):
+    def test_christmas_greys_the_marks_shows_the_note_and_classic_brings_the_marks_back(self):
         self.load_page()
-        self.shell.look.theme = "halloween"
+        self.shell.look.theme = "christmas"
         self.app.processEvents()
         self.assertFalse(self.item("hundred_marks").property("enabled"))
         self.assertTrue(self.item("hundred_marks_chip_rosette").property("selected"))
         note = self.item("hundred_theme_note")
         self.assertTrue(note.property("visible"))
-        self.assertEqual(note.property("text"), "The Halloween case shows the rosette only: the ribbon would hide the pumpkin and the web.")
+        self.assertEqual(note.property("text"), "The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts.")
         self.shell.look.theme = "classic"
         self.app.processEvents()
         self.assertTrue(self.item("hundred_marks").property("enabled"))
@@ -3189,7 +3189,7 @@ class HundredScreen(WindowCase):
     def test_nothing_sticks_out_of_its_card_at_the_narrowest_window(self):
         from PySide6.QtCore import QPointF
         self.load_page()
-        self.shell.look.theme = "halloween"
+        self.shell.look.theme = "christmas"
         self.root.setProperty("minimumWidth", 420)
         self.root.setProperty("width", 420)
         self.app.processEvents()
@@ -4041,8 +4041,8 @@ class ReplaceReasons(FakeStore):
         from unittest import mock
         from qtui import reasons
         self.made()
-        with mock.patch.dict(reasons.THEME_LABELS, {"halloween": "Spooky"}):
-            self.assertIn("new ones in the Spooky theme", self.reason((0, 100, 100), None, None, "halloween")[1])
+        with mock.patch.dict(reasons.THEME_LABELS, {"christmas": "Spooky"}):
+            self.assertIn("new ones in the Spooky theme", self.reason((0, 100, 100), None, None, "christmas")[1])
 
     def test_a_page_with_no_game_at_100_says_the_highlight_is_lost(self):
         for treatment in ("ribbon", "gold-case"):
@@ -4063,21 +4063,21 @@ class ReplaceReasons(FakeStore):
 
     def test_a_theme_change_alone_says_the_new_covers_get_the_theme(self):
         self.made()
-        title, text = self.reason((0, 100, 100), None, None, "halloween")
+        title, text = self.reason((0, 100, 100), None, None, "christmas")
         self.assertIn("theme", title.lower())
-        self.assertIn("new ones in the Halloween theme", text)
-        self.remake(theme="halloween")
+        self.assertIn("new ones in the Christmas theme", text)
+        self.remake(theme="christmas")
         self.assertIn("new ones in the Classic case", self.reason((0, 100, 100), None, None, None)[1])
 
     def test_a_theme_without_a_page_says_the_100_covers_lose_their_ribbon(self):
         self.made(completed={1}, treatment="ribbon")
-        text = self.reason((0, 100, 100), None, None, "halloween")[1]
+        text = self.reason((0, 100, 100), None, None, "christmas")[1]
         self.assertIn("lose their ribbon", text)
         self.assertIn("Rosette and ribbon", text)
         self.remake(completed={1}, treatment="rosette")
-        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
+        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "christmas")[1])
         self.remake()
-        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "halloween")[1])
+        self.assertNotIn("ribbon", self.reason((0, 100, 100), None, None, "christmas")[1])
 
 class ReplaceReasonsAndConsoleCovers(FakeStore):
     """Review finding 7: a console cover is never rebuilt by the natural flow, so it must not colour the question about the others."""
@@ -5848,7 +5848,7 @@ class MakeState(QtCase, FakeStore):
         self.wait_for(lambda: "platform/custom/" in look.previewSource)
         self.assertIn("platform/custom/", look.previewSource)
         self.assertNotEqual(look.previewSource, before)
-        look.theme = "halloween"
+        look.theme = "christmas"
         self.run_it()
         self.assertEqual((self.calls[-1]["theme"], self.make.statusKind), (None, "ok"))      # a theme means nothing in your own case
 
@@ -5977,11 +5977,11 @@ class MakeState(QtCase, FakeStore):
 
     def test_what_the_run_gets_is_what_the_steps_chose(self):
         self.shell.look.setTone(120, 50, 80)
-        self.shell.look.theme = "halloween"
+        self.shell.look.theme = "christmas"
         self.shell.setSwitch("skip_auto_art", True)
         self.run_it()
         call = self.calls[0]
-        self.assertEqual((call["hue"], call["sat"], call["val"], call["theme"], call["skip_auto_art"]), (120, 50, 80, "halloween", True))
+        self.assertEqual((call["hue"], call["sat"], call["val"], call["theme"], call["skip_auto_art"]), (120, 50, 80, "christmas", True))
         self.assertEqual((call["completed"], call["treatment"], call["custom_art"]), (None, None, {}))
 
     def test_a_loaded_page_and_its_style_go_to_the_run(self):
@@ -6197,7 +6197,7 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual((by()["theme"]["value"], by()["hundred"]["value"], by()["art"]["value"]), ("Classic case", "Skipped", "Steam's art"))
         seen = []
         self.make.choicesChanged.connect(lambda: seen.append(1))
-        self.shell.look.theme = "halloween"
+        self.shell.look.theme = "christmas"
         self.shell.look.setTone(120, 100, 100)
         self.shell.setSwitch("skip_auto_art", True)
         self.shell.look.skipAutoArt = False
@@ -6205,7 +6205,7 @@ class MakeState(QtCase, FakeStore):
         self.shell.hundred.loadPage(write_games_page(self.tmp, {1: (1, 1)}))
         self.wait_for(lambda: not self.shell.hundred.busy)
         self.shell.hundred.style = "none"
-        self.assertEqual(by()["theme"]["value"], "Halloween")
+        self.assertEqual(by()["theme"]["value"], "Christmas")
         self.assertEqual(by()["colour"]["value"], self.shell.look.toneName)
         self.assertEqual(by()["art"]["value"], "Your own art")
         self.assertEqual(by()["hundred"]["value"], "No special case")
@@ -9040,7 +9040,7 @@ class NoMarks(QtCase, FakeStore):
     def test_a_theme_over_plain_gold_covers_says_they_get_the_rosette(self):
         from qtui import reasons
         self.made(completed={1}, treatment="gold-case-plain")
-        title, text = reasons.replace_reason(self.covers, (0, 100, 100), None, None, "halloween")
+        title, text = reasons.replace_reason(self.covers, (0, 100, 100), None, None, "christmas")
         self.assertIn("with no marks get the rosette", text)
         self.assertNotIn("lose their ribbon", text)
 
@@ -9082,7 +9082,7 @@ class StartOver(WindowCase):
 
     def test_the_look_goes_back(self):
         self.shell.look.setTone(120, 50, 50)
-        self.shell.look.theme = "halloween"
+        self.shell.look.theme = "christmas"
         self.shell.look._use_own()
         self.shell.startOver()
         look = self.shell.look

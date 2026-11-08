@@ -136,7 +136,7 @@ Release files come with a `SHA256SUMS` list so you can check what you downloaded
 ## 🔧 How it works
 
 1. Get your game list. Click **Open the page in my browser**. Steam opens in your browser: log in if it asks, and you land on a page of plain text. Save it (Ctrl+S, or Cmd+S on a Mac) as `userdata.json`. The app notices the file by itself. If no browser opens, click **Copy link** and paste it yourself. To skip this step, tick **Only my installed games**: games not installed on this computer, including games shared by a family member, are then left out (hover the **i** next to it). On a Mac with Safari, set the format to **Page Source** when saving, or use Chrome or Firefox.
-2. Choose the look. Drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. **Theme** can turn the cases into a **Halloween** one: a cobweb with a spider, a pumpkin and a spider hanging from the top, over whatever colour you picked. The Halloween case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. If you set your own art for some games (in Steam's menu or from SteamGridDB), turn on **Use my own custom art where I have it** and your art goes inside the case instead of Steam's. Games without art of your own keep Steam's. The app keeps a copy of your art in its own folder and never changes your files.
+2. Choose the look. Drag the Colour, Colourfulness and Brightness sliders or tap one of the nine swatches (six colours, then Black, Graphite and Silver), and the preview shows the result. Colourfulness and Brightness only go down from the original blue, so the case can be any shade from vivid to dark grey and black; the white logo and text stay white. **Theme** can turn the cases into a **Christmas** one: a Santa hat at the top, a tree at the bottom left and gifts at the bottom right, over whatever colour you picked. The Christmas case shows the rosette only for your 100% games (the ribbon would hide the decorations), and the window picks that for you. If you set your own art for some games (in Steam's menu or from SteamGridDB), turn on **Use my own custom art where I have it** and your art goes inside the case instead of Steam's. Games without art of your own keep Steam's. The app keeps a copy of your art in its own folder and never changes your files.
 3. Highlight your 100% games (optional). Load your Steam games page and the games where you unlocked every achievement get a mark. Details below. You can skip this step.
 4. Make the covers. Check your choices (each one leads back to its step) and click **Make covers**, then wait. You can cancel and run it again later: finished covers are kept, so it picks up where it stopped. If you already made covers in another colour or theme, the app asks before it replaces them.
 5. Add them to Steam. Click **Apply to Steam**. If more than one Steam account is on this computer, the window shows which one will change; pick another with the account buttons. Your current artwork is backed up first.
@@ -203,7 +203,7 @@ Good to know:
 **Make them yours**
 - Pick games by hand and put them in a PlayStation, Xbox or Nintendo case, or in a colour of your own, in groups the app remembers
 - Optionally put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it
-- Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview, and, if you like, a Halloween theme (a cobweb with a spider, a pumpkin and a hanging spider) in any colour
+- Pick the colour, colourfulness and brightness of the cases with three sliders or a ready-made swatch (black, graphite and silver included), with a live preview, and, if you like, a Christmas theme (a Santa hat, a tree and gifts) in any colour
 - Optional: games where you unlocked every achievement get a rosette and a "100% Complete" ribbon (or the rosette alone), and, if you like, a gold case or a gold border ([how it works](#optional-highlight-your-100-games))
 
 **Install them safely**
@@ -252,7 +252,7 @@ python -m engine make --library userdata.json   # build covers
 python -m engine make --library userdata.json --hue 134   # ...in another case colour (0 to 359 degrees; 0 is the original blue)
 python -m engine make --library userdata.json --brightness 0   # ...a black case (0 to 100; 100 is the original)
 python -m engine make --library userdata.json --saturation 0 --brightness 60   # ...a grey case (--saturation also goes 0 to 100)
-python -m engine make --library userdata.json --theme halloween   # ...with the Halloween theme (the case keeps its colour; --theme classic goes back)
+python -m engine make --library userdata.json --theme christmas   # ...with the Christmas theme (the case keeps its colour; --theme classic goes back)
 python -m engine make --library userdata.json --games-page games.html   # ...with a rosette and a ribbon on your 100% games
 python -m engine make --library userdata.json --use-custom-art   # ...with the art you set yourself inside the case, for the games that have it
 python -m engine make --library userdata.json --games-page games.html --completed-style gold-case   # ...also in a gold case (or gold-border)
@@ -275,7 +275,7 @@ python -m engine reset --everything             # ...also removing art from othe
 
 `list` marks games from your Steam Family library with `(family)`. `make` keeps the colour of the covers already in the folder unless you pass `--hue`, `--saturation` or `--brightness`. An option you leave out keeps the value of the covers already there, or the original (`--hue 0 --saturation 100 --brightness 100` asks for the original blue). Saturation and brightness go from 0 to 100, where 100 is the original and lower values give a greyer or darker case.
 
-`--theme` is `classic` or `halloween`. Without it, covers already in the folder keep their theme. With Halloween, 100% games get the rosette only, so `--completed-marks full` is refused.
+`--theme` is `classic` or `christmas`. Without it, covers already in the folder keep their theme. With Christmas, 100% games get the rosette only, so `--completed-marks full` is refused.
 
 `--use-custom-art` puts the art you set yourself inside the case for the games that have it (add `--user` to pick the account). `--no-custom-art` goes back to Steam's portrait for every cover. With neither, covers already made from your art keep it.
 
