@@ -1263,6 +1263,11 @@ def _drawing_for(treatment, family=False):
     return LAYOUT if treatment is not None or family else KEEP
 
 
+def _art_wanted(custom_art, appid):
+    """The art note a cover of `appid` must carry when make_covers gets `custom_art` ({appid: path}): KEEP when it is KEEP (art is not compared), None for Steam's portrait."""
+    return KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
+
+
 def _spec_for(platform, colour, treatment, theme, art, group):
     """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour or theme to compare, and an earlier gold
     look keeps only its marks there; its art is compared like any other (KEEP: not at all)."""
@@ -1651,7 +1656,7 @@ def covers_in_other_look(covers_dir, hue, sat=100, val=100, completed=None, trea
         if state or notes.colour is None:                            # a cover by hand is left alone by the natural flow
             continue
         target, colour = _wanted_look(appid, notes, (hue, sat, val), completed, treatment, theme)
-        art = KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
+        art = _art_wanted(custom_art, appid)
         if not matches(notes, CoverSpec(colour=colour, treatment=target, theme=theme, art=art, layout=_drawing_for(target) if drawing else KEEP)):
             return True
     return False
@@ -1675,7 +1680,7 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
             continue
         notes = read_notes(path)
         target, colour = _wanted_look(appid, notes, (tones or {}).get(appid, tone), completed, treatment)
-        art = KEEP if custom_art == KEEP else (art_note(custom_art[appid]) if appid in custom_art else None)
+        art = _art_wanted(custom_art, appid)
         count += not matches(notes, _spec_for(platforms[appid], colour, target, None, art, (groups or {}).get(appid)))
     return count
 
