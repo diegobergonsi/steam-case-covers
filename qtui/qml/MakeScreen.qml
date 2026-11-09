@@ -14,7 +14,7 @@ ScreenFrame {
 
     PreviewLayout {
         previewName: "make_preview"
-        source: shell.flow === "manual" && shell.cases.previewKey !== "" ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.previewSource
+        source: shell.flow === "manual" && shell.cases.previewKey !== "" ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.markedSource
 
         Section {
             objectName: "make_section_choices"

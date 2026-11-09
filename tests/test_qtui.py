@@ -1511,11 +1511,11 @@ class HundredFlow(QtCase):
         self.wait_for(lambda: h.loaded)
         self.assertEqual((h.count, os.path.basename(h.path)), (2, "games.html"))
         self.assertEqual(self.find(self.root, "hundred_next").property("text"), "Next: Make \u2192")
-        before = look.previewSource
+        before = look.hundredSource
         self.click("hundred_style_chip_gold-border")
         self.click("hundred_marks_chip_rosette")
-        self.wait_for(lambda: look.previewSource != before and "/gold-border-rosette/" in look.previewSource)
-        self.assertIn("/classic/gold-border-rosette/", look.previewSource)
+        self.wait_for(lambda: look.hundredSource != before and "/gold-border-rosette/" in look.hundredSource)
+        self.assertIn("/classic/gold-border-rosette/", look.hundredSource)
         self.assertEqual(h.values(), ({1, 3}, "gold-border-rosette"))
         self.assertEqual(self.shell.steps[4]["state"], "locked")
         self.click("hundred_next")
@@ -3093,6 +3093,14 @@ class HundredScreen(WindowCase):
         self.assertTrue(self.item("hundred_note").property("text").startswith("Done with the page?"))
         self.assertEqual(self.item("hundred_status").property("kind"), "ok")
 
+    def test_the_preview_of_step_3_starts_from_the_original_colour_and_the_classic_case_whatever_step_2_chose(self):
+        self.shell.look.setTone(90, 80, 70)
+        self.shell.look.theme = "christmas"
+        self.wait_for(lambda: "/90/80/70/christmas/" in self.shell.look.previewSource)
+        self.assertIn("/90/80/70/christmas/", self.shell.look.markedSource)    # Make shows the covers as they will be made
+        self.assertTrue(self.shell.look.hundredSource.startswith("image://preview/0/100/100/classic/"))
+        self.assertEqual(self.item("hundred_preview").property("source"), self.shell.look.hundredSource)
+
     def test_choosing_a_case_and_marks_changes_the_preview_after_a_page_is_loaded(self):
         before = self.shell.look.previewSource
         self.assertIn("/classic/none/", before)
@@ -3101,9 +3109,14 @@ class HundredScreen(WindowCase):
         self.assertEqual(self.h.style, "gold-case")
         self.click("hundred_marks_chip_rosette")
         self.assertEqual(self.h.marks, "rosette")
-        self.wait_for(lambda: "/gold-case-rosette/" in self.shell.look.previewSource)
-        self.assertIn("/classic/gold-case-rosette/", self.shell.look.previewSource)
+        self.wait_for(lambda: "/gold-case-rosette/" in self.shell.look.hundredSource)
+        self.assertIn("/classic/gold-case-rosette/", self.shell.look.hundredSource)
+        self.assertIn("/classic/none/", self.shell.look.previewSource)      # the Look step keeps showing a plain game: the marks belong to step 3 only
         self.assertEqual(self.item("hundred_caption").property("text"), "Preview of a 100% game")
+        self.assertEqual(self.item("hundred_preview").property("source"), self.shell.look.hundredSource)
+        self.shell.go(self.shell.stepIndex("look"))
+        self.app.processEvents()
+        self.assertIn("/classic/none/", str(self.item("look_preview").property("source")))      # the window itself: Look stays plain after step 3 was set
 
     def test_no_caption_without_a_page_and_none_for_normal_covers(self):
         self.assertEqual(self.item("hundred_caption").property("text"), "")
