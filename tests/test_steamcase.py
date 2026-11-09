@@ -724,6 +724,15 @@ class Attacks(Base):
         json.dump({"rgOwnedApps": [-5, 0, 10 ** 30, 413150]}, open(p, "w"))
         self.assertEqual(sc.owned_ids(p), [413150])
 
+    def test_a_game_list_with_numbers_that_are_not_whole_ids_is_called_damaged(self):
+        p = os.path.join(self.tmp, "odd.json")
+        for text in ('{"rgOwnedApps":[Infinity]}', '{"rgOwnedApps":[1.9, 5]}', '{"rgOwnedApps":[true]}', '{"rgOwnedApps":["abc"]}'):
+            with open(p, "w") as f:
+                f.write(text)
+            with self.assertRaises(sc.SteamcaseError, msg=text) as cm:
+                sc.owned_ids(p)
+            self.assertIn("damaged", str(cm.exception), text)
+
     def test_oversized_download_is_refused(self):
         class H(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
@@ -969,6 +978,14 @@ class FamilyOwnership(Base):
         with open(path, "w") as f:
             json.dump(d, f)
         return path
+
+    def test_one_damaged_install_file_does_not_stop_the_library_from_loading(self):
+        self.manifest(10, "Good Game")
+        apps = os.path.join(self.steam, "steamapps")
+        with open(os.path.join(apps, "appmanifest_11.acf"), "w") as f:
+            f.write('"AppState"\n{\n\t"appid"\t\t""\n\t"name"\t\t"Broken"\n}\n')
+        os.makedirs(os.path.join(apps, "appmanifest_12.acf"))                      # a folder where a file should be
+        self.assertEqual(sc.installed_games(self.steam), {10: "Good Game"})
 
     def test_a_cached_app_you_do_not_own_is_family(self):
         self.packageinfo({0: [1]})

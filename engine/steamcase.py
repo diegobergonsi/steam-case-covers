@@ -86,6 +86,7 @@ def library_login_url():
     return "https://store.steampowered.com/login/?redir=dynamicstore%2Fuserdata%2F%3Fcb%3D" + uuid.uuid4().hex[:10] + "&redir_ssl=1"
 MAX_DOWNLOAD = 25 * 1024 * 1024          # a cover portrait is ~1 MB; anything bigger is not one
 MAX_LIBRARY_FILE = 20 * 1024 * 1024      # a real library list is a few KB
+MAX_STEAM_TEXT = 8 * 1024 * 1024         # Steam's own text files (libraryfolders, loginusers, appmanifest) are a few KB
 MAX_APPS = 100_000                       # a real library has at most a few thousand apps
 MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompression bombs
 MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
@@ -305,7 +306,8 @@ def slug(name):
 
 
 def read_text(path):
-    return open(path, encoding="utf-8-sig", errors="replace").read()
+    """A Steam text file (a regular file, links followed, of a sane size), closed again."""
+    return safefile.read_small_file(path, MAX_STEAM_TEXT, follow_links=True).decode("utf-8-sig", errors="replace")
 
 
 def vdf_values(text, key):
@@ -383,9 +385,12 @@ def installed_games(steam):
         for fn in os.listdir(apps):
             if not (fn.startswith("appmanifest_") and fn.endswith(".acf")):
                 continue
-            t = read_text(os.path.join(apps, fn))
+            try:
+                t = read_text(os.path.join(apps, fn))
+            except OSError:                                        # one unreadable file must not hide the other games
+                continue
             i, n = vdf_values(t, "appid"), vdf_values(t, "name")
-            if i and n and not TOOL_NAMES.match(n[0]):
+            if i and n and i[0].isdigit() and not TOOL_NAMES.match(n[0]):
                 games[int(i[0])] = n[0]
     return games
 
@@ -417,8 +422,10 @@ def owned_ids(json_path):
     if len(ids) > MAX_APPS:
         raise SteamcaseError(_t("That game list has %d entries; a real library has far fewer. Refusing it.") % len(ids))
     try:
+        if not all(type(i) is int or (isinstance(i, str) and i.isascii() and i.isdigit()) for i in ids):       # whole numbers only: no 1.9, true or Infinity
+            raise ValueError("not a whole number")
         out = [int(i) for i in ids]
-    except (TypeError, ValueError):
+    except ValueError:                                                                                         # also a digit string too long for int()
         raise SteamcaseError(_t("The game list in that file is damaged. Save %s again.") % LIBRARY_JSON_URL)
     out = [i for i in out if 0 < i < 2 ** 32]                    # real Steam app IDs only
     if not out:
