@@ -62,16 +62,16 @@ class Look(QObject):
 
     # ----- the preview -----
     def _make_sources(self):
-        """(Look preview, 100% games preview, Make preview). Look never shows the marks of step 3, and step 3 never takes the colour of step 2 (it starts from the
-        original one); Make shows the covers as they will be made, colour and marks."""
+        """(Look preview, 100% games preview, Make preview). Look never shows the marks of step 3, and step 3 never takes the colour or the theme of step 2 (it
+        starts from the original colour in the classic case); Make shows the covers as they will be made, colour, theme and marks."""
         self._serial += 1
         if self._own:
             own = "image://preview/platform/%s/%d" % (sc.CUSTOM, self._serial)      # the case keeps its own colours: tone, theme and marks mean nothing in it
             return own, own, own
 
-        def url(tone, treatment):
-            return "image://preview/%d/%d/%d/%s/%s/%d" % (*tone, self._theme, treatment, self._serial)
-        return url(self._tone, "none"), url(tones.ORIGINAL, self._treatment), url(self._tone, self._treatment)
+        def url(tone, theme, treatment):
+            return "image://preview/%d/%d/%d/%s/%s/%d" % (*tone, theme, treatment, self._serial)
+        return (url(self._tone, self._theme, "none"), url(tones.ORIGINAL, "classic", self._treatment), url(self._tone, self._theme, self._treatment))
 
     def _refresh_source(self):
         self._source, self._hundred_source, self._marked_source = self._make_sources()
