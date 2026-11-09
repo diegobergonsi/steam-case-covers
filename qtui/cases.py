@@ -49,6 +49,7 @@ class Cases(QObject):
     groupsChanged = Signal()
     groupNameChanged = Signal()
     colourChanged = Signal()
+    labelsChanged = Signal()                # the colour names (a change of language tells the window to read them again)
     errorChanged = Signal()
     choicesChanged = Signal()
     previewChanged = Signal()               # the choice, what is in use, or the own case changed
@@ -121,7 +122,7 @@ class Cases(QObject):
             self._shell.toast.emit(tr("You picked a new case, so the saved group was unselected."))
 
     # ----- the colour of the Steam case, the name and the groups -----
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=labelsChanged)
     def colourChoices(self):
         return _colour_choices()
 

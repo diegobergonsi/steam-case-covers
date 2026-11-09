@@ -1235,6 +1235,14 @@ class LookScreen(WindowCase):
         super().setUp()
         self.look = self.shell.look
 
+
+    def test_the_theme_chips_follow_a_change_of_language(self):
+        labels = lambda: [c["label"] for c in (lambda m: m.toVariant() if hasattr(m, "toVariant") else m)(self.item("look_theme").property("model"))]
+        before = labels()
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.assertNotEqual(labels(), before)
+
     def test_it_shows_its_title_and_the_nine_swatches(self):
         self.assertEqual(self.item("screen_title").property("text"), "Choose the look")
         self.assertEqual([self.item("look_swatch_%d" % i).property("name") for i in (0, 6, 8)], ["Original", "Black", "Silver"])
@@ -2846,6 +2854,12 @@ class HundredState(QtCase):
         self.assertEqual([x["label"] for x in self.h.styles], ["Gold case", "Gold border", "Normal case", "No special case"])
         self.assertEqual([(x["key"], x["label"]) for x in self.h.markChoices], [("full", "Rosette and ribbon"), ("rosette", "Rosette only"), ("none", "No marks")])
 
+    def test_the_theme_note_follows_the_language(self):
+        self.shell.look.theme = "christmas"
+        self.shell.setLanguage("pt-BR")
+        self.assertIn("Natal", self.h.themeNote)
+        self.assertNotIn("Christmas", self.h.themeNote)
+
     def test_christmas_forces_the_rosette_and_going_back_restores_the_marks(self):
         h, look = self.h, self.shell.look
         self.load(self.page({1: (1, 1)}))
@@ -3003,6 +3017,13 @@ class HundredScreen(WindowCase):
         self.h.loadPage(write_games_page(self.tmp, progress or {1: (3, 3), 2: (1, 4)}, name))
         self.wait_for(lambda: self.h.loaded)
         self.app.processEvents()
+
+    def test_the_case_chips_follow_a_change_of_language(self):
+        labels = lambda: [c["label"] for c in (lambda m: m.toVariant() if hasattr(m, "toVariant") else m)(self.item("hundred_style").property("model"))]
+        before = labels()
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.assertNotEqual(labels(), before)
 
     def test_it_shows_its_title_and_says_it_is_optional(self):
         self.assertEqual(self.item("screen_title").property("text"), "Highlight your 100% games")
@@ -3614,6 +3635,23 @@ class ShellWindow(WindowCase):
     """The real QML window, offscreen, as it opens: nothing done yet, and its animations on."""
     reduce_effects = False
     installed_only = False
+
+    def test_the_translated_lists_can_tell_the_window_to_read_them_again(self):
+        """A property declared constant never tells QML to read it again, so its words would stay in the old language."""
+        shell = self.shell
+        for obj, name in ((shell.look, "themes"), (shell.hundred, "styles"), (shell.hundred, "manualStyles"), (shell.cases, "colourChoices")):
+            meta = obj.metaObject()
+            self.assertTrue(meta.property(meta.indexOfProperty(name)).hasNotifySignal(), name)
+
+    def test_the_waiting_status_lines_follow_a_change_of_language(self):
+        shell = self.shell
+        lines = lambda: (shell.library.status, shell.make.status, shell.hundred.status)
+        before = lines()
+        shell.setLanguage("pt-BR")
+        for was, now in zip(before, lines()):
+            self.assertNotEqual(now, was)
+        shell.setLanguage("en")
+        self.assertEqual(lines(), before)                         # and back again
 
     def test_the_window_has_six_nav_items_and_the_footer(self):
         self.assertEqual([self.item("nav_" + k).property("label") for k in ("home", "game_list", "look", "hundred", "make", "add")],
@@ -4234,6 +4272,11 @@ class MakeScreen(WindowCase, FakeStore):
     def setUp(self):
         super().setUp()
         self.make = self.shell.make
+
+    def test_the_progress_line_follows_the_language(self):
+        self.shell.setLanguage("pt-BR")
+        self.make._on_progress(self.make._req, 3, 120, "Game")
+        self.assertEqual(self.make.status, "3 de 120 \u00b7 Game")
 
     def test_without_a_games_page_only_the_all_games_preview_shows(self):
         self.assertEqual(self.text("make_caption_all"), "All Games")
@@ -9102,6 +9145,21 @@ class ManualFlowEndToEnd(PickerBase):
         self.assertTrue(os.path.exists(os.path.join(self.covers, "God_of_War_3.png")))        # and the other games got the Steam case
 
 
+@need_qt
+class DesktopFileChooser(unittest.TestCase):
+    def test_the_default_kind_and_the_all_files_filter_are_in_the_language_in_use(self):
+        from unittest import mock
+        from qtui import filepicker, i18n
+        i18n.set_language("pt-BR")
+        self.addCleanup(i18n.set_language, "en")
+        seen = []
+        with mock.patch.object(filepicker.sys, "platform", "linux"), mock.patch.object(filepicker.shutil, "which", lambda name: "/bin/" + name if name == "kdialog" else None), \
+                mock.patch.object(filepicker.subprocess, "run", lambda cmd, **kw: seen.append(cmd) or mock.Mock(returncode=1, stdout="")):
+            filepicker.pick_file("Title", "/")
+        self.assertIn("Arquivos JSON", seen[0][-1])
+        self.assertIn("Todos os arquivos", seen[0][-1])
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -9753,3 +9811,4 @@ class ManageGroups(PickerBase):
 
     def cover(self, appid):
         return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))
+

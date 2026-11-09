@@ -12,7 +12,7 @@ from qtui import settings
 from qtui.filepicker import pick_file
 from qtui.system import SAVE_KEY
 from qtui.watcher import DownloadWatcher
-from qtui.i18n import N_, tr
+from qtui.i18n import N_, retranslated, tr
 
 WAITING = N_("Waiting for userdata.json…")
 INSTALLED_ONLY = N_("Using installed games only.")
@@ -37,6 +37,7 @@ class Library(QObject):
         self._choosing = False              # a file chooser is open
         self._why = ""                      # why the last file was refused
         self._picked.connect(self._on_picked)
+        shell.languageChanged.connect(self._language_changed)
         self._reported = {}                 # path -> signature of the version whose error is already on screen
         self._installed = shell.switchValue("installed_only")
         self._status, self._kind = "", "wait"
@@ -85,6 +86,10 @@ class Library(QObject):
         if (text, kind) != (self._status, self._kind):
             self._status, self._kind = text, kind
             self.statusChanged.emit()
+
+    def _language_changed(self):
+        """The waiting lines are stored translated: they follow the language (one about a file that was read stays as it was said)."""
+        self._set_status(retranslated(self._status, INSTALLED_ONLY, WAITING), self._kind)
 
     def _show_default_status(self):
         if self._installed:

@@ -12,7 +12,7 @@ from engine import groups
 from engine import steamcase as sc
 from qtui import reasons
 from qtui.groupticks import GroupTicks
-from qtui.i18n import N_, tr, trn
+from qtui.i18n import N_, retranslated, tr, trn
 
 STATUS_IDLE = N_("Not started.")
 MAX_THUMBS = 5                              # covers shown under the status
@@ -85,6 +85,7 @@ class Make(QObject):
         self._status, self._kind = tr(STATUS_IDLE), "wait"
         self._finished = self._total = 0
         self._art_done.connect(self._on_art)
+        shell.languageChanged.connect(self._language_changed)
         self._progressed.connect(self._on_progress)
         self._made.connect(self._on_made)
         shell.hundred.busyChanged.connect(self._availability)
@@ -216,6 +217,11 @@ class Make(QObject):
         if (text, kind) != (self._status, self._kind):
             self._status, self._kind = text, kind
             self.statusChanged.emit()
+
+    def _language_changed(self):
+        """The line that waits for a run is stored translated: it follows the language (a line about a run that happened stays as it was said)."""
+        self._before = (retranslated(self._before[0], STATUS_IDLE), self._before[1])
+        self._set_status(retranslated(self._status, STATUS_IDLE), self._kind)
 
     def _set_state(self, running=None, searching=None, asking=None, making=None):
         before = (self._running, self._searching, self._asking, self._making)
@@ -389,7 +395,7 @@ class Make(QObject):
             return
         self._finished, self._total = done, max(total, 1)
         self.progressChanged.emit()
-        self._set_status("%d of %d · %s" % (done, total, name if len(name) <= MAX_NAME else name[:MAX_NAME - 3] + "…"), "wait")
+        self._set_status(tr("%d of %d · %s") % (done, total, name if len(name) <= MAX_NAME else name[:MAX_NAME - 3] + "…"), "wait")
 
     def _on_made(self, req, res, error):
         if req != self._req:

@@ -14,7 +14,7 @@ from qtui.filepicker import pick_file
 from qtui.reasons import MARKS, STYLES
 from qtui.system import GAMES_PAGE_URL, SAVE_KEY, THEME_NOTE
 from qtui.watcher import DownloadWatcher
-from qtui.i18n import N_, tr, trn
+from qtui.i18n import N_, retranslated, tr, trn
 
 WAITING = N_("No games page loaded. Your covers keep the look they have.")
 
@@ -27,6 +27,7 @@ class Hundred(QObject):
     marksChanged = Signal()
     choicesChanged = Signal()               # styleEnabled and marksEnabled (they depend on the page, the case and the theme)
     themeNoteChanged = Signal()
+    labelsChanged = Signal()                # the words of the case chips (a change of language tells the window to read them again)
     needDialog = Signal(str)                # the desktop has no file chooser of its own: show Qt's, starting in this folder
     _picked = Signal(object)                # the answer of the file chooser, which runs on another thread
     _read = Signal(int, str, object, object)        # request number, path, app ids at 100% or None, the error words or None (from the worker thread)
@@ -48,6 +49,7 @@ class Hundred(QObject):
         self._picked.connect(self._on_picked)
         self._read.connect(self._on_read)
         self._look.themeChanged.connect(self._theme_changed)
+        shell.languageChanged.connect(self._language_changed)
         self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case or in the manual flow (no gold there)
         shell.flowChanged.connect(self._sync)
         self._theme_changed()               # the folder may hold Christmas covers already
@@ -87,11 +89,11 @@ class Hundred(QObject):
     def downloadsUrl(self):
         return QUrl.fromLocalFile(self._downloads).toString()
 
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=labelsChanged)
     def styles(self):
         return [{"key": k, "label": tr(v)} for k, v in STYLES]
 
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=labelsChanged)
     def manualStyles(self):
         """What the manual flow offers: console cases have no gold, so a 100% game is either highlighted or left plain."""
         return [{"key": "ribbon", "label": tr("Highlight them")}, {"key": "none", "label": tr("Leave them plain")}]
@@ -115,7 +117,7 @@ class Hundred(QObject):
 
     @Property(str, notify=themeNoteChanged)
     def themeNote(self):
-        return THEME_NOTE if self._look.theme != "classic" else ""
+        return tr(THEME_NOTE) if self._look.theme != "classic" else ""
 
     def _get_style(self):
         return self._style
@@ -181,6 +183,9 @@ class Hundred(QObject):
         self._theme_changed()
 
     # ----- the page -----
+    def _language_changed(self):
+        self._set_status(retranslated(self._status, WAITING), self._kind)
+
     def _set_status(self, text, kind, note=None):
         note = self._note if note is None else note
         if (text, kind, note) != (self._status, self._kind, self._note):

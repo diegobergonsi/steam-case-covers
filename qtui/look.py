@@ -23,6 +23,7 @@ class Look(QObject):
     artChanged = Signal()
     previewSourceChanged = Signal()
     ownCaseChanged = Signal()
+    labelsChanged = Signal()                # the words of the theme chips (a change of language tells the window to read them again)
 
     def __init__(self, shell, covers_dir, parent=None):
         super().__init__(parent)
@@ -153,7 +154,7 @@ class Look(QObject):
                 return i
         return -1
 
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=labelsChanged)
     def themes(self):
         return [{"key": k, "label": theme_label(k)} for k in THEMES]
 

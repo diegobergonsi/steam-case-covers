@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The translation layer of the window (qtui/i18n.py): which language to start in, the words, the plurals, and changing language while it runs."""
-import os, re, sys, unittest
+import ast, os, re, sys, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
@@ -275,3 +275,23 @@ class CaseNames(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PortugueseFile(unittest.TestCase):
+    def test_no_english_text_is_translated_twice(self):
+        """A dict literal keeps only the last of two equal keys, without a word: the first translation would be dead text."""
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "qtui", "i18n_pt_br.py")
+        seen, twice = set(), []
+        for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
+            if isinstance(node, ast.Dict):
+                for key in node.keys:
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                        if key.value in seen:
+                            twice.append(key.value)
+                        seen.add(key.value)
+        self.assertEqual(twice, [])
+
+    def test_the_gender_of_the_words_of_the_reset_message_agrees(self):
+        from qtui.i18n_pt_br import PT_BR
+        self.assertIn("os grupos não foram alterados", PT_BR["Everything was reset to the starting point. Your saved cases, covers and groups were not changed."])
+        self.assertEqual(PT_BR["Skipped"], "Ignorados")

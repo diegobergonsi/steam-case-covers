@@ -121,6 +121,14 @@ def tr(text):
     return _pick(language(), text)
 
 
+def retranslated(text, *keys):
+    """`text` in the language in use, when it is one of `keys` in any language (a waiting line that was stored translated); any other text stays as it is."""
+    for key in keys:
+        if text in {_pick(code, key) for code in TABLES}:
+            return tr(key)
+    return text
+
+
 def trn(text, n):
     """A plural: `text` has both forms, "%n game|%n games"; the number goes in at %n."""
     return _pick(language(), text, n).replace("%n", str(n))
