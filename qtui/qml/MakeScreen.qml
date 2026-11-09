@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-// Step 4: make the covers. The wireframe "4 - Make": the preview beside the choices and the progress (above them when narrow).
+// Step 4: make the covers. The wireframe "4 - Make": the previews (All Games, and 100% Games when they look different) beside the choices and the progress (above them when narrow).
 import QtQuick
 import "."
 

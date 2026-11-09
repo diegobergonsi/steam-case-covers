@@ -8258,7 +8258,9 @@ class ManualWindow(WindowClicks, PickerBase):
         self.shell.goKey("make")
         self.app.processEvents()
         self.assertEqual(self.shell.cases.previewKey, "ps5")
-        self.assertIn("platform/ps5", self.item("make_preview").property("source").toString() if hasattr(self.item("make_preview").property("source"), "toString") else self.item("make_preview").property("source").toString())
+        self.assertIn("platform/ps5", self.item("make_preview").property("source").toString())
+        self.assertEqual((self.item("make_caption_all").property("text"), self.item("make_caption_hundred").property("text")), ("", ""))      # the group's case alone, no captions
+        self.assertFalse(self.item("make_preview_hundred").property("visible"))
 
     def test_the_games_list_works_from_the_keyboard(self):
         """Review finding 4: one stop for the whole list, arrows move, Space ticks."""
