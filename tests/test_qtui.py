@@ -3399,7 +3399,7 @@ class QtPreviewWorkflow(unittest.TestCase):
 
     def test_it_builds_on_the_three_systems_and_checks_the_built_app(self):
         t = self.text()
-        for needle in ("windows-latest", "macos-latest", "ubuntu-latest", "steamcase-qt.spec", "--selftest", "unittest discover -s tests", "requirements-qt.txt"):
+        for needle in ("windows-latest", "macos-latest", "ubuntu-latest", "steamcase-qt.spec", "--selftest", "tools/run_tests.py", "requirements-qt.txt"):
             self.assertIn(needle, t)
 
     def test_the_qt_requirements_are_pinned(self):
@@ -3424,7 +3424,7 @@ class ReleaseWorkflow(unittest.TestCase):
 
     def test_it_builds_and_tests_the_qt_window_not_the_tk_one(self):
         t = self.text()
-        for needle in ("requirements-qt.txt", "python -m qtui --selftest", "pyinstaller --noconfirm steamcase-qt.spec", "QT_QPA_PLATFORM: offscreen", "unittest discover -s tests", "libegl1"):
+        for needle in ("requirements-qt.txt", "python -m qtui --selftest", "pyinstaller --noconfirm steamcase-qt.spec", "QT_QPA_PLATFORM: offscreen", "tools/run_tests.py", "libegl1"):
             self.assertIn(needle, t)
         for gone in ("gui.py", "steamcase.spec", "requirements-build.txt"):
             self.assertNotIn(gone, t)
@@ -3579,14 +3579,16 @@ class ChecksWorkflow(unittest.TestCase):
     def test_the_qt_tests_run_in_the_normal_checks(self):
         with open(os.path.join(os.path.dirname(QML_DIR), "..", ".github", "workflows", "checks.yml")) as f:
             text = f.read()
-        for needle in ("qt-tests:", "requirements-qt.txt", "tests.test_qtui", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
+        for needle in ("qt-tests:", "requirements-qt.txt", "tools/run_tests.py", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
             self.assertIn(needle, text)
 
     def test_the_qt_job_names_every_test_file_that_needs_qt(self):
         """The other jobs have no Qt, so a test file that needs it and is not named here would never run where it can."""
         here = os.path.dirname(os.path.abspath(__file__))
         with open(os.path.join(here, "..", ".github", "workflows", "checks.yml"), encoding="utf-8") as f:
-            line = next(l for l in f if "python -m unittest tests." in l)
+            line = next(l for l in f if "requirements-qt.txt" not in l and ("tools/run_tests.py" in l or "python -m unittest tests." in l) and "--selftest" not in l)
+        if "tools/run_tests.py" in line:                    # the runner finds every test file by itself
+            return
         for name in sorted(os.listdir(here)):
             if name.startswith("test_") and name.endswith(".py"):
                 with open(os.path.join(here, name), encoding="utf-8") as f:
