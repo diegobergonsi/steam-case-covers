@@ -1315,17 +1315,33 @@ class LookScreen(WindowCase):
         self.app.processEvents()
         self.assertEqual([i for i in range(9) if self.item("look_swatch_%d" % i).property("activeFocusOnTab")], [0])
 
+    def count_changes(self, name, signal):
+        """How many times the signal (such as "stopsChanged()") of the item is emitted from now on: {"n": count}."""
+        from PySide6.QtCore import QObject, Slot
+
+        class Spy(QObject):
+            n = 0
+
+            @Slot()
+            def hit(self):
+                Spy.n += 1
+        spy = Spy()
+        self.addCleanup(spy.deleteLater)
+        item = self.item(name)
+        meta = item.metaObject()
+        QObject.connect(item, meta.method(meta.indexOfSignal(signal)), spy, spy.metaObject().method(spy.metaObject().indexOfSlot("hit()")))
+        return Spy
+
     def test_a_slider_track_is_not_redrawn_for_its_own_value(self):
-        screen = self.item("look_screen")
-        calls = dict(screen.property("calls").toVariant())
+        sat, val = self.count_changes("look_sat", "stopsChanged()"), self.count_changes("look_val", "stopsChanged()")
+        sat.n = val.n = 0
         self.look.sat = 40                                            # moves the colourfulness slider itself: its own track does not change
         self.app.processEvents()
-        after = dict(screen.property("calls").toVariant())
-        self.assertEqual(after["sat"], calls["sat"])
-        self.assertGreater(after["val"], calls["val"])                # the brightness track does show the new colourfulness
+        self.assertEqual(sat.n, 0)
+        self.assertGreater(val.n, 0)                                  # the brightness track does show the new colourfulness
         self.look.hue = 200
         self.app.processEvents()
-        self.assertGreater(dict(screen.property("calls").toVariant())["sat"], after["sat"])
+        self.assertGreater(sat.n, 0)
 
     def test_related_items_are_8_px_apart_and_the_small_size_is_for_hints(self):
         import re
