@@ -32,7 +32,7 @@ class Look(QObject):
         self._own = False                   # "My own case" for every game (the Look step of the step-by-step way); the file itself is kept by shell.owncase
         self._covers = covers_dir
         self._tone, self._theme = self._starting_look()
-        self._source, self._marked_source = self._make_sources()
+        self._source, self._hundred_source, self._marked_source = self._make_sources()
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(PREVIEW_DELAY_MS)
@@ -62,18 +62,19 @@ class Look(QObject):
 
     # ----- the preview -----
     def _make_sources(self):
-        """(the Look preview, the preview with the 100% marks of step 3): the Look step never shows marks; the 100% games and Make steps do."""
+        """(Look preview, 100% games preview, Make preview). Look never shows the marks of step 3, and step 3 never takes the colour of step 2 (it starts from the
+        original one); Make shows the covers as they will be made, colour and marks."""
         self._serial += 1
         if self._own:
             own = "image://preview/platform/%s/%d" % (sc.CUSTOM, self._serial)      # the case keeps its own colours: tone, theme and marks mean nothing in it
-            return own, own
-        hue, sat, val = self._tone
-        def url(treatment):
-            return "image://preview/%d/%d/%d/%s/%s/%d" % (hue, sat, val, self._theme, treatment, self._serial)
-        return url("none"), url(self._treatment)
+            return own, own, own
+
+        def url(tone, treatment):
+            return "image://preview/%d/%d/%d/%s/%s/%d" % (*tone, self._theme, treatment, self._serial)
+        return url(self._tone, "none"), url(tones.ORIGINAL, self._treatment), url(self._tone, self._treatment)
 
     def _refresh_source(self):
-        self._source, self._marked_source = self._make_sources()
+        self._source, self._hundred_source, self._marked_source = self._make_sources()
         self.previewSourceChanged.emit()
 
     def _schedule(self):
@@ -83,6 +84,10 @@ class Look(QObject):
     @Property(str, notify=previewSourceChanged)
     def previewSource(self):
         return self._source
+
+    @Property(str, notify=previewSourceChanged)
+    def hundredSource(self):
+        return self._hundred_source
 
     @Property(str, notify=previewSourceChanged)
     def markedSource(self):

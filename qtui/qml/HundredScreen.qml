@@ -15,7 +15,7 @@ ScreenFrame {
 
     PreviewLayout {
         previewName: "hundred_preview"
-        source: screen.look.markedSource
+        source: screen.look.hundredSource
         underHeight: Theme.s8 + caption.height                  // the caption always keeps its line: nothing moves when it shows
         underPreview: [
             FontMetrics { id: captionFont; font.pixelSize: Theme.bodySize },
