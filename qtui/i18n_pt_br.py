@@ -375,6 +375,8 @@ PT_BR = {
     "Pick games, choose their cases": "Escolha os jogos e as cases",
     "Put games in groups and give each group its own case.": "Coloque os jogos em grupos e dê a cada grupo a sua case.",
     "%n step|%n steps": "%n passo|%n passos",
+    "%1 · %n step|%1 · %n steps": "%1 · %n passo|%1 · %n passos",
+    "OK": "OK",
     "Same case": "Mesma case",
     "Pick games": "Escolher jogos",
     "Wait until this finishes": "Espere isto terminar",
@@ -451,9 +453,6 @@ PT_BR = {
     "%1, locked": "%1, bloqueado",
     "%1, done": "%1, concluído",
     "%1, %2": "%1, %2",                                                 # a step on Home: its name, then its state
-    "Put every game in a physical case": "Coloque cada jogo em uma case física",
-    "Coming soon": "Em breve",
-    "This screen is built in a later plan.": "Esta tela será feita em um plano futuro.",
     "Games shared with you through Steam Family Sharing are in your library, but they are not on your own game list and are often not installed. With this switch on, only games installed on this computer get covers, so shared games that are not installed are left out. To include them, turn this off and load your game list: the app then finds the shared games in Steam's own files and marks their covers with a green corner.": "Os jogos compartilhados com você pelo Compartilhamento em Família da Steam estão na sua biblioteca, mas não estão na sua lista de jogos e muitas vezes não estão instalados. Com esta chave ligada, só os jogos instalados neste computador ganham capas, então os jogos compartilhados que não estão instalados ficam de fora. Para incluí-los, desligue isto e carregue a sua lista de jogos: o programa então encontra os jogos compartilhados nos próprios arquivos da Steam e marca as capas deles com um canto verde.",
     "Some games, mostly older or small ones, have no real portrait on Steam. Steam builds a stand-in from the wide header image: the title banner sits in the middle of a blurred, stretched copy of itself, with lots of empty space. Tick this to skip those games and keep Steam's default art for them.": "Alguns jogos, em geral os mais antigos ou pequenos, não têm uma capa de verdade na Steam. A Steam monta uma no lugar a partir da imagem larga do cabeçalho: o banner com o título fica no meio de uma cópia borrada e esticada dele mesmo, com muito espaço vazio. Marque isto para pular esses jogos e manter a arte padrão da Steam para eles.",
     "For games where you set your own art (in Steam's menu or from SteamGridDB), your art goes inside the case instead of Steam's. The app keeps a copy of it in its own folder and never changes your files. Games without art of your own use Steam's.": "Para os jogos em que você definiu a sua própria arte (no menu da Steam ou pelo SteamGridDB), a sua arte vai dentro da case no lugar da arte da Steam. O programa guarda uma cópia dela na própria pasta e nunca altera os seus arquivos. Jogos sem arte sua usam a da Steam.",

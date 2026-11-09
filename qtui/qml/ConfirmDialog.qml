@@ -9,7 +9,7 @@ ModalFrame {
     id: dialog
     property string title: ""
     property var paragraphs: []
-    property string confirmText: "OK"
+    property string confirmText: qsTr("OK")
     property string cancelText: qsTr("Cancel")
     // focusBack (from ModalFrame): set by the screen: the button the keyboard goes back to (it may be greyed out while the question is open)
     signal confirmed()
@@ -37,7 +37,7 @@ ModalFrame {
     function ask(heading, texts, yes, alt, info) {
         title = heading
         paragraphs = texts
-        confirmText = yes ? yes : "OK"
+        confirmText = yes ? yes : qsTr("OK")
         alternateText = alt ? alt : ""
         single = info === true
         visible = true

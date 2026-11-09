@@ -89,7 +89,8 @@ QtObject {
     readonly property int listRows: 6                    // how many rows of a tick list show at once (the Games step)
     readonly property int caseWidth: 100                // a console case in the grid of the Case step, and its pixels (read at twice the size)
     readonly property int caseHeight: 150
-    readonly property int caseColumns: 3
+    readonly property int caseColumns: 3                // the most cases in a row of the grid
+    readonly property int caseColumnsMin: 1             // and the fewest, when the window is narrow
     readonly property int thumbWidth: 60
     readonly property int thumbHeight: 90
     readonly property int thumbPixels: 120               // the picture is read at twice its size, for sharp edges on screens with more pixels

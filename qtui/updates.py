@@ -51,9 +51,9 @@ class Updates(QObject):
         self._checking = False
         self.checkingChanged.emit()
         if error:
-            self.message.emit(tr("Could not check for updates"), [{"text": error, "kind": "main"}], "OK", "", "")
+            self.message.emit(tr("Could not check for updates"), [{"text": error, "kind": "main"}], tr("OK"), "", "")
         elif r["newer"] is False:
-            self.message.emit(tr("No update needed"), [{"text": tr("You have the latest version (%s).") % r["current"], "kind": "main"}], "OK", "", "")
+            self.message.emit(tr("No update needed"), [{"text": tr("You have the latest version (%s).") % r["current"], "kind": "main"}], tr("OK"), "", "")
         else:
             if r["newer"]:
                 head = tr("A newer version is available: %s (you have %s).") % (r["latest"], r["current"])
@@ -76,7 +76,7 @@ class Updates(QObject):
         if not QDesktopServices.openUrl(QUrl(sc.KOFI_URL)):
             QGuiApplication.clipboard().setText(sc.KOFI_URL)
             self.message.emit(tr("Support on Ko-fi"), [{"text": tr("Your browser did not open, so the link was copied. Paste it into your browser:\n%s") % sc.KOFI_URL, "kind": "main"}],
-                              "OK", "", "")
+                              tr("OK"), "", "")
 
     @Slot()
     def openDiscord(self):
@@ -84,4 +84,4 @@ class Updates(QObject):
         if not QDesktopServices.openUrl(QUrl(sc.DISCORD_URL)):
             QGuiApplication.clipboard().setText(sc.DISCORD_URL)
             self.message.emit(tr("Join our Discord"), [{"text": tr("Your browser did not open, so the invite link was copied. Paste it into your browser:\n%s") % sc.DISCORD_URL, "kind": "main"}],
-                              "OK", "", "")
+                              tr("OK"), "", "")

@@ -7998,6 +7998,21 @@ class ManualWindow(WindowClicks, PickerBase):
         self.type_into("games_search", "zzz")
         self.assertIn("No games match", self.item("games_status").property("text"))
 
+    def test_the_pictures_of_the_cases_never_overflow_their_cell_at_any_window_width(self):
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertEqual(self.step(), "case")
+        keys = [c["key"] for c in self.shell.cases.choices]
+        for width in range(560, 1300, 20):
+            self.root.setProperty("width", width)
+            self.app.processEvents()
+            for key in keys:
+                cell = self.item("case_" + key)
+                self.assertGreaterEqual(cell.property("width"), 100 + 2 * 8, (width, key))             # the picture is 100 px wide, with 8 px at each side
+                self.assertLessEqual(cell.property("x") + cell.property("width"), self.item("case_section_grid").property("width") + 1, (width, key))
+
     def test_the_case_screen_gives_the_ticked_games_a_case(self):
         self.shell.startPath("manual")
         self.wait_for(lambda: self.picker.rows)

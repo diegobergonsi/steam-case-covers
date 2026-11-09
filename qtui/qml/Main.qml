@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-// The window: a left navigation and one screen at a time (docs/ui-guide.md). The screens here are placeholders; the real ones come in the next plans.
+// The window: a left navigation and one screen at a time (docs/ui-guide.md). Each step has its own screen file.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
@@ -25,7 +25,7 @@ ApplicationWindow {
         if (shell.apply.busy) {
             close.accepted = false
             if (!win.queued(qsTr("Please wait")))
-                win.show(messages, [qsTr("Please wait"), [{"text": qsTr("Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window."), "kind": "main"}], "OK", "", true])
+                win.show(messages, [qsTr("Please wait"), [{"text": qsTr("Steam's artwork is being changed. Closing now could leave it half-done. Wait a few seconds, then close the window."), "kind": "main"}], qsTr("OK"), "", true])
         }
     }
     Timer { interval: 1500; repeat: true; running: true; onTriggered: shell.poll() }       // notices the saved game list and games page
@@ -96,7 +96,7 @@ ApplicationWindow {
                         height: Theme.navHeadingHeight
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
-                        text: shell.flowName + " \u00b7 " + qsTr("%n step|%n steps", "", shell.stepCount(shell.flow))
+                        text: qsTr("%1 \u00b7 %n step|%1 \u00b7 %n steps", "", shell.stepCount(shell.flow)).arg(shell.flowName)
                         color: Theme.muted
                         font.pixelSize: Theme.smallSize
                         font.bold: true
@@ -175,7 +175,7 @@ ApplicationWindow {
                 item.stepKey = Qt.binding(function() { return screen.key })
                 item.frozen = Qt.binding(function() { return shell.make.running && (screen.key === "game_list" || screen.key === "look" || screen.key === "hundred" || screen.key === "pick" || screen.key === "case") })
             }
-            source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "pick" ? "GamesScreen.qml" : screen.key === "case" ? "CasesScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : "PlaceholderScreen.qml"
+            source: screen.key === "home" ? "HomeScreen.qml" : screen.key === "game_list" ? "GameListScreen.qml" : screen.key === "look" ? "LookScreen.qml" : screen.key === "pick" ? "GamesScreen.qml" : screen.key === "case" ? "CasesScreen.qml" : screen.key === "hundred" ? "HundredScreen.qml" : screen.key === "make" ? "MakeScreen.qml" : screen.key === "add" ? "AddScreen.qml" : ""
         }
         Toast {                                                   // a short message from the shell, above the footer buttons of the screen
             id: toast
@@ -236,23 +236,23 @@ ApplicationWindow {
     Connections {
         target: shell.apply
         function onConfirmNeeded(title, paragraphs, go, alt) { win.show(applyDialog, [title, paragraphs, go, alt]) }
-        function onFailed(text) { win.show(messages, [qsTr("Could not finish"), [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(text) { win.show(messages, [qsTr("Could not finish"), [{"text": text, "kind": "main"}], qsTr("OK"), "", true]) }
     }
     Connections {
         target: shell.manage
-        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], qsTr("OK"), "", true]) }
     }
     Connections {
         target: shell.library
-        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], qsTr("OK"), "", true]) }
     }
     Connections {
         target: shell.make
-        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], qsTr("OK"), "", true]) }
     }
     Connections {
         target: shell.owncase
-        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], "OK", "", true]) }
+        function onFailed(title, text) { win.show(messages, [title, [{"text": text, "kind": "main"}], qsTr("OK"), "", true]) }
         function onNeedDialog(folder) { ownCaseDialog.currentFolder = shell.owncase.downloadsUrl; ownCaseDialog.open() }
     }
     FileDialog {                                                  // only when the desktop has no chooser of its own (see OwnCase.browse)
