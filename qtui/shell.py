@@ -60,6 +60,8 @@ class Shell(QObject):
         self._apply = Apply(self, self._make, covers, self)
         self._manage = GroupManager(self, covers, self)
         self._manage.saved.connect(self._cases.reloadGroups)         # Home, the Reset question and the Case step read the groups again
+        self._apply.groupsDeleted.connect(self._cases.forgetGames)   # a Reset or a repaint deleted groups: the Case step must not keep (and write back) their games
+        self._make.groupsDeleted.connect(self._cases.forgetGames)
         self._manage.saved.connect(self._apply.groupTicks.refresh)
         self._apply.canApplyChanged.connect(self._manage.changed)    # Manage opens only while nothing else is running
         self._make.runningChanged.connect(self._manage.changed)

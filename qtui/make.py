@@ -59,6 +59,7 @@ class Make(QObject):
     statusChanged = Signal()
     choicesChanged = Signal()
     groupsChanged = Signal()                # the groups listed in the usual Make, and which are ticked
+    groupsDeleted = Signal(object)          # the games of the groups a Make repainted and so deleted (the shell tells the Case step)
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss wherever they are
     confirmNeeded = Signal(str, str)        # the title and the sentence of the question "replace the covers you made?"
     _art_done = Signal(int, object, object, object, object)         # request, {appid: path}, the library's app ids, problems, error words (from the worker)
@@ -423,6 +424,7 @@ class Make(QObject):
             elif snap.get("repaint"):
                 done = {a for g in snap["repaint"] for a in g["games"]} & made
                 groups.save(self._covers, groups.drop_games(groups.load(self._covers), done))
+                self.groupsDeleted.emit(done)
         except OSError as e:
             self.failed.emit(tr("Could not save your groups"), tr("The covers are made, but your groups could not be saved: %s") % e)
         self._ticks.clear()

@@ -6903,6 +6903,24 @@ class ApplyState(QtCase, FakeStore):
         a.chooseAccount("999")                                          # not an account of this Steam: ignored
         self.assertEqual(a.accountId, "222")
 
+    def test_choosing_another_account_looks_for_its_backup_again(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        real = self.sc.list_backups
+        self.sc.list_backups = lambda steam, user=None: ["b1"] if user in (None, "111") else []          # only Alice has a backup
+        self.addCleanup(lambda: setattr(self.sc, "list_backups", real))
+        self.ap.refresh()
+        self.undo_ready()
+        self.assertTrue(self.ap.canRestore)
+        looked = []
+        real_look = self.ap.refreshUndo
+        self.ap.refreshUndo = lambda: (looked.append(1), real_look())      # a poll heals it in a few seconds; the button must not be wrong meanwhile
+        self.ap.chooseAccount("222")
+        self.assertEqual(len(looked), 1)
+        self.wait_for(lambda: not self.ap.canRestore)                        # Bob has none: Restore must not stay on, to fail with "No backup found"
+        self.ap.chooseAccount("111")
+        self.assertEqual(len(looked), 2)
+        self.wait_for(lambda: self.ap.canRestore)
+
     def test_choosing_an_account_clears_the_last_result(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.ap.refresh()
@@ -7714,6 +7732,13 @@ class CasesState(PickerBase):
         self.picker.toggle(2)
         self.shell.library.installedOnly = False                 # a different list: the games ticked and given a case belong to the old one
         self.assertEqual((self.shell.cases.assignedCount, self.picker.selectedCount), (0, 0))
+
+    def test_a_new_game_list_also_takes_this_runs_games_out_of_the_groups(self):
+        self.load()
+        self.assign("ps5", 1)
+        self.shell.library.installedOnly = False                 # a different list: game 1 was never given the case in it
+        self.assign("ps4", 2)
+        self.assertNotIn(1, [a for g in self.shell.cases.groupsToSave() for a in g["games"]])
 
     def test_picking_the_case_already_chosen_by_a_saved_group_changes_nothing(self):
         self.load()
@@ -8858,6 +8883,15 @@ class GroupReset(PickerBase):
         self.ap.confirmAlternate()
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # ours of the usual flow and the other art went, the groups stay
+
+    def test_a_group_the_reset_deleted_is_gone_from_the_case_step_too(self):
+        self.assertIn(self.red, [g["id"] for g in self.shell.cases.groupList])
+        self.reset()
+        self.tick(self.red)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertNotIn(self.red, [g["id"] for g in self.shell.cases.groupList])
+        self.assertNotIn(self.red, [g["id"] for g in self.shell.cases.groupsToSave()])      # so the next Pick games make cannot write it back
 
     def test_declining_changes_nothing(self):
         self.reset()

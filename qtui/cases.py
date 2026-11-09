@@ -237,6 +237,15 @@ class Cases(QObject):
                 self._groups.append(dict(old, games=[]))
             self._groups = groups.add_games(self._groups, gid, games)
 
+    @Slot(object)
+    def forgetGames(self, games):
+        """Their groups were deleted (by a Reset, or by a Make that repainted them): the games no longer belong to a group of this run, or the next make would write the group back."""
+        for appid in games:
+            for d in (self._assigned, self._tones, self._gids):
+                d.pop(appid, None)
+        self.assignmentsChanged.emit()
+        self.reloadGroups()
+
     @Slot()
     def reloadGroups(self):
         previous = self._groups
@@ -371,6 +380,7 @@ class Cases(QObject):
         if self._assigned:                  # the games belong to the old list
             self._assigned, self._tones, self._gids = {}, {}, {}
             self.assignmentsChanged.emit()
+            self.reloadGroups()             # the groups they were put in during this run go back to what is saved
 
     @Slot()
     def reset(self):

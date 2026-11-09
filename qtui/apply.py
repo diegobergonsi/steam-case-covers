@@ -57,6 +57,7 @@ class Apply(QObject):
     appliedChanged = Signal()
     watchingChanged = Signal()
     failed = Signal(str)                    # the words of an error, for a box the user cannot miss wherever they are
+    groupsDeleted = Signal(object)          # the games of the groups a Reset deleted (the shell tells the Case step)
     choicesChanged = Signal()               # the groups listed in the Reset question, or which of them are ticked
     undoChanged = Signal()                  # whether there is anything to restore or reset
     resultChanged = Signal()                # the card that follows an Apply came or went
@@ -231,6 +232,7 @@ class Apply(QObject):
         self.accountChanged.emit()
         self._set_status("", "wait")
         self._set_result(None)                          # the card named the other account, and its Undo would act on this one
+        self.refreshUndo()                              # Restore and Reset follow the backups of the account now chosen
 
     # ----- the switch -----
     def _get_restart(self):
@@ -622,6 +624,7 @@ class Apply(QObject):
             if gone:
                 groups.save(self._covers, groups.drop_games(groups.load(self._covers), gone))
                 sc.forget_group(self._covers, gone)
+                self.groupsDeleted.emit(gone)
         except OSError as e:
             self.failed.emit(tr("The covers were reset, but your groups could not be saved: %s") % e)
         self._reset_games = set()
