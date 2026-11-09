@@ -18,23 +18,15 @@ ScreenFrame {
         source: screen.look.hundredSource
         underHeight: Theme.s8 + caption.height                  // the caption always keeps its line: nothing moves when it shows
         underPreview: [
-            FontMetrics { id: captionFont; font.pixelSize: Theme.bodySize },
-            Text {                                            // the text, not the row, comes and goes: nothing moves under a finger
+            FontMetrics { id: captionFont; font.pixelSize: Theme.bodySize },        // also the height of the locked note below
+            PreviewCaption {                                  // the text, not the row, comes and goes: nothing moves under a finger
                 id: caption
                 objectName: "hundred_caption"
                 y: Theme.s8
                 width: parent.width
-                height: captionFont.height
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                color: Theme.muted
-                font.pixelSize: Theme.bodySize
                 text: screen.hundred.loaded && screen.look.treatment !== "none" ? qsTr("Preview of a 100% game") : ""
-                Accessible.role: Accessible.StaticText
-                Accessible.name: text
             }
         ]
-
 
         Section {
             objectName: "hundred_section_page"

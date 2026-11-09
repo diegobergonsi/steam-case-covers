@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-// Step 4: make the covers. The wireframe "4 - Make": the preview beside the choices and the progress (above them when narrow).
+// Step 4: make the covers. The wireframe "4 - Make": the previews (All Games, and 100% Games when they look different) beside the choices and the progress (above them when narrow).
 import QtQuick
 import "."
 
@@ -12,9 +12,36 @@ ScreenFrame {
     title: qsTr("Make your covers")
     subtitle: qsTr("Downloads each game's artwork from Steam and builds the covers on your computer.")
 
+    readonly property bool caseOnly: shell.flow === "manual" && shell.cases.previewKey !== ""          // the manual way shows the case of the group, with no captions
+    readonly property bool both: !caseOnly && look.markedSource !== look.previewSource                  // the 100% games look different: no page, or no marks, is one picture
+
     PreviewLayout {
         previewName: "make_preview"
-        source: shell.flow === "manual" && shell.cases.previewKey !== "" ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.markedSource
+        source: screen.caseOnly ? "image://preview/platform/" + shell.cases.previewKey + "/1" : screen.look.previewSource
+        underHeight: screen.both ? hundredCaption.y + hundredCaption.height : Theme.s8 + allCaption.height
+        underPreview: [
+            PreviewCaption {
+                id: allCaption
+                objectName: "make_caption_all"
+                y: Theme.s8
+                width: parent.width
+                text: screen.caseOnly ? "" : qsTr("All Games")
+            },
+            PreviewCard {
+                id: hundredPreview
+                objectName: "make_preview_hundred"
+                y: allCaption.y + allCaption.height + Theme.s24
+                visible: screen.both
+                source: screen.both ? screen.look.markedSource : ""
+            },
+            PreviewCaption {
+                id: hundredCaption
+                objectName: "make_caption_hundred"
+                y: hundredPreview.y + hundredPreview.height + Theme.s8
+                width: parent.width
+                text: screen.both ? qsTr("100% Games") : ""
+            }
+        ]
 
         Section {
             objectName: "make_section_choices"
