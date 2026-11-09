@@ -1511,11 +1511,11 @@ class HundredFlow(QtCase):
         self.wait_for(lambda: h.loaded)
         self.assertEqual((h.count, os.path.basename(h.path)), (2, "games.html"))
         self.assertEqual(self.find(self.root, "hundred_next").property("text"), "Next: Make \u2192")
-        before = look.hundredSource
+        before = look.markedSource
         self.click("hundred_style_chip_gold-border")
         self.click("hundred_marks_chip_rosette")
-        self.wait_for(lambda: look.hundredSource != before and "/gold-border-rosette/" in look.hundredSource)
-        self.assertIn("/classic/gold-border-rosette/", look.hundredSource)
+        self.wait_for(lambda: look.markedSource != before and "/gold-border-rosette/" in look.markedSource)
+        self.assertIn("/classic/gold-border-rosette/", look.markedSource)
         self.assertEqual(h.values(), ({1, 3}, "gold-border-rosette"))
         self.assertEqual(self.shell.steps[4]["state"], "locked")
         self.click("hundred_next")
@@ -3101,11 +3101,14 @@ class HundredScreen(WindowCase):
         self.assertEqual(self.h.style, "gold-case")
         self.click("hundred_marks_chip_rosette")
         self.assertEqual(self.h.marks, "rosette")
-        self.wait_for(lambda: "/gold-case-rosette/" in self.shell.look.hundredSource)
-        self.assertIn("/classic/gold-case-rosette/", self.shell.look.hundredSource)
+        self.wait_for(lambda: "/gold-case-rosette/" in self.shell.look.markedSource)
+        self.assertIn("/classic/gold-case-rosette/", self.shell.look.markedSource)
         self.assertIn("/classic/none/", self.shell.look.previewSource)      # the Look step keeps showing a plain game: the marks belong to step 3 only
         self.assertEqual(self.item("hundred_caption").property("text"), "Preview of a 100% game")
-        self.assertEqual(self.item("hundred_preview").property("source"), self.shell.look.hundredSource)
+        self.assertEqual(self.item("hundred_preview").property("source"), self.shell.look.markedSource)
+        self.shell.go(self.shell.stepIndex("look"))
+        self.app.processEvents()
+        self.assertIn("/classic/none/", str(self.item("look_preview").property("source")))      # the window itself: Look stays plain after step 3 was set
 
     def test_no_caption_without_a_page_and_none_for_normal_covers(self):
         self.assertEqual(self.item("hundred_caption").property("text"), "")
