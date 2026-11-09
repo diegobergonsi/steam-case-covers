@@ -2,3 +2,4 @@
 pillow==13.0.0
 pyinstaller==6.22.3
 certifi==2026.10.23
+pyinstaller-hooks-contrib==2026.9      # what PyInstaller bundles follows this one, so it is pinned too

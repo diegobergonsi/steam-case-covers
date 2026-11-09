@@ -3519,7 +3519,7 @@ class ReleaseWorkflow(unittest.TestCase):
     def test_the_version_is_stamped_for_tags_only_and_before_the_build(self):
         t = self.text()
         stamp = t.index("Stamp the version into the build")
-        self.assertIn("if: startsWith(github.ref, 'refs/tags/')", t[stamp:stamp + 200])
+        self.assertIn("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')", t[stamp:stamp + 200])
         self.assertLess(stamp, t.index("pyinstaller --noconfirm steamcase-qt.spec"))
 
     def test_the_macos_steps_run_in_a_safe_order(self):
@@ -3646,6 +3646,29 @@ class ChecksWorkflow(unittest.TestCase):
             text = f.read()
         for needle in ("qt-tests:", "requirements-qt.txt", "tools/run_tests.py", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
             self.assertIn(needle, text)
+
+    def read_repo(self, *parts):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_every_build_and_scan_requirement_is_pinned_to_an_exact_version(self):
+        import re
+        for name in ("requirements-build.txt", "requirements-scan.txt", "requirements-qt.txt"):
+            for line in self.read_repo(name).splitlines():
+                line = line.split("#")[0].strip()
+                if line and not line.startswith("-r "):
+                    self.assertRegex(line, r"^[A-Za-z0-9_.\-]+==[0-9][0-9A-Za-z.\-]*$", name)
+        self.assertIn("pyinstaller-hooks-contrib==", self.read_repo("requirements-build.txt"))
+
+    def test_the_scans_use_the_pinned_tools_and_check_the_qt_packages_too(self):
+        text = self.read_repo(".github", "workflows", "checks.yml")
+        self.assertIn("pip install -r requirements-scan.txt", text)
+        self.assertNotIn("pip install bandit", text)
+        self.assertIn("pip-audit -r requirements-qt.txt", text)
+
+    def test_a_release_is_only_made_for_a_pushed_tag_never_for_a_run_by_hand(self):
+        text = self.read_repo(".github", "workflows", "release.yml")
+        self.assertGreaterEqual(text.count("github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')"), 2)       # the version stamp, and the release job
 
     def test_the_qt_job_names_every_test_file_that_needs_qt(self):
         """The other jobs have no Qt, so a test file that needs it and is not named here would never run where it can."""
