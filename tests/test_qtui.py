@@ -8925,6 +8925,21 @@ class GroupReset(PickerBase):
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # ours of the usual flow and the other art went, the groups stay
 
+    def test_tab_never_leaves_a_question_in_the_real_window(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.start_window()
+        self.reset()
+        self.assertTrue(self.ap.asking)
+        for key in (Qt.Key_Tab, Qt.Key_Backtab):
+            for _ in range(8):                                        # more presses than the question has buttons
+                self.root.requestActivate()
+                QTest.keyClick(self.root, key)
+                self.app.processEvents()
+                inside = lambda: str(self.root.activeFocusItem().objectName()).startswith("apply_dlg")
+                self.wait_for(inside, 0.3)
+                self.assertTrue(inside(), self.root.activeFocusItem().objectName())
+
     def test_a_group_the_reset_deleted_is_gone_from_the_case_step_too(self):
         self.assertIn(self.red, [g["id"] for g in self.shell.cases.groupList])
         self.reset()
@@ -9788,6 +9803,36 @@ class ManageGroups(PickerBase):
         self.shell.apply.canApplyChanged.emit()
         self.app.processEvents()
         self.assertFalse(self.item("home_manage_" + red).property("enabled"))
+
+    def key_to_focus(self, key):
+        """A key press for whatever has the focus now (key() first gives the focus to a named item)."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtTest import QTest
+        self.root.requestActivate()
+        QTest.keyClick(self.root, key)
+        self.app.processEvents()
+
+    def inside(self, name):
+        """True when the item that has the keyboard focus is the item `name` or one of its children."""
+        found = self.item(name)
+        node = self.root.activeFocusItem()
+        while node is not None:
+            if node == found:
+                return True
+            node = node.parentItem()
+        return False
+
+    def test_tab_never_leaves_the_manage_window_in_either_direction(self):
+        from PySide6.QtCore import Qt
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.assertTrue(self.inside("manage_dialog"))
+        for key in (Qt.Key_Tab, Qt.Key_Backtab):
+            self.item("manage_search").forceActiveFocus()
+            for _ in range(10):                                        # more presses than the window has controls
+                self.key_to_focus(key)
+                self.wait_for(lambda: self.inside("manage_dialog"), 0.3)
+                self.assertTrue(self.inside("manage_dialog"), self.root.activeFocusItem().objectName())
 
     def test_manage_buttons_and_rows_are_44_tall(self):
         red, ps = self.home_with_groups()

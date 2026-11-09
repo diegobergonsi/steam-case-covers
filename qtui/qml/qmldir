@@ -18,6 +18,7 @@ Swatch 1.0 Swatch.qml
 ChoiceChips 1.0 ChoiceChips.qml
 CollectionPills 1.0 CollectionPills.qml
 PreviewCaption 1.0 PreviewCaption.qml
+ModalFrame 1.0 ModalFrame.qml
 PreviewCard 1.0 PreviewCard.qml
 CoverThumbs 1.0 CoverThumbs.qml
 PreviewLayout 1.0 PreviewLayout.qml
