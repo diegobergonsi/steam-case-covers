@@ -4235,6 +4235,25 @@ class MakeScreen(WindowCase, FakeStore):
         super().setUp()
         self.make = self.shell.make
 
+    def test_without_a_games_page_only_the_all_games_preview_shows(self):
+        self.assertEqual(self.text("make_caption_all"), "All Games")
+        self.assertEqual(self.item("make_preview").property("source").toString(), self.shell.look.previewSource)
+        self.assertFalse(self.item("make_preview_hundred").property("visible"))
+        self.assertEqual(self.text("make_caption_hundred"), "")
+
+    def test_with_a_games_page_both_previews_show_one_above_the_other(self):
+        h = self.shell.hundred
+        h.loadPage(write_games_page(self.tmp, {1: (3, 3), 2: (1, 4)}, "games.html"))
+        self.wait_for(lambda: h.loaded)
+        self.settle()
+        self.assertEqual(self.text("make_caption_all"), "All Games")
+        self.assertEqual(self.text("make_caption_hundred"), "100% Games")
+        self.assertEqual(self.item("make_preview").property("source").toString(), self.shell.look.previewSource)
+        self.assertEqual(self.item("make_preview_hundred").property("source").toString(), self.shell.look.markedSource)
+        self.assertNotEqual(self.shell.look.previewSource, self.shell.look.markedSource)
+        self.assertTrue(self.item("make_preview_hundred").property("visible"))
+        self.assertGreater(self.pos("make_preview_hundred").y(), self.pos("make_caption_all").y())      # below the first one and its caption
+
     def text(self, name):
         return self.item(name).property("text")
 
@@ -8239,7 +8258,7 @@ class ManualWindow(WindowClicks, PickerBase):
         self.shell.goKey("make")
         self.app.processEvents()
         self.assertEqual(self.shell.cases.previewKey, "ps5")
-        self.assertIn("platform/ps5", self.item("make_preview").property("source").toString() if hasattr(self.item("make_preview").property("source"), "toString") else str(self.item("make_preview").property("source")))
+        self.assertIn("platform/ps5", self.item("make_preview").property("source").toString() if hasattr(self.item("make_preview").property("source"), "toString") else self.item("make_preview").property("source").toString())
 
     def test_the_games_list_works_from_the_keyboard(self):
         """Review finding 4: one stop for the whole list, arrows move, Space ticks."""

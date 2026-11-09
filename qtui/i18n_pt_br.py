@@ -403,6 +403,8 @@ PT_BR = {
     "Highlight your 100% games": "Destaque os seus jogos com 100%",
     "Optional. Games where you unlocked every achievement get a special mark.": "Opcional. Os jogos em que você desbloqueou todas as conquistas ganham uma marca especial.",
     "Preview of a 100% game": "Prévia de um jogo com 100%",
+    "All Games": "Todos os jogos",
+    "100% Games": "Jogos 100%",
     "Your games page": "A sua página de jogos",
     "Games where you unlocked every achievement can get a rosette and a ribbon (or the rosette alone, or no marks), and a gold case or border if you like. Steam shows them on your games page: open it, then save it as games.html, choosing “Webpage, Complete”. The app notices the file by itself.": "Os jogos em que você desbloqueou todas as conquistas podem ganhar uma roseta e uma faixa (ou só a roseta, ou nenhuma marca), e uma case ou borda dourada se quiser. A Steam os mostra na sua página de jogos: abra-a e salve como games.html, escolhendo “Página da Web, completa”. O programa percebe o arquivo sozinho.",
     "Open my games page": "Abrir a minha página de jogos",
