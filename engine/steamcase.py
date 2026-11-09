@@ -9,7 +9,7 @@
   python -m engine run                        make + apply
   python -m engine restore                    undo the last apply
 
-Needs Python 3.8+ and Pillow (pip install pillow). No Steam API key, no account login.
+Needs Python 3.10+ and Pillow (pip install pillow). No Steam API key, no account login.
 Covers are built on your machine from the artwork Steam itself serves for your games.
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
@@ -482,9 +482,7 @@ def package_apps(steam, package_ids):
     path = os.path.join(steam, "appcache", "packageinfo.vdf")
     wanted = set(package_ids)
     try:
-        if os.path.getsize(path) > MAX_PACKAGEINFO:
-            return None
-        with open(path, "rb") as f:
+        with safefile.open_regular(path, MAX_PACKAGEINFO, follow_links=True) as f:     # too big, or not a plain file: an OSError, so None
             data = f.read()
         magic = struct.unpack_from("<I", data, 0)[0]
         if magic not in _PACKAGEINFO_MAGICS:
@@ -541,11 +539,6 @@ def load_library(steam, library_json=None):
         for i in family:
             games.setdefault(i, None)
     return games, family
-
-
-def load_games(steam, library_json=None):
-    """{appid: name or None}: installed games, plus every owned app (and family game) when library_json is given."""
-    return load_library(steam, library_json)[0]
 
 
 def pick_account(steam, forced=None):
@@ -1178,9 +1171,7 @@ def _noted_colour(info):
 def _png_info(path):
     """The text notes of a PNG we may read (not a link, a plain file, not too big), or None. Reads the header only, never decodes the picture."""
     try:
-        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
-            return None
-        with Image.open(path, formats=["PNG"]) as im:
+        with safefile.open_regular(path, MAX_DOWNLOAD) as fh, Image.open(fh, formats=["PNG"]) as im:
             return dict(im.info)
     except Exception:
         return None
@@ -1443,6 +1434,14 @@ def _check_hand(tones, groups, repaint, treatment, theme):
         raise ValueError("covers by hand only go with the marks (ribbon, rosette) and no theme")
 
 
+def _drop_older_covers(covers_dir, dest, appid):
+    """A game Steam renamed gets a cover under its new name: the file under the old name goes, or Apply could put the old one in Steam."""
+    for name in os.listdir(covers_dir):
+        path = os.path.join(covers_dir, name)
+        if path != dest and appid_of(name) == str(appid) and _is_plain_file(path):
+            os.remove(path)
+
+
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
                 completed=None, treatment=None, theme=None, custom_art=None, platforms=None, tones=None, groups=None, repaint=None):
     """Build a cover per game into `out`.
@@ -1524,7 +1523,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if platforms is not None:
         ids = [i for i in ids if i in platforms]
     if only:
-        ids = [i for i in ids if i in set(only)]
+        wanted = set(only)
+        ids = [i for i in ids if i in wanted]
     if log:
         log("Looking up %d apps on Steam's store..." % len(ids))
     errs = []
@@ -1609,8 +1609,14 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
                 neterr = True
                 continue
             if b[:2] == b"\xff\xd8" or b[:4] == b"\x89PNG" or b[8:12] == b"WEBP":
-                with open(tmp, "wb") as f:
-                    f.write(b)
+                try:
+                    with open(tmp, "wb") as f:
+                        f.write(b)
+                except OSError:                                  # a full disk is that game failing, not the end of the run
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
+                    neterr = True
+                    break
                 got = True
                 break
             neterr = True                                    # answered, but not with an image: a login page or proxy in the way
@@ -1619,6 +1625,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             report(n, appid, name, "failed" if neterr else "noart")
             continue
         if want_p == CUSTOM and _custom is not slot:
+            if os.path.exists(tmp):
+                os.remove(tmp)
             raise _CaseChanged(_t("Your own case changed while the covers were being made. Make them again."))
         try:
             is_family = appid in family
@@ -1627,6 +1635,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             if want_p == CUSTOM and _custom is not slot:
                 os.remove(dest)                                     # built while the case was being replaced: not trusted
                 raise _CaseChanged(_t("Your own case changed while the covers were being made. Make them again."))
+            _drop_older_covers(out, dest, appid)
             res["ok"] += 1
             res["platforms"] += bool(want_p)
             res["family"] += is_family
@@ -1761,10 +1770,7 @@ def _remove_leftovers(grid):
 
 
 def find_covers(covers_dir):
-    cdir = os.path.abspath(covers_dir)
-    if not os.path.isdir(cdir):
-        return []
-    return [os.path.join(cdir, f) for f in sorted(os.listdir(cdir)) if appid_of(f)]
+    return [path for _, path in scan_covers(os.path.abspath(covers_dir))]
 
 
 def apply_covers(steam, covers_dir, user=None, files=None):
@@ -1776,7 +1782,15 @@ def apply_covers(steam, covers_dir, user=None, files=None):
     Returns {"account", "account_name", "grid", "applied", "unchanged", "replaced", "jpg_moved", "backup"}.
     The caller closes Steam beforehand (see close_steam)."""
     grid = grid_dir(steam, user)
-    covers = list(files) if files else find_covers(covers_dir)
+    covers = list(files) if files is not None else find_covers(covers_dir)
+    newest = {}
+    for f in covers:                                         # a game renamed by Steam leaves two files for one app id: only the newest one is applied
+        if not os.path.exists(f):
+            continue
+        a = appid_of(f)
+        if a not in newest or os.path.getmtime(f) >= os.path.getmtime(newest[a]):
+            newest[a] = f
+    covers = [f for f in covers if not os.path.exists(f) or newest.get(appid_of(f)) == f]
     if not covers:
         raise SteamcaseError(_t("No covers found in %s. Make them first.") % covers_dir)
     gone = [f for f in covers if not os.path.exists(f)]
@@ -1817,6 +1831,10 @@ def apply_covers(steam, covers_dir, user=None, files=None):
         try:
             for n in replaced:
                 shutil.copy2(os.path.join(grid, n), os.path.join(backup, n))
+        except OSError as e:                                                    # nothing in the grid was touched yet, and a half-copied backup must never go back into it
+            shutil.rmtree(backup, ignore_errors=True)
+            raise SteamcaseError(_t("Could not write to Steam's artwork folder (%s). Nothing was changed.") % e)
+        try:
             with open(os.path.join(backup, "manifest.json"), "w") as fh:     # written before copying, so a rollback always works
                 json.dump({"added": added, "replaced": replaced, "moved": moved}, fh)
             for j in moved:
@@ -1862,18 +1880,26 @@ def _pid_alive(pid):
 class _Lock:
     """One Apply/Restore at a time per Steam account (two open windows, or a script and a window).
     The lock is a folder holding the process number of its owner, so a lock left by a run that crashed is taken over at once;
-    one with no owner written yet, or whose owner may still be running, is respected, and anything older than ten minutes is stale anyway."""
+    one whose owner may still be running is respected however long it takes, and one with no owner written is stale after ten minutes."""
 
     def __init__(self, cfg):
         self.path = os.path.join(cfg, ".steamcase.lock")
 
-    def _owner_gone(self):
+    def _owner(self):
+        """The process number written in the lock, or None when there is none to read."""
         try:
             with open(os.path.join(self.path, "pid"), encoding="ascii") as f:
                 pid = int(f.read().strip())
         except (OSError, ValueError):
-            return False                                              # unknown owner: not proof of anything
-        return pid > 0 and not _pid_alive(pid)
+            return None
+        return pid if pid > 0 else None
+
+    def _stale(self):
+        """Its owner is gone, or (when no owner can be read) it is older than ten minutes. A live owner keeps it however long it takes."""
+        pid = self._owner()
+        if pid is not None:
+            return not _pid_alive(pid)
+        return time.time() - os.path.getmtime(self.path) > 600
 
     def __enter__(self):
         for _ in range(3):
@@ -1887,17 +1913,18 @@ class _Lock:
                 return self
             except FileExistsError:
                 try:
-                    stale = self._owner_gone() or time.time() - os.path.getmtime(self.path) > 600       # left behind by a crashed run
+                    if not self._stale():
+                        raise SteamcaseError(_t("Another steamcase window is changing Steam's artwork right now. Wait for it to finish, then try again."))
+                    taken = _tmp(self.path, "stale")                  # left behind by a crashed run
+                    os.rename(self.path, taken)                       # atomic: of two runs that both see it stale, only one takes it down
                 except OSError:
                     continue
-                if stale:
-                    shutil.rmtree(self.path, ignore_errors=True)
-                    continue
-                raise SteamcaseError(_t("Another steamcase window is changing Steam's artwork right now. Wait for it to finish, then try again."))
+                shutil.rmtree(taken, ignore_errors=True)
         raise SteamcaseError(_t("Could not get exclusive access to Steam's artwork folder. Please try again."))
 
     def __exit__(self, *exc):
-        shutil.rmtree(self.path, ignore_errors=True)
+        if self._owner() in (None, os.getpid()):                     # a lock that another run took over meanwhile is theirs
+            shutil.rmtree(self.path, ignore_errors=True)
 
 
 _frame_ref = None
@@ -2027,10 +2054,10 @@ def is_steamcase_cover(path):
     a tone, treatment or theme note, a garbled note, or notes the pixels do not match, mean not ours. Art you set yourself never matches, so it
     is never mistaken for ours."""
     try:
-        if Image is None or os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > MAX_DOWNLOAD:
+        if Image is None:
             return False
         top, bot, ref_tops, ref_bot, _ = _frame_regions()
-        with Image.open(path, formats=["PNG"]) as im:
+        with safefile.open_regular(path, MAX_DOWNLOAD) as fh, Image.open(fh, formats=["PNG"]) as im:
             if im.size != SIZE:
                 return False
             toned, colour, done, theme = TONE_CHUNK in im.info, _noted_colour(im.info), im.info.get(DONE_CHUNK), im.info.get(THEME_CHUNK)
@@ -2249,12 +2276,12 @@ def originals_dir():
 def _usable_art(path):
     """True for a plain image file this app can put in a case: not a link, not too big, a PNG, JPEG or WEBP that decodes."""
     try:
-        if not _is_plain_file(path) or os.path.getsize(path) > MAX_DOWNLOAD or Image is None:
+        if Image is None:
             return False
-        with Image.open(path, formats=["PNG", "JPEG", "WEBP"]) as im:
+        with safefile.open_regular(path, MAX_DOWNLOAD) as fh, Image.open(fh, formats=["PNG", "JPEG", "WEBP"]) as im:
             if im.width * im.height > MAX_PIXELS:
                 return False
-        with Image.open(path, formats=["PNG", "JPEG", "WEBP"]) as im:
+        with safefile.open_regular(path, MAX_DOWNLOAD) as fh, Image.open(fh, formats=["PNG", "JPEG", "WEBP"]) as im:
             im.load()                       # a truncated or corrupt file fails here, not later in the middle of Make (verify() does nothing for JPEG and WEBP)
         return True
     except Exception:

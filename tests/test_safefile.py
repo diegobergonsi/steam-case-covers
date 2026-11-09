@@ -35,6 +35,25 @@ class Reading(unittest.TestCase):
         self.write(b'{"a": 1}')
         self.assertEqual(safefile.read_small_file(self.path, 100), b'{"a": 1}')
 
+    def test_open_regular_gives_the_open_file_of_a_normal_file(self):
+        self.write(b"hello")
+        with safefile.open_regular(self.path, 100) as f:
+            self.assertEqual(f.read(), b"hello")
+
+    def test_open_regular_refuses_a_big_file_a_folder_and_a_link(self):
+        self.write(b"x" * 101)
+        with self.assertRaises(safefile.FileTooBig):
+            safefile.open_regular(self.path, 100)
+        with self.assertRaises(safefile.NotRegularFile):
+            safefile.open_regular(self.tmp, 100)
+        link = os.path.join(self.tmp, "link.json")
+        try:
+            os.symlink(self.path, link)
+        except (OSError, NotImplementedError):
+            return                                                   # symlinks not allowed here (Windows without developer mode)
+        with self.assertRaises(safefile.NotRegularFile):
+            safefile.open_regular(link, 1000)
+
     def test_the_limit_is_inclusive(self):
         self.write(b"x" * 100)
         self.assertEqual(len(safefile.read_small_file(self.path, 100)), 100)
