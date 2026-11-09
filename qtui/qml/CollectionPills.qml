@@ -43,7 +43,6 @@ Item {
                     id: pill
                     objectName: pills.objectName + "_pill_" + modelData.id
                     readonly property string text: modelData.label
-                    readonly property bool plain: label.textFormat === Text.PlainText
                     readonly property bool reachable: pills.expanded || y + height <= pills.twoRows + 0.5
                     width: Math.min(label.implicitWidth + Theme.s4 + countText.implicitWidth + 2 * Theme.s16, flow.width)
                     height: Theme.touchMin

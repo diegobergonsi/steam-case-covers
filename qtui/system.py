@@ -5,6 +5,8 @@ import os
 import re
 import sys
 
+from qtui.i18n import N_
+
 SAVE_KEY = "Cmd+S" if sys.platform == "darwin" else "Ctrl+S"      # the shortcut that saves a web page
 
 
@@ -44,12 +46,11 @@ CUSTOM_ART_HELP = ("For games where you set your own art (in Steam's menu or fro
                    "The app keeps a copy of it in its own folder and never changes your files. Games without art of your own use Steam's.")
 
 GAMES_PAGE_URL = "https://steamcommunity.com/my/games/?tab=all&sort=achievements"     # the user's own games page, most achievements first
-THEME_NOTE = "The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts."
+THEME_NOTE = N_("The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts.")
 PAGE_HELP_TEMPLATE = ("How to save the page: open it with the button and log in if asked. Wait until your games have loaded, press %s and save it as "
              "“Webpage, Complete” (Chrome or Firefox), named games.html. Your browser also saves a folder next to it.\n\n"
              "The saved file contains a temporary login token for your Steam account. This app only reads which games are at 100%%: "
              "it does not use or keep the token. You can delete the file and its folder afterwards.")
-PAGE_HELP = PAGE_HELP_TEMPLATE % SAVE_KEY
 
 
 def page_help():

@@ -561,10 +561,8 @@ class StepStates(unittest.TestCase):
         self.assertEqual(sp.STEPS, ("home", "game_list", "look", "hundred", "make", "add"))
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1. Game list", "2. Look", "3. 100% games", "4. Make", "5. Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
-        self.assertEqual(sp.hint("hundred", "active"), "(optional)")
-        self.assertEqual(sp.hint("look", "locked"), "")                          # a locked step is dimmed; it needs no words
-        self.assertEqual(sp.hint("hundred", "locked"), "(optional)")
-        self.assertEqual(sp.hint("look", "done"), "")
+        self.assertEqual(sp.hint("hundred"), "(optional)")
+        self.assertEqual(sp.hint("look"), "")                                        # a locked step is dimmed; it needs no words
 
     def test_nothing_done_only_the_game_list_is_active(self):
         self.assertEqual(self.states(), {"home": "open", "game_list": "active", "look": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
@@ -994,37 +992,37 @@ class LibraryActions(QtCase):
         good = os.path.join(self.tmp, "mine.json")
         with open(good, "w") as f:
             json.dump({"rgOwnedApps": [1, 2, 3]}, f)
-        with mock.patch("qtui.library.pick_file", return_value=good):
+        with mock.patch("qtui.filepicker.pick_file", return_value=good):
             self.lib.browse()
             self.wait_for(lambda: self.lib.path)
         self.assertEqual((self.lib.path, self.lib.ready), (good, True))
 
     def test_browse_does_not_freeze_the_window_while_the_chooser_is_open(self):
-        import time
+        import threading
         from unittest import mock
         good = os.path.join(self.tmp, "slow.json")
         with open(good, "w") as f:
             json.dump({"rgOwnedApps": [1]}, f)
+        gate, threads = threading.Event(), []                  # the gate is the user looking at the chooser
 
         def slow(*a, **k):
-            time.sleep(0.6)                                    # the user is looking at the chooser
+            threads.append(threading.current_thread())
+            gate.wait(5)
             return good
-        with mock.patch("qtui.library.pick_file", side_effect=slow):
-            t0 = time.time()
-            self.lib.browse()
-            self.assertLess(time.time() - t0, 0.3)             # returns at once
+        self.addCleanup(gate.set)
+        with mock.patch("qtui.filepicker.pick_file", side_effect=slow) as chooser:
+            self.lib.browse()                                  # returns at once, the chooser runs on another thread
             self.lib.browse()                                  # a second click while the first chooser is open does not open another
-            for _ in range(60):
-                self.app.processEvents()
-                if self.lib.path:
-                    break
-                time.sleep(0.05)
+            gate.set()
+            self.wait_for(lambda: self.lib.path)
         self.assertEqual(self.lib.path, good)
+        self.assertEqual(chooser.call_count, 1)
+        self.assertNotIn(threading.current_thread(), threads)  # never on the thread that paints the window
 
     def test_browse_cancelled_changes_nothing(self):
         from unittest import mock
         before = (self.lib.path, self.lib.status, self.lib.statusKind)
-        with mock.patch("qtui.library.pick_file", return_value="") as m:
+        with mock.patch("qtui.filepicker.pick_file", return_value="") as m:
             self.lib.browse()
             self.wait_for(lambda: m.called)
             self.app.processEvents()
@@ -1034,7 +1032,7 @@ class LibraryActions(QtCase):
         from unittest import mock
         seen = []
         self.lib.needDialog.connect(lambda folder: seen.append(folder))
-        with mock.patch("qtui.library.pick_file", return_value=None):
+        with mock.patch("qtui.filepicker.pick_file", return_value=None):
             self.lib.browse()
             self.wait_for(lambda: seen)
         self.assertEqual(seen, [self.downloads])
@@ -1235,6 +1233,14 @@ class LookScreen(WindowCase):
         super().setUp()
         self.look = self.shell.look
 
+
+    def test_the_theme_chips_follow_a_change_of_language(self):
+        labels = lambda: [c["label"] for c in (lambda m: m.toVariant() if hasattr(m, "toVariant") else m)(self.item("look_theme").property("model"))]
+        before = labels()
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.assertNotEqual(labels(), before)
+
     def test_it_shows_its_title_and_the_nine_swatches(self):
         self.assertEqual(self.item("screen_title").property("text"), "Choose the look")
         self.assertEqual([self.item("look_swatch_%d" % i).property("name") for i in (0, 6, 8)], ["Original", "Black", "Silver"])
@@ -1309,17 +1315,33 @@ class LookScreen(WindowCase):
         self.app.processEvents()
         self.assertEqual([i for i in range(9) if self.item("look_swatch_%d" % i).property("activeFocusOnTab")], [0])
 
+    def count_changes(self, name, signal):
+        """How many times the signal (such as "stopsChanged()") of the item is emitted from now on: {"n": count}."""
+        from PySide6.QtCore import QObject, Slot
+
+        class Spy(QObject):
+            n = 0
+
+            @Slot()
+            def hit(self):
+                Spy.n += 1
+        spy = Spy()
+        self.addCleanup(spy.deleteLater)
+        item = self.item(name)
+        meta = item.metaObject()
+        QObject.connect(item, meta.method(meta.indexOfSignal(signal)), spy, spy.metaObject().method(spy.metaObject().indexOfSlot("hit()")))
+        return Spy
+
     def test_a_slider_track_is_not_redrawn_for_its_own_value(self):
-        screen = self.item("look_screen")
-        calls = dict(screen.property("calls").toVariant())
+        sat, val = self.count_changes("look_sat", "stopsChanged()"), self.count_changes("look_val", "stopsChanged()")
+        sat.n = val.n = 0
         self.look.sat = 40                                            # moves the colourfulness slider itself: its own track does not change
         self.app.processEvents()
-        after = dict(screen.property("calls").toVariant())
-        self.assertEqual(after["sat"], calls["sat"])
-        self.assertGreater(after["val"], calls["val"])                # the brightness track does show the new colourfulness
+        self.assertEqual(sat.n, 0)
+        self.assertGreater(val.n, 0)                                  # the brightness track does show the new colourfulness
         self.look.hue = 200
         self.app.processEvents()
-        self.assertGreater(dict(screen.property("calls").toVariant())["sat"], after["sat"])
+        self.assertGreater(sat.n, 0)
 
     def test_related_items_are_8_px_apart_and_the_small_size_is_for_hints(self):
         import re
@@ -1588,6 +1610,23 @@ class Components(QtCase):
         self.app.processEvents()
         return self.root
 
+
+    def test_texts_the_player_or_steam_controls_are_drawn_as_typed_never_as_markup(self):
+        """A group name, an account name or a game name may hold <b> or <img>: Qt's automatic format would read it as markup."""
+        from PySide6.QtQuick import QQuickItem
+        mark = "<b>x</b>"
+        self.load('Column { objectName: "col"\n'
+                  '  GroupCard { title: "<b>x</b>"; subtitle: "<b>x</b>" }\n'
+                  '  SwitchRow { label: "<b>x</b>" }\n'
+                  '  PrimaryButton { text: "<b>x</b>"; width: 200 }\n'
+                  '  ChoiceChips { model: [{"key": "a", "label": "<b>x</b>"}]; current: "a" }\n'
+                  '  Toast { message: "<b>x</b>"; opacity: 1 }\n'
+                  '}', 420, 600)
+        from PySide6.QtGui import QFontMetricsF
+        found = [t for t in self.root.findChildren(QQuickItem) if t.property("text") == mark and t.property("contentWidth") is not None]
+        self.assertGreaterEqual(len(found), 5)                                      # card title and subtitle, switch, button, chip (the toast is not drawn until shown)
+        drawn_as_typed = lambda t: abs(t.property("contentWidth") - QFontMetricsF(t.property("font")).horizontalAdvance(mark)) < 2      # markup would draw narrower
+        self.assertEqual([t.objectName() or "?" for t in found if not drawn_as_typed(t)], [])
     def item(self, name):
         from qtui.app import find_item
         got = find_item(self.root, name)
@@ -2846,6 +2885,12 @@ class HundredState(QtCase):
         self.assertEqual([x["label"] for x in self.h.styles], ["Gold case", "Gold border", "Normal case", "No special case"])
         self.assertEqual([(x["key"], x["label"]) for x in self.h.markChoices], [("full", "Rosette and ribbon"), ("rosette", "Rosette only"), ("none", "No marks")])
 
+    def test_the_theme_note_follows_the_language(self):
+        self.shell.look.theme = "christmas"
+        self.shell.setLanguage("pt-BR")
+        self.assertIn("Natal", self.h.themeNote)
+        self.assertNotIn("Christmas", self.h.themeNote)
+
     def test_christmas_forces_the_rosette_and_going_back_restores_the_marks(self):
         h, look = self.h, self.shell.look
         self.load(self.page({1: (1, 1)}))
@@ -2961,7 +3006,7 @@ class HundredState(QtCase):
     def test_browse_loads_the_chosen_page(self):
         from unittest import mock
         path = self.page({1: (1, 1)})
-        with mock.patch("qtui.hundred.pick_file", return_value=path) as m:
+        with mock.patch("qtui.filepicker.pick_file", return_value=path) as m:
             self.h.browse()
             self.wait_for(lambda: self.h.loaded)
         self.assertEqual(m.call_args[0][2], ("Web pages", "*.html *.htm"))
@@ -2970,21 +3015,21 @@ class HundredState(QtCase):
     def test_browse_cancelled_changes_nothing_and_without_a_desktop_chooser_asks_for_the_qt_dialog(self):
         from unittest import mock
         before = (self.h.status, self.h.statusKind)
-        with mock.patch("qtui.hundred.pick_file", return_value=""):
+        with mock.patch("qtui.filepicker.pick_file", return_value=""):
             self.h.browse()
             self.wait_for(lambda: False, 0.3)
         self.assertEqual((self.h.status, self.h.statusKind), before)
         seen = []
         self.h.needDialog.connect(seen.append)
-        with mock.patch("qtui.hundred.pick_file", return_value=None):
+        with mock.patch("qtui.filepicker.pick_file", return_value=None):
             self.h.browse()
             self.wait_for(lambda: seen)
         self.assertEqual(seen, [self.downloads])
 
     def test_the_help_texts_are_the_old_windows(self):
         from qtui import system
-        self.assertIn("The saved file contains a temporary login token for your Steam account.", system.PAGE_HELP)
-        self.assertIn(system.SAVE_KEY, system.PAGE_HELP)
+        self.assertIn("The saved file contains a temporary login token for your Steam account.", system.page_help())
+        self.assertIn(system.SAVE_KEY, system.page_help())
         self.assertEqual(system.THEME_NOTE, "The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts.")
         self.assertEqual(system.GAMES_PAGE_URL, "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
 
@@ -3003,6 +3048,13 @@ class HundredScreen(WindowCase):
         self.h.loadPage(write_games_page(self.tmp, progress or {1: (3, 3), 2: (1, 4)}, name))
         self.wait_for(lambda: self.h.loaded)
         self.app.processEvents()
+
+    def test_the_case_chips_follow_a_change_of_language(self):
+        labels = lambda: [c["label"] for c in (lambda m: m.toVariant() if hasattr(m, "toVariant") else m)(self.item("hundred_style").property("model"))]
+        before = labels()
+        self.shell.setLanguage("pt-BR")
+        self.app.processEvents()
+        self.assertNotEqual(labels(), before)
 
     def test_it_shows_its_title_and_says_it_is_optional(self):
         self.assertEqual(self.item("screen_title").property("text"), "Highlight your 100% games")
@@ -3159,7 +3211,7 @@ class HundredScreen(WindowCase):
 
     def test_the_info_tip_carries_the_old_help(self):
         from qtui import system
-        self.assertEqual(self.item("hundred_tip").property("text"), system.PAGE_HELP)
+        self.assertEqual(self.item("hundred_tip").property("text"), system.page_help())
 
     def test_open_and_copy_use_the_page_address(self):
         from unittest import mock
@@ -3174,7 +3226,7 @@ class HundredScreen(WindowCase):
         from PySide6.QtCore import QObject
         dialog = self.root.findChild(QObject, "hundred_dialog")
         self.assertIsNotNone(dialog)
-        with mock.patch("qtui.hundred.pick_file", return_value=None):
+        with mock.patch("qtui.filepicker.pick_file", return_value=None):
             self.click("hundred_browse")
             self.wait_for(lambda: dialog.property("visible"))
         self.assertTrue(dialog.property("visible"))
@@ -3467,7 +3519,7 @@ class ReleaseWorkflow(unittest.TestCase):
     def test_the_version_is_stamped_for_tags_only_and_before_the_build(self):
         t = self.text()
         stamp = t.index("Stamp the version into the build")
-        self.assertIn("if: startsWith(github.ref, 'refs/tags/')", t[stamp:stamp + 200])
+        self.assertIn("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')", t[stamp:stamp + 200])
         self.assertLess(stamp, t.index("pyinstaller --noconfirm steamcase-qt.spec"))
 
     def test_the_macos_steps_run_in_a_safe_order(self):
@@ -3595,18 +3647,28 @@ class ChecksWorkflow(unittest.TestCase):
         for needle in ("qt-tests:", "requirements-qt.txt", "tools/run_tests.py", "python -m qtui --selftest", "QT_QPA_PLATFORM: offscreen"):
             self.assertIn(needle, text)
 
-    def test_the_qt_job_names_every_test_file_that_needs_qt(self):
-        """The other jobs have no Qt, so a test file that needs it and is not named here would never run where it can."""
-        here = os.path.dirname(os.path.abspath(__file__))
-        with open(os.path.join(here, "..", ".github", "workflows", "checks.yml"), encoding="utf-8") as f:
-            line = next(l for l in f if "requirements-qt.txt" not in l and ("tools/run_tests.py" in l or "python -m unittest tests." in l) and "--selftest" not in l)
-        if "tools/run_tests.py" in line:                    # the runner finds every test file by itself
-            return
-        for name in sorted(os.listdir(here)):
-            if name.startswith("test_") and name.endswith(".py"):
-                with open(os.path.join(here, name), encoding="utf-8") as f:
-                    if "need_qt" in f.read():
-                        self.assertIn("tests." + name[:-3], line, name)
+    def read_repo(self, *parts):
+        with open(os.path.join(os.path.dirname(QML_DIR), "..", *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_every_build_and_scan_requirement_is_pinned_to_an_exact_version(self):
+        import re
+        for name in ("requirements-build.txt", "requirements-scan.txt", "requirements-qt.txt"):
+            for line in self.read_repo(name).splitlines():
+                line = line.split("#")[0].strip()
+                if line and not line.startswith("-r "):
+                    self.assertRegex(line, r"^[A-Za-z0-9_.\-]+==[0-9][0-9A-Za-z.\-]*$", name)
+        self.assertIn("pyinstaller-hooks-contrib==", self.read_repo("requirements-build.txt"))
+
+    def test_the_scans_use_the_pinned_tools_and_check_the_qt_packages_too(self):
+        text = self.read_repo(".github", "workflows", "checks.yml")
+        self.assertIn("pip install -r requirements-scan.txt", text)
+        self.assertNotIn("pip install bandit", text)
+        self.assertIn("pip-audit -r requirements-qt.txt", text)
+
+    def test_a_release_is_only_made_for_a_pushed_tag_never_for_a_run_by_hand(self):
+        text = self.read_repo(".github", "workflows", "release.yml")
+        self.assertGreaterEqual(text.count("github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')"), 2)       # the version stamp, and the release job
 
 
 @need_qt
@@ -3614,6 +3676,23 @@ class ShellWindow(WindowCase):
     """The real QML window, offscreen, as it opens: nothing done yet, and its animations on."""
     reduce_effects = False
     installed_only = False
+
+    def test_the_translated_lists_can_tell_the_window_to_read_them_again(self):
+        """A property declared constant never tells QML to read it again, so its words would stay in the old language."""
+        shell = self.shell
+        for obj, name in ((shell.look, "themes"), (shell.hundred, "styles"), (shell.hundred, "manualStyles"), (shell.cases, "colourChoices")):
+            meta = obj.metaObject()
+            self.assertTrue(meta.property(meta.indexOfProperty(name)).hasNotifySignal(), name)
+
+    def test_the_waiting_status_lines_follow_a_change_of_language(self):
+        shell = self.shell
+        lines = lambda: (shell.library.status, shell.make.status, shell.hundred.status)
+        before = lines()
+        shell.setLanguage("pt-BR")
+        for was, now in zip(before, lines()):
+            self.assertNotEqual(now, was)
+        shell.setLanguage("en")
+        self.assertEqual(lines(), before)                         # and back again
 
     def test_the_window_has_six_nav_items_and_the_footer(self):
         self.assertEqual([self.item("nav_" + k).property("label") for k in ("home", "game_list", "look", "hundred", "make", "add")],
@@ -4234,6 +4313,11 @@ class MakeScreen(WindowCase, FakeStore):
     def setUp(self):
         super().setUp()
         self.make = self.shell.make
+
+    def test_the_progress_line_follows_the_language(self):
+        self.shell.setLanguage("pt-BR")
+        self.make._on_progress(self.make._req, 3, 120, "Game")
+        self.assertEqual(self.make.status, "3 de 120 \u00b7 Game")
 
     def test_without_a_games_page_only_the_all_games_preview_shows(self):
         self.assertEqual(self.text("make_caption_all"), "All Games")
@@ -5859,7 +5943,7 @@ class MakeState(QtCase, FakeStore):
     def choose_own(self):
         from unittest import mock
         self.addCleanup(self.sc.use_custom_case, None)
-        with mock.patch("qtui.owncase.pick_file", return_value=self.own_file()):
+        with mock.patch("qtui.filepicker.pick_file", return_value=self.own_file()):
             self.shell.look.chooseOwnCase()
             self.wait_for(lambda: not self.shell.owncase.choosing)
 
@@ -5907,7 +5991,7 @@ class MakeState(QtCase, FakeStore):
         other = os.path.join(self.tmp, "other.png")
         im.save(other)
         from unittest import mock
-        with mock.patch("qtui.owncase.pick_file", return_value=other):
+        with mock.patch("qtui.filepicker.pick_file", return_value=other):
             self.shell.look.chooseOwnCase()
             self.wait_for(lambda: not self.shell.owncase.choosing)
         self.make.start()
@@ -6903,6 +6987,24 @@ class ApplyState(QtCase, FakeStore):
         a.chooseAccount("999")                                          # not an account of this Steam: ignored
         self.assertEqual(a.accountId, "222")
 
+    def test_choosing_another_account_looks_for_its_backup_again(self):
+        self.accounts = [("111", "Alice"), ("222", "Bob")]
+        real = self.sc.list_backups
+        self.sc.list_backups = lambda steam, user=None: ["b1"] if user in (None, "111") else []          # only Alice has a backup
+        self.addCleanup(lambda: setattr(self.sc, "list_backups", real))
+        self.ap.refresh()
+        self.undo_ready()
+        self.assertTrue(self.ap.canRestore)
+        looked = []
+        real_look = self.ap.refreshUndo
+        self.ap.refreshUndo = lambda: (looked.append(1), real_look())      # a poll heals it in a few seconds; the button must not be wrong meanwhile
+        self.ap.chooseAccount("222")
+        self.assertEqual(len(looked), 1)
+        self.wait_for(lambda: not self.ap.canRestore)                        # Bob has none: Restore must not stay on, to fail with "No backup found"
+        self.ap.chooseAccount("111")
+        self.assertEqual(len(looked), 2)
+        self.wait_for(lambda: self.ap.canRestore)
+
     def test_choosing_an_account_clears_the_last_result(self):
         self.accounts = [("111", "Alice"), ("222", "Bob")]
         self.ap.refresh()
@@ -7358,7 +7460,7 @@ class CasesTests(PickerBase):
     def pick_own(self, path):
         from unittest import mock
         self.addCleanup(self.sc.use_custom_case, None)
-        with mock.patch("qtui.owncase.pick_file", return_value=path):
+        with mock.patch("qtui.filepicker.pick_file", return_value=path):
             self.cases.pick("custom")
             self.wait_for(lambda: not self.shell.owncase.choosing)
 
@@ -7411,7 +7513,7 @@ class CasesTests(PickerBase):
         seen = []
         self.shell.owncase.failed.connect(lambda title, text: seen.append(text))
         self.shell.make._running = True
-        with mock.patch("qtui.owncase.pick_file") as chooser:
+        with mock.patch("qtui.filepicker.pick_file") as chooser:
             self.cases.pick("custom")
             self.wait_for(lambda: bool(seen))
         chooser.assert_not_called()
@@ -7429,9 +7531,14 @@ class CasesTests(PickerBase):
         shell = Shell(os.path.join(self.tmp, "settings3.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
         self.assertNotEqual(shell.owncase.error, "")
         self.assertFalse(shell.owncase.available)
-        for name in ("LookScreen.qml", "CasesScreen.qml"):                   # and the screens show it
-            with open(os.path.join(QML_DIR, name)) as f:
-                self.assertIn("shell.owncase.error", f.read(), name)
+        from qtui.app import close_engine, create_engine, find_item
+        engine = create_engine(shell)                                        # and the Look screen shows it
+        self.addCleanup(close_engine, engine)
+        shell.setFact("ready", True)
+        shell.goKey("look")
+        self.app.processEvents()
+        shown = find_item(engine.rootObjects()[0], "look_own_error")
+        self.assertEqual((shown.property("visible"), shown.property("text")), (True, shell.owncase.error))
 
     def test_cancelling_the_chooser_changes_nothing(self):
         self.pick_own("")
@@ -7715,6 +7822,13 @@ class CasesState(PickerBase):
         self.shell.library.installedOnly = False                 # a different list: the games ticked and given a case belong to the old one
         self.assertEqual((self.shell.cases.assignedCount, self.picker.selectedCount), (0, 0))
 
+    def test_a_new_game_list_also_takes_this_runs_games_out_of_the_groups(self):
+        self.load()
+        self.assign("ps5", 1)
+        self.shell.library.installedOnly = False                 # a different list: game 1 was never given the case in it
+        self.assign("ps4", 2)
+        self.assertNotIn(1, [a for g in self.shell.cases.groupsToSave() for a in g["games"]])
+
     def test_picking_the_case_already_chosen_by_a_saved_group_changes_nothing(self):
         self.load()
         cases, said = self.shell.cases, []
@@ -7853,6 +7967,28 @@ class ManualWindow(WindowClicks, PickerBase):
         self.click("games_clear")
         self.assertEqual(self.picker.selectedCount, 0)
 
+    def type_into(self, name, text):
+        """What a person does: click the box, clear it, type (the box's own edit signal fires, which a set text property does not)."""
+        from PySide6.QtTest import QTest
+        self.root.requestActivate()
+        field = self.item(name)
+        field.setProperty("text", "")
+        field.forceActiveFocus()
+        QTest.keyClicks(self.root, text)
+        self.app.processEvents()
+
+    def test_the_search_box_still_shows_what_filters_the_list_when_the_step_is_opened_again(self):
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        self.type_into("games_search", "hades")
+        self.assertEqual(self.picker.query, "hades")
+        self.shell.go(0)                                                          # Home, and back to the games
+        self.app.processEvents()
+        self.assertFalse(self.has("games_search"))
+        self.shell.goKey("pick")
+        self.app.processEvents()
+        self.assertEqual(self.item("games_search").property("text"), "hades")      # the list is still filtered: the box must say so
+
     def test_a_button_that_has_the_focus_can_become_disabled_without_a_qt_warning(self):
         """Make, Apply and the others are disabled while they work, with the keyboard focus still on them; Qt printed a warning each time."""
         from PySide6.QtCore import qInstallMessageHandler
@@ -7888,12 +8024,25 @@ class ManualWindow(WindowClicks, PickerBase):
     def test_the_games_screen_search_filters_and_says_when_nothing_matches(self):
         self.shell.startPath("manual")
         self.wait_for(lambda: self.picker.rows)
-        self.item("games_search").setProperty("text", "hades")
-        self.app.processEvents()
+        self.type_into("games_search", "hades")
         self.assertEqual(self.names(), ["Hades"])
-        self.item("games_search").setProperty("text", "zzz")
-        self.app.processEvents()
+        self.type_into("games_search", "zzz")
         self.assertIn("No games match", self.item("games_status").property("text"))
+
+    def test_the_pictures_of_the_cases_never_overflow_their_cell_at_any_window_width(self):
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        self.click("games_row_1")
+        self.click("games_next")
+        self.assertEqual(self.step(), "case")
+        keys = [c["key"] for c in self.shell.cases.choices]
+        for width in range(560, 1300, 20):
+            self.root.setProperty("width", width)
+            self.app.processEvents()
+            for key in keys:
+                cell = self.item("case_" + key)
+                self.assertGreaterEqual(cell.property("width"), 100 + 2 * 8, (width, key))             # the picture is 100 px wide, with 8 px at each side
+                self.assertLessEqual(cell.property("x") + cell.property("width"), self.item("case_section_grid").property("width") + 1, (width, key))
 
     def test_the_case_screen_gives_the_ticked_games_a_case(self):
         self.shell.startPath("manual")
@@ -8282,10 +8431,11 @@ class ManualWindow(WindowClicks, PickerBase):
 
     def test_the_games_subtitle_does_not_promise_a_case_for_the_others(self):
         """Review finding 10: games you do not tick are left alone, not remade in the Steam case."""
-        with open(os.path.join(QML_DIR, "GamesScreen.qml")) as f:
-            text = f.read()
-        self.assertIn("left alone", text)
-        self.assertNotIn("keep the Steam case", text)
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        subtitle = self.item("screen_subtitle").property("text")
+        self.assertIn("left alone", subtitle)
+        self.assertNotIn("keep the Steam case", subtitle)
 
     def test_the_navigation_fits_seven_steps_at_the_smallest_window(self):
         from PySide6.QtCore import QPointF
@@ -8859,6 +9009,30 @@ class GroupReset(PickerBase):
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])                          # ours of the usual flow and the other art went, the groups stay
 
+    def test_tab_never_leaves_a_question_in_the_real_window(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        self.start_window()
+        self.reset()
+        self.assertTrue(self.ap.asking)
+        for key in (Qt.Key_Tab, Qt.Key_Backtab):
+            for _ in range(8):                                        # more presses than the question has buttons
+                self.root.requestActivate()
+                QTest.keyClick(self.root, key)
+                self.app.processEvents()
+                inside = lambda: str(self.root.activeFocusItem().objectName()).startswith("apply_dlg")
+                self.wait_for(inside, 0.3)
+                self.assertTrue(inside(), self.root.activeFocusItem().objectName())
+
+    def test_a_group_the_reset_deleted_is_gone_from_the_case_step_too(self):
+        self.assertIn(self.red, [g["id"] for g in self.shell.cases.groupList])
+        self.reset()
+        self.tick(self.red)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy, 10)
+        self.assertNotIn(self.red, [g["id"] for g in self.shell.cases.groupList])
+        self.assertNotIn(self.red, [g["id"] for g in self.shell.cases.groupsToSave()])      # so the next Pick games make cannot write it back
+
     def test_declining_changes_nothing(self):
         self.reset()
         self.tick(self.red)
@@ -9066,6 +9240,35 @@ class ManualFlowEndToEnd(PickerBase):
         self.assertEqual(open(os.path.join(self.covers, "Hades_1.png"), "rb").read(), before)
         self.assertEqual(self.sc.cover_platform(os.path.join(self.covers, "Hades_1.png")), "ps5")
         self.assertTrue(os.path.exists(os.path.join(self.covers, "God_of_War_3.png")))        # and the other games got the Steam case
+
+
+@need_qt
+class DesktopFileChooser(unittest.TestCase):
+    def test_the_default_kind_and_the_all_files_filter_are_in_the_language_in_use(self):
+        from unittest import mock
+        from qtui import filepicker, i18n
+        i18n.set_language("pt-BR")
+        self.addCleanup(i18n.set_language, "en")
+        seen = []
+        with mock.patch.object(filepicker.sys, "platform", "linux"), mock.patch.object(filepicker.shutil, "which", lambda name: "/bin/" + name if name == "kdialog" else None), \
+                mock.patch.object(filepicker.subprocess, "run", lambda cmd, **kw: seen.append(cmd) or mock.Mock(returncode=1, stdout="")):
+            filepicker.pick_file("Title", "/")
+        self.assertIn("Arquivos JSON", seen[0][-1])
+        self.assertIn("Todos os arquivos", seen[0][-1])
+
+
+    def test_a_window_closed_while_the_chooser_is_open_is_not_an_error(self):
+        import threading
+        from unittest import mock
+        from qtui import filepicker
+        heard, failures = [], []
+
+        def closed(path):
+            raise RuntimeError("Signal source has been deleted")
+        with mock.patch.object(filepicker, "pick_file", lambda *a: "/x.json"), mock.patch.object(threading, "excepthook", lambda args: failures.append(args)):
+            filepicker.ask_in_thread(heard.append, "Title", "/").join(5)
+            filepicker.ask_in_thread(closed, "Title", "/").join(5)
+        self.assertEqual((heard, failures), (["/x.json"], []))
 
 
 if __name__ == "__main__":
@@ -9685,6 +9888,36 @@ class ManageGroups(PickerBase):
         self.app.processEvents()
         self.assertFalse(self.item("home_manage_" + red).property("enabled"))
 
+    def key_to_focus(self, key):
+        """A key press for whatever has the focus now (key() first gives the focus to a named item)."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtTest import QTest
+        self.root.requestActivate()
+        QTest.keyClick(self.root, key)
+        self.app.processEvents()
+
+    def inside(self, name):
+        """True when the item that has the keyboard focus is the item `name` or one of its children."""
+        found = self.item(name)
+        node = self.root.activeFocusItem()
+        while node is not None:
+            if node == found:
+                return True
+            node = node.parentItem()
+        return False
+
+    def test_tab_never_leaves_the_manage_window_in_either_direction(self):
+        from PySide6.QtCore import Qt
+        red, ps = self.home_with_groups()
+        self.open_manage(red)
+        self.assertTrue(self.inside("manage_dialog"))
+        for key in (Qt.Key_Tab, Qt.Key_Backtab):
+            self.item("manage_search").forceActiveFocus()
+            for _ in range(10):                                        # more presses than the window has controls
+                self.key_to_focus(key)
+                self.wait_for(lambda: self.inside("manage_dialog"), 0.3)
+                self.assertTrue(self.inside("manage_dialog"), self.root.activeFocusItem().objectName())
+
     def test_manage_buttons_and_rows_are_44_tall(self):
         red, ps = self.home_with_groups()
         for name in ("home_manage_" + red, "home_group_" + red):
@@ -9719,3 +9952,4 @@ class ManageGroups(PickerBase):
 
     def cover(self, appid):
         return os.path.join(self.covers, "%s_%d.png" % (self.NAMES[appid].replace(" ", "_"), appid))
+

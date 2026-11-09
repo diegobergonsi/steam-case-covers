@@ -13,10 +13,8 @@ ScreenFrame {
 
     // the track shows the case in its current colour; reading the three values here makes the binding follow them
     // each track depends on the other two values only: the track of a slider does not change when that slider moves (nor is it redrawn)
-    property var calls: ({"sat": 0, "val": 0})
     function stopsFor(which) {
-        var other = which === "sat" ? [look.hue, look.val] : [look.hue, look.sat]
-        calls[which] += 1
+        var other = which === "sat" ? [look.hue, look.val] : [look.hue, look.sat]          // read only to make the binding follow them
         return look.trackColors(which)
     }
 

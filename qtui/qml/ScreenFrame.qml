@@ -34,6 +34,7 @@ Item {
     }
     Text {
         id: sub
+        objectName: "screen_subtitle"
         y: heading.y + heading.height + Theme.s4
         width: parent.width
         text: frame.subtitle

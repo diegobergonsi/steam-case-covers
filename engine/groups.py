@@ -89,11 +89,11 @@ def save(covers_dir, groups):
     """Write the groups: to a temporary file first and then over the old one, so a failure leaves the old file as it was."""
     os.makedirs(covers_dir, exist_ok=True)
     path = os.path.join(covers_dir, FILE)
-    tmp = "%s.%s.tmp" % (path, uuid.uuid4().hex[:8])
+    tmp = sc._tmp(path)
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"groups": groups}, f, indent=1, ensure_ascii=False)
-        os.replace(tmp, path)
+        sc._replace(tmp, path)                                  # retried: on Windows an antivirus can hold the file for a moment
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)

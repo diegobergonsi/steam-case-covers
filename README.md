@@ -34,16 +34,16 @@
 <table align="center">
   <tr>
     <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-home.png"><img src="assets/screenshot-home.png" width="380" alt="Home the first time: two cards, the same case for every game on your list and Pick games, choose their cases, with the steps on the left and the language flags"></a><br><sub>Home</sub></td>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look.png"><img src="assets/screenshot-look.png" width="380" alt="The Look step: a preview of the case and the colour choices"></a><br><sub>1. Choose the look</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-look.png"><img src="assets/screenshot-look.png" width="380" alt="The Look step: a preview of the case and the colour choices"></a><br><sub>2. Look</sub></td>
   </tr>
   <tr>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100.png"><img src="assets/screenshot-100.png" width="380" alt="The 100% games step: a gold case with a rosette and ribbon, and the choices to mark those games"></a><br><sub>2. Highlight your 100% games</sub></td>
-    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases.png"><img src="assets/screenshot-cases.png" width="380" alt="Pick a case: the Steam case, the PlayStation, Xbox and Nintendo cases and a case of your own, with a preview of the case you picked"></a><br><sub>3. Or pick a console case by hand</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-100.png"><img src="assets/screenshot-100.png" width="380" alt="The 100% games step: a gold case with a rosette and ribbon, and the choices to mark those games"></a><br><sub>3. 100% games</sub></td>
+    <td align="center"><a href="https://github.com/diegobergonsi/steam-case-covers/raw/main/assets/screenshot-cases.png"><img src="assets/screenshot-cases.png" width="380" alt="Pick a case: the Steam case, the PlayStation, Xbox and Nintendo cases and a case of your own, with a preview of the case you picked"></a><br><sub>Or pick a console case by hand</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <em>The whole app: Home, then five short steps, no terminal. The preview follows every choice.</em>
+  <em>The whole app: Home, then five short steps (six if you pick games by hand), no terminal. The preview follows every choice.</em>
 </p>
 
 <p align="center">

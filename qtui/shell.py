@@ -56,14 +56,16 @@ class Shell(QObject):
         self._picker = Picker(self, lambda: self._apply.accountChoice(), self)
         covers = covers_dir or sc.default_covers_dir()
         self._cases = Cases(self, self, covers)
-        self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), parent=self)
+        self._make = Make(self, covers, account=lambda: self._apply.accountChoice(), apply_busy=lambda: self._apply.busy, parent=self)
         self._apply = Apply(self, self._make, covers, self)
         self._manage = GroupManager(self, covers, self)
         self._manage.saved.connect(self._cases.reloadGroups)         # Home, the Reset question and the Case step read the groups again
+        self._apply.groupsDeleted.connect(self._cases.forgetGames)   # a Reset or a repaint deleted groups: the Case step must not keep (and write back) their games
+        self._make.groupsDeleted.connect(self._cases.forgetGames)
         self._manage.saved.connect(self._apply.groupTicks.refresh)
         self._apply.canApplyChanged.connect(self._manage.changed)    # Manage opens only while nothing else is running
         self._make.runningChanged.connect(self._manage.changed)
-        self._apply.canApplyChanged.connect(self._make._availability)
+        self._apply.canApplyChanged.connect(self._make.refreshAvailability)
         self.flowChanged.connect(self.flowNameChanged)
         self.languageChanged.connect(self.flowNameChanged)
         self._make.runningChanged.connect(self.switchChanged)
@@ -80,7 +82,7 @@ class Shell(QObject):
         else:
             states = steps.step_states(**{k: self._facts[k] for k in FACTS})
         names = steps.labels(self._flow)
-        return [{"key": k, "label": names[k], "hint": steps.hint(k, states[k]), "state": states[k]} for k in (steps.STEPS_MANUAL if manual else steps.STEPS)]
+        return [{"key": k, "label": names[k], "hint": steps.hint(k), "state": states[k]} for k in (steps.STEPS_MANUAL if manual else steps.STEPS)]
 
     @Property(str, notify=flowChanged)
     def flow(self):

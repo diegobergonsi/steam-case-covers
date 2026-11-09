@@ -59,6 +59,7 @@ Flow {
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
                 text: modelData.label
+                textFormat: Text.PlainText                       // an account name is Steam's, not ours: never markup
                 font.pixelSize: Theme.bodySize
                 font.bold: true
                 color: chip.selected ? Theme.accentInk : Theme.text

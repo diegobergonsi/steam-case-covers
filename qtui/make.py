@@ -12,7 +12,7 @@ from engine import groups
 from engine import steamcase as sc
 from qtui import reasons
 from qtui.groupticks import GroupTicks
-from qtui.i18n import N_, tr, trn
+from qtui.i18n import N_, retranslated, tr, trn
 
 STATUS_IDLE = N_("Not started.")
 MAX_THUMBS = 5                              # covers shown under the status
@@ -59,15 +59,17 @@ class Make(QObject):
     statusChanged = Signal()
     choicesChanged = Signal()
     groupsChanged = Signal()                # the groups listed in the usual Make, and which are ticked
+    groupsDeleted = Signal(object)          # the games of the groups a Make repainted and so deleted (the shell tells the Case step)
     failed = Signal(str, str)               # a title and the words of an error, for a box the user cannot miss wherever they are
     confirmNeeded = Signal(str, str)        # the title and the sentence of the question "replace the covers you made?"
     _art_done = Signal(int, object, object, object, object)         # request, {appid: path}, the library's app ids, problems, error words (from the worker)
     _progressed = Signal(int, int, int, str)                        # request, done, total, name
     _made = Signal(int, object, object)                             # request, the result of make_covers, error words
 
-    def __init__(self, shell, covers_dir, account=None, parent=None):
+    def __init__(self, shell, covers_dir, account=None, apply_busy=None, parent=None):
         super().__init__(parent)
         self._shell = shell
+        self._apply_busy = apply_busy or (lambda: False)     # covers must not change while they are being added to Steam
         self._covers = covers_dir
         self._account = account or (lambda: None)       # the Steam account folder the user chose, or None
         self._files = []
@@ -84,9 +86,10 @@ class Make(QObject):
         self._status, self._kind = tr(STATUS_IDLE), "wait"
         self._finished = self._total = 0
         self._art_done.connect(self._on_art)
+        shell.languageChanged.connect(self._language_changed)
         self._progressed.connect(self._on_progress)
         self._made.connect(self._on_made)
-        shell.hundred.busyChanged.connect(self._availability)
+        shell.hundred.busyChanged.connect(self.refreshAvailability)
         for signal in (shell.look.toneChanged, shell.look.themeChanged, shell.look.treatmentChanged, shell.look.artChanged,
                        shell.hundred.pathChanged, shell.hundred.styleChanged, shell.hundred.marksChanged,
                        shell.library.pathChanged, shell.library.installedOnlyChanged):
@@ -112,8 +115,7 @@ class Make(QObject):
 
     @Property(bool, notify=runningChanged)
     def canMake(self):
-        apply = getattr(self._shell, "_apply", None)          # covers must not change while they are being added to Steam
-        return not self._running and not self._asking and not self._shell.hundred.busy and not (apply is not None and apply.busy)
+        return not self._running and not self._asking and not self._shell.hundred.busy and not self._apply_busy()
 
     @Property(str, notify=runningChanged)
     def questionTitle(self):
@@ -123,7 +125,7 @@ class Make(QObject):
     def questionText(self):
         return self._question[1]
 
-    def _availability(self):
+    def refreshAvailability(self):
         """Tell the window when canMake changed because of something outside (a page being read, covers being added to Steam)."""
         if self.canMake != self._can:
             self._can = self.canMake
@@ -215,6 +217,11 @@ class Make(QObject):
         if (text, kind) != (self._status, self._kind):
             self._status, self._kind = text, kind
             self.statusChanged.emit()
+
+    def _language_changed(self):
+        """The line that waits for a run is stored translated: it follows the language (a line about a run that happened stays as it was said)."""
+        self._before = (retranslated(self._before[0], STATUS_IDLE), self._before[1])
+        self._set_status(retranslated(self._status, STATUS_IDLE), self._kind)
 
     def _set_state(self, running=None, searching=None, asking=None, making=None):
         before = (self._running, self._searching, self._asking, self._making)
@@ -388,7 +395,7 @@ class Make(QObject):
             return
         self._finished, self._total = done, max(total, 1)
         self.progressChanged.emit()
-        self._set_status("%d of %d · %s" % (done, total, name if len(name) <= MAX_NAME else name[:MAX_NAME - 3] + "…"), "wait")
+        self._set_status(tr("%d of %d · %s") % (done, total, name if len(name) <= MAX_NAME else name[:MAX_NAME - 3] + "…"), "wait")
 
     def _on_made(self, req, res, error):
         if req != self._req:
@@ -423,6 +430,7 @@ class Make(QObject):
             elif snap.get("repaint"):
                 done = {a for g in snap["repaint"] for a in g["games"]} & made
                 groups.save(self._covers, groups.drop_games(groups.load(self._covers), done))
+                self.groupsDeleted.emit(done)
         except OSError as e:
             self.failed.emit(tr("Could not save your groups"), tr("The covers are made, but your groups could not be saved: %s") % e)
         self._ticks.clear()

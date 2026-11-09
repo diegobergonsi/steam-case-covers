@@ -49,6 +49,7 @@ class Cases(QObject):
     groupsChanged = Signal()
     groupNameChanged = Signal()
     colourChanged = Signal()
+    labelsChanged = Signal()                # the colour names (a change of language tells the window to read them again)
     errorChanged = Signal()
     choicesChanged = Signal()
     previewChanged = Signal()               # the choice, what is in use, or the own case changed
@@ -121,7 +122,7 @@ class Cases(QObject):
             self._shell.toast.emit(tr("You picked a new case, so the saved group was unselected."))
 
     # ----- the colour of the Steam case, the name and the groups -----
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=labelsChanged)
     def colourChoices(self):
         return _colour_choices()
 
@@ -236,6 +237,15 @@ class Cases(QObject):
                     continue
                 self._groups.append(dict(old, games=[]))
             self._groups = groups.add_games(self._groups, gid, games)
+
+    @Slot(object)
+    def forgetGames(self, games):
+        """Their groups were deleted (by a Reset, or by a Make that repainted them): the games no longer belong to a group of this run, or the next make would write the group back."""
+        for appid in games:
+            for d in (self._assigned, self._tones, self._gids):
+                d.pop(appid, None)
+        self.assignmentsChanged.emit()
+        self.reloadGroups()
 
     @Slot()
     def reloadGroups(self):
@@ -371,6 +381,7 @@ class Cases(QObject):
         if self._assigned:                  # the games belong to the old list
             self._assigned, self._tones, self._gids = {}, {}, {}
             self.assignmentsChanged.emit()
+            self.reloadGroups()             # the groups they were put in during this run go back to what is saved
 
     @Slot()
     def reset(self):

@@ -23,15 +23,18 @@ ScreenFrame {
             objectName: "case_section_grid"
             heading: qsTr("Choose a case")
             Flow {
+                id: grid
                 width: parent.width
                 spacing: Theme.s12
+                readonly property real minCell: Theme.caseWidth + Theme.s8 + Theme.s8                                                  // the picture and its margin
+                readonly property int columns: Math.max(Theme.caseColumnsMin, Math.min(Theme.caseColumns, Math.floor((width + spacing) / (minCell + spacing))))     // fewer when it is narrow
                 Repeater {
                     model: screen.cases.choices
                     delegate: Item {
                         id: cell
                         objectName: "case_" + modelData.key
                         readonly property bool chosen: screen.cases.selectedKey === modelData.key
-                        width: Math.floor(parent.width / Theme.caseColumns) - Theme.s12
+                        width: Math.floor((grid.width + grid.spacing) / grid.columns) - grid.spacing
                         height: Theme.caseHeight + label.height + 3 * Theme.s8
                         activeFocusOnTab: true
                         Accessible.role: Accessible.RadioButton

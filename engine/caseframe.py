@@ -4,6 +4,8 @@
 Nothing here knows about covers or Steam; engine/steamcase.py keeps the chosen case and draws with it."""
 import io, os
 
+from engine import safefile
+
 try:
     from PIL import Image, ImageDraw
 except ImportError:                     # engine/steamcase.py says what is missing when a case is asked for
@@ -25,15 +27,12 @@ class CaseFileError(Exception):
 
 def read(path):
     """The bytes of a case file the user chose. CaseFileError for a link, something that is not a plain file, or a file that is too big."""
-    if os.path.islink(path):
-        raise CaseFileError(_t("That file is a link, not a picture. Pick the picture itself."))
-    if not os.path.isfile(path):
-        raise CaseFileError(_t("That is not a PNG picture I can read."))
-    if os.path.getsize(path) > MAX_FILE:
-        raise CaseFileError(_t("That file is far too big to be a case (over %d MB).") % (MAX_FILE >> 20))
     try:
-        with open(path, "rb") as f:
-            return f.read()
+        return safefile.read_small_file(path, MAX_FILE)
+    except safefile.FileTooBig:
+        raise CaseFileError(_t("That file is far too big to be a case (over %d MB).") % (MAX_FILE >> 20))
+    except safefile.NotRegularFile:
+        raise CaseFileError(_t("That file is a link, not a picture. Pick the picture itself.") if os.path.islink(path) else _t("That is not a PNG picture I can read."))
     except OSError:
         raise CaseFileError(_t("That is not a PNG picture I can read."))
 

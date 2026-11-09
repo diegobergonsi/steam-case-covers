@@ -3,43 +3,44 @@
 // A question that must be answered before anything changes (it covers the whole window). `ask(title, paragraphs, confirmText)` opens it;
 // `paragraphs` is a list of {text, kind} with kind "main", "muted" or "warn". The safe button (Cancel) has the focus; Escape declines; Tab stays inside.
 import QtQuick
-import QtQuick.Effects
 import "."
 
-FocusScope {
+ModalFrame {
     id: dialog
     property string title: ""
     property var paragraphs: []
-    property string confirmText: "OK"
+    property string confirmText: qsTr("OK")
     property string cancelText: qsTr("Cancel")
-    property var returnTo: null                         // the item that had the focus before, so the keyboard comes back to it
-    property Item focusBack: null                       // set by the screen: the button the keyboard goes back to (it may be greyed out while the question is open)
+    // focusBack (from ModalFrame): set by the screen: the button the keyboard goes back to (it may be greyed out while the question is open)
     signal confirmed()
     signal declined()
     signal alternated()
-    property string prefix: "dlg"                       // the objectName prefix of the parts, so two dialogs in one window can be told apart
+    // prefix (from ModalFrame): the objectName prefix of the parts, so two dialogs in one window can be told apart
     property string alternateText: ""                  // a third choice between Cancel and the confirm; empty: none
     property var choices: []                            // a checklist under the words: [{id, text, ticked}]; the owner ticks (choiceToggled) and sends the list again
     signal choiceToggled(string id)
     property bool single: false                          // an information box: only the confirm button ("OK")
 
-    parent: Window.contentItem
-    anchors.fill: parent
-    z: 1
     visible: false
-    Accessible.role: Accessible.Dialog
     Accessible.name: title
+    arrows: true
+    firstFocus: single ? confirm : cancel
+    stops: function() {
+        var list = []
+        for (var c = 0; c < choiceRows.count; c++) list.push(choiceRows.itemAt(c))
+        return list.concat([cancel, alternate, confirm])
+    }
+    cardWidth: Math.min(dialog.maxCard, Math.ceil(dialog.wanted()) + dialog.pad + Theme.hairline)         // as wide as its longest line, no wider
+    cardHeight: Math.ceil(content.implicitHeight) + 2 * Theme.s24
+    onEscaped: close(false)
 
     function ask(heading, texts, yes, alt, info) {
         title = heading
         paragraphs = texts
-        confirmText = yes ? yes : "OK"
+        confirmText = yes ? yes : qsTr("OK")
         alternateText = alt ? alt : ""
         single = info === true
-        returnTo = focusBack ? focusBack : Window.window ? Window.window.activeFocusItem : null
         visible = true
-        var first = single ? confirm : cancel
-        first.forceActiveFocus()
     }
     readonly property real maxCard: Math.min(Theme.dialogWidth, dialog.width - Theme.s32 - Theme.s32)       // the widest the card may be
     readonly property real pad: Theme.s24 + Theme.s24                                                        // its padding, left and right
@@ -55,35 +56,10 @@ FocusScope {
         if (alternate.visible) { row += alternate.implicitWidth + Theme.s8; single = Math.max(single, alternate.implicitWidth) }
         return Math.max(w, Math.min(row, maxText), Math.min(single, maxText))
     }
-    function step(delta) {                              // the focus moves between the visible buttons and never leaves the dialog
-        var list = []
-        for (var c = 0; c < choiceRows.count; c++) list.push(choiceRows.itemAt(c))
-        if (cancel.visible) list.push(cancel)
-        if (alternate.visible) list.push(alternate)
-        list.push(confirm)
-        var at = 0
-        for (var i = 0; i < list.length; i++) if (list[i].activeFocus) at = i
-        list[(at + delta + list.length) % list.length].forceActiveFocus()
-    }
     function close(answer, alt) {
-        if (Window.window) Window.window.contentItem.forceActiveFocus()         // first take the focus off the buttons: hiding a button that has it makes Qt print a warning
-        visible = false
-        var back = returnTo
+        leave()
+        visible = false                                 // the frame gives the keyboard back to where it was, after the screen has had its answer
         if (alt === true) alternated(); else if (answer) confirmed(); else declined()
-        Qt.callLater(function() { if (back && back.enabled && back.visible) back.forceActiveFocus() })       // after the screen has re-enabled its button
-    }
-
-    Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Escape) {
-            close(false)
-            event.accepted = true
-        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Right) {
-            step(1)
-            event.accepted = true
-        } else if (event.key === Qt.Key_Backtab || event.key === Qt.Key_Left) {
-            step(-1)
-            event.accepted = true
-        }
     }
 
     Item {                                              // invisible copies of the words, only to measure them (see wanted)
@@ -95,124 +71,87 @@ FocusScope {
             delegate: Text { width: dialog.maxText; text: modelData.text; textFormat: Text.PlainText; wrapMode: Text.WrapAtWordBoundaryOrAnywhere; font.pixelSize: Theme.bodySize }
         }
     }
-    Rectangle {                                         // the dimmed window behind; it takes every click, so nothing behind can be reached
-        anchors.fill: parent
-        color: Theme.shadow
-        opacity: Theme.scrimOpacity
-    }
-    MouseArea {
-        anchors.fill: parent
-        onWheel: (wheel) => wheel.accepted = true
-    }
-    Rectangle {                                         // the shadow: a copy of the card's shape that carries nothing. The words must not be inside an effect layer:
-        id: shadow                                      // drawn through a texture on a half pixel they blur, so the card below is a plain rectangle on whole pixels
-        objectName: dialog.prefix + "_shadow"
-        x: card.x
-        y: card.y
-        width: card.width
-        height: card.height
-        radius: Theme.radiusCard
-        color: Theme.card
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Theme.shadow
-            shadowBlur: Theme.raisedShadowBlur
-            shadowOpacity: Theme.cardShadowOpacity
-            shadowVerticalOffset: Theme.raisedShadowOffset
+    Column {
+        id: content
+        x: Theme.s24
+        y: Theme.s24
+        width: dialog.cardWidth - 2 * Theme.s24
+        spacing: Theme.s12
+        Text {
+            id: titleText
+            objectName: dialog.prefix + "_title"
+            width: parent.width
+            text: dialog.title
+            textFormat: Text.PlainText                      // a name in a question is the player's own words, never markup
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere     // a long word with no spaces still wraps
+            color: Theme.text
+            font.pixelSize: Theme.sectionSize
+            font.bold: true
         }
-    }
-    Rectangle {
-        id: card
-        objectName: dialog.prefix + "_card"
-        width: Math.min(dialog.maxCard, Math.ceil(dialog.wanted()) + dialog.pad + Theme.hairline)         // as wide as its longest line, no wider
-        height: Math.ceil(content.implicitHeight) + 2 * Theme.s24
-        x: Math.round((dialog.width - width) / 2)
-        y: Math.round(Math.max(Theme.s16, (dialog.height - height) / 2))
-        color: Theme.card
-        radius: Theme.radiusCard
-        Column {
-            id: content
-            x: Theme.s24
-            y: Theme.s24
-            width: card.width - 2 * Theme.s24
-            spacing: Theme.s12
-            Text {
-                id: titleText
-                objectName: dialog.prefix + "_title"
-                width: parent.width
-                text: dialog.title
-                textFormat: Text.PlainText                      // a name in a question is the player's own words, never markup
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere     // a long word with no spaces still wraps
-                color: Theme.text
-                font.pixelSize: Theme.sectionSize
-                font.bold: true
-            }
-            Flickable {                                 // a lot of words scroll; the buttons stay in view
-                id: body
-                width: content.width
-                height: Math.min(words.implicitHeight, Math.max(Theme.dialogTextMin, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12 - Theme.s12 - Theme.s12))
-                contentWidth: width
-                contentHeight: words.implicitHeight
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                Column {
-                    id: words
-                    width: body.width
-                    spacing: Theme.s12
-                    Repeater {
-                        model: dialog.paragraphs
-                        delegate: Text {
-                            objectName: dialog.prefix + "_p" + index
-                            width: words.width
-                            text: modelData.text
-                            textFormat: Text.PlainText
-                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                            font.pixelSize: Theme.bodySize
-                            color: modelData.kind === "warn" ? Theme.warning : modelData.kind === "muted" ? Theme.muted : Theme.text
-                        }
+        Flickable {                                 // a lot of words scroll; the buttons stay in view
+            id: body
+            width: content.width
+            height: Math.min(words.implicitHeight, Math.max(Theme.dialogTextMin, dialog.height - Theme.s16 - Theme.s16 - Theme.s24 - Theme.s24 - titleText.height - buttons.height - Theme.s12 - Theme.s12 - Theme.s12 - Theme.s12))
+            contentWidth: width
+            contentHeight: words.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: words
+                width: body.width
+                spacing: Theme.s12
+                Repeater {
+                    model: dialog.paragraphs
+                    delegate: Text {
+                        objectName: dialog.prefix + "_p" + index
+                        width: words.width
+                        text: modelData.text
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                        font.pixelSize: Theme.bodySize
+                        color: modelData.kind === "warn" ? Theme.warning : modelData.kind === "muted" ? Theme.muted : Theme.text
                     }
-                    Repeater {
-                        id: choiceRows                          // after the words; the model is a count, so a tick changes a row and never rebuilds it (the focus stays)
-                        model: dialog.choices.length
-                        delegate: GameRow {
-                            objectName: dialog.prefix + "_choice_" + dialog.choices[index].id
-                            standalone: true
-                            width: words.width
-                            name: dialog.choices[index].text
-                            selected: dialog.choices[index].ticked
-                            onToggled: dialog.choiceToggled(dialog.choices[index].id)
-                        }
+                }
+                Repeater {
+                    id: choiceRows                          // after the words; the model is a count, so a tick changes a row and never rebuilds it (the focus stays)
+                    model: dialog.choices.length
+                    delegate: GameRow {
+                        objectName: dialog.prefix + "_choice_" + dialog.choices[index].id
+                        standalone: true
+                        width: words.width
+                        name: dialog.choices[index].text
+                        selected: dialog.choices[index].ticked
+                        onToggled: dialog.choiceToggled(dialog.choices[index].id)
                     }
                 }
             }
-            Item { width: Theme.hairline; height: Theme.s12 }       // the buttons stand apart from the last words (24 px in all)
-            ButtonRow {
-                id: buttons
-                width: content.width
-                QuietButton {
-                    id: cancel
-                    objectName: dialog.prefix + "_cancel"
-                    visible: !dialog.single
-                    text: dialog.cancelText
-                    maxWidth: content.width
-                    onClicked: dialog.close(false)
-                }
-                QuietButton {
-                    id: alternate
-                    objectName: dialog.prefix + "_alternate"
-                    visible: dialog.alternateText !== "" && !dialog.single
-                    text: dialog.alternateText
-                    maxWidth: content.width
-                    onClicked: dialog.close(false, true)
-                }
-                PrimaryButton {
-                    id: confirm
-                    objectName: dialog.prefix + "_confirm"
-                    text: dialog.confirmText
-                    maxWidth: content.width
-                    onClicked: dialog.close(true)
-                }
+        }
+        Item { width: Theme.hairline; height: Theme.s12 }       // the buttons stand apart from the last words (24 px in all)
+        ButtonRow {
+            id: buttons
+            width: content.width
+            QuietButton {
+                id: cancel
+                objectName: dialog.prefix + "_cancel"
+                visible: !dialog.single
+                text: dialog.cancelText
+                maxWidth: content.width
+                onClicked: dialog.close(false)
+            }
+            QuietButton {
+                id: alternate
+                objectName: dialog.prefix + "_alternate"
+                visible: dialog.alternateText !== "" && !dialog.single
+                text: dialog.alternateText
+                maxWidth: content.width
+                onClicked: dialog.close(false, true)
+            }
+            PrimaryButton {
+                id: confirm
+                objectName: dialog.prefix + "_confirm"
+                text: dialog.confirmText
+                maxWidth: content.width
+                onClicked: dialog.close(true)
             }
         }
     }

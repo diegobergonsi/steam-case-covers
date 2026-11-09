@@ -99,7 +99,7 @@ ScreenFrame {
                 Text { text: shell.flow === "manual" ? qsTr("Highlight") : qsTr("Case"); color: Theme.muted; font.pixelSize: Theme.bodySize }
                 ChoiceChips {
                     objectName: "hundred_style"
-                    groupName: qsTr("Case")
+                    groupName: shell.flow === "manual" ? qsTr("Highlight") : qsTr("Case")                  // what the screen reader says is what the screen says
                     width: parent.width
                     enabled: screen.hundred.styleEnabled
                     model: shell.flow === "manual" ? screen.hundred.manualStyles : screen.hundred.styles

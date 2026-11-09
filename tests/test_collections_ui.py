@@ -198,7 +198,10 @@ class CollectionsWindow(CollectionFiles, WindowClicks, PickerBase):
         self.open_games([("markup", "<b>Done</b>", [1]), ("long", "x" * 200, [1, 2])])
         pill = self.item(self.pill("markup"))
         self.assertEqual(pill.property("text"), "<b>Done</b> (1)")
-        self.assertTrue(pill.property("plain"))                                              # drawn as text, not as markup
+        from PySide6.QtGui import QFontMetricsF
+        from PySide6.QtQuick import QQuickItem
+        label = next(t for t in pill.findChildren(QQuickItem) if str(t.property("text")).startswith("<b>Done</b>"))
+        self.assertAlmostEqual(label.property("contentWidth"), QFontMetricsF(label.property("font")).horizontalAdvance(label.property("text")), delta=2)       # as typed, not as markup
         self.assertLessEqual(self.item(self.pill("long")).width(), self.item("games_collections").width())
 
     def test_more_than_two_rows_show_the_link_and_hide_the_rest(self):

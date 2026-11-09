@@ -578,6 +578,22 @@ class Concurrency(Base):
             sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
         self.assertIn("Another steamcase window", str(cm.exception))
 
+    def test_an_old_lock_of_a_live_run_is_still_respected(self):
+        lock = os.path.join(self.cfg, ".steamcase.lock")
+        os.makedirs(lock)
+        with open(os.path.join(lock, "pid"), "w") as f:
+            f.write(str(os.getpid()))                                  # alive, and a long Apply on a slow card can take more than ten minutes
+        os.utime(lock, (1, 1))
+        with self.assertRaises(sc.SteamcaseError):
+            sc.apply_covers(self.steam, self.covers, files=[self.cover(1)])
+
+    def test_leaving_never_removes_a_lock_that_another_run_now_holds(self):
+        lock = os.path.join(self.cfg, ".steamcase.lock")
+        with sc._Lock(self.cfg):
+            with open(os.path.join(lock, "pid"), "w") as f:
+                f.write(str(os.getpid() + 1))                          # taken over by someone else meanwhile
+        self.assertTrue(os.path.isdir(lock))
+
     def test_a_fresh_lock_with_no_owner_written_yet_is_respected(self):
         os.makedirs(os.path.join(self.cfg, ".steamcase.lock"))
         with self.assertRaises(sc.SteamcaseError):
@@ -630,6 +646,41 @@ class Concurrency(Base):
 
 
 class Attacks(Base):
+    def test_two_cover_files_for_one_game_apply_only_the_newest(self):
+        old, new = self.cover(5, b"OLD"), os.path.join(self.covers, "Renamed_5.png")
+        with open(new, "wb") as f:
+            f.write(b"NEW5")
+        os.utime(old, (1, 1))                                                    # the older file, as a game renamed by Steam leaves it
+        info = sc.apply_covers(self.steam, self.covers)
+        self.assertEqual(self.read(self.grid, "5p.png"), b"NEW5")
+        self.assertEqual(info["applied"], 1)
+        manifest = json.loads(self.read(info["backup"], "manifest.json")) if info["backup"] else {"added": ["5p.png"]}
+        self.assertEqual(manifest["added"], ["5p.png"])
+
+    def test_an_empty_pick_applies_nothing_instead_of_everything(self):
+        self.cover(6)
+        with self.assertRaises(sc.SteamcaseError):
+            sc.apply_covers(self.steam, self.covers, files=[])
+        self.assertFalse(os.path.exists(os.path.join(self.grid, "6p.png")))
+
+    def test_a_full_disk_while_backing_up_leaves_the_grid_as_it_was_and_no_half_backup(self):
+        with open(os.path.join(self.grid, "7p.png"), "wb") as f:
+            f.write(b"STEAMS")
+        self.cover(7, b"NEW")
+        real = shutil.copy2
+
+        def full(src, dst, **kw):
+            if sc.BACKUP_PREFIX not in dst:
+                return real(src, dst, **kw)                                       # only the copy into the backup runs out of room
+            with open(dst, "wb") as f:
+                f.write(b"PART")                                                  # the disk filled up halfway through the copy
+            raise OSError(28, "No space left on device")
+        with mock.patch.object(shutil, "copy2", full), self.assertRaises(sc.SteamcaseError) as cm:
+            sc.apply_covers(self.steam, self.covers)
+        self.assertEqual(self.read(self.grid, "7p.png"), b"STEAMS")
+        self.assertEqual([d for d in os.listdir(self.cfg) if d.startswith(sc.BACKUP_PREFIX)], [])      # no folder that Restore would refuse
+        self.assertNotIn("Restore", str(cm.exception))
+
     def test_manifest_with_path_traversal_is_refused(self):
         victim = os.path.join(self.tmp, "victim.txt")
         open(victim, "w").write("DATA")
@@ -723,6 +774,15 @@ class Attacks(Base):
         p = os.path.join(self.tmp, "ids.json")
         json.dump({"rgOwnedApps": [-5, 0, 10 ** 30, 413150]}, open(p, "w"))
         self.assertEqual(sc.owned_ids(p), [413150])
+
+    def test_a_game_list_with_numbers_that_are_not_whole_ids_is_called_damaged(self):
+        p = os.path.join(self.tmp, "odd.json")
+        for text in ('{"rgOwnedApps":[Infinity]}', '{"rgOwnedApps":[1.9, 5]}', '{"rgOwnedApps":[true]}', '{"rgOwnedApps":["abc"]}'):
+            with open(p, "w") as f:
+                f.write(text)
+            with self.assertRaises(sc.SteamcaseError, msg=text) as cm:
+                sc.owned_ids(p)
+            self.assertIn("damaged", str(cm.exception), text)
 
     def test_oversized_download_is_refused(self):
         class H(http.server.BaseHTTPRequestHandler):
@@ -969,6 +1029,14 @@ class FamilyOwnership(Base):
         with open(path, "w") as f:
             json.dump(d, f)
         return path
+
+    def test_one_damaged_install_file_does_not_stop_the_library_from_loading(self):
+        self.manifest(10, "Good Game")
+        apps = os.path.join(self.steam, "steamapps")
+        with open(os.path.join(apps, "appmanifest_11.acf"), "w") as f:
+            f.write('"AppState"\n{\n\t"appid"\t\t""\n\t"name"\t\t"Broken"\n}\n')
+        os.makedirs(os.path.join(apps, "appmanifest_12.acf"))                      # a folder where a file should be
+        self.assertEqual(sc.installed_games(self.steam), {10: "Good Game"})
 
     def test_a_cached_app_you_do_not_own_is_family(self):
         self.packageinfo({0: [1]})
@@ -2678,6 +2746,13 @@ class MakeTreated(StoreMocks):
 
     def cover(self, appid):
         return os.path.join(self.covers, "Game_%d_%d.png" % (appid, appid))
+
+    def test_a_renamed_game_keeps_one_cover_file(self):
+        sc.make_covers(self.games, self.covers)
+        self.assertTrue(os.path.exists(self.cover(1)))
+        self.games[1] = "Renamed"
+        sc.make_covers(self.games, self.covers)
+        self.assertEqual(sorted(f for f in os.listdir(self.covers) if f.endswith("_1.png")), ["Renamed_1.png"])
 
     def test_an_unknown_treatment_is_refused_before_anything_is_made(self):
         for bad in ("sparkly", "", "RIBBON", False):
@@ -5072,6 +5147,7 @@ class CustomCaseCovers(StoreMocks):
             if os.path.exists(self.cv(appid)):
                 self.assertEqual(sc.read_notes(self.cv(appid)).case, first)             # whatever was finished was built with the file it says
         self.assertFalse(os.path.exists(self.cv(3)))
+        self.assertEqual([f for f in os.listdir(self.covers) if f.startswith(".tmp_")], [])      # the download of the game that was stopped is not left behind
 
     def test_marks_and_family_corner_use_the_measured_window(self):
         sc.save_custom_case(self.case_file(), self.covers)

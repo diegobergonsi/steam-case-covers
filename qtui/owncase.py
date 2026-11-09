@@ -2,12 +2,11 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The user's own case: asks for the file (the desktop's chooser, or Qt's dialog when there is none), checks it and keeps the copy (steamcase.save_custom_case).
 One case at a time: picking a file replaces the one before. The Case step and the Look step both use this object."""
-import threading
 
 from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
 
 from engine import steamcase as sc
-from qtui.filepicker import pick_file
+from qtui.filepicker import ask_in_thread
 from qtui.i18n import N_, tr
 
 
@@ -62,13 +61,7 @@ class OwnCase(QObject):
         self._choosing = True
         self.changed.emit()
 
-        def ask():
-            try:
-                path = pick_file(tr("Choose your case file"), self._downloads, (tr("PNG pictures"), "*.png"))
-            except Exception:
-                path = None                                     # no chooser worked: Qt's own dialog
-            self._picked.emit(path)
-        threading.Thread(target=ask, daemon=True).start()
+        ask_in_thread(self._picked.emit, tr("Choose your case file"), self._downloads, (tr("PNG pictures"), "*.png"))
 
     def _on_picked(self, path):
         self._choosing = False
