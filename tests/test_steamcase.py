@@ -3407,6 +3407,19 @@ class ReleaseMessage(unittest.TestCase):
         self.assertLess(len(description), 1700)
         self.assertTrue(description.startswith("- Covers of your 100% games"))     # the fix comes first: it is what people must know
 
+    def test_the_changelog_has_the_1_7_0_notes(self):
+        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
+            text = f.read()
+        notes = self.rm.section(text, "v1.7.0")
+        for word in ("My own case", "Christmas", "Manage", "collections", "Start over", "No marks", "All Games", "python -m engine", "Tab", "Portuguese"):
+            self.assertIn(word, notes)
+        self.assertRegex(text, r"## \[1\.7\.0\] - 2026-11-09")
+        self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # nothing waits under Unreleased
+        announcement = self.rm.announcement(text, "v1.7.0", "https://example.test/r")["embeds"][0]["description"]
+        self.assertNotIn("Documentation", announcement)
+        self.assertLess(len(announcement), self.rm.LIMIT)
+        self.assertTrue(announcement.startswith("- Use a case you made yourself."))      # what the person can do first
+
     def test_the_release_page_body_is_the_section_plus_how_to_check_the_files(self):
         body = self.rm.release_body(self.SAMPLE, "v1.5.0")
         self.assertTrue(body.startswith("- New: a thing."))
