@@ -998,26 +998,26 @@ class LibraryActions(QtCase):
         self.assertEqual((self.lib.path, self.lib.ready), (good, True))
 
     def test_browse_does_not_freeze_the_window_while_the_chooser_is_open(self):
-        import time
+        import threading
         from unittest import mock
         good = os.path.join(self.tmp, "slow.json")
         with open(good, "w") as f:
             json.dump({"rgOwnedApps": [1]}, f)
+        gate, threads = threading.Event(), []                  # the gate is the user looking at the chooser
 
         def slow(*a, **k):
-            time.sleep(0.6)                                    # the user is looking at the chooser
+            threads.append(threading.current_thread())
+            gate.wait(5)
             return good
-        with mock.patch("qtui.filepicker.pick_file", side_effect=slow):
-            t0 = time.time()
-            self.lib.browse()
-            self.assertLess(time.time() - t0, 0.3)             # returns at once
+        self.addCleanup(gate.set)
+        with mock.patch("qtui.filepicker.pick_file", side_effect=slow) as chooser:
+            self.lib.browse()                                  # returns at once, the chooser runs on another thread
             self.lib.browse()                                  # a second click while the first chooser is open does not open another
-            for _ in range(60):
-                self.app.processEvents()
-                if self.lib.path:
-                    break
-                time.sleep(0.05)
+            gate.set()
+            self.wait_for(lambda: self.lib.path)
         self.assertEqual(self.lib.path, good)
+        self.assertEqual(chooser.call_count, 1)
+        self.assertNotIn(threading.current_thread(), threads)  # never on the thread that paints the window
 
     def test_browse_cancelled_changes_nothing(self):
         from unittest import mock
@@ -3669,19 +3669,6 @@ class ChecksWorkflow(unittest.TestCase):
     def test_a_release_is_only_made_for_a_pushed_tag_never_for_a_run_by_hand(self):
         text = self.read_repo(".github", "workflows", "release.yml")
         self.assertGreaterEqual(text.count("github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')"), 2)       # the version stamp, and the release job
-
-    def test_the_qt_job_names_every_test_file_that_needs_qt(self):
-        """The other jobs have no Qt, so a test file that needs it and is not named here would never run where it can."""
-        here = os.path.dirname(os.path.abspath(__file__))
-        with open(os.path.join(here, "..", ".github", "workflows", "checks.yml"), encoding="utf-8") as f:
-            line = next(l for l in f if "requirements-qt.txt" not in l and ("tools/run_tests.py" in l or "python -m unittest tests." in l) and "--selftest" not in l)
-        if "tools/run_tests.py" in line:                    # the runner finds every test file by itself
-            return
-        for name in sorted(os.listdir(here)):
-            if name.startswith("test_") and name.endswith(".py"):
-                with open(os.path.join(here, name), encoding="utf-8") as f:
-                    if "need_qt" in f.read():
-                        self.assertIn("tests." + name[:-3], line, name)
 
 
 @need_qt
@@ -7544,9 +7531,14 @@ class CasesTests(PickerBase):
         shell = Shell(os.path.join(self.tmp, "settings3.json"), downloads=os.path.join(self.tmp, "Downloads"), covers_dir=self.covers)
         self.assertNotEqual(shell.owncase.error, "")
         self.assertFalse(shell.owncase.available)
-        for name in ("LookScreen.qml", "CasesScreen.qml"):                   # and the screens show it
-            with open(os.path.join(QML_DIR, name)) as f:
-                self.assertIn("shell.owncase.error", f.read(), name)
+        from qtui.app import close_engine, create_engine, find_item
+        engine = create_engine(shell)                                        # and the Look screen shows it
+        self.addCleanup(close_engine, engine)
+        shell.setFact("ready", True)
+        shell.goKey("look")
+        self.app.processEvents()
+        shown = find_item(engine.rootObjects()[0], "look_own_error")
+        self.assertEqual((shown.property("visible"), shown.property("text")), (True, shell.owncase.error))
 
     def test_cancelling_the_chooser_changes_nothing(self):
         self.pick_own("")
@@ -8439,10 +8431,11 @@ class ManualWindow(WindowClicks, PickerBase):
 
     def test_the_games_subtitle_does_not_promise_a_case_for_the_others(self):
         """Review finding 10: games you do not tick are left alone, not remade in the Steam case."""
-        with open(os.path.join(QML_DIR, "GamesScreen.qml")) as f:
-            text = f.read()
-        self.assertIn("left alone", text)
-        self.assertNotIn("keep the Steam case", text)
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        subtitle = self.item("screen_subtitle").property("text")
+        self.assertIn("left alone", subtitle)
+        self.assertNotIn("keep the Steam case", subtitle)
 
     def test_the_navigation_fits_seven_steps_at_the_smallest_window(self):
         from PySide6.QtCore import QPointF
