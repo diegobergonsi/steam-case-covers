@@ -31,12 +31,20 @@ class Choosing(unittest.TestCase):
         os.environ["STEAMCASE_LANG"] = "en"
         self.assertEqual(i18n.system_language(), "en")
 
-    def test_a_saved_choice_wins_over_the_system_and_a_bad_one_is_ignored(self):
-        self.assertEqual(i18n.choose("en", "pt_BR"), "en")
-        self.assertEqual(i18n.choose("pt-BR", "en_US"), "pt-BR")
-        self.assertEqual(i18n.choose("klingon", "pt_BR"), "pt-BR")
-        self.assertEqual(i18n.choose(None, "en_US"), "en")
-        self.assertEqual(i18n.choose("", "pt_BR"), "pt-BR")
+    def test_a_saved_choice_is_read_back_and_a_bad_or_missing_one_is_ignored(self):
+        """The shell starts in the saved language when there is one (see Shell.__init__) and in the system's otherwise."""
+        import tempfile
+        from qtui import settings
+        path = os.path.join(tempfile.mkdtemp(), "settings.json")
+        self.addCleanup(__import__("shutil").rmtree, os.path.dirname(path), True)
+        self.assertIsNone(settings.load_language(path))
+        for code in ("en", "pt-BR"):
+            settings.save_language(code, path)
+            self.assertEqual(settings.load_language(path), code)
+        with open(settings.language_path(path), "w") as f:
+            f.write("klingon")
+        self.assertIsNone(settings.load_language(path))
+        self.assertEqual(settings.LANGUAGE_CODES, tuple(i18n.LANGUAGES))
 
 
 @need_qt
@@ -116,10 +124,10 @@ class PageHelp(unittest.TestCase):
             self.assertIn("aperte %s e salve" % key, text)
             self.assertIn("100%:", text)
 
-    def test_the_english_help_is_the_text_of_page_help_constant(self):
+    def test_the_english_help_is_the_template_with_the_key_of_this_computer(self):
         from qtui import system
         i18n.set_language("en")
-        self.assertEqual(system.page_help(), system.PAGE_HELP)
+        self.assertEqual(system.page_help(), system.PAGE_HELP_TEMPLATE % system.SAVE_KEY)
 
 
 @need_qt

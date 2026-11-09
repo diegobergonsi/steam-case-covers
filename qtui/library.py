@@ -2,14 +2,13 @@
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """Step 1 of the window: the game list. The saved userdata.json is noticed by itself, checked, and unlocks the next step."""
 import os
-import threading
 
 from PySide6.QtCore import Property, QDir, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from engine import steamcase as sc
 from qtui import settings
-from qtui.filepicker import pick_file
+from qtui.filepicker import ask_in_thread
 from qtui.system import SAVE_KEY
 from qtui.watcher import DownloadWatcher
 from qtui.i18n import N_, retranslated, tr
@@ -210,13 +209,7 @@ class Library(QObject):
             return
         self._choosing = True
 
-        def ask():
-            try:
-                path = pick_file(tr("Choose your userdata.json"), self._downloads)
-            except Exception:
-                path = None                                     # no chooser worked: Qt's own dialog
-            self._picked.emit(path)
-        threading.Thread(target=ask, daemon=True).start()
+        ask_in_thread(self._picked.emit, tr("Choose your userdata.json"), self._downloads)
 
     def _on_picked(self, path):
         self._choosing = False

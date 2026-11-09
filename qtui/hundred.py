@@ -10,7 +10,7 @@ from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from engine import completion
 from engine import steamcase as sc
-from qtui.filepicker import pick_file
+from qtui.filepicker import ask_in_thread
 from qtui.reasons import MARKS, STYLES
 from qtui.system import GAMES_PAGE_URL, SAVE_KEY, THEME_NOTE
 from qtui.watcher import DownloadWatcher
@@ -273,13 +273,7 @@ class Hundred(QObject):
             return
         self._choosing = True
 
-        def ask():
-            try:
-                path = pick_file(tr("Choose your saved games page"), self._downloads, (tr("Web pages"), "*.html *.htm"))
-            except Exception:
-                path = None                                     # no chooser worked: Qt's own dialog
-            self._picked.emit(path)
-        threading.Thread(target=ask, daemon=True).start()
+        ask_in_thread(self._picked.emit, tr("Choose your saved games page"), self._downloads, (tr("Web pages"), "*.html *.htm"))
 
     def _on_picked(self, path):
         self._choosing = False

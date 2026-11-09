@@ -32,11 +32,6 @@ def system_language():
     return detect(os.environ.get("STEAMCASE_LANG") or system)
 
 
-def choose(saved, system_name):
-    """The language to start in: the saved choice when it is one we have, else the system's."""
-    return saved if saved in LANGUAGES else detect(system_name)
-
-
 def _form(language, n):
     """0 for the singular form, 1 for the plural one. English: only 1 is singular. Brazilian Portuguese: 0 and 1 are singular."""
     return 0 if (n == 1 if language == "en" else n in (0, 1)) else 1

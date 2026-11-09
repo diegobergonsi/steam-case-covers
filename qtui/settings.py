@@ -6,6 +6,7 @@ import os
 import uuid
 
 from engine import safefile
+from qtui import i18n
 from engine import steamcase as sc
 
 SETTING_KEYS = ("skip_auto_art", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
@@ -18,7 +19,7 @@ def settings_path():
     return os.path.join(os.path.dirname(sc.default_covers_dir()), "settings.json")
 
 
-LANGUAGE_CODES = ("en", "pt-BR")          # the languages of the window (see qtui/i18n.py)
+LANGUAGE_CODES = tuple(i18n.LANGUAGES)     # the languages of the window (see qtui/i18n.py)
 LIBRARY_FILE = "library.txt"              # the path of the game list the user used last, next to settings.json (only the path: the file stays where it is)
 LANGUAGE_FILE = "language.txt"            # the one word of the language the user chose, next to settings.json
 

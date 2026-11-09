@@ -561,10 +561,8 @@ class StepStates(unittest.TestCase):
         self.assertEqual(sp.STEPS, ("home", "game_list", "look", "hundred", "make", "add"))
         self.assertEqual([sp.LABELS[k] for k in sp.STEPS], ["Home", "1. Game list", "2. Look", "3. 100% games", "4. Make", "5. Add to Steam"])
         self.assertEqual(sp.HINTS, {"hundred": "(optional)"})
-        self.assertEqual(sp.hint("hundred", "active"), "(optional)")
-        self.assertEqual(sp.hint("look", "locked"), "")                          # a locked step is dimmed; it needs no words
-        self.assertEqual(sp.hint("hundred", "locked"), "(optional)")
-        self.assertEqual(sp.hint("look", "done"), "")
+        self.assertEqual(sp.hint("hundred"), "(optional)")
+        self.assertEqual(sp.hint("look"), "")                                        # a locked step is dimmed; it needs no words
 
     def test_nothing_done_only_the_game_list_is_active(self):
         self.assertEqual(self.states(), {"home": "open", "game_list": "active", "look": "locked", "hundred": "locked", "make": "locked", "add": "locked"})
@@ -994,7 +992,7 @@ class LibraryActions(QtCase):
         good = os.path.join(self.tmp, "mine.json")
         with open(good, "w") as f:
             json.dump({"rgOwnedApps": [1, 2, 3]}, f)
-        with mock.patch("qtui.library.pick_file", return_value=good):
+        with mock.patch("qtui.filepicker.pick_file", return_value=good):
             self.lib.browse()
             self.wait_for(lambda: self.lib.path)
         self.assertEqual((self.lib.path, self.lib.ready), (good, True))
@@ -1009,7 +1007,7 @@ class LibraryActions(QtCase):
         def slow(*a, **k):
             time.sleep(0.6)                                    # the user is looking at the chooser
             return good
-        with mock.patch("qtui.library.pick_file", side_effect=slow):
+        with mock.patch("qtui.filepicker.pick_file", side_effect=slow):
             t0 = time.time()
             self.lib.browse()
             self.assertLess(time.time() - t0, 0.3)             # returns at once
@@ -1024,7 +1022,7 @@ class LibraryActions(QtCase):
     def test_browse_cancelled_changes_nothing(self):
         from unittest import mock
         before = (self.lib.path, self.lib.status, self.lib.statusKind)
-        with mock.patch("qtui.library.pick_file", return_value="") as m:
+        with mock.patch("qtui.filepicker.pick_file", return_value="") as m:
             self.lib.browse()
             self.wait_for(lambda: m.called)
             self.app.processEvents()
@@ -1034,7 +1032,7 @@ class LibraryActions(QtCase):
         from unittest import mock
         seen = []
         self.lib.needDialog.connect(lambda folder: seen.append(folder))
-        with mock.patch("qtui.library.pick_file", return_value=None):
+        with mock.patch("qtui.filepicker.pick_file", return_value=None):
             self.lib.browse()
             self.wait_for(lambda: seen)
         self.assertEqual(seen, [self.downloads])
@@ -2975,7 +2973,7 @@ class HundredState(QtCase):
     def test_browse_loads_the_chosen_page(self):
         from unittest import mock
         path = self.page({1: (1, 1)})
-        with mock.patch("qtui.hundred.pick_file", return_value=path) as m:
+        with mock.patch("qtui.filepicker.pick_file", return_value=path) as m:
             self.h.browse()
             self.wait_for(lambda: self.h.loaded)
         self.assertEqual(m.call_args[0][2], ("Web pages", "*.html *.htm"))
@@ -2984,21 +2982,21 @@ class HundredState(QtCase):
     def test_browse_cancelled_changes_nothing_and_without_a_desktop_chooser_asks_for_the_qt_dialog(self):
         from unittest import mock
         before = (self.h.status, self.h.statusKind)
-        with mock.patch("qtui.hundred.pick_file", return_value=""):
+        with mock.patch("qtui.filepicker.pick_file", return_value=""):
             self.h.browse()
             self.wait_for(lambda: False, 0.3)
         self.assertEqual((self.h.status, self.h.statusKind), before)
         seen = []
         self.h.needDialog.connect(seen.append)
-        with mock.patch("qtui.hundred.pick_file", return_value=None):
+        with mock.patch("qtui.filepicker.pick_file", return_value=None):
             self.h.browse()
             self.wait_for(lambda: seen)
         self.assertEqual(seen, [self.downloads])
 
     def test_the_help_texts_are_the_old_windows(self):
         from qtui import system
-        self.assertIn("The saved file contains a temporary login token for your Steam account.", system.PAGE_HELP)
-        self.assertIn(system.SAVE_KEY, system.PAGE_HELP)
+        self.assertIn("The saved file contains a temporary login token for your Steam account.", system.page_help())
+        self.assertIn(system.SAVE_KEY, system.page_help())
         self.assertEqual(system.THEME_NOTE, "The Christmas case shows the rosette only: the ribbon would hide the hat, the tree and the gifts.")
         self.assertEqual(system.GAMES_PAGE_URL, "https://steamcommunity.com/my/games/?tab=all&sort=achievements")
 
@@ -3180,7 +3178,7 @@ class HundredScreen(WindowCase):
 
     def test_the_info_tip_carries_the_old_help(self):
         from qtui import system
-        self.assertEqual(self.item("hundred_tip").property("text"), system.PAGE_HELP)
+        self.assertEqual(self.item("hundred_tip").property("text"), system.page_help())
 
     def test_open_and_copy_use_the_page_address(self):
         from unittest import mock
@@ -3195,7 +3193,7 @@ class HundredScreen(WindowCase):
         from PySide6.QtCore import QObject
         dialog = self.root.findChild(QObject, "hundred_dialog")
         self.assertIsNotNone(dialog)
-        with mock.patch("qtui.hundred.pick_file", return_value=None):
+        with mock.patch("qtui.filepicker.pick_file", return_value=None):
             self.click("hundred_browse")
             self.wait_for(lambda: dialog.property("visible"))
         self.assertTrue(dialog.property("visible"))
@@ -5902,7 +5900,7 @@ class MakeState(QtCase, FakeStore):
     def choose_own(self):
         from unittest import mock
         self.addCleanup(self.sc.use_custom_case, None)
-        with mock.patch("qtui.owncase.pick_file", return_value=self.own_file()):
+        with mock.patch("qtui.filepicker.pick_file", return_value=self.own_file()):
             self.shell.look.chooseOwnCase()
             self.wait_for(lambda: not self.shell.owncase.choosing)
 
@@ -5950,7 +5948,7 @@ class MakeState(QtCase, FakeStore):
         other = os.path.join(self.tmp, "other.png")
         im.save(other)
         from unittest import mock
-        with mock.patch("qtui.owncase.pick_file", return_value=other):
+        with mock.patch("qtui.filepicker.pick_file", return_value=other):
             self.shell.look.chooseOwnCase()
             self.wait_for(lambda: not self.shell.owncase.choosing)
         self.make.start()
@@ -7419,7 +7417,7 @@ class CasesTests(PickerBase):
     def pick_own(self, path):
         from unittest import mock
         self.addCleanup(self.sc.use_custom_case, None)
-        with mock.patch("qtui.owncase.pick_file", return_value=path):
+        with mock.patch("qtui.filepicker.pick_file", return_value=path):
             self.cases.pick("custom")
             self.wait_for(lambda: not self.shell.owncase.choosing)
 
@@ -7472,7 +7470,7 @@ class CasesTests(PickerBase):
         seen = []
         self.shell.owncase.failed.connect(lambda title, text: seen.append(text))
         self.shell.make._running = True
-        with mock.patch("qtui.owncase.pick_file") as chooser:
+        with mock.patch("qtui.filepicker.pick_file") as chooser:
             self.cases.pick("custom")
             self.wait_for(lambda: bool(seen))
         chooser.assert_not_called()
@@ -9158,6 +9156,20 @@ class DesktopFileChooser(unittest.TestCase):
             filepicker.pick_file("Title", "/")
         self.assertIn("Arquivos JSON", seen[0][-1])
         self.assertIn("Todos os arquivos", seen[0][-1])
+
+
+    def test_a_window_closed_while_the_chooser_is_open_is_not_an_error(self):
+        import threading
+        from unittest import mock
+        from qtui import filepicker
+        heard, failures = [], []
+
+        def closed(path):
+            raise RuntimeError("Signal source has been deleted")
+        with mock.patch.object(filepicker, "pick_file", lambda *a: "/x.json"), mock.patch.object(threading, "excepthook", lambda args: failures.append(args)):
+            filepicker.ask_in_thread(heard.append, "Title", "/").join(5)
+            filepicker.ask_in_thread(closed, "Title", "/").join(5)
+        self.assertEqual((heard, failures), (["/x.json"], []))
 
 
 if __name__ == "__main__":

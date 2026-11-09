@@ -5,7 +5,25 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from qtui.i18n import tr
+
+
+def ask_in_thread(emit, title, start_dir, kind=None):
+    """`pick_file` on another thread, so the window keeps painting while the chooser is open; `emit` (a signal's emit) gets its answer: the path, "" or None.
+    A window closed while the chooser was open is not an error. Returns the thread."""
+    def ask():
+        try:
+            path = pick_file(title, start_dir, kind)
+        except Exception:
+            path = None                                     # no chooser worked: Qt's own dialog
+        try:
+            emit(path)
+        except RuntimeError:                                # the window is gone
+            pass
+    thread = threading.Thread(target=ask, daemon=True)
+    thread.start()
+    return thread
 
 
 def pick_file(title, start_dir, kind=None):

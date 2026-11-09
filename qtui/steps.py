@@ -11,7 +11,7 @@ LABELS_MANUAL = {"home": N_("Home"), "game_list": N_("1. Game list"), "pick": N_
 HINTS = {"hundred": N_("(optional)")}                  # a small line under the name of a step
 
 
-def hint(key, state):
+def hint(key):
     """The small line under a step's name: "(optional)" for the step that is. A locked step is only dimmed."""
     return tr(HINTS.get(key, ""))
 

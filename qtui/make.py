@@ -66,9 +66,10 @@ class Make(QObject):
     _progressed = Signal(int, int, int, str)                        # request, done, total, name
     _made = Signal(int, object, object)                             # request, the result of make_covers, error words
 
-    def __init__(self, shell, covers_dir, account=None, parent=None):
+    def __init__(self, shell, covers_dir, account=None, apply_busy=None, parent=None):
         super().__init__(parent)
         self._shell = shell
+        self._apply_busy = apply_busy or (lambda: False)     # covers must not change while they are being added to Steam
         self._covers = covers_dir
         self._account = account or (lambda: None)       # the Steam account folder the user chose, or None
         self._files = []
@@ -88,7 +89,7 @@ class Make(QObject):
         shell.languageChanged.connect(self._language_changed)
         self._progressed.connect(self._on_progress)
         self._made.connect(self._on_made)
-        shell.hundred.busyChanged.connect(self._availability)
+        shell.hundred.busyChanged.connect(self.refreshAvailability)
         for signal in (shell.look.toneChanged, shell.look.themeChanged, shell.look.treatmentChanged, shell.look.artChanged,
                        shell.hundred.pathChanged, shell.hundred.styleChanged, shell.hundred.marksChanged,
                        shell.library.pathChanged, shell.library.installedOnlyChanged):
@@ -114,8 +115,7 @@ class Make(QObject):
 
     @Property(bool, notify=runningChanged)
     def canMake(self):
-        apply = getattr(self._shell, "_apply", None)          # covers must not change while they are being added to Steam
-        return not self._running and not self._asking and not self._shell.hundred.busy and not (apply is not None and apply.busy)
+        return not self._running and not self._asking and not self._shell.hundred.busy and not self._apply_busy()
 
     @Property(str, notify=runningChanged)
     def questionTitle(self):
@@ -125,7 +125,7 @@ class Make(QObject):
     def questionText(self):
         return self._question[1]
 
-    def _availability(self):
+    def refreshAvailability(self):
         """Tell the window when canMake changed because of something outside (a page being read, covers being added to Steam)."""
         if self.canMake != self._can:
             self._can = self.canMake
