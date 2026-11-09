@@ -33,7 +33,8 @@ ScreenFrame {
             width: parent.width
             placeholderText: qsTr("Search by name…")
             Accessible.name: qsTr("Search your games by name")
-            onTextChanged: screen.picker.query = text
+            text: screen.picker.query                          // the list stays filtered when the step is opened again: the box must say so
+            onTextEdited: screen.picker.query = text
         }
         Text {
             objectName: "games_count"

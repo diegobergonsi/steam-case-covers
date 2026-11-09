@@ -35,6 +35,7 @@ ScreenFrame {
             color: Theme.text
             font.pixelSize: Theme.bodySize
             text: screen.apply.accountLabel
+            textFormat: Text.PlainText                       // the account name is Steam's: never markup
         }
         ChoiceChips {
             objectName: "add_accounts"

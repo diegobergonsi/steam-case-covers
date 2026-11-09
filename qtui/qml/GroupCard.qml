@@ -46,6 +46,7 @@ Rectangle {
             elide: Text.ElideRight
             maximumLineCount: 1
             text: card.title
+            textFormat: Text.PlainText                      // a name is the player's own words, never markup
             color: card.chosen ? Theme.accent : Theme.text
             font.pixelSize: Theme.bodySize
             font.bold: true
@@ -56,6 +57,7 @@ Rectangle {
             elide: Text.ElideRight
             maximumLineCount: 1
             text: card.subtitle
+            textFormat: Text.PlainText
             color: Theme.muted
             font.pixelSize: Theme.smallSize
         }

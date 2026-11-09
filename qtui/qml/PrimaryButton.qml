@@ -44,6 +44,7 @@ Rectangle {
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
         text: root.text
+        textFormat: Text.PlainText                       // a button may carry a name (a group, an account): never markup
         font.pixelSize: Theme.bodySize
         font.bold: true
         color: root.quiet ? Theme.text : root.enabled ? Theme.accentInk : Theme.faint

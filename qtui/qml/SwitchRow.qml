@@ -57,6 +57,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width - x - (tipItem.visible ? tipItem.width + Theme.s12 : 0)
         text: row.label
+        textFormat: Text.PlainText                       // a group name is the player's own words, never markup
         color: Theme.text
         font.pixelSize: Theme.bodySize
         wrapMode: Text.WordWrap                          // a long label wraps, it is never cut off

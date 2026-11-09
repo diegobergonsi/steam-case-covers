@@ -199,6 +199,7 @@ ScreenFrame {
             color: Theme.text
             font.pixelSize: Theme.bodySize
             text: screen.apply.accountLabel
+            textFormat: Text.PlainText                       // the account name is Steam's: never markup
         }
         ButtonRow {
             QuietButton { objectName: "home_restore"; text: qsTr("Restore previous artwork"); enabled: screen.apply.canRestore; onClicked: screen.apply.restore() }

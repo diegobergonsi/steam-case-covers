@@ -1594,6 +1594,23 @@ class Components(QtCase):
         self.app.processEvents()
         return self.root
 
+
+    def test_texts_the_player_or_steam_controls_are_drawn_as_typed_never_as_markup(self):
+        """A group name, an account name or a game name may hold <b> or <img>: Qt's automatic format would read it as markup."""
+        from PySide6.QtQuick import QQuickItem
+        mark = "<b>x</b>"
+        self.load('Column { objectName: "col"\n'
+                  '  GroupCard { title: "<b>x</b>"; subtitle: "<b>x</b>" }\n'
+                  '  SwitchRow { label: "<b>x</b>" }\n'
+                  '  PrimaryButton { text: "<b>x</b>"; width: 200 }\n'
+                  '  ChoiceChips { model: [{"key": "a", "label": "<b>x</b>"}]; current: "a" }\n'
+                  '  Toast { message: "<b>x</b>"; opacity: 1 }\n'
+                  '}', 420, 600)
+        from PySide6.QtGui import QFontMetricsF
+        found = [t for t in self.root.findChildren(QQuickItem) if t.property("text") == mark and t.property("contentWidth") is not None]
+        self.assertGreaterEqual(len(found), 5)                                      # card title and subtitle, switch, button, chip (the toast is not drawn until shown)
+        drawn_as_typed = lambda t: abs(t.property("contentWidth") - QFontMetricsF(t.property("font")).horizontalAdvance(mark)) < 2      # markup would draw narrower
+        self.assertEqual([t.objectName() or "?" for t in found if not drawn_as_typed(t)], [])
     def item(self, name):
         from qtui.app import find_item
         got = find_item(self.root, name)
@@ -7919,6 +7936,28 @@ class ManualWindow(WindowClicks, PickerBase):
         self.click("games_clear")
         self.assertEqual(self.picker.selectedCount, 0)
 
+    def type_into(self, name, text):
+        """What a person does: click the box, clear it, type (the box's own edit signal fires, which a set text property does not)."""
+        from PySide6.QtTest import QTest
+        self.root.requestActivate()
+        field = self.item(name)
+        field.setProperty("text", "")
+        field.forceActiveFocus()
+        QTest.keyClicks(self.root, text)
+        self.app.processEvents()
+
+    def test_the_search_box_still_shows_what_filters_the_list_when_the_step_is_opened_again(self):
+        self.shell.startPath("manual")
+        self.wait_for(lambda: self.picker.rows)
+        self.type_into("games_search", "hades")
+        self.assertEqual(self.picker.query, "hades")
+        self.shell.go(0)                                                          # Home, and back to the games
+        self.app.processEvents()
+        self.assertFalse(self.has("games_search"))
+        self.shell.goKey("pick")
+        self.app.processEvents()
+        self.assertEqual(self.item("games_search").property("text"), "hades")      # the list is still filtered: the box must say so
+
     def test_a_button_that_has_the_focus_can_become_disabled_without_a_qt_warning(self):
         """Make, Apply and the others are disabled while they work, with the keyboard focus still on them; Qt printed a warning each time."""
         from PySide6.QtCore import qInstallMessageHandler
@@ -7954,11 +7993,9 @@ class ManualWindow(WindowClicks, PickerBase):
     def test_the_games_screen_search_filters_and_says_when_nothing_matches(self):
         self.shell.startPath("manual")
         self.wait_for(lambda: self.picker.rows)
-        self.item("games_search").setProperty("text", "hades")
-        self.app.processEvents()
+        self.type_into("games_search", "hades")
         self.assertEqual(self.names(), ["Hades"])
-        self.item("games_search").setProperty("text", "zzz")
-        self.app.processEvents()
+        self.type_into("games_search", "zzz")
         self.assertIn("No games match", self.item("games_status").property("text"))
 
     def test_the_case_screen_gives_the_ticked_games_a_case(self):

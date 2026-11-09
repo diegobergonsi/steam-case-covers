@@ -37,6 +37,7 @@ Rectangle {
         width: Math.min(implicitWidth, toast.maxWidth - Theme.s32)
         wrapMode: Text.WordWrap
         text: toast.message
+        textFormat: Text.PlainText                       // a toast may name a Steam account: never markup
         color: Theme.text
         font.pixelSize: Theme.bodySize
     }
