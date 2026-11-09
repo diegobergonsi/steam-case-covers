@@ -32,7 +32,7 @@ class Look(QObject):
         self._own = False                   # "My own case" for every game (the Look step of the step-by-step way); the file itself is kept by shell.owncase
         self._covers = covers_dir
         self._tone, self._theme = self._starting_look()
-        self._source = self._make_source()
+        self._source, self._hundred_source = self._make_sources()
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(PREVIEW_DELAY_MS)
@@ -61,15 +61,18 @@ class Look(QObject):
         self._schedule()
 
     # ----- the preview -----
-    def _make_source(self):
+    def _make_sources(self):
+        """(the Look preview, the 100% games preview): the second also carries the 100% marks of step 3; the first never does."""
         self._serial += 1
         if self._own:
-            return "image://preview/platform/%s/%d" % (sc.CUSTOM, self._serial)      # the case keeps its own colours: tone, theme and marks mean nothing in it
+            own = "image://preview/platform/%s/%d" % (sc.CUSTOM, self._serial)      # the case keeps its own colours: tone, theme and marks mean nothing in it
+            return own, own
         hue, sat, val = self._tone
-        return "image://preview/%d/%d/%d/%s/%s/%d" % (hue, sat, val, self._theme, self._treatment, self._serial)
+        make = lambda treatment: "image://preview/%d/%d/%d/%s/%s/%d" % (hue, sat, val, self._theme, treatment, self._serial)
+        return make("none"), make(self._treatment)
 
     def _refresh_source(self):
-        self._source = self._make_source()
+        self._source, self._hundred_source = self._make_sources()
         self.previewSourceChanged.emit()
 
     def _schedule(self):
@@ -79,6 +82,10 @@ class Look(QObject):
     @Property(str, notify=previewSourceChanged)
     def previewSource(self):
         return self._source
+
+    @Property(str, notify=previewSourceChanged)
+    def hundredSource(self):
+        return self._hundred_source
 
     # ----- the colour -----
     def _set_tone(self, hue, sat, val):
