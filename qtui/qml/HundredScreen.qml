@@ -96,15 +96,24 @@ ScreenFrame {
                     font.pixelSize: Theme.bodySize
                     text: screen.hundred.themeNote
                 }
-                Text { text: shell.flow === "manual" ? qsTr("Highlight") : qsTr("Case"); color: Theme.muted; font.pixelSize: Theme.bodySize }
+                Text { text: qsTr("Case"); color: Theme.muted; font.pixelSize: Theme.bodySize }
                 ChoiceChips {
                     objectName: "hundred_style"
-                    groupName: shell.flow === "manual" ? qsTr("Highlight") : qsTr("Case")                  // what the screen reader says is what the screen says
+                    groupName: qsTr("Case")                  // what the screen reader says is what the screen says
                     width: parent.width
                     enabled: screen.hundred.styleEnabled
-                    model: shell.flow === "manual" ? screen.hundred.manualStyles : screen.hundred.styles
-                    current: shell.flow === "manual" && screen.hundred.style !== "none" ? "ribbon" : screen.hundred.style       // console cases have no gold: any case style means "highlight"
+                    model: screen.hundred.styles
+                    current: screen.hundred.style
                     onChosen: (key) => screen.hundred.style = key
+                }
+                Text {
+                    objectName: "hundred_console_note"
+                    width: parent.width
+                    visible: screen.hundred.consoleNote
+                    wrapMode: Text.WordWrap
+                    color: Theme.faint
+                    font.pixelSize: Theme.bodySize
+                    text: qsTr("Gold is for games in a Steam case. Games in a console case or your own case get the marks only.")
                 }
             }
         }

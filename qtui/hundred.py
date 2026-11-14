@@ -50,7 +50,7 @@ class Hundred(QObject):
         self._read.connect(self._on_read)
         self._look.themeChanged.connect(self._theme_changed)
         shell.languageChanged.connect(self._language_changed)
-        self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case or in the manual flow (no gold there)
+        self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case (no gold there)
         shell.flowChanged.connect(self._sync)
         self._theme_changed()               # the folder may hold Christmas covers already
 
@@ -93,14 +93,9 @@ class Hundred(QObject):
     def styles(self):
         return [{"key": k, "label": tr(v)} for k, v in STYLES]
 
-    @Property("QVariantList", notify=labelsChanged)
-    def manualStyles(self):
-        """What the manual flow offers: console cases have no gold, so a 100% game is either highlighted or left plain."""
-        return [{"key": "ribbon", "label": tr("Highlight them")}, {"key": "none", "label": tr("Leave them plain")}]
-
     def _no_gold(self):
-        """True where there is no gold case to go with "No marks": the manual flow (console cases) and your own case. There "Highlight them" with no marks would be plain."""
-        return self._shell.flow == "manual" or self._look.ownCase
+        """True where there is no gold case to go with "No marks": your own case. There the normal case with no marks would be plain."""
+        return self._look.ownCase
 
     @Property("QVariantList", notify=choicesChanged)
     def markChoices(self):
@@ -114,6 +109,11 @@ class Hundred(QObject):
     def marksEnabled(self):
         """Marks can be chosen with a page loaded, a case to put them on, and the classic theme (Christmas has the rosette alone)."""
         return self._completed is not None and self._style in sc.CASES and self._look.theme == "classic"
+
+    @Property(bool, notify=choicesChanged)
+    def consoleNote(self):
+        """The hand-made flow with a gold case chosen: console cases and your own case have no gold, so the note says they get the marks only."""
+        return self._shell.flow == "manual" and self._style in ("gold-case", "gold-border")
 
     @Property(str, notify=themeNoteChanged)
     def themeNote(self):

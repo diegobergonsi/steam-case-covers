@@ -261,8 +261,7 @@ class Make(QObject):
             if not shell.cases.assignedCount:
                 return
             snap.update(manual=True, platforms=shell.cases.assigned(), tones=shell.cases.tones(), groups=shell.cases.groupIds(), save=shell.cases.groupsToSave(),
-                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, software=False, non_steam=False,
-                        treatment=_marks_only(treatment))
+                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, software=False, non_steam=False)
         else:
             self._ticks.refresh()
             snap["repaint"] = self._ticks.ticked()

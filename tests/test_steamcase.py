@@ -4624,10 +4624,11 @@ class ConsoleMake(StoreMocks):
         with mock.patch.object(sc, "store_items", side_effect=AssertionError("looked up")), self.assertRaises(ValueError):
             sc.make_covers({1: None}, self.covers, platforms={1: "ps9"})
 
-    def test_gold_and_themes_are_refused_with_a_console_case(self):
-        for kw in ({"treatment": "gold-case"}, {"treatment": "gold-border-rosette"}, {"theme": "christmas"}):
-            with self.subTest(kw=kw), self.assertRaises(ValueError):
-                sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, **kw)
+    def test_a_theme_is_refused_with_a_console_case_and_gold_keeps_only_its_marks(self):
+        with self.assertRaises(ValueError):
+            sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, theme="christmas")
+        sc.make_covers({1: None}, self.covers, platforms={1: "ps5"}, completed={1}, treatment="gold-border-rosette")
+        self.assertEqual(sc.cover_treatment(self.cv(1)), "rosette")
         sc.make_covers({1: None}, self.covers, platforms={1: None}, theme="christmas", treatment="rosette", completed={1})     # Steam case only: allowed
         self.assertEqual(sc.cover_theme(self.cv(1)), "christmas")
 
@@ -4953,6 +4954,22 @@ class GroupMake(StoreMocks):
         self.assertEqual(sc.cover_treatment(self.cv(2)), "ribbon")
         self.assertEqual(sc.cover_colour(self.cv(2)), gold)
 
+    def test_a_gold_treatment_goes_on_steam_case_groups_and_a_console_case_keeps_the_marks(self):
+        self.make([1, 2, 3], {1: None, 2: "ps5", 3: None}, tones={1: self.RED, 3: self.RED}, groups={1: "r", 2: "p", 3: "r"}, completed={1, 2}, treatment="gold-border-rosette")
+        self.assertEqual([sc.cover_treatment(self.cv(i)) for i in (1, 2, 3)], ["gold-border-rosette", "rosette", None])
+        self.make([1, 2], {1: None, 2: "ps5"}, tones={1: self.RED}, groups={1: "r", 2: "p"}, completed={1, 2}, treatment="gold-case")
+        self.assertEqual([sc.cover_treatment(self.cv(i)) for i in (1, 2)], ["gold-case", "ribbon"])
+        self.assertEqual(sc.cover_colour(self.cv(1)), (sc.GOLD_HUE, 100, 100))
+
+    def test_a_kept_gold_group_cover_is_not_counted_as_another_case(self):
+        platforms = {1: None, 2: "ps5"}
+        self.make([1, 2], platforms, tones={1: self.RED}, groups={1: "r", 2: "p"}, completed={1, 2}, treatment="gold-case")
+        self.assertEqual(sc.covers_in_other_case(self.covers, platforms, treatment="gold-case", completed={1, 2}, tones={1: self.RED}, groups={1: "r", 2: "p"}), 0)
+
+    def test_a_theme_is_still_refused_with_covers_by_hand(self):
+        with self.assertRaises(ValueError):
+            self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"}, theme="christmas")
+
     def test_without_a_games_page_no_game_of_a_group_gets_marks(self):
         self.make([1], {1: None}, tones={1: self.RED}, groups={1: "r"}, completed=None, treatment="ribbon")
         self.assertIsNone(sc.cover_treatment(self.cv(1)))
@@ -5002,7 +5019,7 @@ class GroupMake(StoreMocks):
         with mock.patch.object(sc, "store_items", side_effect=AssertionError("looked up")):
             for kw in ({"tones": {1: (360, 100, 100)}}, {"tones": {1: (0, 101, 100)}}, {"tones": {1: (0, 100)}}, {"tones": {1: "red"}}, {"tones": {"a": (0, 1, 1)}},
                        {"groups": {1: "BAD"}}, {"groups": {1: 5}}, {"groups": {"x": "a"}}, {"groups": {1: "g"}, "theme": "christmas", "treatment": "rosette"},
-                       {"groups": {1: "g"}, "treatment": "gold-case"}, {"tones": {1: (0, 100, 100)}, "treatment": "gold-border"}, {"repaint": 5}):
+                       {"repaint": 5}):
                 with self.subTest(**kw), self.assertRaises(ValueError):
                     sc.make_covers({1: None}, self.covers, platforms={1: None}, **kw)
 
