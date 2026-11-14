@@ -587,6 +587,30 @@ class Software(Base):
         self.assertEqual((r["ok"], r["unlisted"], r["not_games"]), (1, 1, 0))
 
 
+class NonSteam(Base):
+    def test_a_shortcut_with_art_gets_a_cover_and_is_counted(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
+        art = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), (160, 30, 30)).save(art, format="JPEG")
+        shortcut = 3998375076                                           # an id as big as Steam gives to games added by hand
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {1: {"type": 0, "name": "Game", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}}}      # Steam knows nothing of the shortcut
+        sc.http_get = lambda url, tries=3: buf.getvalue()
+        out = os.path.join(self.tmp, "cv")
+        try:
+            r = sc.make_covers({1: None, shortcut: "My Shortcut"}, out, custom_art={shortcut: art})
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+        cover = os.path.join(out, "My_Shortcut_%d.png" % shortcut)
+        self.assertTrue(os.path.isfile(cover))
+        self.assertIsNotNone(sc.cover_art(cover))
+        self.assertEqual((r["ok"], r["unlisted"], r["not_games"], r["failed"], r["missing"]), (2, 0, 0, [], []))
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]
@@ -3628,6 +3652,99 @@ class CustomArt(Base):
         sc.Image.new("RGB", (100, 150), colour).save(path, format=fmt)
         return path
 
+    SHORTCUT = 2 ** 31 + 5
+
+    def shortcut_file(self, *entries):
+        from tests.test_shortcuts import vdf
+        with open(os.path.join(os.path.dirname(self.grid), "shortcuts.vdf"), "wb") as f:
+            f.write(vdf([(i - 2 ** 32, name) for i, name in entries]))
+
+    def test_only_the_asked_for_ids_are_found_and_copied(self):
+        self.art("100p.jpg")
+        self.art("%dp.jpg" % self.SHORTCUT)
+        found = sc.find_custom_art(self.steam, originals=self.originals, only={self.SHORTCUT})
+        self.assertEqual(list(found), [self.SHORTCUT])
+        self.assertFalse(os.path.exists(self.kept(100)))                          # art nobody asked for is not copied
+
+    def after_apply(self, *appids):
+        """Their own art kept in originals, and the grid holding only our covers, as Apply leaves it."""
+        for appid in appids:
+            self.art("%dp.jpg" % appid)
+        sc.find_custom_art(self.steam, originals=self.originals)
+        for appid in appids:
+            os.remove(os.path.join(self.grid, "%dp.jpg" % appid))
+            self.applied(appid)
+
+    def test_reset_brings_back_the_own_art_of_a_shortcut_but_not_of_a_steam_game(self):
+        self.after_apply(100, self.SHORTCUT)
+        r = sc.reset_to_default(self.steam, originals=self.originals)
+        self.assertEqual((r["removed"], r["restored"]), (2, 1))
+        self.assertEqual(sorted(os.listdir(self.grid)), ["%dp.jpg" % self.SHORTCUT])          # the shortcut has its own art again; the Steam game has Steam's
+
+    def test_reset_with_no_kept_art_for_a_shortcut_restores_nothing(self):
+        self.applied(self.SHORTCUT)
+        r = sc.reset_to_default(self.steam, originals=self.originals)
+        self.assertEqual((r["removed"], r["restored"]), (1, 0))
+        self.assertEqual(os.listdir(self.grid), [])
+
+    def test_restoring_a_reset_puts_the_covers_back_and_takes_the_brought_back_art_away(self):
+        self.after_apply(100, self.SHORTCUT)
+        r = sc.reset_to_default(self.steam, originals=self.originals)
+        sc.restore_backup(self.steam, r["backup"], originals=self.originals)
+        self.assertEqual(sorted(os.listdir(self.grid)), sorted(["100p.png", "%dp.png" % self.SHORTCUT]))      # as before the reset: the shortcut shows its case again
+
+    def test_a_reset_that_fails_while_bringing_art_back_changes_nothing(self):
+        from unittest import mock
+        self.after_apply(100, self.SHORTCUT)
+        before = sorted(os.listdir(self.grid))
+        real_copy = sc._safe_copy
+        with mock.patch.object(sc, "_safe_copy", lambda src, dst: (_ for _ in ()).throw(OSError("disk full")) if src.startswith(self.originals) else real_copy(src, dst)):
+            with self.assertRaises(sc.SteamcaseError):
+                sc.reset_to_default(self.steam, originals=self.originals)
+        self.assertEqual(sorted(os.listdir(self.grid)), before)                   # our covers are back where they were, no art was left behind
+
+    def test_reset_everything_leaves_a_shortcut_with_no_art(self):
+        self.after_apply(self.SHORTCUT)
+        r = sc.reset_to_default(self.steam, everything=True, originals=self.originals)
+        self.assertEqual(r["restored"], 0)
+        self.assertEqual(os.listdir(self.grid), [])
+
+    def test_a_shortcut_that_already_holds_art_is_not_given_a_second_copy(self):
+        self.after_apply(self.SHORTCUT)
+        self.art("%dp.webp" % self.SHORTCUT)                                       # art set by hand after Apply
+        r = sc.reset_to_default(self.steam, originals=self.originals)
+        self.assertEqual(r["restored"], 0)
+        self.assertEqual(os.listdir(self.grid), ["%dp.webp" % self.SHORTCUT])
+
+    def test_collect_art_for_non_steam_only_adds_the_shortcut_and_leaves_steam_art_alone(self):
+        self.art("100p.jpg")
+        self.art("%dp.jpg" % self.SHORTCUT)
+        self.shortcut_file((self.SHORTCUT, "Cod"))
+        games = {100: None}
+        art = sc.collect_art(self.steam, None, games, steam_art=False, non_steam=True, originals=self.originals)
+        self.assertEqual(art, {self.SHORTCUT: self.kept(self.SHORTCUT)})
+        self.assertEqual(games, {100: None, self.SHORTCUT: "Cod"})
+        self.assertFalse(os.path.exists(self.kept(100)))
+
+    def test_collect_art_for_steam_games_only_needs_no_shortcuts(self):
+        self.art("100p.jpg")
+        self.art("%dp.jpg" % self.SHORTCUT)
+        self.shortcut_file((self.SHORTCUT, "Cod"))
+        games = {100: None, 200: None}
+        art = sc.collect_art(self.steam, None, games, steam_art=True, non_steam=False, originals=self.originals)
+        self.assertEqual(art, {100: self.kept(100)})                              # art of an id that is not in the library is left out
+        self.assertEqual(games, {100: None, 200: None})
+
+    def test_collect_art_keeps_only_the_steam_games_asked_to_keep(self):
+        self.art("100p.jpg")
+        self.art("200p.jpg")
+        art = sc.collect_art(self.steam, None, {100: None, 200: None}, steam_art=True, non_steam=False, keep={200}, originals=self.originals)
+        self.assertEqual(list(art), [200])
+
+    def test_collect_art_with_nothing_asked_for_finds_nothing(self):
+        self.art("100p.jpg")
+        self.assertEqual(sc.collect_art(self.steam, None, {100: None}, steam_art=False, non_steam=False, originals=self.originals), {})
+
     def test_a_custom_jpg_is_found_and_copied_to_originals(self):
         src = self.art("100p.jpg")
         found = sc.find_custom_art(self.steam, originals=self.originals)
@@ -3897,6 +4014,13 @@ class MakeFromCustomArt(StoreMocks):
         self.assertTrue(sc.covers_in_other_look(self.covers, 0, custom_art={}))                  # switching off
         self.assertTrue(sc.covers_in_other_look(self.covers, 0, custom_art={1: self.art(colour=(1, 2, 3))}))   # changed source
 
+    def test_covers_of_shortcuts_do_not_count_when_no_games_are_given(self):
+        mine = self.art()
+        shortcut = 2 ** 31 + 5                                                   # never part of a run that was not asked to include non-Steam games
+        sc.make_covers({1: None, shortcut: "Cod"}, self.covers, custom_art={1: mine, shortcut: mine})
+        self.assertFalse(sc.covers_with_other_art(self.covers, {1: mine}))
+        self.assertTrue(sc.covers_with_other_art(self.covers, {1: mine}, {1, shortcut}))      # it does when the run includes them and the art is gone from it
+
     def test_covers_with_other_art_looks_at_the_art_only(self):
         mine = self.art()
         sc.make_covers({1: None}, self.covers, hue=90)
@@ -3930,8 +4054,8 @@ class MakeFromCustomArt(StoreMocks):
         self.assertTrue(sc.is_steamcase_cover(self.cover(1)))
 
 
-class CustomArtCli(StoreMocks):
-    """--use-custom-art on the command line."""
+class CustomArtBase(StoreMocks):
+    """A fake Steam account with a grid folder, and make on the command line."""
 
     def setUp(self):
         super().setUp()
@@ -3949,6 +4073,10 @@ class CustomArtCli(StoreMocks):
 
     def cover(self, out, appid):
         return os.path.join(out, "Game_%d_%d.png" % (appid, appid))
+
+
+class CustomArtCli(CustomArtBase):
+    """--use-custom-art on the command line."""
 
     def test_use_custom_art_builds_from_the_grid_file(self):
         self.mine(1)
@@ -4007,6 +4135,86 @@ class CustomArtCli(StoreMocks):
         text = self.make(out, "--use-custom-art")
         self.assertFalse(os.path.exists(self.cover(out, 9)))
         self.assertNotIn("from your own art", text)
+
+
+class NonSteamCli(CustomArtBase):
+    """--include-non-steam on the command line."""
+    SHORTCUT = 4000000000
+
+    def setUp(self):
+        super().setUp()
+        from tests.test_shortcuts import vdf
+        with open(os.path.join(self.cfg, "shortcuts.vdf"), "wb") as f:
+            f.write(vdf([(self.SHORTCUT - 2 ** 32, "Cod Game")]))        # Steam stores the id as a signed number
+
+    def shortcut_cover(self, out):
+        return os.path.join(out, "Cod_Game_%d.png" % self.SHORTCUT)
+
+    def test_the_flag_gives_a_shortcut_with_art_its_cover(self):
+        self.mine(self.SHORTCUT)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+
+    def test_without_the_flag_the_shortcut_is_ignored(self):
+        self.mine(self.SHORTCUT)
+        out = os.path.join(self.tmp, "out")
+        self.make(out)
+        self.assertFalse(os.path.exists(self.shortcut_cover(out)))
+
+    def test_a_shortcut_without_art_is_ignored_with_the_flag(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.assertFalse(os.path.exists(self.shortcut_cover(out)))
+
+    def test_the_flag_alone_does_not_use_the_art_of_steam_games(self):
+        self.mine(self.SHORTCUT)
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+        self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_no_custom_art_with_the_flag_still_builds_the_shortcut_from_its_art(self):
+        self.mine(self.SHORTCUT)
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--no-custom-art", "--include-non-steam")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+        self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_covers_already_made_from_your_art_keep_it_when_the_flag_is_added(self):
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--use-custom-art")
+        self.mine(self.SHORTCUT)
+        self.make(out, "--include-non-steam")                       # neither art flag: the covers that already come from your art keep it
+        self.assertIsNotNone(sc.cover_art(self.cover(out, 1)))
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+
+    def test_the_flag_does_not_copy_the_art_of_steam_games(self):
+        self.mine(self.SHORTCUT)
+        self.mine(1)
+        self.make(os.path.join(self.tmp, "out"), "--include-non-steam")
+        kept = [n for _, _, names in os.walk(self.originals) for n in names]
+        self.assertEqual(kept, ["%d.jpg" % self.SHORTCUT])
+
+    def test_reset_on_the_command_line_says_the_own_art_came_back(self):
+        self.mine(self.SHORTCUT)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.run_cli("apply", "--steam-dir", self.steam, "--covers", out, "--yes")
+        text = self.run_cli("reset", "--steam-dir", self.steam, "--yes")
+        self.assertIn("Your own art came back for 1 non-Steam games", text)
+        self.assertEqual(os.listdir(self.grid), ["%dp.jpg" % self.SHORTCUT])
+
+    def test_the_flag_with_use_custom_art_uses_both(self):
+        self.mine(self.SHORTCUT)
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam", "--use-custom-art")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+        self.assertIsNotNone(sc.cover_art(self.cover(out, 1)))
 
 
 class PlatformCases(Base):

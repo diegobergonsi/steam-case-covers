@@ -488,7 +488,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(tuple(got), st.SETTING_KEYS)
 
     def test_defaults_are_the_agreed_ones(self):
-        self.assertEqual(st.DEFAULTS, {"skip_auto_art": False, "include_software": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False})
+        self.assertEqual(st.DEFAULTS, {"skip_auto_art": False, "include_software": False, "include_non_steam": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False})
 
     def test_save_then_load_roundtrip(self):
         values = dict(st.DEFAULTS, skip_auto_art=True, restart_steam=False, reduce_effects=True)
@@ -509,12 +509,13 @@ class Settings(unittest.TestCase):
             json.dump({"skip_auto_art": "yes", "use_custom_art": 1, "installed_only": True, "restart_steam": None, "reduce_effects": True}, f)
         self.assertEqual(st.load_settings(self.path), dict(st.DEFAULTS, installed_only=True, reduce_effects=True))
 
-    def test_a_settings_file_from_before_software_loads_with_it_off(self):
+    def test_a_settings_file_from_before_the_art_options_loads_with_them_off(self):
         os.makedirs(os.path.dirname(self.path))
         with open(self.path, "w") as f:
             json.dump({"skip_auto_art": True, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}, f)
         got = st.load_settings(self.path)
         self.assertIs(got["include_software"], False)
+        self.assertIs(got["include_non_steam"], False)
         self.assertIs(got["skip_auto_art"], True)
 
     def test_unknown_keys_are_dropped_and_never_written(self):
@@ -1365,7 +1366,7 @@ class LookScreen(WindowCase):
         self.assertEqual(self.look.theme, "classic")
 
     def test_the_art_switches_change_and_are_remembered(self):
-        for name in ("look_custom_art", "look_skip_blurry", "look_include_software"):
+        for name in ("look_custom_art", "look_skip_blurry", "look_include_software", "look_include_non_steam"):
             self.reveal(name)
             it = self.item(name)
             from PySide6.QtCore import QPoint, QPointF, Qt
@@ -1373,11 +1374,12 @@ class LookScreen(WindowCase):
             p = it.mapToScene(QPointF(60, it.height() / 2)).toPoint()        # on the label: the empty space to its right is not part of the switch
             QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, p)
             self.app.processEvents()
-        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt and self.look.includeSoftware)
+        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt and self.look.includeSoftware and self.look.includeNonSteam)
         self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
         self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).AUTO_ART_HELP)
         self.assertEqual(self.item("look_include_software_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).SOFTWARE_HELP)
-        self.assertTrue(all(self.shell.switchValue(k) for k in ("use_custom_art", "skip_auto_art", "include_software")))        # saved, not only shown
+        self.assertEqual(self.item("look_include_non_steam_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).NON_STEAM_HELP)
+        self.assertTrue(all(self.shell.switchValue(k) for k in ("use_custom_art", "skip_auto_art", "include_software", "include_non_steam")))        # saved, not only shown
 
     def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
         self.assertTrue(self.item("look_next").property("filled"))
@@ -1454,7 +1456,6 @@ class LookFlow(QtCase):
             pt = it.mapToScene(QPointF(it.width() / 2 if dx is None else dx, it.height() / 2)).toPoint()
             QTest.mouseClick(root, Qt.LeftButton, Qt.NoModifier, pt)
             self.app.processEvents()
-        before = look.previewSource
         click("look_hue")                                       # drag the colour
         self.assertNotEqual(look.hue, 90)
         click("look_swatch_4")                                  # a ready-made colour
@@ -1464,8 +1465,8 @@ class LookFlow(QtCase):
         click("look_custom_art", 60)
         click("look_skip_blurry", 60)
         self.assertTrue(look.useCustomArt and look.skipAutoArt)
-        end = time.time() + 2
-        while time.time() < end and look.previewSource == before:
+        end = time.time() + 10                                  # a busy machine redraws late: wait for the final picture, not for any change
+        while time.time() < end and "/176/100/100/christmas/none/" not in look.previewSource:
             self.app.processEvents()
             time.sleep(0.02)
         self.assertIn("/176/100/100/christmas/none/", look.previewSource)     # one picture, in the final choice
@@ -2590,10 +2591,12 @@ class LookState(QtCase):
         self.look.theme = "classic"
         self.assertEqual(self.look.theme, "classic")
 
-    def test_the_software_switch_is_remembered(self):
-        self.assertFalse(self.look.includeSoftware)
+    def test_the_software_and_non_steam_switches_are_remembered(self):
+        self.assertFalse(self.look.includeSoftware or self.look.includeNonSteam)
         self.look.includeSoftware = True
-        self.assertTrue(self.new_shell().look.includeSoftware)
+        self.look.includeNonSteam = True
+        again = self.new_shell().look
+        self.assertTrue(again.includeSoftware and again.includeNonSteam)
 
     def test_the_art_switches_are_remembered(self):
         self.look.useCustomArt = True
@@ -4521,7 +4524,7 @@ class MakeScreen(WindowCase, FakeStore):
         self.settle()
         self.shell.look.setTone(90, 100, 100)
         self.shell.setSwitch("use_custom_art", True)
-        with mock.patch.object(sc, "find_custom_art", lambda steam, account, originals=None, problems=None: {}):
+        with mock.patch.object(sc, "find_custom_art", lambda steam, account, originals=None, problems=None, only=None: {}):
             self.click("make_again")
             self.shell.go(2)                                            # away, while the art is being looked for
             self.wait_for(lambda: self.make.asking)
@@ -4649,7 +4652,7 @@ class AddWindow(WindowCase, FakeStore):
                             ("find_our_covers", lambda steam, user=None, progress=None, cancelled=None: list(self.ours)),
                             ("find_other_art", lambda steam, user=None, ours=(): (list(self.extra), list(self.other))),
                             ("reset_to_default", lambda steam, user=None, names=None, everything=False, keep=(): (self.log.append(("reset", user, list(names or []), everything)),
-                                                                                                      {"removed": len(names or []), "account_name": "Alice"})[1]),
+                                                                                                      {"removed": len(names or []), "restored": getattr(self, "restored_art", 0), "account_name": "Alice"})[1]),
                             ("grid_dir", lambda steam, user=None: self.grid)):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
@@ -5929,7 +5932,7 @@ class MakeState(QtCase, FakeStore):
                 kw["progress"] = progress
             return real_make(games, out, **kw)
         for name, value in (("steam_dir", lambda: self.tmp), ("load_library", lambda steam, lib: (dict(self.games), set(self.family))),
-                            ("find_custom_art", lambda steam, account, originals=None, problems=None: (problems.extend(self.art_problems) if problems is not None else None) or dict(self.art)),
+                            ("find_custom_art", lambda steam, account, originals=None, problems=None, only=None: (problems.extend(self.art_problems) if problems is not None else None) or {a: p for a, p in self.art.items() if only is None or a in only}),
                             ("make_covers", make_covers)):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
@@ -6152,6 +6155,44 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(self.calls[0]["custom_art"], {1: mine})
         self.assertFalse(self.make.searching)
 
+    def shortcuts_found(self, found):
+        """The account has these non-Steam shortcuts, {id: name}, in its shortcuts.vdf."""
+        from tests.test_shortcuts import vdf
+        config = os.path.join(self.tmp, "userdata", "111", "config")
+        os.makedirs(config, exist_ok=True)
+        with open(os.path.join(config, "shortcuts.vdf"), "wb") as f:
+            f.write(vdf([(i - 2 ** 32, name) for i, name in found.items()]))
+
+    def test_the_non_steam_switch_adds_shortcuts_with_art_and_only_their_art(self):
+        mine = self.mine()
+        SC, NO_ART = 2 ** 31 + 99, 2 ** 31 + 98
+        self.art = {1: mine, SC: mine}                                   # game 1 has art too, but the own-art switch is off
+        self.shortcuts_found({SC: "Cod Game", NO_ART: "No art"})
+        self.shell.look.includeNonSteam = True
+        self.run_it()
+        call = self.calls[-1]
+        self.assertEqual(call["games"].get(SC), "Cod Game")
+        self.assertNotIn(NO_ART, call["games"])
+        self.assertEqual(call["custom_art"], {SC: mine})
+
+    def test_with_the_non_steam_switch_off_shortcuts_are_left_out(self):
+        mine = self.mine()
+        SC, NO_ART = 2 ** 31 + 99, 2 ** 31 + 98
+        self.art = {SC: mine}
+        self.shortcuts_found({SC: "Cod Game"})
+        self.run_it()
+        self.assertNotIn(SC, self.calls[-1]["games"])
+
+    def test_the_non_steam_switch_with_own_art_uses_both(self):
+        mine = self.mine()
+        SC, NO_ART = 2 ** 31 + 99, 2 ** 31 + 98
+        self.art = {1: mine, SC: mine}
+        self.shortcuts_found({SC: "Cod Game"})
+        self.shell.look.includeNonSteam = True
+        self.shell.setSwitch("use_custom_art", True)
+        self.run_it()
+        self.assertEqual(self.calls[-1]["custom_art"], {1: mine, SC: mine})
+
     def test_own_art_that_could_not_be_copied_is_told_after_the_run(self):
         self.art, self.art_problems = {1: self.mine()}, ["x"]
         self.shell.setSwitch("use_custom_art", True)
@@ -6169,7 +6210,7 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(asked, ["Go back to Steam's art?"])
 
     def test_a_failed_art_search_says_why_and_leaves_the_screen_usable(self):
-        def broken(steam, account, originals=None, problems=None):
+        def broken(steam, account, originals=None, problems=None, only=None):
             raise self.sc.SteamcaseError("Cannot read your art folder.")
         self.shell.setSwitch("use_custom_art", True)
         with unittest.mock.patch.object(self.sc, "find_custom_art", broken):
@@ -6179,7 +6220,7 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(self.calls, [])
 
     def test_an_unknown_failure_never_leaves_it_stuck(self):
-        def broken(steam, account, originals=None, problems=None):
+        def broken(steam, account, originals=None, problems=None, only=None):
             raise ValueError("boom")
         self.shell.setSwitch("use_custom_art", True)
         with unittest.mock.patch.object(self.sc, "find_custom_art", broken):
@@ -6202,7 +6243,7 @@ class MakeState(QtCase, FakeStore):
         self.games = {}
         self.run_it()
         self.assertEqual(failures[-1], ("Could not make covers", "No games found. Install a game first, or load your userdata.json."))
-        def broken(steam, account, originals=None, problems=None):
+        def broken(steam, account, originals=None, problems=None, only=None):
             raise self.sc.SteamcaseError("Cannot read your art folder.")
         self.shell.setSwitch("use_custom_art", True)
         with unittest.mock.patch.object(self.sc, "find_custom_art", broken):
@@ -6354,6 +6395,8 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped")
         self.shell.look.includeSoftware = True
         self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped, software included")
+        self.shell.look.includeNonSteam = True
+        self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped, software included, non-Steam games included")
         self.assertGreaterEqual(len(seen), 5)
         self.shell.library.installedOnly = False
         self.assertEqual(by()["games"]["value"], "Not chosen yet")
@@ -6431,7 +6474,7 @@ class ApplyState(QtCase, FakeStore):
                             ("restore_backup", lambda steam, backup, user=None, keep=False, originals=None: (self.log.append(("restore", backup)), self.backups.pop(0), self.restored)[2]),
                             ("find_our_covers", self.find_ours), ("find_other_art", lambda steam, user=None, ours=(): (list(self.extra), list(self.other))),
                             ("reset_to_default", lambda steam, user=None, names=None, everything=False, keep=(): (self.log.append(("reset", user, list(names or []), everything)),
-                                                                                                      {"removed": len(names or []), "account_name": "Alice"})[1]),
+                                                                                                      {"removed": len(names or []), "restored": getattr(self, "restored_art", 0), "account_name": "Alice"})[1]),
                             ("grid_dir", lambda steam, user=None: self.grid)):
             patcher = mock.patch.object(sc, name, value)
             patcher.start()
@@ -6870,6 +6913,17 @@ class ApplyState(QtCase, FakeStore):
         self.assertEqual(said[0], "Done. 2 covers removed from the Steam account \u201cAlice\u201d: Steam shows its own default art again. "
                                          "Press \u201cRestore previous artwork\u201d to bring them back. Steam is starting.")
 
+    def test_reset_says_when_the_own_art_of_non_steam_games_came_back(self):
+        self.undo_ready()
+        self.ours = ["a", "b"]
+        self.restored_art = 1
+        self.ask(self.ap.reset)
+        said = []
+        self.shell.toast.connect(said.append)
+        self.ap.confirm()
+        self.wait_for(lambda: not self.ap.busy)
+        self.assertIn("to bring them back. Your own art came back for 1 non-Steam game.", said[0])
+
     def test_reset_with_art_from_elsewhere_offers_only_ours_or_all(self):
         self.undo_ready()
         self.ours, self.extra, self.other = ["a"], ["x"], ["y", "z"]
@@ -7129,6 +7183,13 @@ class PickerTests(PickerBase):
         self.library[4] = None
         self.shell.setSwitch("include_software", True)
         self.load()
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
+
+    def test_non_steam_games_are_not_listed_even_with_the_switch_on(self):
+        from unittest import mock
+        self.shell.setSwitch("include_non_steam", True)
+        with mock.patch("engine.shortcuts.read_shortcuts", side_effect=AssertionError("the game list never reads shortcuts")):
+            self.load()
         self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
 
     def test_load_lists_games_sorted_by_name(self):
@@ -8522,6 +8583,18 @@ class ManualMake(PickerBase):
         self.run_make()
         (games, kw), = calls
         self.assertIs(kw["software"], False)
+
+    def test_the_engine_gets_no_non_steam_games_in_this_flow_even_with_the_switch_on(self):
+        from unittest import mock
+        calls = self.spy()
+        self.shell.setSwitch("include_non_steam", True)
+        self.give("ps5", 1, 3)
+        shortcut = 2 ** 31 + 99
+        with mock.patch.object(self.sc, "find_custom_art", return_value={shortcut: "/a.png"}), mock.patch("engine.shortcuts.read_shortcuts", return_value={shortcut: "Cod Game"}):
+            self.run_make()
+        (games, kw), = calls
+        self.assertNotIn(shortcut, games)
+        self.assertEqual(kw["custom_art"], {})
 
     def test_the_engine_gets_the_assignments_and_none_of_the_steps_that_are_not_in_this_flow(self):
         calls = self.spy()

@@ -106,6 +106,8 @@ ScreenFrame {
                 checked: screen.look.skipAutoArt; onToggled: (v) => screen.look.skipAutoArt = v }
             SwitchRow { objectName: "look_include_software"; label: qsTr("Include software"); tip: softwareHelp
                 checked: screen.look.includeSoftware; onToggled: (v) => screen.look.includeSoftware = v }
+            SwitchRow { objectName: "look_include_non_steam"; label: qsTr("Include non-Steam games"); tip: nonSteamHelp
+                checked: screen.look.includeNonSteam; onToggled: (v) => screen.look.includeNonSteam = v }
         }
     }
 

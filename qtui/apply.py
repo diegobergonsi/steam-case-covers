@@ -583,6 +583,8 @@ class Apply(QObject):
                 text = trn("Done. %n cover removed from the Steam account \u201c%s\u201d: Steam shows its own default art again. Press \u201cRestore previous artwork\u201d to bring it back.|"
                            "Done. %n covers removed from the Steam account \u201c%s\u201d: Steam shows its own default art again. Press \u201cRestore previous artwork\u201d to bring them back.",
                            r["removed"]) % r["account_name"]
+                if r["restored"]:                       # a non-Steam game has no default art in Steam: its own art is put back
+                    text += " " + trn("Your own art came back for %n non-Steam game.|Your own art came back for %n non-Steam games.", r["restored"])
             else:
                 backups = sc.list_backups(steam, job["account"])
                 if not backups:
