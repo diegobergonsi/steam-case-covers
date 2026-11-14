@@ -17,7 +17,7 @@ from qtui.owncase import OwnCase
 from qtui.picker import Picker
 from qtui.updates import Updates
 
-START_OVER_DONE = N_("Everything was reset to the starting point. Your saved cases, covers and groups were not changed.")
+START_OVER_DONE = N_("Everything was reset to the starting point. Your groups and the covers you already made were not changed.")
 FACTS = ("ready", "look_done", "hundred_done", "covers_made", "applied")
 MANUAL_FACTS = ("picked", "assigned")           # only the manual flow reads these
 

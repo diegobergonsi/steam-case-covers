@@ -12,7 +12,7 @@ from engine import steamcase as sc
 from qtui.i18n import N_, tr
 from qtui.picker import RowsModel
 
-NO_GAMES_TICKED = N_("No games ticked. Saving would delete this group.")
+NO_GAMES_SELECTED = N_("No games selected. Saving would delete this group.")
 LOADING_NAME = N_("Loading name…")
 SAVED = N_("Saved. Your covers change the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d.")
 DELETED = N_("Deleted. Your covers change the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d.")
@@ -87,12 +87,12 @@ class GroupManager(QObject):
     query = Property(str, _get_query, _set_query, notify=changed)
 
     @Property(int, notify=changed)
-    def tickedCount(self):
+    def selectedCount(self):
         return len(self._ticked)
 
     @Property(str, notify=changed)
     def warning(self):
-        return tr(NO_GAMES_TICKED) if self._open and not self._ticked else ""
+        return tr(NO_GAMES_SELECTED) if self._open and not self._ticked else ""
 
     @Property(str, notify=changed)
     def error(self):

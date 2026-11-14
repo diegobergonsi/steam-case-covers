@@ -62,7 +62,7 @@ ScreenFrame {
                 wrapMode: Text.WordWrap
                 color: Theme.muted
                 font.pixelSize: Theme.bodySize
-                text: qsTr("These groups of covers were made by hand, so they are left as they are. Tick a group to repaint its covers with the look above. That deletes the group.")
+                text: qsTr("These groups of covers were made by hand, so they are left as they are. Select a group to repaint its covers with the look above. That deletes the group.")
             }
             Repeater {
                 model: screen.make.groupTicks.choices
@@ -119,7 +119,7 @@ ScreenFrame {
     }
     function openQuestion() {
         dialog.ask(make.questionTitle, [{"text": make.questionText, "kind": "main"},
-                                        {"text": qsTr("Steam keeps showing your current art until you add the new covers in step 5."), "kind": "muted"}], qsTr("Replace them"))
+                                        {"text": qsTr("Steam keeps showing your current art until you add the new covers to Steam."), "kind": "muted"}], qsTr("Replace them"))
     }
     Component.onCompleted: {
         make.groupTicks.refresh()                       // the manual way may have changed them since this screen was last shown

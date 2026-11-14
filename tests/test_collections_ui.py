@@ -167,10 +167,10 @@ class CollectionsWindow(CollectionFiles, WindowClicks, PickerBase):
 
     def test_with_ticks_the_dialog_asks_and_add_keeps_them(self):
         self.ask()
-        self.assertEqual(self.text("collections_dlg_title"), "You already ticked 1 game")
+        self.assertEqual(self.text("collections_dlg_title"), "You already selected 1 game")
         self.assertEqual(self.text("collections_dlg_p0"), "“Many” has 2 games on your list.")
-        self.assertEqual(self.text("collections_dlg_p1"), "Add keeps your ticks and ticks the collection too: 3 games in total.")
-        self.assertEqual(self.text("collections_dlg_p2"), "Replace unticks your games first: 2 games in total.")
+        self.assertEqual(self.text("collections_dlg_p1"), "\u201cAdd them\u201d keeps the games you selected and selects the collection\u2019s games too: 3 games in total.")
+        self.assertEqual(self.text("collections_dlg_p2"), "\u201cReplace them\u201d clears your selection and selects only the collection\u2019s games: 2 games in total.")
         self.assertEqual([self.text("collections_dlg_confirm"), self.text("collections_dlg_alternate"), self.text("collections_dlg_cancel")],
                          ["Add them", "Replace them", "Cancel"])
         self.assertTrue(self.item("collections_dlg_cancel").property("activeFocus"))
@@ -278,7 +278,7 @@ class CollectionsWindow(CollectionFiles, WindowClicks, PickerBase):
         for name in ("games_collections_label", "games_collections_more", "collections_dlg_title", "collections_dlg_p0", "collections_dlg_p1", "collections_dlg_p2",
                      "collections_dlg_confirm", "collections_dlg_alternate"):
             with self.subTest(name):
-                self.assertNotRegex(self.text(name), r"^(Your collections|Show all|You already|“.*” has|Add keeps|Replace unticks|Add them|Replace them)")
+                self.assertNotRegex(self.text(name), r"^(Your collections|Show all|You already|“.*” has|\u201cAdd them\u201d keeps|\u201cReplace them\u201d clears|Add them|Replace them)")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ ScreenFrame {
     readonly property var picker: shell.picker
     readonly property int ticked: picker.selectedCount
     title: qsTr("Pick a case")
-    subtitle: qsTr("Pick the case for the games you ticked. You can do this again for other games, or go on.")
+    subtitle: qsTr("Pick the case for the games you selected. You can do this again for other games, or go on.")
 
     property string switchKey: ""                        // the card clicked while the question is open
 
@@ -219,7 +219,7 @@ ScreenFrame {
                     visible: screen.cases.selectedGroup !== ""
                     text: qsTr("Delete this group")
                     onClicked: deleteDialog.ask(qsTr("Delete the group \u201c%1\u201d?").arg(screen.cases.groupName),
-                                                [{"text": qsTr("Its games lose this case here. Covers already on Steam stay until you Reset or make covers again."), "kind": "main"}],
+                                                [{"text": qsTr("The group is removed. Covers already on Steam stay as they are until you reset them or add new covers."), "kind": "main"}],
                                                 qsTr("Delete"))
                 }
             }

@@ -147,7 +147,7 @@ ScreenFrame {
                 wrapMode: Text.WordWrap
                 color: Theme.muted
                 font.pixelSize: Theme.bodySize
-                text: qsTr("Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
+                text: qsTr("Put the app back to how it was when you opened it. Your groups and the covers you already made are not changed.")
             }
             footer: ButtonRow {
                 QuietButton {
@@ -156,8 +156,8 @@ ScreenFrame {
                     text: qsTr("Start over")
                     enabled: shell.canSwitch                  // not while covers are made or added to Steam
                     onClicked: startOverDialog.ask(qsTr("Start over?"), [
-                        {text: qsTr("The way you chose, your progress, the game list, your look and the switches go back to the start."), kind: "main"},
-                        {text: qsTr("Your saved cases, covers and groups are not changed."), kind: "muted"}], qsTr("Start over"))
+                        {text: qsTr("Your choices go back to how they were when you opened the app: the way you picked, your progress, your game list, your look and your options."), kind: "main"},
+                        {text: qsTr("Your groups and the covers you already made are not changed."), kind: "muted"}], qsTr("Start over"))
                 }
             }
         }
