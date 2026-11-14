@@ -2454,7 +2454,7 @@ def cmd_make(args):
     res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art,
                      platforms={appid: CUSTOM for appid in games} if args.case_file else None, software=args.include_software)
     own_art = sum(1 for f in res["files"] if cover_art(f))
-    print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
+    print("\n%d covers in %s | %d skipped (DLC/software/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
           + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")

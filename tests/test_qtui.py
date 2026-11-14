@@ -6321,7 +6321,7 @@ class MakeState(QtCase, FakeStore):
         self.assertIn("2 of them are family games and have a green corner.", result_text(dict(base, family=2), [])[0])
         self.assertIn("1 of them is 100% and is highlighted.", result_text(dict(base, completed=1), [])[0])
         self.assertIn("2 of them are 100% and are highlighted.", result_text(dict(base, completed=2), [])[0])
-        self.assertIn("Skipped 5 items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists).", result_text(dict(base, not_games=3, unlisted=2), [])[0])
+        self.assertIn("Skipped 5 items that aren't games you can play (DLC, soundtracks, software, tools, and apps Steam no longer lists).", result_text(dict(base, not_games=3, unlisted=2), [])[0])
         self.assertEqual(result_text(dict(base, failed=[1]), []),
                          ("Done. 3 covers ready. 1 could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only that one.", "wait"))
         self.assertEqual(result_text(dict(base, ok=0), []), ("Done. 0 covers ready.", "wait"))

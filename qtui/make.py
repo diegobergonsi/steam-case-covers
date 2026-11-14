@@ -36,8 +36,8 @@ def result_text(res, problems):
         text += " " + trn("%n of them is 100% and is highlighted.|%n of them are 100% and are highlighted.", done)
     skipped = res.get("not_games", 0) + res.get("unlisted", 0)
     if skipped:
-        text += " " + trn("Skipped %n item that isn't a game you can play (DLC, soundtracks, tools, and apps Steam no longer lists).|"
-                          "Skipped %n items that aren't games you can play (DLC, soundtracks, tools, and apps Steam no longer lists).", skipped)
+        text += " " + trn("Skipped %n item that isn't a game you can play (DLC, soundtracks, software, tools, and apps Steam no longer lists).|"
+                          "Skipped %n items that aren't games you can play (DLC, soundtracks, software, tools, and apps Steam no longer lists).", skipped)
     if bad:
         text += " " + trn("%n could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only that one.|"
                           "%n could not be downloaded (connection problem?): click \u201cMake again\u201d to retry only those.", bad)
