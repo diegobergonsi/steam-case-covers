@@ -5601,8 +5601,8 @@ class PlainGold(StoreMocks):
             sc.make_covers({1: None}, self.covers, completed={1}, treatment="gold-case-plain", theme="christmas")
 
     def test_console_and_own_case_covers_never_get_a_plain_gold_treatment(self):
-        self.assertIsNone(sc._console_marks("gold-case-plain"))
-        self.assertEqual(sc._console_marks("gold-case-rosette"), "rosette")
+        self.assertIsNone(sc.console_marks("gold-case-plain"))
+        self.assertEqual(sc.console_marks("gold-case-rosette"), "rosette")
 
     def test_a_theme_turns_kept_plain_gold_into_the_rosette_twin(self):
         for name, twin in (("gold-case-plain", "gold-case-rosette"), ("gold-border-plain", "gold-border-rosette")):

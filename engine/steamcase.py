@@ -1283,7 +1283,7 @@ def _spec_for(platform, colour, treatment, theme, art, group):
     """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour or theme to compare, and an earlier gold
     look keeps only its marks there; its art is compared like any other (KEEP: not at all)."""
     if platform:
-        return CoverSpec(treatment=_console_marks(treatment), art=art, platform=platform, group=group, layout=LAYOUT, case=_case_digest(platform))
+        return CoverSpec(treatment=console_marks(treatment), art=art, platform=platform, group=group, layout=LAYOUT, case=_case_digest(platform))
     return CoverSpec(colour, treatment, theme, art, None, group, LAYOUT)
 
 
@@ -1361,7 +1361,7 @@ def forget_group(covers_dir, appids):
     return count
 
 
-def _console_marks(treatment):
+def console_marks(treatment):
     """The marks a console cover keeps from a treatment (none, "ribbon" or "rosette"): a console case has no gold, so an earlier gold look keeps only its marks."""
     return compose_treatment("ribbon", split_treatment(treatment)[1]) if treatment else None
 
@@ -1502,9 +1502,9 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if wanted_platforms - set(PLATFORMS) - {CUSTOM}:
         raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS) - {CUSTOM}, key=str)[0],))
     if wanted_platforms:
-        _check_platform(sorted(wanted_platforms)[0], _console_marks(treatment), theme)
+        _check_platform(sorted(wanted_platforms)[0], console_marks(treatment), theme)
     if CUSTOM in wanted_platforms:
-        _check_platform(CUSTOM, _console_marks(treatment), theme)           # the run stops here, before any download, when the case file is gone
+        _check_platform(CUSTOM, console_marks(treatment), theme)           # the run stops here, before any download, when the case file is gone
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -1598,7 +1598,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
-            target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
+            target = console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
         spec = _spec_for(want_p, colour, target, theme, wanted_art, want_g)
         if not force and matches(notes, spec):
             res["ok"] += 1
@@ -1704,7 +1704,7 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
         notes = read_notes(path)
         target, colour = _wanted_look(appid, notes, (tones or {}).get(appid, tone), completed, treatment)
         if platforms[appid]:
-            target = _console_marks(target)
+            target = console_marks(target)
         art = _art_wanted(custom_art, appid)
         count += not matches(notes, _spec_for(platforms[appid], colour, target, None, art, (groups or {}).get(appid)))
     return count

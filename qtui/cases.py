@@ -52,6 +52,7 @@ class Cases(QObject):
     labelsChanged = Signal()                # the colour names (a change of language tells the window to read them again)
     errorChanged = Signal()
     choicesChanged = Signal()
+    hundredSourceChanged = Signal()         # the case most games are in, or the picture the 100% step shows, changed
     previewChanged = Signal()               # the choice, what is in use, or the own case changed
 
     def __init__(self, shell, parent=None, covers_dir=None):
@@ -70,6 +71,8 @@ class Cases(QObject):
         self._family = False
         for signal in (self.selectedKeyChanged, self.assignmentsChanged, self.choicesChanged):
             signal.connect(self.previewChanged)
+        for signal in (self.assignmentsChanged, shell.look.treatmentChanged, shell.look.previewSourceChanged):
+            signal.connect(self.hundredSourceChanged)
         shell.owncase.changed.connect(self.choicesChanged)         # the card of the user's own case shows the case, or asks for a file
         shell.picker.selectionChanged.connect(self.selectedKeyChanged)           # canAssign follows the ticks too
         self._library_seen = self._library_state()
@@ -344,6 +347,15 @@ class Cases(QObject):
         """The sample cover beside the choices: the case picked, else the one most games are in, else the Steam case."""
         key = self._key or self.previewKey or "steam"
         return next(c["source"] for c in self.choices if c["key"] == key)
+
+    @Property(str, notify=hundredSourceChanged)
+    def hundredSource(self):
+        """The sample on the 100% games step of this flow: the case most games are in, with the marks chosen there (a console case has no gold, the engine keeps
+        its marks only). No game in a console case: the Steam case, as the usual path shows it."""
+        key = self.previewKey
+        if key in ("", "steam"):
+            return self._shell.look.hundredSource
+        return "image://preview/platform/%s/%s/1" % (key, self._shell.look.treatment)
 
     @Property(str, notify=assignmentsChanged)
     def previewKey(self):

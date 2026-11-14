@@ -2374,6 +2374,12 @@ class PreviewImages(QtCase):
         self.assertFalse(img.isNull())
         self.assertEqual((self.get("0/100/100/classic/none/1").width(), self.get("0/100/100/classic/none/1").height()), (200, 300))
 
+    def test_a_console_case_with_marks_shows_only_the_marks_even_for_a_gold_look(self):
+        plain, gold, rosette = (self.get("platform/ps5/%s/1" % t) for t in ("none", "gold-case", "ribbon"))
+        self.assertNotEqual(plain, rosette)
+        self.assertEqual(gold, rosette)                                              # a console case has no gold: "gold-case" is its full marks
+        self.assertEqual(self.get("platform/ps5/bogus/1").pixelColor(100, 150).alpha(), 0)
+
     def test_the_hue_changes_the_picture_but_not_for_greys(self):
         a, b = self.get("0/100/100/classic/none/1"), self.get("120/100/100/classic/none/2")
         self.assertNotEqual(a.pixelColor(3, 150).name(), b.pixelColor(3, 150).name())
@@ -7876,6 +7882,18 @@ class CasesState(PickerBase):
         self.assertEqual(cases.previewSource, "image://preview/platform/ps5/1")      # nothing chosen now: the case most games are in
         cases.pick("xbox360")
         self.assertEqual(cases.previewSource, "image://preview/platform/xbox360/1")
+
+    def test_the_100_step_preview_is_the_case_most_games_are_in_with_the_marks(self):
+        self.load()
+        cases, look = self.shell.cases, self.shell.look
+        self.assertEqual(cases.hundredSource, look.hundredSource)                    # no game has a case yet: the Steam case
+        self.assign("xbox360", 1)
+        look.treatment = "gold-case"
+        self.assertEqual(cases.hundredSource, "image://preview/platform/xbox360/gold-case/1")
+        look.treatment = "none"
+        self.assertEqual(cases.hundredSource, "image://preview/platform/xbox360/none/1")
+        self.assign("steam", 2, 3)
+        self.assertEqual(cases.hundredSource, look.hundredSource)                    # most games are in the Steam case: its own preview, gold and all
 
     def test_the_chosen_case_has_a_label_for_the_new_group_card(self):
         self.load()
