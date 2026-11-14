@@ -197,7 +197,9 @@ class Make(QObject):
             marked = tr("No special case")
         else:
             marked = reasons.look_label(hundred.values()[1])
-        art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt), (tr("software included"), look.includeSoftware), (tr("non-Steam games included"), look.includeNonSteam)) if on]
+        chosen = ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt),
+                  (tr("software included"), look.includeSoftware), (tr("non-Steam games included"), look.includeNonSteam))
+        art = [text for text, on in chosen if on]
         art = ", ".join(art)
         art = (art[0].upper() + art[1:]) if art else tr("Steam's art")
         theme = tr("Classic case") if look.theme == "classic" else reasons.theme_label(look.theme)
@@ -252,7 +254,8 @@ class Make(QObject):
         completed, treatment = hundred.values()
         snap = {"tone": (look.hue, look.sat, look.val), "completed": completed, "treatment": treatment,
                 "theme": None if look.theme == "classic" else look.theme,
-                "skip": shell.switchValue("skip_auto_art"), "software": shell.switchValue("include_software"), "non_steam": shell.switchValue("include_non_steam"), "custom": shell.switchValue("use_custom_art"),
+                "skip": shell.switchValue("skip_auto_art"), "software": shell.switchValue("include_software"), "non_steam": shell.switchValue("include_non_steam"),
+                "custom": shell.switchValue("use_custom_art"), "shortcuts": {},         # shortcuts: filled by the art search, the non-Steam games that have art ({id: name})
                 "lib": None if library.installedOnly else library.path, "account": self._account()}
         if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme, blurry-art, software and non-Steam switches do not count (own art does: the Case step has the switch)
             if not shell.cases.assignedCount:
@@ -365,7 +368,7 @@ class Make(QObject):
         try:
             steam = sc.steam_dir()
             games, family = sc.load_library(steam, snap["lib"])
-            games.update(snap.get("shortcuts", {}))
+            games.update(snap["shortcuts"])
             if not games:
                 raise sc.SteamcaseError(tr("No games found. Install a game first, or load your userdata.json."))
             manual = snap.get("manual")

@@ -1713,8 +1713,11 @@ def covers_with_other_art(covers_dir, custom_art, games=None):
     from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared.
     `games`: only covers of these appids count (the run leaves the others alone); default: every Steam game (a run that was not asked to include
     non-Steam games leaves their covers alone)."""
+    def counts(appid):
+        return appid in games if games is not None else appid < shortcuts.SHORTCUT_ID_FLAG
+
     return any(notes.colour is not None and notes.art != (art_note(custom_art[appid]) if appid in custom_art else None)
-               for appid, _, notes in usual_covers(covers_dir) if (appid in games if games is not None else appid < shortcuts.SHORTCUT_ID_FLAG))
+               for appid, _, notes in usual_covers(covers_dir) if counts(appid))
 
 
 def covers_with_art(covers_dir):
@@ -2132,6 +2135,13 @@ def find_other_art(steam, user=None, ours=()):
     return sorted(n for n in files if _COVER_NAME.match(n) and n not in ours), sorted(n for n in files if _JPG_NAME.match(n))
 
 
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def reset_to_default(steam, user=None, names=None, everything=False, keep=(), originals=None):
     """Remove our covers from Steam's grid folder so Steam shows its own default art again.
     Only files recognised as ours go; the files are moved into a normal backup, so restore_backup() undoes this.
@@ -2166,7 +2176,7 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=(), or
             except FileExistsError:
                 k += 1
                 backup = "%s-%d" % (base, k)
-        moved = []
+        moved, copied = [], []
         try:
             with open(os.path.join(backup, "manifest.json"), "w") as fh:
                 json.dump({"added": [name for name, _ in back], "replaced": names, "moved": other}, fh)
@@ -2175,12 +2185,10 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=(), or
                 moved.append(n)
             for name, src in back:
                 _safe_copy(src, os.path.join(grid, name))
-                moved.append(name)
+                copied.append(name)
         except OSError as e:
-            for name, _ in back:
-                if name in moved:                                       # a copy made here, not a file that was moved: it is removed, not brought back
-                    moved.remove(name)
-                    os.remove(os.path.join(grid, name))
+            for n in copied:                                            # a copy made here: it is removed, not brought back
+                _remove_quietly(os.path.join(grid, n))
             for n in moved:
                 try:
                     os.replace(os.path.join(backup, n), os.path.join(grid, n))
@@ -2188,7 +2196,7 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=(), or
                     pass
             shutil.rmtree(backup, ignore_errors=True)
             raise SteamcaseError(_t("Could not remove the covers (%s). Nothing was changed.") % e)
-        return dict(info, removed=len(names + other), restored=len(back), backup=backup)
+        return dict(info, removed=len(moved), restored=len(copied), backup=backup)
 
 
 def list_backups(steam, user=None):
@@ -2281,7 +2289,8 @@ def restore_backup(steam, backup_dir, user=None, keep=False, originals=None):
         jpgs = [str(x) for x in m.get("moved", [])]
     except (OSError, ValueError, AttributeError, TypeError, RecursionError, MemoryError, UnicodeError):
         raise SteamcaseError(_t("The backup's manifest is damaged."))
-    if not all(_COVER_NAME.match(n) for n in m.get("replaced", [])) or not all(_ANY_ART_NAME.match(n) for n in m.get("added", [])) or not all(_JPG_NAME.match(n) for n in jpgs):
+    replaced, added = m.get("replaced", []), m.get("added", [])
+    if not all(_COVER_NAME.match(n) for n in replaced) or not all(_ANY_ART_NAME.match(n) for n in added) or not all(_JPG_NAME.match(n) for n in jpgs):
         raise SteamcaseError(_t("The backup's manifest lists unexpected files; refusing to use it."))
     with _Lock(cfg):
         _remove_leftovers(grid)
@@ -2479,8 +2488,9 @@ def cmd_make(args):
     out = os.path.abspath(args.out)
     problems = []
     custom_art = None
-    have = None if args.use_custom_art else covers_with_art(out)                 # not asked for: only the games whose covers already come from your art keep it
-    steam_art = bool(args.use_custom_art or (args.use_custom_art is None and have))
+    asked = args.use_custom_art                                                   # True, False, or None: not asked, so only the games whose covers already come from your art keep it
+    have = covers_with_art(out) if asked is None else None
+    steam_art = asked or bool(have)
     if steam_art or args.include_non_steam:
         custom_art = collect_art(steam, args.user, games, steam_art, args.include_non_steam, have, problems)
 

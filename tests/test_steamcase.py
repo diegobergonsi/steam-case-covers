@@ -3693,6 +3693,16 @@ class CustomArt(Base):
         sc.restore_backup(self.steam, r["backup"], originals=self.originals)
         self.assertEqual(sorted(os.listdir(self.grid)), sorted(["100p.png", "%dp.png" % self.SHORTCUT]))      # as before the reset: the shortcut shows its case again
 
+    def test_a_reset_that_fails_while_bringing_art_back_changes_nothing(self):
+        from unittest import mock
+        self.after_apply(100, self.SHORTCUT)
+        before = sorted(os.listdir(self.grid))
+        real_copy = sc._safe_copy
+        with mock.patch.object(sc, "_safe_copy", lambda src, dst: (_ for _ in ()).throw(OSError("disk full")) if src.startswith(self.originals) else real_copy(src, dst)):
+            with self.assertRaises(sc.SteamcaseError):
+                sc.reset_to_default(self.steam, originals=self.originals)
+        self.assertEqual(sorted(os.listdir(self.grid)), before)                   # our covers are back where they were, no art was left behind
+
     def test_reset_everything_leaves_a_shortcut_with_no_art(self):
         self.after_apply(self.SHORTCUT)
         r = sc.reset_to_default(self.steam, everything=True, originals=self.originals)
