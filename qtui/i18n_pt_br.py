@@ -432,6 +432,8 @@ PT_BR = {
     "Use my own custom art where I have it": "Usar a minha própria arte onde eu tiver",
     "Skip blurry covers": "Pular capas borradas",
     "Include software": "Incluir programas",
+    "Include non-Steam games": "Incluir jogos de fora da Steam",
+    "Also make covers for the non-Steam games you added to Steam, when they already have a portrait in your Steam art folder. Games without one are left alone.": "Fazer capas também para os jogos de fora da Steam que você adicionou à Steam, quando eles já têm um retrato na sua pasta de arte da Steam. Os jogos sem retrato ficam como estão.",
     "Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. Steam's own tools, demos and DLC still get none.": "Fazer capas também para os programas que você tem na Steam, como o Wallpaper Engine ou o Lossless Scaling. As ferramentas da própria Steam, as demos e as DLCs continuam sem capa.",
     "Next: 100% games →": "Próximo: Jogos com 100% →",
     "Steam Case Covers": "Steam Case Covers",

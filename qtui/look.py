@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""Step 2 of the window: the look of the covers. The case colour, the theme and the three art switches, with a preview that follows them."""
+"""Step 2 of the window: the look of the covers. The case colour, the theme and the art switches, with a preview that follows them."""
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from engine import steamcase as sc
@@ -265,4 +265,5 @@ class Look(QObject):
     # ----- the art switches (saved through the shell) -----
     skipAutoArt = _art_switch("skip_auto_art", artChanged)
     includeSoftware = _art_switch("include_software", artChanged)
+    includeNonSteam = _art_switch("include_non_steam", artChanged)
     useCustomArt = _art_switch("use_custom_art", artChanged)

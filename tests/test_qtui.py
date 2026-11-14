@@ -488,7 +488,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(tuple(got), st.SETTING_KEYS)
 
     def test_defaults_are_the_agreed_ones(self):
-        self.assertEqual(st.DEFAULTS, {"skip_auto_art": False, "include_software": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False})
+        self.assertEqual(st.DEFAULTS, {"skip_auto_art": False, "include_software": False, "include_non_steam": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False})
 
     def test_save_then_load_roundtrip(self):
         values = dict(st.DEFAULTS, skip_auto_art=True, restart_steam=False, reduce_effects=True)
@@ -509,12 +509,13 @@ class Settings(unittest.TestCase):
             json.dump({"skip_auto_art": "yes", "use_custom_art": 1, "installed_only": True, "restart_steam": None, "reduce_effects": True}, f)
         self.assertEqual(st.load_settings(self.path), dict(st.DEFAULTS, installed_only=True, reduce_effects=True))
 
-    def test_a_settings_file_from_before_software_loads_with_it_off(self):
+    def test_a_settings_file_from_before_the_art_options_loads_with_them_off(self):
         os.makedirs(os.path.dirname(self.path))
         with open(self.path, "w") as f:
             json.dump({"skip_auto_art": True, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}, f)
         got = st.load_settings(self.path)
         self.assertIs(got["include_software"], False)
+        self.assertIs(got["include_non_steam"], False)
         self.assertIs(got["skip_auto_art"], True)
 
     def test_unknown_keys_are_dropped_and_never_written(self):
@@ -1365,7 +1366,7 @@ class LookScreen(WindowCase):
         self.assertEqual(self.look.theme, "classic")
 
     def test_the_art_switches_change_and_are_remembered(self):
-        for name in ("look_custom_art", "look_skip_blurry", "look_include_software"):
+        for name in ("look_custom_art", "look_skip_blurry", "look_include_software", "look_include_non_steam"):
             self.reveal(name)
             it = self.item(name)
             from PySide6.QtCore import QPoint, QPointF, Qt
@@ -1373,11 +1374,12 @@ class LookScreen(WindowCase):
             p = it.mapToScene(QPointF(60, it.height() / 2)).toPoint()        # on the label: the empty space to its right is not part of the switch
             QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, p)
             self.app.processEvents()
-        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt and self.look.includeSoftware)
+        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt and self.look.includeSoftware and self.look.includeNonSteam)
         self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
         self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).AUTO_ART_HELP)
         self.assertEqual(self.item("look_include_software_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).SOFTWARE_HELP)
-        self.assertTrue(all(self.shell.switchValue(k) for k in ("use_custom_art", "skip_auto_art", "include_software")))        # saved, not only shown
+        self.assertEqual(self.item("look_include_non_steam_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).NON_STEAM_HELP)
+        self.assertTrue(all(self.shell.switchValue(k) for k in ("use_custom_art", "skip_auto_art", "include_software", "include_non_steam")))        # saved, not only shown
 
     def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
         self.assertTrue(self.item("look_next").property("filled"))
@@ -2590,10 +2592,12 @@ class LookState(QtCase):
         self.look.theme = "classic"
         self.assertEqual(self.look.theme, "classic")
 
-    def test_the_software_switch_is_remembered(self):
-        self.assertFalse(self.look.includeSoftware)
+    def test_the_software_and_non_steam_switches_are_remembered(self):
+        self.assertFalse(self.look.includeSoftware or self.look.includeNonSteam)
         self.look.includeSoftware = True
-        self.assertTrue(self.new_shell().look.includeSoftware)
+        self.look.includeNonSteam = True
+        again = self.new_shell().look
+        self.assertTrue(again.includeSoftware and again.includeNonSteam)
 
     def test_the_art_switches_are_remembered(self):
         self.look.useCustomArt = True
