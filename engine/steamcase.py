@@ -1484,8 +1484,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set),
     "completed": how many of "files" carry a treatment, kept ones included, "platforms": how many of "files" are in a console case}.
     tones: {appid: (hue, sat, val)}, with `platforms` a dict: the colour of a game in the Steam case (the run's own colour for a game not in it). groups: {appid: id of a
-    group, see groups.py}: the cover gets the group note, and a cover is kept only if its group is the wanted one. Covers by hand have no `theme` (ValueError otherwise, before any lookup); a game in a console case or your own case keeps only the marks of the
-    `treatment`, a game in the Steam case gets all of it (gold included). The natural flow (`platforms` None) leaves every cover by hand (a console case or a
+    group, see groups.py}: the cover gets the group note, and a cover is kept only if its group is the wanted one. Covers by hand have no `theme` (ValueError otherwise, before any lookup).
+    A game in a console case or your own case keeps only the marks of the `treatment`; a game in the Steam case gets all of it (gold included). The natural flow (`platforms` None) leaves every cover by hand (a console case or a
     group note) alone, force or not, except those whose appid is in `repaint`: they are made again as normal covers.
     """
     if Image is None:

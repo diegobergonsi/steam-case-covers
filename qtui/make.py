@@ -47,11 +47,6 @@ def result_text(res, problems):
     return text, "ok" if n and not bad else "wait"
 
 
-def _marks_only(treatment):
-    """The treatment a console case or your own case can have: the marks of `treatment` on the plain case, no gold (None stays None)."""
-    return sc.compose_treatment("ribbon", sc.split_treatment(treatment)[1]) if treatment else None
-
-
 class Make(QObject):
     runningChanged = Signal()               # running, searching, asking and canMake
     doneChanged = Signal()
@@ -183,7 +178,7 @@ class Make(QObject):
         if self._shell.flow == "manual":
             cases = self._shell.cases
             count = cases.assignedCount
-            marked = tr("Skipped") if not hundred.loaded else tr("Left plain") if hundred.style == "none" else tr("Highlighted")
+            marked = tr("Skipped") if not hundred.loaded else tr("Highlighted") if hundred.values()[1] else tr("Left plain")
             return [{"key": "games", "label": tr("Games"), "value": trn("%n game|%n games", count), "step": self._shell.stepIndex("pick")},
                     {"key": "cases", "label": tr("Cases"), "value": ", ".join(s["label"] for s in cases.summary), "step": self._shell.stepIndex("case")},
                     {"key": "hundred", "label": tr("100% games"), "value": marked, "step": self._shell.stepIndex("hundred")}]
@@ -266,8 +261,8 @@ class Make(QObject):
             self._ticks.refresh()
             snap["repaint"] = self._ticks.ticked()
             snap["own_case"] = look.ownCase
-            if snap["own_case"]:                    # your own case has its own colours and no gold look: only the marks count, as for a console case
-                snap.update(theme=None, treatment=_marks_only(treatment))
+            if snap["own_case"]:                    # your own case has its own colours: no theme (the engine keeps only the marks of the treatment, as for a console case)
+                snap.update(theme=None)
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1

@@ -51,7 +51,7 @@ class Hundred(QObject):
         self._look.themeChanged.connect(self._theme_changed)
         shell.languageChanged.connect(self._language_changed)
         self._look.ownCaseChanged.connect(self._sync)            # "No marks" is not offered with your own case (no gold there)
-        shell.flowChanged.connect(self._sync)
+        shell.flowChanged.connect(self._theme_changed)           # a path without themes ignores the Look step's theme (it also syncs the preview and the choices)
         self._theme_changed()               # the folder may hold Christmas covers already
 
     # ----- properties -----
@@ -93,6 +93,10 @@ class Hundred(QObject):
     def styles(self):
         return [{"key": k, "label": tr(v)} for k, v in STYLES]
 
+    def _themed(self):
+        """True when covers get a theme (Christmas): the hand-made path makes none, whatever the Look step says."""
+        return self._look.theme != "classic" and self._shell.flow != "manual"
+
     def _no_gold(self):
         """True where there is no gold case to go with "No marks": your own case. There the normal case with no marks would be plain."""
         return self._look.ownCase
@@ -108,7 +112,7 @@ class Hundred(QObject):
     @Property(bool, notify=choicesChanged)
     def marksEnabled(self):
         """Marks can be chosen with a page loaded, a case to put them on, and the classic theme (Christmas has the rosette alone)."""
-        return self._completed is not None and self._style in sc.CASES and self._look.theme == "classic"
+        return self._completed is not None and self._style in sc.CASES and not self._themed()
 
     @Property(bool, notify=choicesChanged)
     def consoleNote(self):
@@ -117,7 +121,7 @@ class Hundred(QObject):
 
     @Property(str, notify=themeNoteChanged)
     def themeNote(self):
-        return tr(THEME_NOTE) if self._look.theme != "classic" else ""
+        return tr(THEME_NOTE) if self._themed() else ""
 
     def _get_style(self):
         return self._style
@@ -135,7 +139,7 @@ class Hundred(QObject):
         return "full" if self._marks == "none" and self._no_gold() else self._marks       # what was chosen before counts as the full marks where "No marks" is not offered
 
     def _set_marks(self, value):
-        if value in sc.MARKS and value != self._marks and self._look.theme == "classic" and (value != "none" or not self._no_gold()):      # under Christmas the choice is greyed and fixed
+        if value in sc.MARKS and value != self._marks and not self._themed() and (value != "none" or not self._no_gold()):      # under Christmas the choice is greyed and fixed
             self._marks = value
             self.marksChanged.emit()
             self._sync()
@@ -159,7 +163,7 @@ class Hundred(QObject):
     def _theme_changed(self):
         """Christmas goes with the rosette alone: choosing it picks that and greys the marks out; going back restores what was picked before."""
         before = self._marks
-        if self._look.theme != "classic":
+        if self._themed():
             if self._marks_before is None:
                 self._marks_before = self._marks
             self._marks = "rosette"

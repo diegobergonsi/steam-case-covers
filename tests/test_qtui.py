@@ -2888,6 +2888,17 @@ class HundredState(QtCase):
         look.theme = "classic"
         self.assertEqual(h.marks, "none")                            # what was chosen before comes back
 
+    def test_the_look_theme_does_not_lock_the_marks_when_picking_games(self):
+        h, look = self.h, self.shell.look
+        self.load(self.page({1: (1, 1)}))
+        look.theme = "christmas"
+        self.shell.startPath("manual")                               # this path makes no themed covers: the Look step's theme must not count
+        self.assertEqual((h.marksEnabled, h.themeNote), (True, ""))
+        h.marks = "none"
+        self.assertEqual(h.marks, "none")
+        self.shell.startPath("natural")
+        self.assertEqual((h.marksEnabled, h.themeNote != "", h.marks), (False, True, "rosette"))
+
     def test_a_wrong_style_or_marks_is_ignored(self):
         h = self.h
         h.style, h.marks = "sparkly", "lots"
@@ -8642,6 +8653,15 @@ class ManualMake(PickerBase):
         self.run_make()
         self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, set()))      # "do not highlight": marks come off
 
+    def test_the_summary_says_plain_when_the_choice_makes_no_marks(self):
+        hundred = self.shell.hundred
+        self.give("ps4", 1)
+        hundred._completed = {1}
+        said = lambda: {c["key"]: c["value"] for c in self.shell.make.choices}["hundred"]
+        for style, marks, want in (("gold-case", "full", "Highlighted"), ("ribbon", "none", "Left plain"), ("none", "full", "Left plain"), ("gold-border", "none", "Highlighted")):
+            hundred._style, hundred._marks = style, marks
+            self.assertEqual(said(), want, (style, marks))
+
     def test_no_games_page_leaves_the_marks_of_the_covers_alone(self):
         calls = self.spy()
         self.give("ps4", 1)
@@ -9406,14 +9426,6 @@ class NoMarks(QtCase, FakeStore):
         title, text = reasons.replace_reason(self.covers, (0, 100, 100), {1}, "gold-case-plain")
         self.assertEqual(title, "Change the look of your 100% games?")
         self.assertIn("Gold case, no marks", text)
-
-    @need_qt
-    def test_console_and_own_case_runs_have_no_treatment_for_no_marks(self):
-        from qtui.make import _marks_only
-        self.assertIsNone(_marks_only("gold-case-plain"))
-        self.assertIsNone(_marks_only("gold-border-plain"))
-        self.assertEqual(_marks_only("gold-border-rosette"), "rosette")
-        self.assertEqual(_marks_only("gold-case"), "ribbon")
 
     def test_a_theme_over_plain_gold_covers_says_they_get_the_rosette(self):
         from qtui import reasons
