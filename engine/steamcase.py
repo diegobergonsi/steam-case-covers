@@ -14,7 +14,7 @@ Covers are built on your machine from the artwork Steam itself serves for your g
 
 The functions below are the engine. The CLI at the bottom and the window (qtui/) both use them.
 """
-from engine import caseframe, completion, safefile
+from engine import caseframe, completion, safefile, shortcuts
 import argparse, filecmp, functools, hashlib, io, json, os, re, shutil, socket, ssl, stat, struct, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from typing import NamedTuple
 
@@ -99,6 +99,9 @@ BACKUP_PREFIX = "grid_backup_"
 # Shown next to the "include software" option (GUI tooltip, CLI --help).
 SOFTWARE_HELP = ("Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. "
                  "Steam's own tools, demos and DLC still get none.")
+# Shown next to the "include non-Steam games" option (GUI tooltip, CLI --help).
+NON_STEAM_HELP = ("Also make covers for the non-Steam games you added to Steam, when they already have a portrait in your Steam art folder. "
+                  "Games without one are left alone.")
 # Shown next to the "skip blurry auto-art" option (GUI tooltip, CLI --help).
 AUTO_ART_HELP = (
     "Some games, mostly older or small ones, have no real portrait on Steam. "
@@ -2441,11 +2444,15 @@ def cmd_make(args):
     out = os.path.abspath(args.out)
     problems = []
     custom_art = None
-    if args.use_custom_art or (args.use_custom_art is None and covers_with_art(out)):
-        custom_art = find_custom_art(steam, args.user, problems=problems)
-        if args.use_custom_art is None:                     # not asked for: only the games whose covers already come from your art keep it
-            have = covers_with_art(out)
-            custom_art = {a: p for a, p in custom_art.items() if a in have}
+    own_art = args.use_custom_art or (args.use_custom_art is None and covers_with_art(out))
+    if own_art or args.include_non_steam:
+        found = find_custom_art(steam, args.user, problems=problems)
+        custom_art = {}
+        if own_art:
+            have = None if args.use_custom_art else covers_with_art(out)         # not asked for: only the games whose covers already come from your art keep it
+            custom_art = {a: p for a, p in found.items() if have is None or a in have}
+        if args.include_non_steam:                          # the art of a shortcut is always used: it has no other portrait
+            custom_art.update(shortcuts.add_non_steam(games, found, shortcuts.read_shortcuts(steam, args.user)))
 
     def progress(done, total, appid, name, status):
         if status == "ok":
@@ -2601,6 +2608,7 @@ def main():
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
         p.add_argument("--include-software", action="store_true", help=SOFTWARE_HELP)
+        p.add_argument("--include-non-steam", action="store_true", help=NON_STEAM_HELP)
         art = p.add_mutually_exclusive_group()
         art.add_argument("--use-custom-art", dest="use_custom_art", action="store_const", const=True, default=None,
                          help="put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it; a copy is kept in this app's own folder, "

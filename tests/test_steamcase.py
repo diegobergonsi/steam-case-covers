@@ -3954,8 +3954,8 @@ class MakeFromCustomArt(StoreMocks):
         self.assertTrue(sc.is_steamcase_cover(self.cover(1)))
 
 
-class CustomArtCli(StoreMocks):
-    """--use-custom-art on the command line."""
+class CustomArtBase(StoreMocks):
+    """A fake Steam account with a grid folder, and make on the command line."""
 
     def setUp(self):
         super().setUp()
@@ -3973,6 +3973,11 @@ class CustomArtCli(StoreMocks):
 
     def cover(self, out, appid):
         return os.path.join(out, "Game_%d_%d.png" % (appid, appid))
+
+
+
+class CustomArtCli(CustomArtBase):
+    """--use-custom-art on the command line."""
 
     def test_use_custom_art_builds_from_the_grid_file(self):
         self.mine(1)
@@ -4031,6 +4036,53 @@ class CustomArtCli(StoreMocks):
         text = self.make(out, "--use-custom-art")
         self.assertFalse(os.path.exists(self.cover(out, 9)))
         self.assertNotIn("from your own art", text)
+
+
+class NonSteamCli(CustomArtBase):
+    """--include-non-steam on the command line."""
+    SHORTCUT = 4000000000
+
+    def setUp(self):
+        super().setUp()
+        from tests.test_shortcuts import vdf
+        with open(os.path.join(self.cfg, "shortcuts.vdf"), "wb") as f:
+            f.write(vdf([(self.SHORTCUT - 2 ** 32, "Cod Game")]))        # Steam stores the id as a signed number
+
+    def shortcut_cover(self, out):
+        return os.path.join(out, "Cod_Game_%d.png" % self.SHORTCUT)
+
+    def test_the_flag_gives_a_shortcut_with_art_its_cover(self):
+        self.mine(self.SHORTCUT)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+
+    def test_without_the_flag_the_shortcut_is_ignored(self):
+        self.mine(self.SHORTCUT)
+        out = os.path.join(self.tmp, "out")
+        self.make(out)
+        self.assertFalse(os.path.exists(self.shortcut_cover(out)))
+
+    def test_a_shortcut_without_art_is_ignored_with_the_flag(self):
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.assertFalse(os.path.exists(self.shortcut_cover(out)))
+
+    def test_the_flag_alone_does_not_use_the_art_of_steam_games(self):
+        self.mine(self.SHORTCUT)
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+        self.assertIsNone(sc.cover_art(self.cover(out, 1)))
+
+    def test_the_flag_with_use_custom_art_uses_both(self):
+        self.mine(self.SHORTCUT)
+        self.mine(1)
+        out = os.path.join(self.tmp, "out")
+        self.make(out, "--include-non-steam", "--use-custom-art")
+        self.assertIsNotNone(sc.cover_art(self.shortcut_cover(out)))
+        self.assertIsNotNone(sc.cover_art(self.cover(out, 1)))
 
 
 class PlatformCases(Base):
