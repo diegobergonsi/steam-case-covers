@@ -702,14 +702,23 @@ def store_items(appids, log=None, cancelled=None, errors=None):
     return out
 
 
-def portrait_candidates(appid, item):
+def _listed_portraits(item):
+    """The portrait files Steam lists for a store item, the 2x one first."""
     a = (item or {}).get("assets") or {}
     fmt = a.get("asset_url_format")
-    listed = [a[k] for k in ("library_capsule_2x", "library_capsule") if fmt and a.get(k)]     # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
-    urls = [CDN + fmt.replace("${FILENAME}", f) for f in listed]
+    return [a[k] for k in ("library_capsule_2x", "library_capsule") if fmt and a.get(k)]     # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
+
+
+def _is_auto_portrait(listed):
+    """True if the first listed file is the stand-in Steam generates from the header: blurry."""
+    return bool(listed) and listed[0].endswith("portrait.png")
+
+
+def portrait_candidates(appid, item):
+    listed = _listed_portraits(item)
+    urls = [CDN + item["assets"]["asset_url_format"].replace("${FILENAME}", f) for f in listed]
     urls += [OLD_CDN % appid + f for f in ("library_600x900_2x.jpg", "library_600x900.jpg")]
-    auto = bool(listed) and listed[0].endswith("portrait.png")     # the first listed file decides: Steam-generated from the header means blurry
-    return urls, auto
+    return urls, _is_auto_portrait(listed)
 
 
 def is_coverable(item, name, software=False):
@@ -719,9 +728,9 @@ def is_coverable(item, name, software=False):
 
 
 def _has_real_portrait(item):
-    """True if Steam lists a portrait for the item and it is not the blurry stand-in Steam makes from the header (see portrait_candidates)."""
-    assets = item.get("assets") or {}
-    return bool(assets.get("library_capsule") or assets.get("library_capsule_2x")) and not portrait_candidates(0, item)[1]
+    """True if Steam lists a portrait for the item and it is not the blurry stand-in made from the header."""
+    listed = _listed_portraits(item)
+    return bool(listed) and not _is_auto_portrait(listed)
 
 
 def list_games(games, log=None, errors=None, software=False):

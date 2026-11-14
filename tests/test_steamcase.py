@@ -544,54 +544,15 @@ class Playtests(Base):
         self.assertEqual((r["ok"], r["not_games"]), (1, 0))
 
 
-class Editions(Base):
-    """Steam gives type 14 to an edition that is its own app (Metro Exodus Enhanced Edition) and to its franchise ads. Only the first has a real portrait."""
-    REAL = {"asset_url_format": "s/${FILENAME}", "library_capsule": "library_600x900.jpg", "library_capsule_2x": "library_600x900_2x.jpg"}
-    BLURRY = {"asset_url_format": "s/${FILENAME}", "library_capsule": "e1/portrait.png", "header": "header.jpg"}       # what a franchise ad lists: the stand-in Steam makes from the header
-
-    def run_items(self, items):
-        """(list_games result, make_covers result) with Steam answering `items` ({appid: store item})."""
-        import io
-        buf = io.BytesIO()
-        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
-        real_store, real_get = sc.store_items, sc.http_get
-        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: items[i] for i in ids if i in items}
-        sc.http_get = lambda url, tries=3: buf.getvalue()
-        try:
-            games = {i: None for i in items}
-            return sc.list_games(games), sc.make_covers(games, os.path.join(self.tmp, "cv"))
-        finally:
-            sc.store_items, sc.http_get = real_store, real_get
-
-    def setUp(self):
-        super().setUp()
-        if sc.Image is None:
-            self.skipTest("Pillow missing")
-
-    def test_an_edition_with_a_real_portrait_gets_a_cover(self):
-        listed, r = self.run_items({1449560: {"type": 14, "name": "Metro Exodus Enhanced Edition", "assets": self.REAL}})
-        self.assertEqual(listed, [(1449560, "Metro Exodus Enhanced Edition")])
-        self.assertEqual((r["ok"], r["not_games"]), (1, 0))
-
-    def test_a_franchise_ad_with_only_the_blurry_stand_in_gets_none(self):
-        listed, r = self.run_items({380350: {"type": 14, "name": "GRID Franchise Advertising App", "assets": self.BLURRY}})
-        self.assertEqual(listed, [])
-        self.assertEqual((r["ok"], r["not_games"]), (0, 1))
-
-    def test_a_type_14_item_with_no_art_gets_none(self):
-        listed, r = self.run_items({765670: {"type": 14, "name": "Rapid Designing Downloadable Content", "assets": {}}})
-        self.assertEqual(listed, [])
-        self.assertEqual((r["ok"], r["not_games"]), (0, 1))
-
-
-class Software(Base):
+class StoreAnswers(Base):
+    """Tests that fake Steam's store answers and the portrait download."""
     def make(self, items, **kw):
         """(list_games result, make_covers result) with Steam answering `items` ({appid: store item}, an id missing from it is one Steam no longer lists)."""
         import io
         buf = io.BytesIO()
         sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
         art = {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}
-        full = {i: dict(it, assets=art) for i, it in items.items()}
+        full = {i: {"assets": art, **it} for i, it in items.items()}      # an item may bring its own assets
         real_store, real_get = sc.store_items, sc.http_get
         sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: full[i] for i in ids if i in full}
         sc.http_get = lambda url, tries=3: buf.getvalue()
@@ -606,6 +567,29 @@ class Software(Base):
         if sc.Image is None:
             self.skipTest("Pillow missing")
 
+
+class Editions(StoreAnswers):
+    """Steam gives type 14 to an edition that is its own app (Metro Exodus Enhanced Edition) and to its franchise ads. Only the first has a real portrait."""
+    REAL = {"asset_url_format": "s/${FILENAME}", "library_capsule": "library_600x900.jpg", "library_capsule_2x": "library_600x900_2x.jpg"}
+    BLURRY = {"asset_url_format": "s/${FILENAME}", "library_capsule": "e1/portrait.png", "header": "header.jpg"}       # what a franchise ad lists: the stand-in Steam makes from the header
+
+    def test_an_edition_with_a_real_portrait_gets_a_cover(self):
+        listed, r = self.make({1449560: {"type": 14, "name": "Metro Exodus Enhanced Edition", "assets": self.REAL}})
+        self.assertEqual(listed, [(1449560, "Metro Exodus Enhanced Edition")])
+        self.assertEqual((r["ok"], r["not_games"]), (1, 0))
+
+    def test_a_franchise_ad_with_only_the_blurry_stand_in_gets_none(self):
+        listed, r = self.make({380350: {"type": 14, "name": "GRID Franchise Advertising App", "assets": self.BLURRY}})
+        self.assertEqual(listed, [])
+        self.assertEqual((r["ok"], r["not_games"]), (0, 1))
+
+    def test_a_type_14_item_with_no_art_gets_none(self):
+        listed, r = self.make({765670: {"type": 14, "name": "Rapid Designing Downloadable Content", "assets": {}}})
+        self.assertEqual(listed, [])
+        self.assertEqual((r["ok"], r["not_games"]), (0, 1))
+
+
+class Software(StoreAnswers):
     def test_software_is_skipped_by_default(self):
         listed, r = self.make({1: {"type": 6, "name": "Lossless Scaling"}})
         self.assertEqual(listed, [])
