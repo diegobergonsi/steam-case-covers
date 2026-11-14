@@ -72,7 +72,7 @@ ModalFrame {
             Text {
                 objectName: "manage_count"
                 width: parent.width
-                text: qsTr("%n game selected|%n games selected", "", dialog.manage.tickedCount)
+                text: qsTr("%n game selected|%n games selected", "", dialog.manage.selectedCount)
                 color: Theme.muted
                 font.pixelSize: Theme.bodySize
             }

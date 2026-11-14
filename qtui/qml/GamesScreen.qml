@@ -12,6 +12,8 @@ ScreenFrame {
     subtitle: qsTr("Select the games that get a case. Games you do not select are left alone.")
     Component.onCompleted: picker.ensureLoaded()
 
+    readonly property string addLabel: qsTr("Add them")                // the buttons of the collection question, named in its sentences
+    readonly property string replaceLabel: qsTr("Replace them")
     property string pendingCollection: ""               // the collection the question is about
     function pickCollection(id) {
         var plan = picker.collectionPlan(id)
@@ -20,9 +22,9 @@ ScreenFrame {
         pendingCollection = id
         collectionDialog.ask(qsTr("You already selected %n game|You already selected %n games", "", plan.ticked), [
             {text: qsTr("\u201c%1\u201d has %n game on your list.|\u201c%1\u201d has %n games on your list.", "", plan.games).arg(plan.name), kind: "main"},
-            {text: qsTr("\u201c%1\u201d keeps the games you selected and selects the collection\u2019s games too: %n game in total.|\u201c%1\u201d keeps the games you selected and selects the collection\u2019s games too: %n games in total.", "", plan.afterAdd).arg(qsTr("Add them")), kind: "muted"},
-            {text: qsTr("\u201c%1\u201d clears your selection and selects only the collection\u2019s games: %n game in total.|\u201c%1\u201d clears your selection and selects only the collection\u2019s games: %n games in total.", "", plan.games).arg(qsTr("Replace them")), kind: "muted"}],
-            qsTr("Add them"), qsTr("Replace them"))
+            {text: qsTr("\u201c%1\u201d keeps the games you selected and selects the collection\u2019s games too: %n game in total.|\u201c%1\u201d keeps the games you selected and selects the collection\u2019s games too: %n games in total.", "", plan.afterAdd).arg(addLabel), kind: "muted"},
+            {text: qsTr("\u201c%1\u201d clears your selection and selects only the collection\u2019s games: %n game in total.|\u201c%1\u201d clears your selection and selects only the collection\u2019s games: %n games in total.", "", plan.games).arg(replaceLabel), kind: "muted"}],
+            addLabel, replaceLabel)
     }
 
     Section {

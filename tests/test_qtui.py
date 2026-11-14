@@ -9768,7 +9768,7 @@ class ManageGroups(PickerBase):
         manage = self.shell.manage
         manage.open(red)
         self.assertTrue(manage.isOpen)
-        self.assertEqual((manage.title, manage.name, manage.tickedCount, manage.groupId), ("Red games", "Red games", 2, red))
+        self.assertEqual((manage.title, manage.name, manage.selectedCount, manage.groupId), ("Red games", "Red games", 2, red))
         self.assertEqual(self.rows(), [(2, "forza Horizon 5", True, ""), (1, "Hades", True, ""), (3, "God of War", False, "PS5 games")])    # the group's games first
 
     def test_the_groups_games_stay_on_top_while_ticking_and_searching(self):
@@ -9798,7 +9798,7 @@ class ManageGroups(PickerBase):
         self.load()
         self.shell.manage.open(old)
         self.wait_for(lambda: (9, "Game 9", True, "") in self.rows())            # the store gave no name: the number stays, after the wait
-        self.assertEqual(self.shell.manage.tickedCount, 2)
+        self.assertEqual(self.shell.manage.selectedCount, 2)
 
     def test_a_game_outside_the_listed_library_gets_its_name_from_the_store(self):
         from engine import groups
@@ -9829,7 +9829,7 @@ class ManageGroups(PickerBase):
         manage = self.shell.manage
         manage.open(old)
         self.wait_for(lambda: (9, "Game 9", True, "") in self.rows())
-        self.assertEqual(manage.tickedCount, 2)
+        self.assertEqual(manage.selectedCount, 2)
 
     def test_unticking_a_game_removes_it_and_its_cover_loses_the_group_note(self):
         gid = self.made_group()
@@ -9849,7 +9849,7 @@ class ManageGroups(PickerBase):
         manage = self.shell.manage
         manage.open(red)
         manage.toggle(3)
-        self.assertEqual(manage.tickedCount, 3)
+        self.assertEqual(manage.selectedCount, 3)
         manage.save()
         self.assertEqual((self.shell.cases.assignedCount, self.shell.cases.groupIds()), (1, {3: red}))
         self.assertEqual((self.games_of(red), self.games_of(ps)), ([1, 2], [3]))                       # nothing is saved before Make
@@ -9956,7 +9956,7 @@ class ManageGroups(PickerBase):
         manage.cancel()
         self.assertFalse(manage.isOpen)
         manage.open(red)
-        self.assertEqual(manage.tickedCount, 2)
+        self.assertEqual(manage.selectedCount, 2)
 
     def test_search_filters_rows_but_keeps_ticks(self):
         red, ps = self.saved()
@@ -9966,7 +9966,7 @@ class ManageGroups(PickerBase):
         manage.query = "hades"
         self.assertEqual([r[0] for r in self.rows()], [1])
         manage.query = ""
-        self.assertEqual((manage.tickedCount, len(self.rows())), (2, 3))
+        self.assertEqual((manage.selectedCount, len(self.rows())), (2, 3))
 
     def test_save_is_disabled_until_the_library_is_listed(self):
         red, ps = self.saved()
