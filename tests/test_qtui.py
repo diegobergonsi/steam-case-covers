@@ -488,7 +488,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(tuple(got), st.SETTING_KEYS)
 
     def test_defaults_are_the_agreed_ones(self):
-        self.assertEqual(st.DEFAULTS, {"skip_auto_art": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False})
+        self.assertEqual(st.DEFAULTS, {"skip_auto_art": False, "include_software": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False})
 
     def test_save_then_load_roundtrip(self):
         values = dict(st.DEFAULTS, skip_auto_art=True, restart_steam=False, reduce_effects=True)
@@ -508,6 +508,14 @@ class Settings(unittest.TestCase):
         with open(self.path, "w") as f:
             json.dump({"skip_auto_art": "yes", "use_custom_art": 1, "installed_only": True, "restart_steam": None, "reduce_effects": True}, f)
         self.assertEqual(st.load_settings(self.path), dict(st.DEFAULTS, installed_only=True, reduce_effects=True))
+
+    def test_a_settings_file_from_before_software_loads_with_it_off(self):
+        os.makedirs(os.path.dirname(self.path))
+        with open(self.path, "w") as f:
+            json.dump({"skip_auto_art": True, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}, f)
+        got = st.load_settings(self.path)
+        self.assertIs(got["include_software"], False)
+        self.assertIs(got["skip_auto_art"], True)
 
     def test_unknown_keys_are_dropped_and_never_written(self):
         st.save_settings({"account": "111", "path": "/home/x", "reduce_effects": True}, self.path)
@@ -1355,6 +1363,17 @@ class LookScreen(WindowCase):
         self.assertEqual(self.look.theme, "christmas")
         self.click("look_theme_chip_classic")
         self.assertEqual(self.look.theme, "classic")
+
+    def test_the_software_switch_changes_shows_its_help_and_is_saved(self):
+        self.reveal("look_include_software")
+        it = self.item("look_include_software")
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, it.mapToScene(QPointF(60, it.height() / 2)).toPoint())
+        self.app.processEvents()
+        self.assertTrue(self.look.includeSoftware)
+        self.assertTrue(self.shell.switchValue("include_software"))
+        self.assertEqual(self.item("look_include_software_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).SOFTWARE_HELP)
 
     def test_the_art_switches_change_and_are_remembered(self):
         for name in ("look_custom_art", "look_skip_blurry"):
@@ -2580,6 +2599,11 @@ class LookState(QtCase):
         self.assertEqual(self.look.theme, "christmas")
         self.look.theme = "classic"
         self.assertEqual(self.look.theme, "classic")
+
+    def test_the_software_switch_is_remembered(self):
+        self.assertFalse(self.look.includeSoftware)
+        self.look.includeSoftware = True
+        self.assertTrue(self.new_shell().look.includeSoftware)
 
     def test_the_art_switches_are_remembered(self):
         self.look.useCustomArt = True
@@ -6093,6 +6117,13 @@ class MakeState(QtCase, FakeStore):
         self.run_it()
         self.assertEqual((asked, len(self.calls)), ([], 2))
 
+    def test_the_run_gets_software_only_when_the_switch_is_on(self):
+        self.run_it()
+        self.assertIs(self.calls[-1]["software"], False)
+        self.shell.look.includeSoftware = True
+        self.run_it()
+        self.assertIs(self.calls[-1]["software"], True)
+
     def test_what_the_run_gets_is_what_the_steps_chose(self):
         self.shell.look.setTone(120, 50, 80)
         self.shell.look.theme = "christmas"
@@ -6331,6 +6362,8 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(by()["hundred"]["value"], "Gold case, rosette only")
         self.shell.look.skipAutoArt = True
         self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped")
+        self.shell.look.includeSoftware = True
+        self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped, software included")
         self.assertGreaterEqual(len(seen), 5)
         self.shell.library.installedOnly = False
         self.assertEqual(by()["games"]["value"], "Not chosen yet")
@@ -7565,6 +7598,17 @@ class CasesTests(PickerBase):
         self.assertEqual(self.shell.make.statusKind, "error")
         self.assertIn("case", self.shell.make.status)
         self.assertEqual(os.listdir(self.covers), ["groups.json"] if os.path.exists(os.path.join(self.covers, "groups.json")) else [])
+
+    def test_the_pick_games_flow_with_the_software_switch_on_still_makes_the_picked_game(self):
+        self.shell.startPath("manual")
+        self.shell.setSwitch("include_software", True)
+        self.picker.toggle(1)
+        self.cases.pick("ps5")
+        self.cases.assign()
+        self.shell.setFact("ready", True)
+        self.shell.make.start()
+        self.wait_for(lambda: not self.shell.make.running)
+        self.assertEqual(self.shell.make.statusKind, "ok")
 
     def test_an_unknown_case_is_ignored(self):
         self.cases.pick("ps9")

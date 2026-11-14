@@ -9,8 +9,8 @@ from engine import safefile
 from qtui import i18n
 from engine import steamcase as sc
 
-SETTING_KEYS = ("skip_auto_art", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
-DEFAULTS = {"skip_auto_art": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}
+SETTING_KEYS = ("skip_auto_art", "include_software", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
+DEFAULTS = {"skip_auto_art": False, "include_software": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}
 MAX_SETTINGS = 64 * 1024                  # a settings file is a few dozen bytes; anything bigger is not ours
 
 

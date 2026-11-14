@@ -132,6 +132,7 @@ PT_BR = {
     "Could not open the folder. It is here:\n\n%s": "Não foi possível abrir a pasta. Ela está aqui:\n\n%s",
     "Your own art": "A sua própria arte",
     "blurry art skipped": "arte borrada ignorada",
+    "software included": "programas incluídos",
     "The covers are made, but your groups could not be saved: %s": "As capas foram criadas, mas não foi possível salvar os seus grupos: %s",
     "Loading your games…": "Carregando os seus jogos…",
     "Loading name…": "Carregando o nome…",
@@ -430,6 +431,8 @@ PT_BR = {
     "%1 (%2 to %3)": "%1 (%2 a %3)",                                   # what a screen reader says about a slider: its value, then its range
     "Use my own custom art where I have it": "Usar a minha própria arte onde eu tiver",
     "Skip blurry covers": "Pular capas borradas",
+    "Include software": "Incluir programas",
+    "Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. Steam's own tools, demos and DLC still get none.": "Fazer capas também para os programas que você tem na Steam, como o Wallpaper Engine ou o Lossless Scaling. As ferramentas da própria Steam, as demos e as DLCs continuam sem capa.",
     "Next: 100% games →": "Próximo: Jogos com 100% →",
     "Steam Case Covers": "Steam Case Covers",
     "Please wait": "Aguarde",

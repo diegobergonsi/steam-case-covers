@@ -260,6 +260,16 @@ class Look(QObject):
 
     skipAutoArt = Property(bool, _get_skip, _set_skip, notify=artChanged)
 
+    def _get_software(self):
+        return self._shell.switchValue("include_software")
+
+    def _set_software(self, value):
+        if bool(value) != self._get_software():
+            self._shell.setSwitch("include_software", bool(value))
+            self.artChanged.emit()
+
+    includeSoftware = Property(bool, _get_software, _set_software, notify=artChanged)
+
     def _get_custom(self):
         return self._shell.switchValue("use_custom_art")
 

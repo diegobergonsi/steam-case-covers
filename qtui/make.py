@@ -197,7 +197,7 @@ class Make(QObject):
             marked = tr("No special case")
         else:
             marked = reasons.look_label(hundred.values()[1])
-        art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt)) if on]
+        art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt), (tr("software included"), look.includeSoftware)) if on]
         art = ", ".join(art)
         art = (art[0].upper() + art[1:]) if art else tr("Steam's art")
         theme = tr("Classic case") if look.theme == "classic" else reasons.theme_label(look.theme)
@@ -252,7 +252,7 @@ class Make(QObject):
         completed, treatment = hundred.values()
         snap = {"tone": (look.hue, look.sat, look.val), "completed": completed, "treatment": treatment,
                 "theme": None if look.theme == "classic" else look.theme,
-                "skip": shell.switchValue("skip_auto_art"), "custom": shell.switchValue("use_custom_art"),
+                "skip": shell.switchValue("skip_auto_art"), "software": shell.switchValue("include_software"), "custom": shell.switchValue("use_custom_art"),
                 "lib": None if library.installedOnly else library.path, "account": self._account()}
         if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme and blurry-art switches do not count (own art does: the Case step has the switch)
             if not shell.cases.assignedCount:
@@ -371,7 +371,7 @@ class Make(QObject):
                 extra["platforms"] = {appid: sc.CUSTOM for appid in games}          # every game, in the case the user gave
             elif not manual:                        # covers made in your own case for every game go back to the Steam case now that it is off
                 extra["repaint"] = {a for g in snap.get("repaint") or () for a in g["games"]} | sc.covers_in_own_case(self._covers)
-            res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], family=family if not manual or snap["family"] else set(), hue=hue, sat=sat, val=val,
+            res = sc.make_covers(games, self._covers, skip_auto_art=snap["skip"], software=snap["software"], family=family if not manual or snap["family"] else set(), hue=hue, sat=sat, val=val,
                                  progress=lambda done, total, appid, name, status: self._tell(req, done, total, name),
                                  cancelled=self._cancel.is_set, completed=snap["completed"], treatment=snap["treatment"],
                                  theme=snap["theme"], custom_art=custom_art, **extra)

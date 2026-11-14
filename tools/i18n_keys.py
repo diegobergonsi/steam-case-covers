@@ -83,7 +83,7 @@ def qml_keys():
 def help_keys():
     from engine import steamcase as sc
     from qtui import system
-    return {t: "help" for t in (sc.FAMILY_HELP, sc.AUTO_ART_HELP, system.CUSTOM_ART_HELP, system.PAGE_HELP_TEMPLATE)}
+    return {t: "help" for t in (sc.FAMILY_HELP, sc.AUTO_ART_HELP, sc.SOFTWARE_HELP, system.CUSTOM_ART_HELP, system.PAGE_HELP_TEMPLATE)}
 
 
 def all_keys():
