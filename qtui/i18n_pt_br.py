@@ -133,6 +133,7 @@ PT_BR = {
     "Your own art": "A sua própria arte",
     "blurry art skipped": "arte borrada ignorada",
     "software included": "programas incluídos",
+    "non-Steam games included": "jogos de fora da Steam incluídos",
     "The covers are made, but your groups could not be saved: %s": "As capas foram criadas, mas não foi possível salvar os seus grupos: %s",
     "Loading your games…": "Carregando os seus jogos…",
     "Loading name…": "Carregando o nome…",

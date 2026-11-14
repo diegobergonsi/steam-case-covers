@@ -9,7 +9,7 @@ from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
 from engine import groups
-from engine import steamcase as sc
+from engine import shortcuts, steamcase as sc
 from qtui import reasons
 from qtui.groupticks import GroupTicks
 from qtui.i18n import N_, retranslated, tr, trn
@@ -197,7 +197,7 @@ class Make(QObject):
             marked = tr("No special case")
         else:
             marked = reasons.look_label(hundred.values()[1])
-        art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt), (tr("software included"), look.includeSoftware)) if on]
+        art = [text for text, on in ((tr("Your own art"), look.useCustomArt), (tr("blurry art skipped"), look.skipAutoArt), (tr("software included"), look.includeSoftware), (tr("non-Steam games included"), look.includeNonSteam)) if on]
         art = ", ".join(art)
         art = (art[0].upper() + art[1:]) if art else tr("Steam's art")
         theme = tr("Classic case") if look.theme == "classic" else reasons.theme_label(look.theme)
@@ -252,13 +252,13 @@ class Make(QObject):
         completed, treatment = hundred.values()
         snap = {"tone": (look.hue, look.sat, look.val), "completed": completed, "treatment": treatment,
                 "theme": None if look.theme == "classic" else look.theme,
-                "skip": shell.switchValue("skip_auto_art"), "software": shell.switchValue("include_software"), "custom": shell.switchValue("use_custom_art"),
+                "skip": shell.switchValue("skip_auto_art"), "software": shell.switchValue("include_software"), "non_steam": shell.switchValue("include_non_steam"), "custom": shell.switchValue("use_custom_art"),
                 "lib": None if library.installedOnly else library.path, "account": self._account()}
-        if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme, blurry-art and software switches do not count (own art does: the Case step has the switch)
+        if shell.flow == "manual":                      # only the games given a case; the Look step is not part of this flow, so its theme, blurry-art, software and non-Steam switches do not count (own art does: the Case step has the switch)
             if not shell.cases.assignedCount:
                 return
             snap.update(manual=True, platforms=shell.cases.assigned(), tones=shell.cases.tones(), groups=shell.cases.groupIds(), save=shell.cases.groupsToSave(),
-                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, software=False,
+                        released=shell.cases.released(), family=shell.cases.family, theme=None, skip=False, software=False, non_steam=False,
                         treatment=_marks_only(treatment))
         else:
             self._ticks.refresh()
@@ -269,7 +269,7 @@ class Make(QObject):
         self._snap = snap
         self._before = (self._status, self._kind)
         self._req += 1
-        if not snap["custom"]:
+        if not (snap["custom"] or snap["non_steam"]):
             self._set_state(running=True)
             self._begin(snap, {}, None, ())              # {}: the option is off, covers made from your own art go back to Steam's portrait
             return
@@ -278,13 +278,16 @@ class Make(QObject):
         threading.Thread(target=self._art_worker, args=(self._req, snap), daemon=True).start()
 
     def _art_worker(self, req, snap):
-        """Off the UI thread: the user's own art for the games in the library. Only the art of games in the library is kept."""
+        """Off the UI thread: the user's own art for the games in the library, and for the non-Steam games when they are included. Only that art is kept."""
         art = games = problems = error = None
         try:
             steam = sc.steam_dir()
             games, _ = sc.load_library(steam, snap["lib"])
             problems = []
-            art = {a: p for a, p in sc.find_custom_art(steam, snap["account"], problems=problems).items() if a in games}
+            found = sc.find_custom_art(steam, snap["account"], problems=problems)
+            art = {a: p for a, p in found.items() if a in games} if snap["custom"] else {}       # the art of Steam games only when asked for
+            if snap["non_steam"]:                       # a shortcut's art is always used: it has no other portrait
+                art.update(shortcuts.add_non_steam(games, found, shortcuts.read_shortcuts(steam, snap["account"])))
             games = set(games)
         except sc.SteamcaseError as e:
             error = str(e)
@@ -363,6 +366,8 @@ class Make(QObject):
         try:
             steam = sc.steam_dir()
             games, family = sc.load_library(steam, snap["lib"])
+            if snap["non_steam"]:
+                shortcuts.add_non_steam(games, custom_art, shortcuts.read_shortcuts(steam, snap["account"]))
             if not games:
                 raise sc.SteamcaseError(tr("No games found. Install a game first, or load your userdata.json."))
             manual = snap.get("manual")

@@ -1456,7 +1456,6 @@ class LookFlow(QtCase):
             pt = it.mapToScene(QPointF(it.width() / 2 if dx is None else dx, it.height() / 2)).toPoint()
             QTest.mouseClick(root, Qt.LeftButton, Qt.NoModifier, pt)
             self.app.processEvents()
-        before = look.previewSource
         click("look_hue")                                       # drag the colour
         self.assertNotEqual(look.hue, 90)
         click("look_swatch_4")                                  # a ready-made colour
@@ -1466,8 +1465,8 @@ class LookFlow(QtCase):
         click("look_custom_art", 60)
         click("look_skip_blurry", 60)
         self.assertTrue(look.useCustomArt and look.skipAutoArt)
-        end = time.time() + 2
-        while time.time() < end and look.previewSource == before:
+        end = time.time() + 10                                  # a busy machine redraws late: wait for the final picture, not for any change
+        while time.time() < end and "/176/100/100/christmas/none/" not in look.previewSource:
             self.app.processEvents()
             time.sleep(0.02)
         self.assertIn("/176/100/100/christmas/none/", look.previewSource)     # one picture, in the final choice
@@ -6156,6 +6155,40 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(self.calls[0]["custom_art"], {1: mine})
         self.assertFalse(self.make.searching)
 
+    def shortcuts_found(self, found):
+        """The account's non-Steam shortcuts are `found` ({id: name}) for the rest of the test."""
+        from unittest import mock
+        patcher = mock.patch("engine.shortcuts.read_shortcuts", lambda steam, user=None: dict(found))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_the_non_steam_switch_adds_shortcuts_with_art_and_only_their_art(self):
+        mine = self.mine()
+        self.art = {1: mine, 99: mine}                                   # game 1 has art too, but the own-art switch is off
+        self.shortcuts_found({99: "Cod Game", 98: "No art"})
+        self.shell.look.includeNonSteam = True
+        self.run_it()
+        call = self.calls[-1]
+        self.assertEqual(call["games"].get(99), "Cod Game")
+        self.assertNotIn(98, call["games"])
+        self.assertEqual(call["custom_art"], {99: mine})
+
+    def test_with_the_non_steam_switch_off_shortcuts_are_left_out(self):
+        mine = self.mine()
+        self.art = {99: mine}
+        self.shortcuts_found({99: "Cod Game"})
+        self.run_it()
+        self.assertNotIn(99, self.calls[-1]["games"])
+
+    def test_the_non_steam_switch_with_own_art_uses_both(self):
+        mine = self.mine()
+        self.art = {1: mine, 99: mine}
+        self.shortcuts_found({99: "Cod Game"})
+        self.shell.look.includeNonSteam = True
+        self.shell.setSwitch("use_custom_art", True)
+        self.run_it()
+        self.assertEqual(self.calls[-1]["custom_art"], {1: mine, 99: mine})
+
     def test_own_art_that_could_not_be_copied_is_told_after_the_run(self):
         self.art, self.art_problems = {1: self.mine()}, ["x"]
         self.shell.setSwitch("use_custom_art", True)
@@ -6358,6 +6391,8 @@ class MakeState(QtCase, FakeStore):
         self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped")
         self.shell.look.includeSoftware = True
         self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped, software included")
+        self.shell.look.includeNonSteam = True
+        self.assertEqual(by()["art"]["value"], "Your own art, blurry art skipped, software included, non-Steam games included")
         self.assertGreaterEqual(len(seen), 5)
         self.shell.library.installedOnly = False
         self.assertEqual(by()["games"]["value"], "Not chosen yet")
@@ -7133,6 +7168,13 @@ class PickerTests(PickerBase):
         self.library[4] = None
         self.shell.setSwitch("include_software", True)
         self.load()
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
+
+    def test_non_steam_games_are_not_listed_even_with_the_switch_on(self):
+        from unittest import mock
+        self.shell.setSwitch("include_non_steam", True)
+        with mock.patch("engine.shortcuts.read_shortcuts", lambda steam, user=None: {99: "Cod Game"}):
+            self.load()
         self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
 
     def test_load_lists_games_sorted_by_name(self):
@@ -8526,6 +8568,17 @@ class ManualMake(PickerBase):
         self.run_make()
         (games, kw), = calls
         self.assertIs(kw["software"], False)
+
+    def test_the_engine_gets_no_non_steam_games_in_this_flow_even_with_the_switch_on(self):
+        from unittest import mock
+        calls = self.spy()
+        self.shell.setSwitch("include_non_steam", True)
+        self.give("ps5", 1, 3)
+        with mock.patch.object(self.sc, "find_custom_art", return_value={99: "/a.png"}), mock.patch("engine.shortcuts.read_shortcuts", lambda steam, user=None: {99: "Cod Game"}):
+            self.run_make()
+        (games, kw), = calls
+        self.assertNotIn(99, games)
+        self.assertEqual(kw["custom_art"], {})
 
     def test_the_engine_gets_the_assignments_and_none_of_the_steps_that_are_not_in_this_flow(self):
         calls = self.spy()
