@@ -91,6 +91,7 @@ MAX_APPS = 100_000                       # a real library has at most a few thou
 MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompression bombs
 MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
 _PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
+GAME_TYPES = (0, None, 12)           # 0 = game, 12 = playtest (same art as its game, and it sits in the library); other types are DLC, tools, demos
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
@@ -710,7 +711,7 @@ def list_games(games, log=None, errors=None):
     for appid in sorted(games):
         it = info.get(appid, {})
         name = games[appid] or it.get("name")
-        if it.get("type", 0) not in (0, None) or not name or TOOL_NAMES.match(name):
+        if it.get("type", 0) not in GAME_TYPES or not name or TOOL_NAMES.match(name):
             continue
         out.append((appid, name))
     return out
@@ -1537,7 +1538,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     for appid in ids:
         it = info.get(appid) or {}
         known = games[appid] or it.get("name")
-        if it.get("type", 0) not in (0, None) or TOOL_NAMES.match(known or ""):
+        if it.get("type", 0) not in GAME_TYPES or TOOL_NAMES.match(known or ""):
             res["skipped"] += 1
             res["not_games"] += 1               # DLC, soundtracks, tools, demos
         elif not known:
@@ -1558,7 +1559,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             break
         it = info.get(appid) or {}
         name = games[appid] or it.get("name") or str(appid)
-        if it.get("type", 0) not in (0, None) or TOOL_NAMES.match(name):
+        if it.get("type", 0) not in GAME_TYPES or TOOL_NAMES.match(name):
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
