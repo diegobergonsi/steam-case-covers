@@ -200,6 +200,7 @@ Good to know:
 - Each cover is the game's own portrait inside a case, with the Steam banner and platform badges
 - Games shared through Steam Family Sharing get covers too, with a green corner and a family icon
 - Optional "skip blurry covers" for games Steam has no real portrait for
+- Optional "include software": programs such as Wallpaper Engine or Lossless Scaling get a case too
 
 **Make them yours**
 - Pick games by hand and put them in a PlayStation, Xbox or Nintendo case, or in a colour of your own, in groups the app remembers
@@ -284,7 +285,7 @@ python -m engine reset --everything             # ...also removing art from othe
 
 `--games-page FILE` is the games page saved as "Webpage, Complete" (see [above](#optional-highlight-your-100-games)). `--completed-style` is `ribbon` (the plain case; the default when you pass a page), `gold-case`, `gold-border` or `none`; `none` removes the highlights from covers made before. `--completed-marks` is `full` (the rosette and the ribbon, the default), `rosette` (the rosette alone) or `none` (no marks: with `gold-case` or `gold-border` the gold alone) and works with every style except `none`. Without either option, covers keep the look they have.
 
-Run `python -m engine -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
+Run `python -m engine -h` for all options, such as `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--include-software`, `--steam-dir` and `--user` (the account's folder number in Steam's `userdata`, to pick one of several accounts).
 
 <a id="faq"></a>
 

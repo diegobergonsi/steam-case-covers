@@ -544,6 +544,49 @@ class Playtests(Base):
         self.assertEqual((r["ok"], r["not_games"]), (1, 0))
 
 
+class Software(Base):
+    def make(self, items, **kw):
+        """(list_games result, make_covers result) with Steam answering `items` ({appid: store item}, an id missing from it is one Steam no longer lists)."""
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
+        art = {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}
+        full = {i: dict(it, assets=art) for i, it in items.items()}
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: full[i] for i in ids if i in full}
+        sc.http_get = lambda url, tries=3: buf.getvalue()
+        try:
+            games = {i: None for i in items}
+            return sc.list_games(games, **kw), sc.make_covers(games, os.path.join(self.tmp, "cv"), **kw)
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_software_is_skipped_by_default(self):
+        listed, r = self.make({1: {"type": 6, "name": "Lossless Scaling"}})
+        self.assertEqual(listed, [])
+        self.assertEqual((r["ok"], r["not_games"]), (0, 1))
+
+    def test_software_gets_a_cover_with_the_switch(self):
+        listed, r = self.make({1: {"type": 6, "name": "Lossless Scaling"}}, software=True)
+        self.assertEqual(listed, [(1, "Lossless Scaling")])
+        self.assertEqual((r["ok"], r["not_games"]), (1, 0))
+
+    def test_tools_and_other_types_stay_skipped_with_the_switch(self):
+        listed, r = self.make({1: {"type": 6, "name": "Proton 9.0"}, 2: {"type": 1, "name": "A Demo"}, 3: {"type": 4, "name": "Some DLC"}}, software=True)
+        self.assertEqual(listed, [])
+        self.assertEqual((r["ok"], r["not_games"]), (0, 3))
+
+    def test_software_without_a_name_stays_unlisted_with_the_switch(self):
+        listed, r = self.make({1: {"type": 0, "name": "Game"}, 2: {"type": 6}}, software=True)
+        self.assertEqual(listed, [(1, "Game")])
+        self.assertEqual((r["ok"], r["unlisted"], r["not_games"]), (1, 1, 0))
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]
@@ -1173,6 +1216,37 @@ class StoreMocks(Base):
         finally:
             sys.argv = argv
         return out.getvalue()
+
+
+class SoftwareCli(StoreMocks):
+    def make_kwargs(self, *extra):
+        """The keywords the command line gave make_covers."""
+        seen = {}
+        real = sc.make_covers
+        empty = real({}, os.path.join(self.tmp, "none"))
+        sc.make_covers = lambda *a, **kw: seen.update(kw) or empty
+        try:
+            self.run_cli("make", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", os.path.join(self.tmp, "out"), *extra)
+        finally:
+            sc.make_covers = real
+        return seen
+
+    def test_flag_gives_make_covers_software(self):
+        self.assertIs(self.make_kwargs("--include-software")["software"], True)
+
+    def test_list_shows_software_with_the_flag(self):
+        seen = []
+        real = sc.list_games
+        sc.list_games = lambda games, log=None, errors=None, software=False: seen.append(software) or []
+        try:
+            for extra in ((), ("--include-software",)):
+                self.run_cli("list", "--steam-dir", self.steam, "--library", self.fake_library(True), *extra)
+        finally:
+            sc.list_games = real
+        self.assertEqual(seen, [False, True])
+
+    def test_without_the_flag_software_is_off(self):
+        self.assertIs(self.make_kwargs()["software"], False)
 
 
 class FamilyCovers(StoreMocks):

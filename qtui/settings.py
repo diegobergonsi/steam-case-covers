@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""The five switches the window remembers between sessions. Nothing else is ever saved: no account, no path."""
+"""The six switches the window remembers between sessions. Nothing else is ever saved: no account, no path."""
 import json
 import os
 import uuid
@@ -9,8 +9,8 @@ from engine import safefile
 from qtui import i18n
 from engine import steamcase as sc
 
-SETTING_KEYS = ("skip_auto_art", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
-DEFAULTS = {"skip_auto_art": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}
+SETTING_KEYS = ("skip_auto_art", "include_software", "use_custom_art", "installed_only", "restart_steam", "reduce_effects")
+DEFAULTS = {"skip_auto_art": False, "include_software": False, "use_custom_art": False, "installed_only": False, "restart_steam": True, "reduce_effects": False}
 MAX_SETTINGS = 64 * 1024                  # a settings file is a few dozen bytes; anything bigger is not ours
 
 
@@ -91,7 +91,7 @@ def save_language(code, path=None):
 
 
 def load_settings(path=None):
-    """All five switches. A missing, unreadable, oversized or garbled file gives the defaults, and a value that is not a true/false
+    """All six switches. A missing, unreadable, oversized or garbled file gives the defaults, and a value that is not a true/false
     gives the default of that switch only; unknown keys are ignored."""
     try:
         path = path or settings_path()
@@ -104,7 +104,7 @@ def load_settings(path=None):
 
 
 def save_settings(values, path=None):
-    """Write the five switches (missing ones take the default, other keys are dropped). Atomic. True when written, False if the folder is not writable."""
+    """Write the six switches (missing ones take the default, other keys are dropped). Atomic. True when written, False if the folder is not writable."""
     path = path or settings_path()
     clean = {k: values[k] if isinstance(values.get(k), bool) else DEFAULTS[k] for k in SETTING_KEYS}
     tmp = "%s.%s.tmp" % (path, uuid.uuid4().hex[:8])

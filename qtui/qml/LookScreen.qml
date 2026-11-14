@@ -104,6 +104,8 @@ ScreenFrame {
                 checked: screen.look.useCustomArt; onToggled: (v) => screen.look.useCustomArt = v }
             SwitchRow { objectName: "look_skip_blurry"; label: qsTr("Skip blurry covers"); tip: autoArtHelp
                 checked: screen.look.skipAutoArt; onToggled: (v) => screen.look.skipAutoArt = v }
+            SwitchRow { objectName: "look_include_software"; label: qsTr("Include software"); tip: softwareHelp
+                checked: screen.look.includeSoftware; onToggled: (v) => screen.look.includeSoftware = v }
         }
     }
 

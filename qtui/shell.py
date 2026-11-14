@@ -112,7 +112,7 @@ class Shell(QObject):
     @Slot()
     def startOver(self):
         """Put the window back to what a fresh start shows: the way, the steps, the game list (and the note of its path), the look, the games page, the cases not
-        made yet, what Make and Apply remember, the five switches. Nothing saved is touched: groups, covers, the case file, Steam and the language stay.
+        made yet, what Make and Apply remember, the six switches. Nothing saved is touched: groups, covers, the case file, Steam and the language stay.
         Not while covers are made or added to Steam."""
         if not self.canSwitch:
             return

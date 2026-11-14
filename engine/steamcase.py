@@ -92,9 +92,13 @@ MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompre
 MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
 _PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
 GAME_TYPES = (0, None, 12)           # 0 = game, 12 = playtest (same art as its game, and it sits in the library); other types are DLC, tools, demos
+SOFTWARE_TYPE = 6                   # Lossless Scaling, Wallpaper Engine and Blender: type 6, with normal portrait art; made only when the user asks
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
+# Shown next to the "include software" option (GUI tooltip, CLI --help).
+SOFTWARE_HELP = ("Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. "
+                 "Steam's own tools, demos and DLC still get none.")
 # Shown next to the "skip blurry auto-art" option (GUI tooltip, CLI --help).
 AUTO_ART_HELP = (
     "Some games, mostly older or small ones, have no real portrait on Steam. "
@@ -704,14 +708,20 @@ def portrait_candidates(appid, item):
     return urls, auto
 
 
-def list_games(games, log=None, errors=None):
-    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers). `errors`: a list that gets the exception of every store lookup that failed."""
+def is_coverable(item, name, software=False):
+    """True if a store item can get a cover by what it is: a game or playtest, or software when `software` is on, and not one of Steam's tools by name. DLC, demos and the rest never do. A missing `name` is the caller's business."""
+    kind = item.get("type", 0)
+    return not TOOL_NAMES.match(name or "") and (kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE))
+
+
+def list_games(games, log=None, errors=None, software=False):
+    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers; software only with `software`). `errors`: a list that gets the exception of every store lookup that failed."""
     info = store_items(sorted(games), log, errors=errors)
     out = []
     for appid in sorted(games):
         it = info.get(appid, {})
         name = games[appid] or it.get("name")
-        if it.get("type", 0) not in GAME_TYPES or not name or TOOL_NAMES.match(name):
+        if not name or not is_coverable(it, name, software):
             continue
         out.append((appid, name))
     return out
@@ -1444,7 +1454,7 @@ def _drop_older_covers(covers_dir, dest, appid):
 
 
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None, theme=None, custom_art=None, platforms=None, tones=None, groups=None, repaint=None):
+                completed=None, treatment=None, theme=None, custom_art=None, platforms=None, tones=None, groups=None, repaint=None, software=False):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -1538,7 +1548,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     for appid in ids:
         it = info.get(appid) or {}
         known = games[appid] or it.get("name")
-        if it.get("type", 0) not in GAME_TYPES or TOOL_NAMES.match(known or ""):
+        if not is_coverable(it, known, software):
             res["skipped"] += 1
             res["not_games"] += 1               # DLC, soundtracks, tools, demos
         elif not known:
@@ -1559,10 +1569,6 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             break
         it = info.get(appid) or {}
         name = games[appid] or it.get("name") or str(appid)
-        if it.get("type", 0) not in GAME_TYPES or TOOL_NAMES.match(name):
-            res["skipped"] += 1
-            report(n, appid, name, "skipped")
-            continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         want_p = platforms.get(appid) if platforms is not None else None
         want_g = groups.get(appid) if platforms is not None else None
@@ -2352,7 +2358,7 @@ def _collect(args):
 def cmd_list(args):
     steam, games, family = _collect(args)
     print("Steam folder:", steam)
-    rows = list_games(games, print)
+    rows = list_games(games, print, software=args.include_software)
     for appid, name in rows:
         print("%d %s%s" % (appid, name, "  (family)" if appid in family else ""))
     print("\n%d games%s" % (len(rows), "" if args.library else "  (installed only; add --library userdata.json for your whole library)"))
@@ -2446,9 +2452,9 @@ def cmd_make(args):
             print("ok  ", appid, name)
 
     res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art,
-                     platforms={appid: CUSTOM for appid in games} if args.case_file else None)
+                     platforms={appid: CUSTOM for appid in games} if args.case_file else None, software=args.include_software)
     own_art = sum(1 for f in res["files"] if cover_art(f))
-    print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
+    print("\n%d covers in %s | %d skipped (DLC/software/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
           + (" | %d of them are 100%% complete" % res["completed"] if res["completed"] else "")
           + (" | in a custom colour" if hue or (sat, val) != (100, 100) else "")
@@ -2562,7 +2568,7 @@ def main():
             p.add_argument("--yes", action="store_true", help="don't ask even if Steam is running")
             p.add_argument("--close-steam", action="store_true", help="close Steam automatically before copying")
 
-    p = sub.add_parser("list", help="show detected games"); common(p, make=True); p.set_defaults(fn=cmd_list)
+    p = sub.add_parser("list", help="show detected games"); common(p, make=True); p.add_argument("--include-software", action="store_true", help=SOFTWARE_HELP); p.set_defaults(fn=cmd_list)
     for name, fn in (("make", cmd_make), ("run", cmd_run)):
         p = sub.add_parser(name, help=name + " covers" if name == "make" else "make + apply")
         common(p, make=True, apply_=(name == "run"))
@@ -2594,6 +2600,7 @@ def main():
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) rosette (the rosette alone) or none (no marks: the gold case or border alone; with the normal case it is the same as --completed-style none). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
+        p.add_argument("--include-software", action="store_true", help=SOFTWARE_HELP)
         art = p.add_mutually_exclusive_group()
         art.add_argument("--use-custom-art", dest="use_custom_art", action="store_const", const=True, default=None,
                          help="put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it; a copy is kept in this app's own folder, "

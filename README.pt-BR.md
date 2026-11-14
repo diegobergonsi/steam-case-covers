@@ -199,6 +199,7 @@ Bom saber:
 - Cada capa é o retrato do próprio jogo dentro de uma case, com a faixa da Steam e os ícones das plataformas
 - Os jogos compartilhados pelo Compartilhamento em Família da Steam também ganham capas, com um canto verde e um ícone de família
 - Opção de "pular capas borradas" para jogos que a Steam não tem um retrato de verdade
+- Opção de "incluir programas": programas como o Wallpaper Engine ou o Lossless Scaling também ganham um case
 
 **Deixe do seu jeito**
 - Escolha jogos à mão e coloque-os numa case de PlayStation, Xbox ou Nintendo, ou numa cor sua, em grupos que o programa lembra
@@ -285,7 +286,7 @@ O `--case-file FILE` coloca todos os jogos da execução em uma case sua (um PNG
 
 O `--games-page FILE` é a página de jogos salva como "Página da Web, completa" (veja [acima](#optional-highlight-your-100-games)). O `--completed-style` é `ribbon` (a case normal; é o padrão quando você passa uma página), `gold-case`, `gold-border` ou `none`; o `none` remove o destaque das capas feitas antes. O `--completed-marks` é `full` (a roseta e a faixa, o padrão), `rosette` (só a roseta) ou `none` (sem marcas: com `gold-case` ou `gold-border`, só o dourado) e funciona com todos os estilos, menos `none`. Sem nenhuma das duas opções, as capas mantêm o visual que têm.
 
-Rode `python -m engine -h` para ver todas as opções, como `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--steam-dir` e `--user` (o número da pasta da conta dentro de `userdata` da Steam, para escolher uma entre várias contas).
+Rode `python -m engine -h` para ver todas as opções, como `--only`, `--hue`, `--saturation`, `--brightness`, `--skip-auto-art`, `--include-software`, `--steam-dir` e `--user` (o número da pasta da conta dentro de `userdata` da Steam, para escolher uma entre várias contas).
 
 <a id="faq"></a>
 

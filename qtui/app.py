@@ -54,6 +54,7 @@ def create_engine(shell, qml_dir=None, assets_dir=None):
     def help_texts():                                  # the long help of the little "i" tips, in the language in use
         ctx.setContextProperty("familyHelp", i18n.tr(sc.FAMILY_HELP))
         ctx.setContextProperty("autoArtHelp", i18n.tr(sc.AUTO_ART_HELP))
+        ctx.setContextProperty("softwareHelp", i18n.tr(sc.SOFTWARE_HELP))
         ctx.setContextProperty("customArtHelp", i18n.tr(CUSTOM_ART_HELP))
         ctx.setContextProperty("pageHelp", page_help())
     help_texts()
