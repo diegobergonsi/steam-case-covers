@@ -3182,16 +3182,6 @@ class ReadmeLanguages(unittest.TestCase):
             self.assertIn("**%s**" % PT_BR[english].rstrip("."), pt, english)
 
 
-class ChangelogHasTheNewOptions(unittest.TestCase):
-    """The notes of the next release name what was added: the two switches and the command line option of each."""
-    def test_unreleased_names_software_and_non_steam_games(self):
-        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
-            text = f.read()
-        unreleased = text.split("\n## [", 2)[1]
-        for needle in ("--include-software", "--include-non-steam", "playtest"):
-            self.assertIn(needle, unreleased)
-
-
 class DiscordButton(unittest.TestCase):
     """The Discord icon in the window's navigation: one link, one bundled image, credited."""
     PNG = os.path.join(sc.HERE, "assets", "discord.png")
@@ -3575,6 +3565,19 @@ class ReleaseMessage(unittest.TestCase):
         self.assertNotIn("Documentation", announcement)
         self.assertLess(len(announcement), self.rm.LIMIT)
         self.assertTrue(announcement.startswith("- Use a case you made yourself."))      # what the person can do first
+
+    def test_the_changelog_has_the_1_8_0_notes(self):
+        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
+            text = f.read()
+        notes = self.rm.section(text, "v1.8.0")
+        for word in ("Include software", "Include non-Steam games", "--include-software", "--include-non-steam", "playtest", "Metro Exodus", "Select", "gold"):
+            self.assertIn(word, notes)
+        self.assertRegex(text, r"## \[1\.8\.0\] - 2026-11-14")
+        self.assertNotRegex(text, r"## \[Unreleased\]\n+- ")                   # nothing waits under Unreleased
+        announcement = self.rm.announcement(text, "v1.8.0", "https://example.test/r")["embeds"][0]["description"]
+        self.assertNotIn("Documentation", announcement)
+        self.assertLess(len(announcement), self.rm.LIMIT)
+        self.assertTrue(announcement.startswith("- A new switch, **Include software**"))      # what the person can do first
 
     def test_the_release_page_body_is_the_section_plus_how_to_check_the_files(self):
         body = self.rm.release_body(self.SAMPLE, "v1.5.0")

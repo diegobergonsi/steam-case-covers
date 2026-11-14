@@ -4,17 +4,19 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-14
+
 ### ✨ New
-- **Include software** on the Look step (`--include-software` on the command line). Programs you own on Steam, such as Wallpaper Engine or Lossless Scaling, get a case like games do. It is off until you turn it on. Steam's own tools, demos and DLC still get none. In Pick games you cannot pick software by hand yet.
-- **Include non-Steam games** on the Look step (`--include-non-steam` on the command line). Games you added to Steam by hand get a case when they already have a portrait in your Steam art folder; the app does not look for art online. It is off until you turn it on. Reset gives these games their own art back, because Steam has no default art for them, and Restore undoes that. In Pick games you cannot pick them by hand yet.
+- A new switch, **Include software**, gives programs you own on Steam, such as Wallpaper Engine or Lossless Scaling, a case like games have. It is on the Look step (`--include-software` on the command line) and off until you turn it on. Steam's own tools, demos and DLC still get none. In Pick games you cannot pick software by hand yet.
+- A new switch, **Include non-Steam games**, gives the games you added to Steam by hand a case. It is on the Look step (`--include-non-steam` on the command line) and off until you turn it on. A game gets a case when it already has a portrait in your Steam art folder; the app does not look for art online. Reset gives these games their own art back, because Steam has no default art for them, and Restore undoes that. In Pick games you cannot pick them by hand yet.
 
 ### 🛠 Fixed
 - A game you joined as a playtest now gets a cover, with the same art as the game. Demos, DLC and tools are still skipped.
 - Metro Exodus "PC Enhanced Edition" now gets a cover. Steam lists it as an edition of its own, a kind of item the app used to skip. Editions with a real portrait get a cover; Steam's franchise ads, which only have a blurry stand-in picture, still do not.
 
 ### 🔧 Changed
-- Plainer words in the windows and on the screens. "Select" replaces "tick", the question about a Steam collection names its buttons, the Reset buttons say "Remove only this app's covers" and "Remove all covers", and a few messages (Start over, Restore, Delete group) say more clearly what changes. One question wrongly said "step 5" when picking games by hand; it no longer names a step.
-- Picking games by hand now has the same 100% choices as the other way: gold case, gold border, normal case or no special case, and the marks. Gold goes on the games in a Steam case; games in a console case or your own case get the marks only, and the screen says so.
+- Picking games by hand now has the same 100% choices as the other way: gold case, gold border, normal case or no special case, and the marks. Gold goes on the games in a Steam case; games in a console case or your own case get the marks only, and the screen says so. Going back to the Case step and clicking another case now asks first, then moves your games to it.
+- The windows and screens use plainer words. "Select" replaces "tick", the question about a Steam collection names its buttons, the Reset buttons say "Remove only this app's covers" and "Remove all covers", and a few messages (Start over, Restore, Delete group) say more clearly what changes. One question wrongly said "step 5" when picking games by hand; it no longer names a step.
 
 ## [1.7.0] - 2026-11-09
 
