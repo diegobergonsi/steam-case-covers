@@ -4,6 +4,9 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+### 🔧 Changed
+- Picking games by hand now has the same 100% choices as the other way: gold case, gold border, normal case or no special case, and the marks. Gold goes on the games in a Steam case; games in a console case or your own case get the marks only, and the screen says so.
+
 ## [1.7.0] - 2026-11-09
 
 ### ✨ New

@@ -52,6 +52,7 @@ class Cases(QObject):
     labelsChanged = Signal()                # the colour names (a change of language tells the window to read them again)
     errorChanged = Signal()
     choicesChanged = Signal()
+    hundredSourceChanged = Signal()         # the case most games are in, or the picture the 100% step shows, changed
     previewChanged = Signal()               # the choice, what is in use, or the own case changed
 
     def __init__(self, shell, parent=None, covers_dir=None):
@@ -70,6 +71,8 @@ class Cases(QObject):
         self._family = False
         for signal in (self.selectedKeyChanged, self.assignmentsChanged, self.choicesChanged):
             signal.connect(self.previewChanged)
+        for signal in (self.assignmentsChanged, shell.look.treatmentChanged, shell.look.previewSourceChanged):
+            signal.connect(self.hundredSourceChanged)
         shell.owncase.changed.connect(self.choicesChanged)         # the card of the user's own case shows the case, or asks for a file
         shell.picker.selectionChanged.connect(self.selectedKeyChanged)           # canAssign follows the ticks too
         self._library_seen = self._library_state()
@@ -266,9 +269,10 @@ class Cases(QObject):
     @Slot()
     def assign(self):
         """Put the ticked games in the picked case; they are then unticked, so the next round starts clean."""
-        if not self.canAssign:
-            return
-        games = self._shell.picker.selection()
+        if self.canAssign:
+            self._assign(self._shell.picker.selection())
+
+    def _assign(self, games):
         group = next((g for g in self._groups if g["id"] == self._gid), None)
         case = group["case"] if group else ({"tone": list(self._tone)} if self._key == "steam" else {"platform": self._key})
         try:
@@ -285,6 +289,29 @@ class Cases(QObject):
         self.selectedKeyChanged.emit()
         self.groupNameChanged.emit()
         self.colourChanged.emit()
+
+    @Slot(str, result=bool)
+    def switchNeeded(self, key):
+        """A click on a case card would move games already given a case: nothing is ticked, they are all in one case, and this card is another one (your own
+        case asks for its file first, and with two cases in use nobody can tell which games should move)."""
+        return key in ORDER and key != sc.CUSTOM and not self._shell.picker.selectedCount and len(self.summary) == 1 and self.summary[0]["key"] != key
+
+    @Slot(str, result=str)
+    def switchSentence(self, key):
+        """What the question before a switch says: how many games move, from which case to which, and what starts again."""
+        used = self.summary[0]
+        return trn("This moves your %n game from %s to %s and puts your 100%% games choices back to how they started.|"
+                   "This moves your %n games from %s to %s and puts your 100%% games choices back to how they started.", used["count"]) % (used["label"], tr(LABELS[key]))
+
+    @Slot(str)
+    def switchTo(self, key):
+        """The answer "yes" to that question: every game of this run goes into the new case, and the 100% games step starts from its defaults (the page stays)."""
+        if self.switchNeeded(key):
+            games = sorted(self._assigned)
+            self._key, self._gid = key, ""
+            self._follow_case()
+            self._assign(games)
+            self._shell.hundred.reset_choices()
 
     def _note(self, case, gid, games):
         """This run's lists know that the games are in the group `gid`, drawn in this case."""
@@ -344,6 +371,15 @@ class Cases(QObject):
         """The sample cover beside the choices: the case picked, else the one most games are in, else the Steam case."""
         key = self._key or self.previewKey or "steam"
         return next(c["source"] for c in self.choices if c["key"] == key)
+
+    @Property(str, notify=hundredSourceChanged)
+    def hundredSource(self):
+        """The sample on the 100% games step of this flow: the case most games are in, with the marks chosen there (a console case has no gold, the engine keeps
+        its marks only). No game in a console case: the Steam case, as the usual path shows it."""
+        key = self.previewKey
+        if key in ("", "steam"):
+            return self._shell.look.hundredSource
+        return "image://preview/platform/%s/%s/1" % (key, self._shell.look.treatment)
 
     @Property(str, notify=assignmentsChanged)
     def previewKey(self):

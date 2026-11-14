@@ -1283,7 +1283,7 @@ def _spec_for(platform, colour, treatment, theme, art, group):
     """The CoverSpec of a game made in `platform` (None: the Steam case in `colour`). A console case has no colour or theme to compare, and an earlier gold
     look keeps only its marks there; its art is compared like any other (KEEP: not at all)."""
     if platform:
-        return CoverSpec(treatment=_console_marks(treatment), art=art, platform=platform, group=group, layout=LAYOUT, case=_case_digest(platform))
+        return CoverSpec(treatment=console_marks(treatment), art=art, platform=platform, group=group, layout=LAYOUT, case=_case_digest(platform))
     return CoverSpec(colour, treatment, theme, art, None, group, LAYOUT)
 
 
@@ -1361,7 +1361,7 @@ def forget_group(covers_dir, appids):
     return count
 
 
-def _console_marks(treatment):
+def console_marks(treatment):
     """The marks a console cover keeps from a treatment (none, "ribbon" or "rosette"): a console case has no gold, so an earlier gold look keeps only its marks."""
     return compose_treatment("ribbon", split_treatment(treatment)[1]) if treatment else None
 
@@ -1433,7 +1433,7 @@ def _wanted_look(appid, notes, colour, completed, treatment, theme=None):
 
 def _check_hand(tones, groups, repaint, treatment, theme):
     """ValueError unless `tones` ({appid: (hue, sat, val)}), `groups` ({appid: group id}) and `repaint` (a set of appids) are what make_covers takes, and, for covers by hand
-    (any tone or group), the `treatment` is none, "ribbon" or "rosette" and there is no `theme`: those covers have no gold and no theme."""
+    (any tone or group) there is no `theme`: those covers have no theme."""
     def whole(a):
         return isinstance(a, int) and not isinstance(a, bool)
     for a, t in (tones or {}).items():
@@ -1444,8 +1444,8 @@ def _check_hand(tones, groups, repaint, treatment, theme):
             raise ValueError("a group is an id of 1 to 12 lower-case letters and digits for a game: %r" % ((a, g),))
     if repaint is not None and not (isinstance(repaint, (set, frozenset)) and all(whole(a) for a in repaint)):
         raise ValueError("repaint is a set of appids: %r" % (repaint,))
-    if (tones or groups) and (theme is not None or treatment not in (None, "ribbon", "rosette")):
-        raise ValueError("covers by hand only go with the marks (ribbon, rosette) and no theme")
+    if (tones or groups) and theme is not None:
+        raise ValueError("covers by hand have no theme")
 
 
 def _drop_older_covers(covers_dir, dest, appid):
@@ -1484,8 +1484,9 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     "family": how many covers were drawn with the family frame in this run (an existing plain cover is kept unless force is set),
     "completed": how many of "files" carry a treatment, kept ones included, "platforms": how many of "files" are in a console case}.
     tones: {appid: (hue, sat, val)}, with `platforms` a dict: the colour of a game in the Steam case (the run's own colour for a game not in it). groups: {appid: id of a
-    group, see groups.py}: the cover gets the group note, and a cover is kept only if its group is the wanted one. Covers by hand only go with no `treatment` or the "ribbon"
-    and "rosette" marks and no `theme` (ValueError otherwise, before any lookup). The natural flow (`platforms` None) leaves every cover by hand (a console case or a
+    group, see groups.py}: the cover gets the group note, and a cover is kept only if its group is the wanted one. Covers by hand have no `theme` (ValueError otherwise, before any lookup).
+    A game in a console case or your own case keeps only the marks of the `treatment`; a game in the Steam case gets all of it (gold included).
+    The natural flow (`platforms` None) leaves every cover by hand (a console case or a
     group note) alone, force or not, except those whose appid is in `repaint`: they are made again as normal covers.
     """
     if Image is None:
@@ -1502,9 +1503,9 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     if wanted_platforms - set(PLATFORMS) - {CUSTOM}:
         raise ValueError("unknown platform: %r" % (sorted(wanted_platforms - set(PLATFORMS) - {CUSTOM}, key=str)[0],))
     if wanted_platforms:
-        _check_platform(sorted(wanted_platforms)[0], treatment, theme)
+        _check_platform(sorted(wanted_platforms)[0], console_marks(treatment), theme)
     if CUSTOM in wanted_platforms:
-        _check_platform(CUSTOM, treatment, theme)           # the run stops here, before any download, when the case file is gone
+        _check_platform(CUSTOM, console_marks(treatment), theme)           # the run stops here, before any download, when the case file is gone
     os.makedirs(out, exist_ok=True)
     hue %= 360
     sat, val = min(max(sat, 0), 100), min(max(val, 0), 100)
@@ -1598,7 +1599,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
-            target = _console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
+            target = console_marks(target)              # an earlier gold look keeps only its marks: a console case has no gold
         spec = _spec_for(want_p, colour, target, theme, wanted_art, want_g)
         if not force and matches(notes, spec):
             res["ok"] += 1

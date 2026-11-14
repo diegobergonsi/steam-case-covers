@@ -24,11 +24,16 @@ def _placeholder(size):
 
 def _parse(ident):
     """(hue, sat, val, theme or None, treatment or None) from a request id, or None when it is not one of ours.
-    A console case is asked for as platform/<key>/<serial> (key: "steam" or one of PLATFORMS) and answered as ("platform", key or None)."""
+    A console case is asked for as platform/<key>/<serial> (key: "steam" or one of PLATFORMS) and answered as ("platform", key or None, None). With the marks of a
+    100% game it is platform/<key>/<treatment or none>/<serial>: any treatment, a console case keeps only its marks (sc.console_marks)."""
     parts = ident.split("/")
     if parts[0] == "platform":
-        return ("platform", None if parts[1] == "steam" else parts[1]) if len(parts) == 3 and (parts[1] == "steam" or parts[1] in sc.PLATFORMS
-                                                                                              or (parts[1] == sc.CUSTOM and sc.custom_case_digest())) else None
+        if len(parts) not in (3, 4) or not (parts[1] == "steam" or parts[1] in sc.PLATFORMS or (parts[1] == sc.CUSTOM and sc.custom_case_digest())):
+            return None
+        treatment = parts[2] if len(parts) == 4 else "none"
+        if treatment != "none" and treatment not in sc.TREATMENTS:
+            return None
+        return "platform", None if parts[1] == "steam" else parts[1], None if treatment == "none" else treatment
     if len(parts) != 6:
         return None
     try:
@@ -64,14 +69,14 @@ class PreviewProvider(QQuickImageProvider):
         request = _parse(ident)
         if request is None:
             return _placeholder(want)
-        key = request + (want.width(), want.height()) + ((sc.custom_case_digest(),) if request == ("platform", sc.CUSTOM) else ())      # a new case file is a new picture
+        key = request + (want.width(), want.height()) + ((sc.custom_case_digest(),) if request[:2] == ("platform", sc.CUSTOM) else ())      # a new case file is a new picture
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
                 return self._cache[key]
             try:
                 if request[0] == "platform":
-                    pil = sc.preview_cover(platform=request[1]).convert("RGBA")
+                    pil = sc.preview_cover(platform=request[1], treatment=sc.console_marks(request[2])).convert("RGBA")
                 else:
                     hue, sat, val, theme, treatment = request
                     pil = sc.preview_cover(hue, sat=sat, val=val, treatment=treatment, theme=theme).convert("RGBA")

@@ -2374,6 +2374,12 @@ class PreviewImages(QtCase):
         self.assertFalse(img.isNull())
         self.assertEqual((self.get("0/100/100/classic/none/1").width(), self.get("0/100/100/classic/none/1").height()), (200, 300))
 
+    def test_a_console_case_with_marks_shows_only_the_marks_even_for_a_gold_look(self):
+        plain, gold, rosette = (self.get("platform/ps5/%s/1" % t) for t in ("none", "gold-case", "ribbon"))
+        self.assertNotEqual(plain, rosette)
+        self.assertEqual(gold, rosette)                                              # a console case has no gold: "gold-case" is its full marks
+        self.assertEqual(self.get("platform/ps5/bogus/1").pixelColor(100, 150).alpha(), 0)
+
     def test_the_hue_changes_the_picture_but_not_for_greys(self):
         a, b = self.get("0/100/100/classic/none/1"), self.get("120/100/100/classic/none/2")
         self.assertNotEqual(a.pixelColor(3, 150).name(), b.pixelColor(3, 150).name())
@@ -2869,17 +2875,13 @@ class HundredState(QtCase):
         keys = lambda: [c["key"] for c in h.markChoices]
         h.style, h.marks = "gold-case", "none"
         self.assertEqual(keys(), ["full", "rosette", "none"])
-        self.shell.startPath("manual")                                     # console cases have no gold: "Highlight them" with no marks would be plain, so it is not offered
-        self.assertEqual(keys(), ["full", "rosette"])
-        self.assertEqual(h.values()[1], "gold-case")                 # what was chosen before counts as the full marks there
-        self.shell.startPath("natural")
+        self.shell.startPath("manual")                                     # a gold case in a Steam-case group has no marks too: offered here as well
         self.assertEqual(keys(), ["full", "rosette", "none"])
         self.assertEqual(h.values()[1], "gold-case-plain")
-        h.marks = "rosette"
-        self.shell.startPath("manual")
-        h.marks = "none"                                             # not offered, so not accepted
-        self.assertEqual(h.marks, "rosette")
         self.shell.startPath("natural")
+        look._use_own()                                              # your own case has no gold: "No marks" is not offered, what was chosen counts as the full marks
+        self.assertEqual(keys(), ["full", "rosette"])
+        self.assertEqual(h.values()[1], "gold-case")
 
     def test_christmas_still_forces_the_rosette_when_no_marks_was_chosen(self):
         h, look = self.h, self.shell.look
@@ -2891,6 +2893,17 @@ class HundredState(QtCase):
         self.assertEqual(h.marks, "rosette")
         look.theme = "classic"
         self.assertEqual(h.marks, "none")                            # what was chosen before comes back
+
+    def test_the_look_theme_does_not_lock_the_marks_when_picking_games(self):
+        h, look = self.h, self.shell.look
+        self.load(self.page({1: (1, 1)}))
+        look.theme = "christmas"
+        self.shell.startPath("manual")                               # this path makes no themed covers: the Look step's theme must not count
+        self.assertEqual((h.marksEnabled, h.themeNote), (True, ""))
+        h.marks = "none"
+        self.assertEqual(h.marks, "none")
+        self.shell.startPath("natural")
+        self.assertEqual((h.marksEnabled, h.themeNote != "", h.marks), (False, True, "rosette"))
 
     def test_a_wrong_style_or_marks_is_ignored(self):
         h = self.h
@@ -3697,7 +3710,7 @@ class ShellWindow(WindowCase):
     def test_the_translated_lists_can_tell_the_window_to_read_them_again(self):
         """A property declared constant never tells QML to read it again, so its words would stay in the old language."""
         shell = self.shell
-        for obj, name in ((shell.look, "themes"), (shell.hundred, "styles"), (shell.hundred, "manualStyles"), (shell.cases, "colourChoices")):
+        for obj, name in ((shell.look, "themes"), (shell.hundred, "styles"), (shell.cases, "colourChoices")):
             meta = obj.metaObject()
             self.assertTrue(meta.property(meta.indexOfProperty(name)).hasNotifySignal(), name)
 
@@ -7870,6 +7883,60 @@ class CasesState(PickerBase):
         cases.pick("xbox360")
         self.assertEqual(cases.previewSource, "image://preview/platform/xbox360/1")
 
+    def test_a_card_with_nothing_ticked_asks_to_move_the_games_when_one_case_is_in_use(self):
+        self.load()
+        cases = self.shell.cases
+        self.assertFalse(cases.switchNeeded("ps5"))                                  # no game has a case yet: a card just picks
+        self.assign("steam", 1, 2)
+        self.assertTrue(cases.switchNeeded("xboxseries"))
+        self.assertFalse(cases.switchNeeded("steam"))                                # the case they are in already
+        self.assertFalse(cases.switchNeeded("custom"))                               # your own case asks for its file instead
+        self.picker.toggle(3)
+        self.assertFalse(cases.switchNeeded("xboxseries"))                          # games are ticked: the usual way, the button decides
+        self.picker.toggle(3)
+        self.assign("ps5", 3)
+        self.assertFalse(cases.switchNeeded("xboxseries"))                          # two cases in use: which games would move? the usual way
+
+    def test_the_question_says_how_many_games_move_where(self):
+        self.load()
+        self.assign("steam", 1, 2)
+        text = self.shell.cases.switchSentence("xboxseries")
+        self.assertIn("2 games", text)
+        self.assertIn("Steam", text)
+        self.assertIn("Xbox Series X", text)
+
+    def test_switching_moves_every_game_and_starts_the_100_choices_again(self):
+        self.load()
+        cases, h = self.shell.cases, self.shell.hundred
+        self.assign("steam", 1, 2)
+        h._completed = {1}
+        h._style, h._marks = "gold-case", "rosette"
+        cases.switchTo("xboxseries")
+        self.assertEqual(cases.assigned(), {1: "xboxseries", 2: "xboxseries"})
+        self.assertEqual([s["key"] for s in cases.summary], ["xboxseries"])
+        self.assertEqual((h.style, h.marks), ("ribbon", "full"))
+        self.assertTrue(h.loaded)                                                    # the games page stays
+        self.assertEqual(cases.hundredSource.split("/")[4], "xboxseries")
+
+    def test_switching_does_nothing_when_it_is_not_needed(self):
+        self.load()
+        cases = self.shell.cases
+        self.assign("steam", 1)
+        cases.switchTo("steam")
+        self.assertEqual(cases.assigned(), {1: None})
+
+    def test_the_100_step_preview_is_the_case_most_games_are_in_with_the_marks(self):
+        self.load()
+        cases, look = self.shell.cases, self.shell.look
+        self.assertEqual(cases.hundredSource, look.hundredSource)                    # no game has a case yet: the Steam case
+        self.assign("xbox360", 1)
+        look.treatment = "gold-case"
+        self.assertEqual(cases.hundredSource, "image://preview/platform/xbox360/gold-case/1")
+        look.treatment = "none"
+        self.assertEqual(cases.hundredSource, "image://preview/platform/xbox360/none/1")
+        self.assign("steam", 2, 3)
+        self.assertEqual(cases.hundredSource, look.hundredSource)                    # most games are in the Steam case: its own preview, gold and all
+
     def test_the_chosen_case_has_a_label_for_the_new_group_card(self):
         self.load()
         cases = self.shell.cases
@@ -8245,6 +8312,21 @@ class ManualWindow(WindowClicks, PickerBase):
         self.assertTrue(self.item("toast").property("visible"))
         self.assertEqual(self.text("toast_text"), "You picked a new case, so the saved group was unselected.")
 
+    def test_another_card_with_nothing_ticked_asks_first_then_moves_the_games_on_yes(self):
+        self.open_case_screen(1)
+        self.click("case_steam")
+        self.click("case_main")                                                     # the game is in the Steam case, nothing is ticked now
+        self.click("case_xboxseries")
+        self.wait_for(lambda: self.item("case_switch_dlg_card").property("visible"))
+        self.assertEqual(self.text("case_switch_dlg_title"), "Change the case?")
+        self.assertIn("1 game from Steam to Xbox Series X", self.text("case_switch_dlg_p0"))
+        self.click("case_switch_dlg_cancel")
+        self.assertEqual(self.shell.cases.assigned(), {1: None})
+        self.click("case_xboxseries")
+        self.wait_for(lambda: self.item("case_switch_dlg_card").property("visible"))
+        self.click("case_switch_dlg_confirm")
+        self.assertEqual(self.shell.cases.assigned(), {1: "xboxseries"})
+
     def test_deleting_a_group_asks_first_and_cancel_changes_nothing(self):
         gid = self.saved_red()
         self.open_case_screen(1)
@@ -8362,7 +8444,9 @@ class ManualWindow(WindowClicks, PickerBase):
         self.open_case_screen(1)
         self.click("case_ps5")
         self.click("case_main")                                                             # game 1 has a case; nothing is ticked now
-        self.click("case_xbox360")
+        self.click("case_xbox360")                                                          # another card with nothing ticked asks before moving the game
+        self.wait_for(lambda: self.item("case_switch_dlg_card").property("visible"))
+        self.click("case_switch_dlg_cancel")
         main = self.item("case_main")
         self.assertEqual((main.property("text"), main.property("enabled")), ("Next \u2192", True))
         self.click("case_main")
@@ -8482,16 +8566,17 @@ class ManualWindow(WindowClicks, PickerBase):
         self.shell.cases.pick("ps5")
         self.shell.cases.assign()
 
-    def test_the_100_step_offers_highlight_or_plain_in_the_manual_flow(self):
+    def test_the_100_step_offers_the_same_cases_as_the_other_path_and_a_console_note_for_gold(self):
         self.give_a_case()
         self.shell.goKey("hundred")
         self.app.processEvents()
-        self.assertEqual([c["key"] for c in self.item("hundred_style").property("model").toVariant()] if hasattr(self.item("hundred_style").property("model"), "toVariant")
-                         else [c["key"] for c in self.item("hundred_style").property("model")], ["ribbon", "none"])
-        self.shell.hundred._style = "gold-case"                               # chosen earlier in the other flow
-        self.shell.hundred.styleChanged.emit()
+        model = self.item("hundred_style").property("model")
+        self.assertEqual([c["key"] for c in (model.toVariant() if hasattr(model, "toVariant") else model)], ["gold-case", "gold-border", "ribbon", "none"])
+        note = self.item("hundred_console_note")
+        self.assertFalse(note.property("visible"))
+        self.shell.hundred.style = "gold-case"
         self.app.processEvents()
-        self.assertEqual(self.item("hundred_style").property("current"), "ribbon")
+        self.assertTrue(note.property("visible"))
 
     def test_the_make_screen_shows_the_case_that_was_picked(self):
         self.give_a_case()
@@ -8635,15 +8720,24 @@ class ManualMake(PickerBase):
     def test_the_100_step_decides_the_marks(self):
         calls = self.spy()
         hundred = self.shell.hundred
-        self.give("ps4", 1)
+        self.give("ps4", 1)                                                   # the run gets the whole treatment: the engine keeps only the marks on a console case
         hundred._completed = {1}                                              # a games page was loaded
-        for style, marks, want in (("ribbon", "full", "ribbon"), ("gold-case", "full", "ribbon"), ("gold-border", "rosette", "rosette"), ("ribbon", "rosette", "rosette")):
+        for style, marks, want in (("ribbon", "full", "ribbon"), ("gold-case", "full", "gold-case"), ("gold-border", "rosette", "gold-border-rosette"), ("ribbon", "rosette", "rosette")):
             hundred._style, hundred._marks = style, marks
             self.run_make()
             self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (want, {1}), (style, marks))
         hundred._style = "none"
         self.run_make()
         self.assertEqual((calls[-1][1]["treatment"], calls[-1][1]["completed"]), (None, set()))      # "do not highlight": marks come off
+
+    def test_the_summary_says_plain_when_the_choice_makes_no_marks(self):
+        hundred = self.shell.hundred
+        self.give("ps4", 1)
+        hundred._completed = {1}
+        said = lambda: {c["key"]: c["value"] for c in self.shell.make.choices}["hundred"]
+        for style, marks, want in (("gold-case", "full", "Highlighted"), ("ribbon", "none", "Left plain"), ("none", "full", "Left plain"), ("gold-border", "none", "Highlighted")):
+            hundred._style, hundred._marks = style, marks
+            self.assertEqual(said(), want, (style, marks))
 
     def test_no_games_page_leaves_the_marks_of_the_covers_alone(self):
         calls = self.spy()
@@ -8710,9 +8804,20 @@ class ManualMake(PickerBase):
         self.assertIn("2 of them are in a console case.", text)
         self.assertNotIn("console", result_text(dict(self.RESULT, platforms=0), [])[0])
 
-    def test_the_100_step_offers_two_choices_in_this_flow(self):
-        self.assertEqual([c["key"] for c in self.shell.hundred.manualStyles], ["ribbon", "none"])
+    def test_the_100_step_offers_the_same_choices_in_both_paths(self):
+        self.assertFalse(hasattr(self.shell.hundred, "manualStyles"))
         self.assertEqual([c["key"] for c in self.shell.hundred.styles], ["gold-case", "gold-border", "ribbon", "none"])
+
+    def test_the_console_note_shows_in_this_flow_with_a_gold_case_only(self):
+        h = self.shell.hundred
+        self.assertFalse(h.consoleNote)
+        h.style = "gold-border"
+        self.assertTrue(h.consoleNote)
+        h.style = "ribbon"
+        self.assertFalse(h.consoleNote)
+        h.style = "gold-case"
+        self.shell.startPath("natural")
+        self.assertFalse(h.consoleNote)
 
 
 @need_qt
@@ -9398,14 +9503,6 @@ class NoMarks(QtCase, FakeStore):
         title, text = reasons.replace_reason(self.covers, (0, 100, 100), {1}, "gold-case-plain")
         self.assertEqual(title, "Change the look of your 100% games?")
         self.assertIn("Gold case, no marks", text)
-
-    @need_qt
-    def test_console_and_own_case_runs_have_no_treatment_for_no_marks(self):
-        from qtui.make import _marks_only
-        self.assertIsNone(_marks_only("gold-case-plain"))
-        self.assertIsNone(_marks_only("gold-border-plain"))
-        self.assertEqual(_marks_only("gold-border-rosette"), "rosette")
-        self.assertEqual(_marks_only("gold-case"), "ribbon")
 
     def test_a_theme_over_plain_gold_covers_says_they_get_the_rosette(self):
         from qtui import reasons

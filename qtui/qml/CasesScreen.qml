@@ -15,6 +15,17 @@ ScreenFrame {
     title: qsTr("Pick a case")
     subtitle: qsTr("Pick the case for the games you ticked. You can do this again for other games, or go on.")
 
+    property string switchKey: ""                        // the card clicked while the question is open
+
+    function choose(key) {                                // games already have a case and none is ticked: moving them to another case asks first
+        if (cases.switchNeeded(key)) {
+            switchKey = key
+            switchDialog.ask(qsTr("Change the case?"), [{"text": cases.switchSentence(key), "kind": "main"}], qsTr("Change the case"))
+        } else {
+            cases.pick(key)
+        }
+    }
+
     PreviewLayout {
         previewName: "case_preview"
         source: screen.cases.previewSource
@@ -41,7 +52,7 @@ ScreenFrame {
                         Accessible.name: modelData.label
                         Accessible.checkable: true
                         Accessible.checked: chosen
-                        Accessible.onPressAction: screen.cases.pick(modelData.key)
+                        Accessible.onPressAction: screen.choose(modelData.key)
                         Rectangle {
                             anchors.fill: parent
                             radius: Theme.radiusField
@@ -86,11 +97,11 @@ ScreenFrame {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: { cell.forceActiveFocus(); screen.cases.pick(modelData.key) }
+                            onClicked: { cell.forceActiveFocus(); screen.choose(modelData.key) }
                         }
                         Keys.onPressed: (event) => {
                             if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                if (!event.isAutoRepeat) screen.cases.pick(modelData.key)
+                                if (!event.isAutoRepeat) screen.choose(modelData.key)
                                 event.accepted = true
                             }
                         }
@@ -237,6 +248,12 @@ ScreenFrame {
                 onToggled: (value) => shell.look.useCustomArt = value
             }
         }
+    }
+    ConfirmDialog {                                       // moving the games to another case asks first; the safe button (Cancel) has the focus
+        id: switchDialog
+        objectName: "case_switch_dialog"
+        prefix: "case_switch_dlg"
+        onConfirmed: screen.cases.switchTo(screen.switchKey)
     }
     ConfirmDialog {                                       // deleting a group asks first; the safe button (Cancel) has the focus
         id: deleteDialog
