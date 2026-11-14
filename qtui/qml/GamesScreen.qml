@@ -9,7 +9,7 @@ ScreenFrame {
     id: screen
     readonly property var picker: shell.picker
     title: qsTr("Pick your games")
-    subtitle: qsTr("Tick the games that get a case. Games you do not tick are left alone.")
+    subtitle: qsTr("Select the games that get a case. Games you do not select are left alone.")
     Component.onCompleted: picker.ensureLoaded()
 
     property string pendingCollection: ""               // the collection the question is about
@@ -18,10 +18,10 @@ ScreenFrame {
         if (plan.games === 0) return
         if (!plan.ask) { picker.applyCollection(id, "add"); return }
         pendingCollection = id
-        collectionDialog.ask(qsTr("You already ticked %n game|You already ticked %n games", "", plan.ticked), [
+        collectionDialog.ask(qsTr("You already selected %n game|You already selected %n games", "", plan.ticked), [
             {text: qsTr("\u201c%1\u201d has %n game on your list.|\u201c%1\u201d has %n games on your list.", "", plan.games).arg(plan.name), kind: "main"},
-            {text: qsTr("Add keeps your ticks and ticks the collection too: %n game in total.|Add keeps your ticks and ticks the collection too: %n games in total.", "", plan.afterAdd), kind: "muted"},
-            {text: qsTr("Replace unticks your games first: %n game in total.|Replace unticks your games first: %n games in total.", "", plan.games), kind: "muted"}],
+            {text: qsTr("\u201c%1\u201d keeps the games you selected and selects the collection\u2019s games too: %n game in total.|\u201c%1\u201d keeps the games you selected and selects the collection\u2019s games too: %n games in total.", "", plan.afterAdd).arg(qsTr("Add them")), kind: "muted"},
+            {text: qsTr("\u201c%1\u201d clears your selection and selects only the collection\u2019s games: %n game in total.|\u201c%1\u201d clears your selection and selects only the collection\u2019s games: %n games in total.", "", plan.games).arg(qsTr("Replace them")), kind: "muted"}],
             qsTr("Add them"), qsTr("Replace them"))
     }
 

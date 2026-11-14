@@ -107,7 +107,7 @@ AUTO_ART_HELP = (
     "Some games, mostly older or small ones, have no real portrait on Steam. "
     "Steam builds a stand-in from the wide header image: the title banner sits in the "
     "middle of a blurred, stretched copy of itself, with lots of empty space. "
-    "Tick this to skip those games and keep Steam's default art for them."
+    "Use this to skip those games and keep Steam's default art for them."
 )
 FAMILY_HELP = (
     "Games shared with you through Steam Family Sharing are in your library, but they are not on your own game list and are often not installed. "

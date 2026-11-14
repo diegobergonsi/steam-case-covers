@@ -58,7 +58,7 @@ class Updates(QObject):
             if r["newer"]:
                 head = tr("A newer version is available: %s (you have %s).") % (r["latest"], r["current"])
             else:
-                head = tr("The latest version is %s. This copy has no version number (it was not installed from a release), so I cannot compare.") % r["latest"]
+                head = tr("The latest version is %s. This copy has no version number (it was not installed from a release), so the app cannot compare.") % r["latest"]
             self.message.emit(tr("Update available"), [
                 {"text": head, "kind": "main"},
                 {"text": tr("Nothing is downloaded or installed unless you choose to do it yourself on that page."), "kind": "muted"}],

@@ -72,7 +72,7 @@ ModalFrame {
             Text {
                 objectName: "manage_count"
                 width: parent.width
-                text: qsTr("%n game ticked|%n games ticked", "", dialog.manage.tickedCount)
+                text: qsTr("%n game selected|%n games selected", "", dialog.manage.tickedCount)
                 color: Theme.muted
                 font.pixelSize: Theme.bodySize
             }
@@ -152,7 +152,7 @@ ModalFrame {
                     objectName: "manage_delete"
                     text: qsTr("Delete group")
                     onClicked: deleteDialog.ask(qsTr("Delete “%1”?").arg(dialog.manage.title),
-                                                [{text: qsTr("The group is removed. Covers already on Steam stay there. Your games are not touched."), kind: "main"}],
+                                                [{text: qsTr("The group is removed. Covers already on Steam stay as they are. Your games and your Steam library are not changed."), kind: "main"}],
                                                 qsTr("Delete group"))
                 }
                 QuietButton {

@@ -408,8 +408,8 @@ class Apply(QObject):
         if self._asking or not self.canRestore:
             return
         self._ask("restore", tr("Restore previous artwork"),
-                  [{"text": tr("Your artwork from before the last Apply will be put back on the Steam account \u201c%s\u201d.") % self._who_is(), "kind": "main"},
-                   {"text": tr("The covers added by that Apply are removed."), "kind": "muted"}],
+                  [{"text": tr("The artwork you had before you last added covers to Steam will be put back on the Steam account \u201c%s\u201d.") % self._who_is(), "kind": "main"},
+                   {"text": tr("The covers you added then are removed."), "kind": "muted"}],
                   tr("Close Steam and restore") if self._steam_open else tr("Restore"))
 
     @Slot()
@@ -476,16 +476,16 @@ class Apply(QObject):
             paragraphs.append({"text": trn("%n cover made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for it.|"
                                            "%n covers made by this app will be removed from the Steam account \u201c%s\u201d. Steam goes back to its own default art for them.", len(names)) % who, "kind": "main"})
         if stay:
-            paragraphs.append({"text": tr("Your groups are left as they are unless you tick them. A ticked group is reset and deleted."), "kind": "muted"})
+            paragraphs.append({"text": tr("Your groups are left as they are unless you select them. A selected group is reset and deleted."), "kind": "muted"})
         if other:
-            paragraphs.append({"text": trn("Found %n more custom cover that this app did not make (from SteamGridDB or set by hand in Steam).|"
-                                           "Found %n more custom covers that this app did not make (from SteamGridDB or set by hand in Steam).", other), "kind": "main"})
+            paragraphs.append({"text": trn("Found %n custom cover that this app did not make (from SteamGridDB or set by hand in Steam). Removing all covers removes it too.|"
+                                           "Found %n custom covers that this app did not make (from SteamGridDB or set by hand in Steam). Removing all covers removes them too.", other), "kind": "main"})
         paragraphs.append({"text": tr("A backup is kept, so \u201cRestore previous artwork\u201d brings everything back."), "kind": "muted"})
         closing = self._steam_open
         if other and names:
-            go, alt = (tr("Close Steam and remove only ours"), tr("Close Steam and remove all")) if closing else (tr("Remove only ours"), tr("Remove all"))
+            go, alt = (tr("Close Steam and remove only this app's covers"), tr("Close Steam and remove all covers")) if closing else (tr("Remove only this app's covers"), tr("Remove all covers"))
         elif other:
-            go, alt = tr("Close Steam and remove all") if closing else tr("Remove all"), ""
+            go, alt = tr("Close Steam and remove all covers") if closing else tr("Remove all covers"), ""
         else:
             go, alt = tr("Close Steam and reset") if closing else tr("Reset"), ""
         self._ask("reset", tr("Reset to Steam's default art"), paragraphs, go, alt)
@@ -498,7 +498,7 @@ class Apply(QObject):
             self._busy = False
             self._ticks.clear()
             self._set_status("", "wait")
-            self._shell.toast.emit(tr("Nothing was reset: no group was ticked."))
+            self._shell.toast.emit(tr("Nothing was reset: no group was selected."))
             self.canApplyChanged.emit()
             self.undoChanged.emit()
             return None

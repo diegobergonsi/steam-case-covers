@@ -300,8 +300,8 @@ class Cases(QObject):
     def switchSentence(self, key):
         """What the question before a switch says: how many games move, from which case to which, and what starts again."""
         used = self.summary[0]
-        return trn("This moves your %n game from %s to %s and puts your 100%% games choices back to how they started.|"
-                   "This moves your %n games from %s to %s and puts your 100%% games choices back to how they started.", used["count"]) % (used["label"], tr(LABELS[key]))
+        return trn("This moves your %n game from %s to %s and resets your choices for 100%% games.|"
+                   "This moves your %n games from %s to %s and resets your choices for 100%% games.", used["count"]) % (used["label"], tr(LABELS[key]))
 
     @Slot(str)
     def switchTo(self, key):

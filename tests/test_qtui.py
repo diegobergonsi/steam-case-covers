@@ -1824,7 +1824,7 @@ class Components(QtCase):
         self.assertFalse(self.item("screen_fade").property("visible"))
 
     THREE = ('property string last: ""\nConfirmDialog { id: dlg; objectName: "dlg"; onConfirmed: win.last = "yes"; onDeclined: win.last = "no"; onAlternated: win.last = "alt" }\n'
-             'function openIt() { dlg.ask("Reset", [{"text": "a", "kind": "main"}], "Remove only ours", "Remove all") }\n'
+             'function openIt() { dlg.ask("Reset", [{"text": "a", "kind": "main"}], "Remove mine", "Remove all covers") }\n'
              'function openPlain() { dlg.ask("Plain", [{"text": "a", "kind": "main"}], "Yes") }\n'
              'function openInfo() { dlg.ask("Info", [{"text": "b", "kind": "main"}], "OK", "", true) }')
 
@@ -1855,7 +1855,7 @@ class Components(QtCase):
         self.open_fn("openIt")
         places = [(round(self.item(n).y()), self.item(n).x()) for n in ("dlg_cancel", "dlg_alternate", "dlg_confirm")]
         self.assertEqual(places, sorted(places))                         # in reading order, on one row or wrapped onto several
-        self.assertEqual(self.item("dlg_alternate").property("text"), "Remove all")
+        self.assertEqual(self.item("dlg_alternate").property("text"), "Remove all covers")
         self.assertFalse(self.item("dlg_alternate").property("filled"))
         self.assertTrue(self.item("dlg_cancel").property("activeFocus"))
         from PySide6.QtCore import QPointF
@@ -4252,7 +4252,7 @@ class UpdatesState(QtCase):
 
     def test_an_unknown_current_version_cannot_be_compared(self):
         paragraphs = self.check({"newer": None, "current": None, "latest": "1.3.0", "url": "https://github.com/x"})[1]
-        self.assertEqual(paragraphs[0]["text"], "The latest version is 1.3.0. This copy has no version number (it was not installed from a release), so I cannot compare.")
+        self.assertEqual(paragraphs[0]["text"], "The latest version is 1.3.0. This copy has no version number (it was not installed from a release), so the app cannot compare.")
 
     def test_a_failed_check_says_why(self):
         from engine import steamcase as sc
@@ -4467,7 +4467,7 @@ class MakeScreen(WindowCase, FakeStore):
         self.assertTrue(self.item("make_dialog").isVisible())
         self.assertEqual(self.text("dlg_title"), "Change the colour of your covers?")
         self.assertEqual(self.text("dlg_p0"), "This replaces the covers you already made in another colour.")
-        self.assertEqual(self.text("dlg_p1"), "Steam keeps showing your current art until you add the new covers in step 5.")
+        self.assertEqual(self.text("dlg_p1"), "Steam keeps showing your current art until you add the new covers to Steam.")
         self.assertEqual(self.text("dlg_confirm"), "Replace them")
         self.click("dlg_cancel")
         self.settle()
@@ -5477,7 +5477,7 @@ class HomeScreen(AddWindow):
         self.click("home_reset")
         self.wait_for(lambda: self.ap.asking)
         QTest.qWait(60)
-        self.assertEqual([self.text(n) for n in ("apply_dlg_cancel", "apply_dlg_alternate", "apply_dlg_confirm")], ["Cancel", "Remove all", "Remove only ours"])
+        self.assertEqual([self.text(n) for n in ("apply_dlg_cancel", "apply_dlg_alternate", "apply_dlg_confirm")], ["Cancel", "Remove all covers", "Remove only this app's covers"])
         self.click("apply_dlg_alternate")
         self.wait_for(lambda: not self.ap.busy)
         self.assertEqual(self.log[0], ("reset", None, ["a"], True))
@@ -5542,7 +5542,7 @@ class HomeScreen(AddWindow):
         self.ask_and_go = None
         self.click("home_restore")
         self.settle()
-        self.assertEqual(self.text("apply_dlg_p0"), "Your artwork from before the last Apply will be put back on the Steam account \u201c" + "Bob" + "\u201d.")
+        self.assertEqual(self.text("apply_dlg_p0"), "The artwork you had before you last added covers to Steam will be put back on the Steam account \u201c" + "Bob" + "\u201d.")
 
     def test_one_account_is_not_offered_as_a_choice_on_home(self):
         self.open_home()
@@ -6870,8 +6870,8 @@ class ApplyState(QtCase, FakeStore):
         self.wait_for(lambda: self.ap.steamOpen)
         title, paragraphs, go, alt = self.ask(self.ap.restore)
         self.assertEqual(title, "Restore previous artwork")
-        self.assertEqual(paragraphs[:2], [{"text": "Your artwork from before the last Apply will be put back on the Steam account \u201cAlice\u201d.", "kind": "main"},
-                                          {"text": "The covers added by that Apply are removed.", "kind": "muted"}])
+        self.assertEqual(paragraphs[:2], [{"text": "The artwork you had before you last added covers to Steam will be put back on the Steam account \u201cAlice\u201d.", "kind": "main"},
+                                          {"text": "The covers you added then are removed.", "kind": "muted"}])
         self.assertEqual((paragraphs[2]["kind"], go, alt), ("warn", "Close Steam and restore", ""))
         self.assertEqual(self.log, [])
         said = []
@@ -6941,8 +6941,8 @@ class ApplyState(QtCase, FakeStore):
         self.undo_ready()
         self.ours, self.extra, self.other = ["a"], ["x"], ["y", "z"]
         title, paragraphs, go, alt = self.ask(self.ap.reset)
-        self.assertEqual((go, alt), ("Remove only ours", "Remove all"))
-        self.assertEqual(paragraphs[1]["text"], "Found 3 more custom covers that this app did not make (from SteamGridDB or set by hand in Steam).")
+        self.assertEqual((go, alt), ("Remove only this app's covers", "Remove all covers"))
+        self.assertEqual(paragraphs[1]["text"], "Found 3 custom covers that this app did not make (from SteamGridDB or set by hand in Steam). Removing all covers removes them too.")
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy)
         self.assertEqual(self.log[0], ("reset", None, ["a"], False))
@@ -6957,7 +6957,7 @@ class ApplyState(QtCase, FakeStore):
         self.undo_ready()
         self.other = ["y"]
         title, paragraphs, go, alt = self.ask(self.ap.reset)
-        self.assertEqual((go, alt), ("Remove all", ""))
+        self.assertEqual((go, alt), ("Remove all covers", ""))
         self.ap.confirm()
         self.wait_for(lambda: not self.ap.busy)
         self.assertEqual(self.log[0], ("reset", None, [], True))
@@ -6969,7 +6969,7 @@ class ApplyState(QtCase, FakeStore):
         self.ap.watching = True
         self.wait_for(lambda: self.ap.steamOpen)
         title, paragraphs, go, alt = self.ask(self.ap.reset)
-        self.assertEqual((go, alt, paragraphs[-1]["kind"]), ("Close Steam and remove only ours", "Close Steam and remove all", "warn"))
+        self.assertEqual((go, alt, paragraphs[-1]["kind"]), ("Close Steam and remove only this app's covers", "Close Steam and remove all covers", "warn"))
 
     def test_reset_with_nothing_to_remove_says_so(self):
         self.undo_ready()
@@ -8336,7 +8336,7 @@ class ManualWindow(WindowClicks, PickerBase):
         self.click("case_delete")
         self.wait_for(lambda: self.item("case_delete_dlg_card").property("visible"))
         self.assertEqual(self.text("case_delete_dlg_title"), "Delete the group \u201cRed Steam Cases\u201d?")
-        self.assertEqual(self.text("case_delete_dlg_p0"), "Its games lose this case here. Covers already on Steam stay until you Reset or make covers again.")
+        self.assertEqual(self.text("case_delete_dlg_p0"), "The group is removed. Covers already on Steam stay as they are until you reset them or add new covers.")
         self.click("case_delete_dlg_cancel")
         self.assertEqual([g["id"] for g in self.shell.cases.groupList], [gid])
         self.assertEqual(self.shell.cases.selectedGroup, gid)
@@ -9210,7 +9210,7 @@ class GroupReset(PickerBase):
         self.ap.confirm()                                                                # nothing ticked: nothing to do, and the person is told
         self.wait_for(lambda: not self.ap.busy, 10)
         self.assertEqual(self.on_steam(), ["1p.png", "3p.png"])
-        self.assertTrue(said and "ticked" in said[0], said)
+        self.assertTrue(said and "selected" in said[0], said)
         self.reset()
         self.tick(self.red)
         self.ap.confirm()
@@ -9518,7 +9518,7 @@ class StartOver(WindowCase):
     """The Start over button of Home: the window goes back to what a fresh start shows, and nothing that was saved is touched."""
     installed_only = False
     autostart = False
-    TOAST = "Everything was reset to the starting point. Your saved cases, covers and groups were not changed."
+    TOAST = "Everything was reset to the starting point. Your groups and the covers you already made were not changed."
 
     def game_list(self):
         path = os.path.join(self.tmp, "userdata.json")
@@ -9660,7 +9660,7 @@ class StartOver(WindowCase):
         self.shell.go(0)
         self.assertEqual(self.item("home_section_start_over").property("heading"), "Start Over")
         self.assertEqual(self.item("home_start_over").property("text"), "Start over")
-        self.assertEqual(self.item("home_start_over_line").property("text"), "Restart the app back to its initial settings. Your saved cases, covers and groups are not changed.")
+        self.assertEqual(self.item("home_start_over_line").property("text"), "Put the app back to how it was when you opened it. Your groups and the covers you already made are not changed.")
         self.assertTrue(self.item("home_start_over").property("enabled"))
         self.shell.startPath("manual")
         self.shell.go(0)
@@ -9737,7 +9737,7 @@ class ManageGroups(PickerBase):
         self.assertEqual(cases.assignedCount, 1)
 
     # ----- the GroupManager behind the window -----
-    WARNING = "No games ticked. Saving would delete this group."
+    WARNING = "No games selected. Saving would delete this group."
     TOAST = "Saved. Your covers change the next time you make covers, with “Same case” or “Pick games”."
 
     def rows(self):

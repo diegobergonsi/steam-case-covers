@@ -12,7 +12,7 @@ from engine import steamcase as sc
 from qtui.i18n import N_, tr
 from qtui.picker import RowsModel
 
-NO_GAMES_TICKED = N_("No games ticked. Saving would delete this group.")
+NO_GAMES_TICKED = N_("No games selected. Saving would delete this group.")
 LOADING_NAME = N_("Loading name…")
 SAVED = N_("Saved. Your covers change the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d.")
 DELETED = N_("Deleted. Your covers change the next time you make covers, with \u201cSame case\u201d or \u201cPick games\u201d.")

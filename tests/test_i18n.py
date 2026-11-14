@@ -301,5 +301,5 @@ class PortugueseFile(unittest.TestCase):
 
     def test_the_gender_of_the_words_of_the_reset_message_agrees(self):
         from qtui.i18n_pt_br import PT_BR
-        self.assertIn("os grupos não foram alterados", PT_BR["Everything was reset to the starting point. Your saved cases, covers and groups were not changed."])
+        self.assertIn("grupos e as capas que você já criou não foram alterados", PT_BR["Everything was reset to the starting point. Your groups and the covers you already made were not changed."])
         self.assertEqual(PT_BR["Skipped"], "Ignorados")
