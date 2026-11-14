@@ -96,9 +96,10 @@ SOFTWARE_TYPE = 6                   # Lossless Scaling, Wallpaper Engine and Ble
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
-# Shown next to the "skip blurry auto-art" option (GUI tooltip, CLI --help).
+# Shown next to the "include software" option (GUI tooltip, CLI --help).
 SOFTWARE_HELP = ("Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. "
                  "Steam's own tools, demos and DLC still get none.")
+# Shown next to the "skip blurry auto-art" option (GUI tooltip, CLI --help).
 AUTO_ART_HELP = (
     "Some games, mostly older or small ones, have no real portrait on Steam. "
     "Steam builds a stand-in from the wide header image: the title banner sits in the "
@@ -707,10 +708,10 @@ def portrait_candidates(appid, item):
     return urls, auto
 
 
-def is_coverable(item, software=False):
-    """True if a store item gets a cover: a game or playtest, or software when `software` is on. DLC, demos and the rest never do."""
+def is_coverable(item, name, software=False):
+    """True if a store item can get a cover by what it is: a game or playtest, or software when `software` is on, and not one of Steam's tools by name. DLC, demos and the rest never do. A missing `name` is the caller's business."""
     kind = item.get("type", 0)
-    return kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE)
+    return not TOOL_NAMES.match(name or "") and (kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE))
 
 
 def list_games(games, log=None, errors=None, software=False):
@@ -720,7 +721,7 @@ def list_games(games, log=None, errors=None, software=False):
     for appid in sorted(games):
         it = info.get(appid, {})
         name = games[appid] or it.get("name")
-        if not is_coverable(it, software) or not name or TOOL_NAMES.match(name):
+        if not name or not is_coverable(it, name, software):
             continue
         out.append((appid, name))
     return out
@@ -1547,7 +1548,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     for appid in ids:
         it = info.get(appid) or {}
         known = games[appid] or it.get("name")
-        if not is_coverable(it, software) or TOOL_NAMES.match(known or ""):
+        if not is_coverable(it, known, software):
             res["skipped"] += 1
             res["not_games"] += 1               # DLC, soundtracks, tools, demos
         elif not known:
@@ -1568,10 +1569,6 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             break
         it = info.get(appid) or {}
         name = games[appid] or it.get("name") or str(appid)
-        if not is_coverable(it, software) or TOOL_NAMES.match(name):
-            res["skipped"] += 1
-            report(n, appid, name, "skipped")
-            continue
         dest = os.path.join(out, "%s_%d.png" % (slug(name), appid))
         want_p = platforms.get(appid) if platforms is not None else None
         want_g = groups.get(appid) if platforms is not None else None
@@ -2361,7 +2358,7 @@ def _collect(args):
 def cmd_list(args):
     steam, games, family = _collect(args)
     print("Steam folder:", steam)
-    rows = list_games(games, print)
+    rows = list_games(games, print, software=args.include_software)
     for appid, name in rows:
         print("%d %s%s" % (appid, name, "  (family)" if appid in family else ""))
     print("\n%d games%s" % (len(rows), "" if args.library else "  (installed only; add --library userdata.json for your whole library)"))
@@ -2571,7 +2568,7 @@ def main():
             p.add_argument("--yes", action="store_true", help="don't ask even if Steam is running")
             p.add_argument("--close-steam", action="store_true", help="close Steam automatically before copying")
 
-    p = sub.add_parser("list", help="show detected games"); common(p, make=True); p.set_defaults(fn=cmd_list)
+    p = sub.add_parser("list", help="show detected games"); common(p, make=True); p.add_argument("--include-software", action="store_true", help=SOFTWARE_HELP); p.set_defaults(fn=cmd_list)
     for name, fn in (("make", cmd_make), ("run", cmd_run)):
         p = sub.add_parser(name, help=name + " covers" if name == "make" else "make + apply")
         common(p, make=True, apply_=(name == "run"))

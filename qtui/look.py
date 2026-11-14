@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
-"""Step 2 of the window: the look of the covers. The case colour, the theme and the two art switches, with a preview that follows them."""
+"""Step 2 of the window: the look of the covers. The case colour, the theme and the three art switches, with a preview that follows them."""
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from engine import steamcase as sc
@@ -11,6 +11,19 @@ from qtui.i18n import N_, tr
 COLOUR_NOTE = N_("Only the original colour is checked for readable text.")
 THEMES = ("classic",) + tuple(sc.THEMES)
 PREVIEW_DELAY_MS = 60                       # one preview render per burst of slider changes: the newest tone wins
+
+
+def _art_switch(key, changed):
+    """A true/false Property that reads one of the shell's saved switches, saves it when set, and tells the window."""
+    def get(self):
+        return self._shell.switchValue(key)
+
+    def set_(self, value):
+        if bool(value) != get(self):
+            self._shell.setSwitch(key, bool(value))
+            self.artChanged.emit()
+
+    return Property(bool, get, set_, notify=changed)
 
 
 class Look(QObject):
@@ -54,7 +67,7 @@ class Look(QObject):
         return tone, theme
 
     def start_over(self):
-        """The look of a window just opened. The shell has already put the two art switches back; the case file is kept."""
+        """The look of a window just opened. The shell has already put the art switches back; the case file is kept."""
         self._own = False
         self._tone, self._theme = self._starting_look()
         for signal in (self.hueChanged, self.satChanged, self.valChanged, self.toneChanged, self.themeChanged, self.ownCaseChanged, self.artChanged):
@@ -250,32 +263,6 @@ class Look(QObject):
         self._schedule()                        # a new file is a new picture even when the switch was already on
 
     # ----- the art switches (saved through the shell) -----
-    def _get_skip(self):
-        return self._shell.switchValue("skip_auto_art")
-
-    def _set_skip(self, value):
-        if bool(value) != self._get_skip():
-            self._shell.setSwitch("skip_auto_art", bool(value))
-            self.artChanged.emit()
-
-    skipAutoArt = Property(bool, _get_skip, _set_skip, notify=artChanged)
-
-    def _get_software(self):
-        return self._shell.switchValue("include_software")
-
-    def _set_software(self, value):
-        if bool(value) != self._get_software():
-            self._shell.setSwitch("include_software", bool(value))
-            self.artChanged.emit()
-
-    includeSoftware = Property(bool, _get_software, _set_software, notify=artChanged)
-
-    def _get_custom(self):
-        return self._shell.switchValue("use_custom_art")
-
-    def _set_custom(self, value):
-        if bool(value) != self._get_custom():
-            self._shell.setSwitch("use_custom_art", bool(value))
-            self.artChanged.emit()
-
-    useCustomArt = Property(bool, _get_custom, _set_custom, notify=artChanged)
+    skipAutoArt = _art_switch("skip_auto_art", artChanged)
+    includeSoftware = _art_switch("include_software", artChanged)
+    useCustomArt = _art_switch("use_custom_art", artChanged)

@@ -556,7 +556,7 @@ class Software(Base):
         sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: full[i] for i in ids if i in full}
         sc.http_get = lambda url, tries=3: buf.getvalue()
         try:
-            games = {i: None for i in items} or {1: None}
+            games = {i: None for i in items}
             return sc.list_games(games, **kw), sc.make_covers(games, os.path.join(self.tmp, "cv"), **kw)
         finally:
             sc.store_items, sc.http_get = real_store, real_get
@@ -581,15 +581,10 @@ class Software(Base):
         self.assertEqual(listed, [])
         self.assertEqual((r["ok"], r["not_games"]), (0, 3))
 
-    def test_unlisted_item_stays_unlisted_with_the_switch(self):
-        real_store = sc.store_items
-        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {1: {"type": 0, "name": "Game"}}      # id 2: Steam no longer lists it
-        try:
-            r = sc.make_covers({1: None, 2: None}, os.path.join(self.tmp, "cv"), software=True)
-        finally:
-            sc.store_items = real_store
-        self.assertEqual(r["unlisted"], 1)
-        self.assertEqual(len(r["files"]), 0)
+    def test_software_without_a_name_stays_unlisted_with_the_switch(self):
+        listed, r = self.make({1: {"type": 0, "name": "Game"}, 2: {"type": 6}}, software=True)
+        self.assertEqual(listed, [(1, "Game")])
+        self.assertEqual((r["ok"], r["unlisted"], r["not_games"]), (1, 1, 0))
 
 
 class Concurrency(Base):
@@ -1228,7 +1223,8 @@ class SoftwareCli(StoreMocks):
         """The keywords the command line gave make_covers."""
         seen = {}
         real = sc.make_covers
-        sc.make_covers = lambda *a, **kw: seen.update(kw) or {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0}
+        empty = real({}, os.path.join(self.tmp, "none"))
+        sc.make_covers = lambda *a, **kw: seen.update(kw) or empty
         try:
             self.run_cli("make", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", os.path.join(self.tmp, "out"), *extra)
         finally:
@@ -1237,6 +1233,17 @@ class SoftwareCli(StoreMocks):
 
     def test_flag_gives_make_covers_software(self):
         self.assertIs(self.make_kwargs("--include-software")["software"], True)
+
+    def test_list_shows_software_with_the_flag(self):
+        seen = []
+        real = sc.list_games
+        sc.list_games = lambda games, log=None, errors=None, software=False: seen.append(software) or []
+        try:
+            for extra in ((), ("--include-software",)):
+                self.run_cli("list", "--steam-dir", self.steam, "--library", self.fake_library(True), *extra)
+        finally:
+            sc.list_games = real
+        self.assertEqual(seen, [False, True])
 
     def test_without_the_flag_software_is_off(self):
         self.assertIs(self.make_kwargs()["software"], False)

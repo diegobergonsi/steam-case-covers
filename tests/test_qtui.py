@@ -1364,19 +1364,8 @@ class LookScreen(WindowCase):
         self.click("look_theme_chip_classic")
         self.assertEqual(self.look.theme, "classic")
 
-    def test_the_software_switch_changes_shows_its_help_and_is_saved(self):
-        self.reveal("look_include_software")
-        it = self.item("look_include_software")
-        from PySide6.QtCore import QPointF, Qt
-        from PySide6.QtTest import QTest
-        QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, it.mapToScene(QPointF(60, it.height() / 2)).toPoint())
-        self.app.processEvents()
-        self.assertTrue(self.look.includeSoftware)
-        self.assertTrue(self.shell.switchValue("include_software"))
-        self.assertEqual(self.item("look_include_software_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).SOFTWARE_HELP)
-
     def test_the_art_switches_change_and_are_remembered(self):
-        for name in ("look_custom_art", "look_skip_blurry"):
+        for name in ("look_custom_art", "look_skip_blurry", "look_include_software"):
             self.reveal(name)
             it = self.item(name)
             from PySide6.QtCore import QPoint, QPointF, Qt
@@ -1384,10 +1373,11 @@ class LookScreen(WindowCase):
             p = it.mapToScene(QPointF(60, it.height() / 2)).toPoint()        # on the label: the empty space to its right is not part of the switch
             QTest.mouseClick(self.root, Qt.LeftButton, Qt.NoModifier, p)
             self.app.processEvents()
-        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt)
+        self.assertTrue(self.look.useCustomArt and self.look.skipAutoArt and self.look.includeSoftware)
         self.assertEqual(self.item("look_custom_art_tip").property("text").startswith("For games where you set your own art"), True)
         self.assertEqual(self.item("look_skip_blurry_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).AUTO_ART_HELP)
-        self.assertTrue(self.shell.switchValue("use_custom_art") and self.shell.switchValue("skip_auto_art"))        # saved, not only shown
+        self.assertEqual(self.item("look_include_software_tip").property("text"), __import__("engine.steamcase", fromlist=["x"]).SOFTWARE_HELP)
+        self.assertTrue(all(self.shell.switchValue(k) for k in ("use_custom_art", "skip_auto_art", "include_software")))        # saved, not only shown
 
     def test_next_is_the_only_filled_button_and_opens_the_next_step(self):
         self.assertTrue(self.item("look_next").property("filled"))
@@ -7133,6 +7123,14 @@ class PickerBase(WindowCase, FakeStore):
 class PickerTests(PickerBase):
     """The Games step of the manual flow: the library's games by name, a search, tick boxes."""
 
+    def test_software_is_not_listed_even_with_the_software_switch_on(self):
+        base = self.sc.store_items
+        self.sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {**base(ids), 4: {"type": 6, "name": "Lossless Scaling"}}
+        self.library[4] = None
+        self.shell.setSwitch("include_software", True)
+        self.load()
+        self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
+
     def test_load_lists_games_sorted_by_name(self):
         self.load()
         self.assertEqual(self.names(), ["forza Horizon 5", "God of War", "Hades"])
@@ -7598,17 +7596,6 @@ class CasesTests(PickerBase):
         self.assertEqual(self.shell.make.statusKind, "error")
         self.assertIn("case", self.shell.make.status)
         self.assertEqual(os.listdir(self.covers), ["groups.json"] if os.path.exists(os.path.join(self.covers, "groups.json")) else [])
-
-    def test_the_pick_games_flow_with_the_software_switch_on_still_makes_the_picked_game(self):
-        self.shell.startPath("manual")
-        self.shell.setSwitch("include_software", True)
-        self.picker.toggle(1)
-        self.cases.pick("ps5")
-        self.cases.assign()
-        self.shell.setFact("ready", True)
-        self.shell.make.start()
-        self.wait_for(lambda: not self.shell.make.running)
-        self.assertEqual(self.shell.make.statusKind, "ok")
 
     def test_an_unknown_case_is_ignored(self):
         self.cases.pick("ps9")
@@ -8528,6 +8515,14 @@ class ManualMake(PickerBase):
         self.addCleanup(patcher.stop)
         return calls
 
+    def test_the_engine_is_told_no_software_in_this_flow_even_with_the_switch_on(self):
+        calls = self.spy()
+        self.shell.setSwitch("include_software", True)
+        self.give("ps5", 1, 3)
+        self.run_make()
+        (games, kw), = calls
+        self.assertIs(kw["software"], False)
+
     def test_the_engine_gets_the_assignments_and_none_of_the_steps_that_are_not_in_this_flow(self):
         calls = self.spy()
         self.give("ps5", 1, 3)
@@ -9372,7 +9367,7 @@ class StartOver(WindowCase):
         self.assertTrue(os.path.isfile(path))
         self.assertEqual(st.load_library(self.shell.settingsPath), "")
 
-    def test_the_five_switches_go_back_to_their_defaults_and_stay_there(self):
+    def test_the_switches_go_back_to_their_defaults_and_stay_there(self):
         for key in st.SETTING_KEYS:
             self.shell.setSwitch(key, not st.DEFAULTS[key])
         self.shell.library.installedOnly = True
