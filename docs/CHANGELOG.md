@@ -4,7 +4,12 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+### ✨ New
+- **Include software** on the Look step (`--include-software` on the command line). Programs you own on Steam, such as Wallpaper Engine or Lossless Scaling, get a case like games do. It is off until you turn it on. Steam's own tools, demos and DLC still get none. In Pick games you cannot pick software by hand yet.
+- **Include non-Steam games** on the Look step (`--include-non-steam` on the command line). Games you added to Steam by hand get a case when they already have a portrait in your Steam art folder; the app does not look for art online. It is off until you turn it on. Reset gives these games their own art back, because Steam has no default art for them, and Restore undoes that. In Pick games you cannot pick them by hand yet.
+
 ### 🛠 Fixed
+- A game you joined as a playtest now gets a cover, with the same art as the game. Demos, DLC and tools are still skipped.
 - Metro Exodus "PC Enhanced Edition" now gets a cover. Steam lists it as an edition of its own, a kind of item the app used to skip. Editions with a real portrait get a cover; Steam's franchise ads, which only have a blurry stand-in picture, still do not.
 
 ### 🔧 Changed

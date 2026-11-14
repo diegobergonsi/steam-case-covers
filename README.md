@@ -358,7 +358,7 @@ Save your games page again (same name, same way), pick the new file with **Brows
 <details>
 <summary><b>Does it work for non-Steam games and shortcuts?</b></summary>
 
-Not yet. Only games in your Steam library.
+Yes, if you turn it on. On the **Look** step, switch on **Include non-Steam games** (on the command line, `--include-non-steam`). Games you added to Steam by hand then get a case when they already have a portrait in your Steam art folder. The app does not look for art online, so a game with no portrait there is left alone.
 
 </details>
 

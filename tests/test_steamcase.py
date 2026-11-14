@@ -3124,6 +3124,12 @@ class ReadmeLanguages(unittest.TestCase):
         for flag in ("flag_us.png", "flag_br.png"):
             self.assertTrue(os.path.isfile(os.path.join(sc.HERE, "assets", flag)))
 
+    def test_the_faq_on_non_steam_games_names_the_option_that_makes_them_work(self):
+        for name, question in (("README.md", "Does it work for non-Steam games and shortcuts?"), ("README.pt-BR.md", "Funciona para jogos fora da Steam e atalhos?")):
+            text = self.read(name)
+            answer = text[text.index(question):].split("</details>")[0]
+            self.assertIn("--include-non-steam", answer, name)
+
     def test_every_image_and_file_link_in_both_exists(self):
         for name in ("README.md", "README.pt-BR.md"):
             text = self.read(name)
@@ -3174,6 +3180,16 @@ class ReadmeLanguages(unittest.TestCase):
                         "Open covers folder", "Rosette and ribbon", "Rosette only", "Gold case", "Gold border", "Normal case", "No special case",
                         "Mark family games with a green corner", "Remove only this app's covers"):
             self.assertIn("**%s**" % PT_BR[english].rstrip("."), pt, english)
+
+
+class ChangelogHasTheNewOptions(unittest.TestCase):
+    """The notes of the next release name what was added: the two switches and the command line option of each."""
+    def test_unreleased_names_software_and_non_steam_games(self):
+        with open(os.path.join(sc.HERE, "docs", "CHANGELOG.md"), encoding="utf-8") as f:
+            text = f.read()
+        unreleased = text.split("\n## [", 2)[1]
+        for needle in ("--include-software", "--include-non-steam", "playtest"):
+            self.assertIn(needle, unreleased)
 
 
 class DiscordButton(unittest.TestCase):
