@@ -92,6 +92,7 @@ MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompre
 MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
 _PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
 GAME_TYPES = (0, None, 12)           # 0 = game, 12 = playtest (same art as its game, and it sits in the library); other types are DLC, tools, demos
+EDITION_TYPE = 14                  # an edition that is its own app (Metro Exodus Enhanced Edition); Steam gives this type to its franchise ads too, which only list a blurry stand-in portrait
 SOFTWARE_TYPE = 6                   # Lossless Scaling, Wallpaper Engine and Blender: type 6, with normal portrait art; made only when the user asks
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
@@ -701,20 +702,35 @@ def store_items(appids, log=None, cancelled=None, errors=None):
     return out
 
 
-def portrait_candidates(appid, item):
+def _listed_portraits(item):
+    """The portrait files Steam lists for a store item, the 2x one first."""
     a = (item or {}).get("assets") or {}
     fmt = a.get("asset_url_format")
-    listed = [a[k] for k in ("library_capsule_2x", "library_capsule") if fmt and a.get(k)]     # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
-    urls = [CDN + fmt.replace("${FILENAME}", f) for f in listed]
+    return [a[k] for k in ("library_capsule_2x", "library_capsule") if fmt and a.get(k)]     # both: Steam can list a 2x file it does not serve (ARK: Survival Evolved)
+
+
+def _is_auto_portrait(listed):
+    """True if the first listed file is the stand-in Steam generates from the header: blurry."""
+    return bool(listed) and listed[0].endswith("portrait.png")
+
+
+def portrait_candidates(appid, item):
+    listed = _listed_portraits(item)
+    urls = [CDN + item["assets"]["asset_url_format"].replace("${FILENAME}", f) for f in listed]
     urls += [OLD_CDN % appid + f for f in ("library_600x900_2x.jpg", "library_600x900.jpg")]
-    auto = bool(listed) and listed[0].endswith("portrait.png")     # the first listed file decides: Steam-generated from the header means blurry
-    return urls, auto
+    return urls, _is_auto_portrait(listed)
 
 
 def is_coverable(item, name, software=False):
-    """True if a store item can get a cover by what it is: a game or playtest, or software when `software` is on, and not one of Steam's tools by name. DLC, demos and the rest never do. A missing `name` is the caller's business."""
+    """True if a store item can get a cover by what it is: a game, playtest or edition with a real portrait, or software when `software` is on, and not one of Steam's tools by name. DLC, demos and the rest never do. A missing `name` is the caller's business."""
     kind = item.get("type", 0)
-    return not TOOL_NAMES.match(name or "") and (kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE))
+    return not TOOL_NAMES.match(name or "") and (kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE) or (kind == EDITION_TYPE and _has_real_portrait(item)))
+
+
+def _has_real_portrait(item):
+    """True if Steam lists a portrait for the item and it is not the blurry stand-in made from the header."""
+    listed = _listed_portraits(item)
+    return bool(listed) and not _is_auto_portrait(listed)
 
 
 def list_games(games, log=None, errors=None, software=False):

@@ -4,6 +4,9 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 
 ## [Unreleased]
 
+### 🛠 Fixed
+- Metro Exodus "PC Enhanced Edition" now gets a cover. Steam lists it as an edition of its own, a kind of item the app used to skip. Editions with a real portrait get a cover; Steam's franchise ads, which only have a blurry stand-in picture, still do not.
+
 ### 🔧 Changed
 - Plainer words in the windows and on the screens. "Select" replaces "tick", the question about a Steam collection names its buttons, the Reset buttons say "Remove only this app's covers" and "Remove all covers", and a few messages (Start over, Restore, Delete group) say more clearly what changes. One question wrongly said "step 5" when picking games by hand; it no longer names a step.
 - Picking games by hand now has the same 100% choices as the other way: gold case, gold border, normal case or no special case, and the marks. Gold goes on the games in a Steam case; games in a console case or your own case get the marks only, and the screen says so.
