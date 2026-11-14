@@ -544,6 +544,54 @@ class Playtests(Base):
         self.assertEqual((r["ok"], r["not_games"]), (1, 0))
 
 
+class Software(Base):
+    def make(self, items, **kw):
+        """(list_games result, make_covers result) with Steam answering `items` ({appid: store item}, an id missing from it is one Steam no longer lists)."""
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
+        art = {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}
+        full = {i: dict(it, assets=art) for i, it in items.items()}
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: full[i] for i in ids if i in full}
+        sc.http_get = lambda url, tries=3: buf.getvalue()
+        try:
+            games = {i: None for i in items} or {1: None}
+            return sc.list_games(games, **kw), sc.make_covers(games, os.path.join(self.tmp, "cv"), **kw)
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+
+    def setUp(self):
+        super().setUp()
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+
+    def test_software_is_skipped_by_default(self):
+        listed, r = self.make({1: {"type": 6, "name": "Lossless Scaling"}})
+        self.assertEqual(listed, [])
+        self.assertEqual((r["ok"], r["not_games"]), (0, 1))
+
+    def test_software_gets_a_cover_with_the_switch(self):
+        listed, r = self.make({1: {"type": 6, "name": "Lossless Scaling"}}, software=True)
+        self.assertEqual(listed, [(1, "Lossless Scaling")])
+        self.assertEqual((r["ok"], r["not_games"]), (1, 0))
+
+    def test_tools_and_other_types_stay_skipped_with_the_switch(self):
+        listed, r = self.make({1: {"type": 6, "name": "Proton 9.0"}, 2: {"type": 1, "name": "A Demo"}, 3: {"type": 4, "name": "Some DLC"}}, software=True)
+        self.assertEqual(listed, [])
+        self.assertEqual((r["ok"], r["not_games"]), (0, 3))
+
+    def test_unlisted_item_stays_unlisted_with_the_switch(self):
+        real_store = sc.store_items
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {1: {"type": 0, "name": "Game"}}      # id 2: Steam no longer lists it
+        try:
+            r = sc.make_covers({1: None, 2: None}, os.path.join(self.tmp, "cv"), software=True)
+        finally:
+            sc.store_items = real_store
+        self.assertEqual(r["unlisted"], 1)
+        self.assertEqual(len(r["files"]), 0)
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]

@@ -92,6 +92,7 @@ MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompre
 MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
 _PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
 GAME_TYPES = (0, None, 12)           # 0 = game, 12 = playtest (same art as its game, and it sits in the library); other types are DLC, tools, demos
+SOFTWARE_TYPE = 6                   # Lossless Scaling, Wallpaper Engine and Blender: type 6, with normal portrait art; made only when the user asks
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
 
@@ -704,14 +705,20 @@ def portrait_candidates(appid, item):
     return urls, auto
 
 
-def list_games(games, log=None, errors=None):
-    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers). `errors`: a list that gets the exception of every store lookup that failed."""
+def is_coverable(item, software=False):
+    """True if a store item gets a cover: a game or playtest, or software when `software` is on. DLC, demos and the rest never do."""
+    kind = item.get("type", 0)
+    return kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE)
+
+
+def list_games(games, log=None, errors=None, software=False):
+    """[(appid, name)] of real games only (no DLC, tools or unnamed leftovers; software only with `software`). `errors`: a list that gets the exception of every store lookup that failed."""
     info = store_items(sorted(games), log, errors=errors)
     out = []
     for appid in sorted(games):
         it = info.get(appid, {})
         name = games[appid] or it.get("name")
-        if it.get("type", 0) not in GAME_TYPES or not name or TOOL_NAMES.match(name):
+        if not is_coverable(it, software) or not name or TOOL_NAMES.match(name):
             continue
         out.append((appid, name))
     return out
@@ -1444,7 +1451,7 @@ def _drop_older_covers(covers_dir, dest, appid):
 
 
 def make_covers(games, out, only=None, force=False, skip_auto_art=False, progress=None, cancelled=None, log=None, family=None, hue=0, sat=100, val=100,
-                completed=None, treatment=None, theme=None, custom_art=None, platforms=None, tones=None, groups=None, repaint=None):
+                completed=None, treatment=None, theme=None, custom_art=None, platforms=None, tones=None, groups=None, repaint=None, software=False):
     """Build a cover per game into `out`.
 
     progress(done, total, appid, name, status)  status: ok | exists | skipped | noart | failed
@@ -1538,7 +1545,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     for appid in ids:
         it = info.get(appid) or {}
         known = games[appid] or it.get("name")
-        if it.get("type", 0) not in GAME_TYPES or TOOL_NAMES.match(known or ""):
+        if not is_coverable(it, software) or TOOL_NAMES.match(known or ""):
             res["skipped"] += 1
             res["not_games"] += 1               # DLC, soundtracks, tools, demos
         elif not known:
@@ -1559,7 +1566,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             break
         it = info.get(appid) or {}
         name = games[appid] or it.get("name") or str(appid)
-        if it.get("type", 0) not in GAME_TYPES or TOOL_NAMES.match(name):
+        if not is_coverable(it, software) or TOOL_NAMES.match(name):
             res["skipped"] += 1
             report(n, appid, name, "skipped")
             continue
