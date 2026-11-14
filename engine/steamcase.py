@@ -1711,9 +1711,10 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
 def covers_with_other_art(covers_dir, custom_art, games=None):
     """True if make_covers with this `custom_art` ({appid: path}) would rebuild a cover already in the folder because of its art alone: a cover made
     from your art when `custom_art` has none for it (or another file), or a cover from Steam's portrait that now gets art of yours. Colour and look are not compared.
-    `games`: only covers of these appids count (the run leaves the others alone); default: all."""
+    `games`: only covers of these appids count (the run leaves the others alone); default: every Steam game (a run that was not asked to include
+    non-Steam games leaves their covers alone)."""
     return any(notes.colour is not None and notes.art != (art_note(custom_art[appid]) if appid in custom_art else None)
-               for appid, _, notes in usual_covers(covers_dir) if games is None or appid in games)
+               for appid, _, notes in usual_covers(covers_dir) if (appid in games if games is not None else appid < shortcuts.SHORTCUT_ID_FLAG))
 
 
 def covers_with_art(covers_dir):
@@ -2131,13 +2132,15 @@ def find_other_art(steam, user=None, ours=()):
     return sorted(n for n in files if _COVER_NAME.match(n) and n not in ours), sorted(n for n in files if _JPG_NAME.match(n))
 
 
-def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
+def reset_to_default(steam, user=None, names=None, everything=False, keep=(), originals=None):
     """Remove our covers from Steam's grid folder so Steam shows its own default art again.
     Only files recognised as ours go; the files are moved into a normal backup, so restore_backup() undoes this.
     `names`: result of an earlier find_our_covers() (default: scan now).
     `everything`: also remove every other custom portrait (SteamGridDB, set by hand in Steam, any format), so no custom art is left.
     `keep`: file names that stay whatever else is removed (the covers of groups the user did not tick): they are not "other art" either.
-    Returns {"removed", "backup", "account", "account_name"}."""
+    A non-Steam game has no default art in Steam, so its own art that the app kept a copy of (find_custom_art) is put back, unless `everything`
+    (then no custom art is left, as asked); `originals` is the folder of those copies (default: originals_dir()). Restore takes that copy away again.
+    Returns {"removed", "restored", "backup", "account", "account_name"}."""
     grid = grid_dir(steam, user)
     acc = os.path.basename(os.path.dirname(os.path.dirname(grid)))
     info = {"account": acc, "account_name": account_label(steam, acc), "grid": grid}
@@ -2149,7 +2152,9 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
         extra_png, other = find_other_art(steam, user, names)
         names += [n for n in extra_png if n not in keep]
     if not names and not other:
-        return dict(info, removed=0, backup=None)
+        return dict(info, removed=0, restored=0, backup=None)
+    shortcut_ids = {int(n[:-5]) for n in names if _COVER_NAME.match(n) and int(n[:-5]) & shortcuts.SHORTCUT_ID_FLAG}
+    back = [] if everything or not shortcut_ids else _art_to_bring_back(grid, os.path.join(originals or originals_dir(), acc), shortcut_ids, set(names))
     with _Lock(os.path.dirname(grid)):
         _remove_leftovers(grid)
         base = os.path.join(os.path.dirname(grid), BACKUP_PREFIX + time.strftime("%Y%m%d_%H%M%S"))
@@ -2164,11 +2169,18 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
         moved = []
         try:
             with open(os.path.join(backup, "manifest.json"), "w") as fh:
-                json.dump({"added": [], "replaced": names, "moved": other}, fh)
+                json.dump({"added": [name for name, _ in back], "replaced": names, "moved": other}, fh)
             for n in names + other:
                 os.replace(os.path.join(grid, n), os.path.join(backup, n))      # a move, not a copy: instant and no extra disk space
                 moved.append(n)
+            for name, src in back:
+                _safe_copy(src, os.path.join(grid, name))
+                moved.append(name)
         except OSError as e:
+            for name, _ in back:
+                if name in moved:                                       # a copy made here, not a file that was moved: it is removed, not brought back
+                    moved.remove(name)
+                    os.remove(os.path.join(grid, name))
             for n in moved:
                 try:
                     os.replace(os.path.join(backup, n), os.path.join(grid, n))
@@ -2176,7 +2188,7 @@ def reset_to_default(steam, user=None, names=None, everything=False, keep=()):
                     pass
             shutil.rmtree(backup, ignore_errors=True)
             raise SteamcaseError(_t("Could not remove the covers (%s). Nothing was changed.") % e)
-        return dict(info, removed=len(moved), backup=backup)
+        return dict(info, removed=len(names + other), restored=len(back), backup=backup)
 
 
 def list_backups(steam, user=None):
@@ -2208,22 +2220,30 @@ def _undo(grid, backup_dir, m):
     return n
 
 
-def _bring_back_art(grid, originals):
-    """Copy the user's own art kept in `originals` back into the grid folder for every app that has no portrait there at all. Caller holds the lock. Returns files copied.
-    The copy stays in `originals`."""
+def _art_to_bring_back(grid, originals, only=None, leaving=()):
+    """[(file name in the grid folder, path of the kept copy)]: the user's own art kept in `originals` for every app that has no portrait in `grid`.
+    `only`: a set of app ids, the only ones looked at. `leaving`: names of grid files about to go, they do not count as a portrait."""
     try:
         kept = sorted(os.listdir(originals))
-        held = {int(m.group(1)) for m in map(_ART_NAME.match, os.listdir(grid)) if m}
+        held = {int(m.group(1)) for n in os.listdir(grid) if n not in leaving for m in [_ART_NAME.match(n)] if m}
     except OSError:
-        return 0
-    n = 0
+        return []
+    out = []
     for name in kept:
         m = _ORIGINAL_NAME.match(name)
         src = os.path.join(originals, name)
-        if not m or int(m.group(1)) in held or not _usable_art(src):
-            continue
+        if m and int(m.group(1)) not in held and (only is None or int(m.group(1)) in only) and _usable_art(src):
+            out.append(("%sp.%s" % (m.group(1), m.group(2)), src))
+    return out
+
+
+def _bring_back_art(grid, originals):
+    """Copy the user's own art kept in `originals` back into the grid folder for every app that has no portrait there at all. Caller holds the lock. Returns files copied.
+    The copy stays in `originals`."""
+    n = 0
+    for name, src in _art_to_bring_back(grid, originals):
         try:
-            _safe_copy(src, os.path.join(grid, "%sp.%s" % (m.group(1), m.group(2))))
+            _safe_copy(src, os.path.join(grid, name))
             n += 1
         except OSError:
             pass
@@ -2231,6 +2251,7 @@ def _bring_back_art(grid, originals):
 
 
 _COVER_NAME = re.compile(r"^[0-9]{1,10}p\.png$")
+_ANY_ART_NAME = re.compile(r"^[0-9]{1,10}p\.(png|jpg|jpeg|webp)$")      # what Reset may add to the grid folder: the art of a shortcut, brought back
 _JPG_NAME = re.compile(r"^[0-9]{1,10}p\.(jpg|jpeg|webp)$")      # art set from Steam's menu or by SteamGridDB; Steam shows these before our .png
 OTHER_EXT = ("jpg", "jpeg", "webp")
 
@@ -2260,7 +2281,7 @@ def restore_backup(steam, backup_dir, user=None, keep=False, originals=None):
         jpgs = [str(x) for x in m.get("moved", [])]
     except (OSError, ValueError, AttributeError, TypeError, RecursionError, MemoryError, UnicodeError):
         raise SteamcaseError(_t("The backup's manifest is damaged."))
-    if not all(_COVER_NAME.match(n) for n in names) or not all(_JPG_NAME.match(n) for n in jpgs):
+    if not all(_COVER_NAME.match(n) for n in m.get("replaced", [])) or not all(_ANY_ART_NAME.match(n) for n in m.get("added", [])) or not all(_JPG_NAME.match(n) for n in jpgs):
         raise SteamcaseError(_t("The backup's manifest lists unexpected files; refusing to use it."))
     with _Lock(cfg):
         _remove_leftovers(grid)
@@ -2298,14 +2319,15 @@ def _usable_art(path):
         return False
 
 
-def find_custom_art(steam, user=None, originals=None, problems=None):
+def find_custom_art(steam, user=None, originals=None, problems=None, only=None):
     """{appid: path} of the user's own portraits (set by hand in Steam or from SteamGridDB), for `make_covers(custom_art=...)`.
     A plain image in the grid folder that is not one of our covers wins (`.jpg`, `.jpeg`, `.webp`, then `.png`, like Steam) and is copied into
     `originals` (default: `originals_dir()`, one folder per Steam account inside it); an app the grid folder holds only our cover for keeps the copy
     made earlier, and only while the grid still holds our cover: once it does not (Reset, or the art was cleared in Steam) the game goes back to
     Steam's portrait. A link, a file that is too big or does not decode is ignored. The app never deletes an original.
     One account's art never reaches another account's covers.
-    `problems`: a list that gets one sentence for each file whose copy could not be kept (that file is then used where it is, but Apply will move it away)."""
+    `problems`: a list that gets one sentence for each file whose copy could not be kept (that file is then used where it is, but Apply will move it away).
+    `only`: a set of app ids; the art of any other app is not looked at, copied or reported (default: every app)."""
     originals = os.path.join(originals or originals_dir(), pick_account(steam, user))
     grid = grid_dir(steam, user)
     found = {}
@@ -2316,7 +2338,7 @@ def find_custom_art(steam, user=None, originals=None, problems=None):
     options = {}
     for n in names:
         m = _ART_NAME.match(n)
-        if m:
+        if m and (only is None or int(m.group(1)) in only):
             options.setdefault(int(m.group(1)), {})[m.group(2)] = os.path.join(grid, n)
     for appid, by_ext in options.items():
         for ext in ART_EXT_ORDER:
@@ -2345,11 +2367,24 @@ def find_custom_art(steam, user=None, originals=None, problems=None):
     for n in stored:
         m = _ORIGINAL_NAME.match(n)
         path = os.path.join(originals, n)
-        if m and int(m.group(1)) not in found and _usable_art(path) and not is_steamcase_cover(path):     # a copy that is one of our covers (an older version kept those) is no art
+        if m and (only is None or int(m.group(1)) in only) and int(m.group(1)) not in found and _usable_art(path) and not is_steamcase_cover(path):     # a copy that is one of our covers (an older version kept those) is no art
             ours = os.path.join(grid, "%sp.png" % m.group(1))
             if _is_plain_file(ours) and is_steamcase_cover(ours):
                 found[int(m.group(1))] = path
     return found
+
+
+def collect_art(steam, user, games, steam_art=False, non_steam=False, keep=None, problems=None, originals=None):
+    """{appid: path} of the user's own art that covers are built from. `steam_art`: the art of the Steam `games` (only those in `keep`, when given).
+    `non_steam`: the non-Steam games that have art of their own; they are put into `games` (in place) and their art is always used, it is their only portrait.
+    Art that nobody asked for is not looked at: nothing of it is copied or reported."""
+    names = shortcuts.read_shortcuts(os.path.join(os.path.dirname(grid_dir(steam, user)), "shortcuts.vdf")) if non_steam else {}
+    if not (steam_art or names):
+        return {}
+    found = find_custom_art(steam, user, originals, problems, None if steam_art else set(names))
+    art = {a: p for a, p in found.items() if a in games and (keep is None or a in keep)} if steam_art else {}
+    art.update(shortcuts.add_non_steam(games, found, names))
+    return art
 
 
 def _collect(args):
@@ -2444,15 +2479,10 @@ def cmd_make(args):
     out = os.path.abspath(args.out)
     problems = []
     custom_art = None
-    own_art = args.use_custom_art or (args.use_custom_art is None and covers_with_art(out))
-    if own_art or args.include_non_steam:
-        found = find_custom_art(steam, args.user, problems=problems)
-        custom_art = {}
-        if own_art:
-            have = None if args.use_custom_art else covers_with_art(out)         # not asked for: only the games whose covers already come from your art keep it
-            custom_art = {a: p for a, p in found.items() if have is None or a in have}
-        if args.include_non_steam:                          # the art of a shortcut is always used: it has no other portrait
-            custom_art.update(shortcuts.add_non_steam(games, found, shortcuts.read_shortcuts(steam, args.user)))
+    have = None if args.use_custom_art else covers_with_art(out)                 # not asked for: only the games whose covers already come from your art keep it
+    steam_art = bool(args.use_custom_art or (args.use_custom_art is None and have))
+    if steam_art or args.include_non_steam:
+        custom_art = collect_art(steam, args.user, games, steam_art, args.include_non_steam, have, problems)
 
     def progress(done, total, appid, name, status):
         if status == "ok":
@@ -2540,6 +2570,8 @@ def cmd_reset(args):
         raise SteamcaseError(_t("Cancelled."))
     r = reset_to_default(steam, args.user, names, args.everything)
     print("Removed %d covers. Backup: %s\nTo bring them back: python -m engine restore" % (r["removed"], r["backup"]))
+    if r["restored"]:
+        print("Your own art came back for %d non-Steam games (they have no default art in Steam)." % r["restored"])
 
 
 def cmd_restore(args):

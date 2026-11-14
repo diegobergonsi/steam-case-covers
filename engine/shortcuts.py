@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Diego Bergonsi. Part of steam-case-covers: https://github.com/diegobergonsi/steam-case-covers
 """The non-Steam games an account added to Steam (its shortcuts.vdf), so they can get a case when they already have art of their own."""
-import os
 import struct
 
 from engine import safefile
 
 MAX_SHORTCUTS = 8 * 1024 * 1024               # a shortcuts.vdf is a few KB; anything bigger is not ours
+SHORTCUT_ID_FLAG = 0x80000000                 # Steam sets the top bit of the id of every game added by hand; ids of real Steam games are below it
+
+
+_FIXED = {3: 4, 7: 8, 0x0A: 8}                 # float32, uint64 and int64 values: their size in bytes
 
 
 def _cstr(data, i):
@@ -33,6 +36,10 @@ def _walk(data, i, depth=0):
         elif kind == 2:
             out[key] = struct.unpack_from("<i", data, i)[0]
             i += 4
+        elif kind in _FIXED:                  # a value nobody here needs: skip it, keep the rest of the file
+            if i + _FIXED[kind] > len(data):
+                raise IndexError("cut inside a number")
+            i += _FIXED[kind]
         else:
             raise ValueError("unknown kind %d" % kind)
 
@@ -40,7 +47,8 @@ def _walk(data, i, depth=0):
 def _parse(data):
     """{unsigned app id: name} of the complete entries; a cut or garbled file gives the entries before the damage. Steam names the art
     `<unsigned id>p.png`, so the signed number stored in the file is turned into an unsigned one. An entry with no `appid` is left out:
-    Steam computes the id of those itself, and a wrong guess would put a case on the wrong art."""
+    Steam computes the id of those itself, and a wrong guess would put a case on the wrong art. An id without the top bit set could be a real Steam
+    game's, so it is left out too: the art of a Steam game is used only when the user asks for it."""
     found = {}
     try:
         if data[:1] != b"\x00":
@@ -50,29 +58,27 @@ def _parse(data):
             _, i = _cstr(data, i + 1)
             entry, i = _walk(data, i)
             appid, name = entry.get("appid"), entry.get("appname")
-            if isinstance(appid, int) and appid & 0xFFFFFFFF and isinstance(name, str) and name:
+            if isinstance(appid, int) and appid & SHORTCUT_ID_FLAG and isinstance(name, str) and name:
                 found[appid & 0xFFFFFFFF] = name
     except (ValueError, IndexError, struct.error):
         pass
     return found
 
 
-def read_shortcuts(steam, user=None):
-    """{app id: name} of the account's non-Steam shortcuts. Anything unreadable (no account, no file, a link to something else, too big, garbled) gives {}."""
-    from engine import steamcase as sc        # here, not at the top: steamcase uses this module too
+def read_shortcuts(path):
+    """{app id: name} of the non-Steam shortcuts in the shortcuts.vdf at `path`. Anything unreadable (no file, a link to something else, too big, garbled) gives {}."""
     try:
-        path = os.path.join(steam, "userdata", sc.pick_account(steam, user), "config", "shortcuts.vdf")
         return _parse(safefile.read_small_file(path, MAX_SHORTCUTS, follow_links=True))
-    except (OSError, sc.SteamcaseError):
+    except OSError:
         return {}
 
 
 def add_non_steam(games, found_art, shortcuts):
-    """Put the shortcuts that have art of their own into `games` (a Steam game keeps its name) and return that art: {app id: path}.
-    A shortcut without art is left out of both: there is nothing to put in a case."""
+    """Put the shortcuts that have art of their own into `games` and return that art: {app id: path}. A shortcut without art is left out of both
+    (there is nothing to put in a case), and an id that is already a game is left alone, name and art."""
     added = {}
     for appid, name in shortcuts.items():
-        if appid in found_art:
-            games.setdefault(appid, name)
+        if appid in found_art and appid not in games:
+            games[appid] = name
             added[appid] = found_art[appid]
     return added

@@ -9,7 +9,7 @@ from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
 from engine import groups
-from engine import shortcuts, steamcase as sc
+from engine import steamcase as sc
 from qtui import reasons
 from qtui.groupticks import GroupTicks
 from qtui.i18n import N_, retranslated, tr, trn
@@ -284,10 +284,9 @@ class Make(QObject):
             steam = sc.steam_dir()
             games, _ = sc.load_library(steam, snap["lib"])
             problems = []
-            found = sc.find_custom_art(steam, snap["account"], problems=problems)
-            art = {a: p for a, p in found.items() if a in games} if snap["custom"] else {}       # the art of Steam games only when asked for
-            if snap["non_steam"]:                       # a shortcut's art is always used: it has no other portrait
-                art.update(shortcuts.add_non_steam(games, found, shortcuts.read_shortcuts(steam, snap["account"])))
+            before = set(games)
+            art = sc.collect_art(steam, snap["account"], games, snap["custom"], snap["non_steam"], problems=problems)
+            snap["shortcuts"] = {a: games[a] for a in set(games) - before}      # the non-Steam games with art: the make worker adds them to its own list
             games = set(games)
         except sc.SteamcaseError as e:
             error = str(e)
@@ -366,8 +365,7 @@ class Make(QObject):
         try:
             steam = sc.steam_dir()
             games, family = sc.load_library(steam, snap["lib"])
-            if snap["non_steam"]:
-                shortcuts.add_non_steam(games, custom_art, shortcuts.read_shortcuts(steam, snap["account"]))
+            games.update(snap.get("shortcuts", {}))
             if not games:
                 raise sc.SteamcaseError(tr("No games found. Install a game first, or load your userdata.json."))
             manual = snap.get("manual")

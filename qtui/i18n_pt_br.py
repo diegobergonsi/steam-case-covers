@@ -434,6 +434,7 @@ PT_BR = {
     "Skip blurry covers": "Pular capas borradas",
     "Include software": "Incluir programas",
     "Include non-Steam games": "Incluir jogos de fora da Steam",
+    "Your own art came back for %n non-Steam game.|Your own art came back for %n non-Steam games.": "A sua própria arte voltou para %n jogo de fora da Steam.|A sua própria arte voltou para %n jogos de fora da Steam.",
     "Also make covers for the non-Steam games you added to Steam, when they already have a portrait in your Steam art folder. Games without one are left alone.": "Fazer capas também para os jogos de fora da Steam que você adicionou à Steam, quando eles já têm um retrato na sua pasta de arte da Steam. Os jogos sem retrato ficam como estão.",
     "Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. Steam's own tools, demos and DLC still get none.": "Fazer capas também para os programas que você tem na Steam, como o Wallpaper Engine ou o Lossless Scaling. As ferramentas da própria Steam, as demos e as DLCs continuam sem capa.",
     "Next: 100% games →": "Próximo: Jogos com 100% →",
