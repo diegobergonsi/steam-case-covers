@@ -587,6 +587,30 @@ class Software(Base):
         self.assertEqual((r["ok"], r["unlisted"], r["not_games"]), (1, 1, 0))
 
 
+class NonSteam(Base):
+    def test_a_shortcut_with_art_gets_a_cover_and_is_counted(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
+        art = os.path.join(self.tmp, "mine.jpg")
+        sc.Image.new("RGB", (100, 150), (160, 30, 30)).save(art, format="JPEG")
+        shortcut = 3998375076                                           # an id as big as Steam gives to games added by hand
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {1: {"type": 0, "name": "Game", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}}}      # Steam knows nothing of the shortcut
+        sc.http_get = lambda url, tries=3: buf.getvalue()
+        out = os.path.join(self.tmp, "cv")
+        try:
+            r = sc.make_covers({1: None, shortcut: "My Shortcut"}, out, custom_art={shortcut: art})
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+        cover = os.path.join(out, "My_Shortcut_%d.png" % shortcut)
+        self.assertTrue(os.path.isfile(cover))
+        self.assertIsNotNone(sc.cover_art(cover))
+        self.assertEqual((r["ok"], r["unlisted"], r["not_games"], r["failed"], r["missing"]), (2, 0, 0, [], []))
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]
