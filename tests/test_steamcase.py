@@ -526,6 +526,24 @@ class Progress(Base):
         self.assertTrue(all(t == 3 for _, t in seen))
 
 
+class Playtests(Base):
+    def test_a_playtest_gets_a_cover_like_a_game(self):
+        if sc.Image is None:
+            self.skipTest("Pillow missing")
+        import io
+        buf = io.BytesIO()
+        sc.Image.new("RGB", (600, 900), (10, 80, 160)).save(buf, "PNG")
+        real_store, real_get = sc.store_items, sc.http_get
+        sc.store_items = lambda ids, log=None, cancelled=None, errors=None: {i: {"type": 12, "name": "G Playtest", "assets": {"asset_url_format": "s/${FILENAME}", "library_capsule_2x": "h/c.jpg"}} for i in ids}      # 12 = Steam's type for a playtest
+        sc.http_get = lambda url, tries=3: buf.getvalue()
+        try:
+            self.assertEqual(sc.list_games({1: None}), [(1, "G Playtest")])
+            r = sc.make_covers({1: None}, os.path.join(self.tmp, "cv"))
+        finally:
+            sc.store_items, sc.http_get = real_store, real_get
+        self.assertEqual((r["ok"], r["not_games"]), (1, 0))
+
+
 class Concurrency(Base):
     def test_simultaneous_applies_never_lose_covers(self):
         files = [self.cover(i) for i in range(1, 41)]
