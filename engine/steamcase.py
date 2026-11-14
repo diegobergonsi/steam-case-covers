@@ -1485,7 +1485,8 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
     "completed": how many of "files" carry a treatment, kept ones included, "platforms": how many of "files" are in a console case}.
     tones: {appid: (hue, sat, val)}, with `platforms` a dict: the colour of a game in the Steam case (the run's own colour for a game not in it). groups: {appid: id of a
     group, see groups.py}: the cover gets the group note, and a cover is kept only if its group is the wanted one. Covers by hand have no `theme` (ValueError otherwise, before any lookup).
-    A game in a console case or your own case keeps only the marks of the `treatment`; a game in the Steam case gets all of it (gold included). The natural flow (`platforms` None) leaves every cover by hand (a console case or a
+    A game in a console case or your own case keeps only the marks of the `treatment`; a game in the Steam case gets all of it (gold included).
+    The natural flow (`platforms` None) leaves every cover by hand (a console case or a
     group note) alone, force or not, except those whose appid is in `repaint`: they are made again as normal covers.
     """
     if Image is None:
@@ -1598,7 +1599,7 @@ def make_covers(games, out, only=None, force=False, skip_auto_art=False, progres
             continue
         target, colour = _wanted_look(appid, notes, tones.get(appid, (hue, sat, val)) if platforms is not None else (hue, sat, val), completed, treatment, theme)
         if want_p:
-            target = console_marks(target)             # an earlier gold look keeps only its marks: a console case has no gold
+            target = console_marks(target)              # an earlier gold look keeps only its marks: a console case has no gold
         spec = _spec_for(want_p, colour, target, theme, wanted_art, want_g)
         if not force and matches(notes, spec):
             res["ok"] += 1
@@ -1703,8 +1704,6 @@ def covers_in_other_case(covers_dir, platforms, tone=(0, 100, 100), treatment=No
             continue
         notes = read_notes(path)
         target, colour = _wanted_look(appid, notes, (tones or {}).get(appid, tone), completed, treatment)
-        if platforms[appid]:
-            target = console_marks(target)
         art = _art_wanted(custom_art, appid)
         count += not matches(notes, _spec_for(platforms[appid], colour, target, None, art, (groups or {}).get(appid)))
     return count

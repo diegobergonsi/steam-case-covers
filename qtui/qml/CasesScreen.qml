@@ -253,7 +253,6 @@ ScreenFrame {
         id: switchDialog
         objectName: "case_switch_dialog"
         prefix: "case_switch_dlg"
-        focusBack: grid
         onConfirmed: screen.cases.switchTo(screen.switchKey)
     }
     ConfirmDialog {                                       // deleting a group asks first; the safe button (Cancel) has the focus
