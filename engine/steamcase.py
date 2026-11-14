@@ -92,6 +92,7 @@ MAX_PIXELS = 30_000_000                  # portraits are ~1 MP; refuses decompre
 MAX_PACKAGEINFO = 16 * 1024 * 1024       # Steam's own package list is a few hundred KB
 _PACKAGEINFO_MAGICS = (0x06565527, 0x06565528)
 GAME_TYPES = (0, None, 12)           # 0 = game, 12 = playtest (same art as its game, and it sits in the library); other types are DLC, tools, demos
+EDITION_TYPE = 14                  # an edition that is its own app (Metro Exodus Enhanced Edition); Steam gives this type to its franchise ads too, which only list a blurry stand-in portrait
 SOFTWARE_TYPE = 6                   # Lossless Scaling, Wallpaper Engine and Blender: type 6, with normal portrait art; made only when the user asks
 TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam Controller Configs)", re.I)
 BACKUP_PREFIX = "grid_backup_"
@@ -712,9 +713,15 @@ def portrait_candidates(appid, item):
 
 
 def is_coverable(item, name, software=False):
-    """True if a store item can get a cover by what it is: a game or playtest, or software when `software` is on, and not one of Steam's tools by name. DLC, demos and the rest never do. A missing `name` is the caller's business."""
+    """True if a store item can get a cover by what it is: a game, playtest or edition with a real portrait, or software when `software` is on, and not one of Steam's tools by name. DLC, demos and the rest never do. A missing `name` is the caller's business."""
     kind = item.get("type", 0)
-    return not TOOL_NAMES.match(name or "") and (kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE))
+    return not TOOL_NAMES.match(name or "") and (kind in GAME_TYPES or (software and kind == SOFTWARE_TYPE) or (kind == EDITION_TYPE and _has_real_portrait(item)))
+
+
+def _has_real_portrait(item):
+    """True if Steam lists a portrait for the item and it is not the blurry stand-in Steam makes from the header (see portrait_candidates)."""
+    assets = item.get("assets") or {}
+    return bool(assets.get("library_capsule") or assets.get("library_capsule_2x")) and not portrait_candidates(0, item)[1]
 
 
 def list_games(games, log=None, errors=None, software=False):
