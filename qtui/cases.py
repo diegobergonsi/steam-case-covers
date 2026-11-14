@@ -269,9 +269,10 @@ class Cases(QObject):
     @Slot()
     def assign(self):
         """Put the ticked games in the picked case; they are then unticked, so the next round starts clean."""
-        if not self.canAssign:
-            return
-        games = self._shell.picker.selection()
+        if self.canAssign:
+            self._assign(self._shell.picker.selection())
+
+    def _assign(self, games):
         group = next((g for g in self._groups if g["id"] == self._gid), None)
         case = group["case"] if group else ({"tone": list(self._tone)} if self._key == "steam" else {"platform": self._key})
         try:
@@ -288,6 +289,29 @@ class Cases(QObject):
         self.selectedKeyChanged.emit()
         self.groupNameChanged.emit()
         self.colourChanged.emit()
+
+    @Slot(str, result=bool)
+    def switchNeeded(self, key):
+        """A click on a case card would move games already given a case: nothing is ticked, they are all in one case, and this card is another one (your own
+        case asks for its file first, and with two cases in use nobody can tell which games should move)."""
+        return key in ORDER and key != sc.CUSTOM and not self._shell.picker.selectedCount and len(self.summary) == 1 and self.summary[0]["key"] != key
+
+    @Slot(str, result=str)
+    def switchSentence(self, key):
+        """What the question before a switch says: how many games move, from which case to which, and what starts again."""
+        used = self.summary[0]
+        return trn("This moves your %n game from %s to %s and puts your 100%% games choices back to how they started.|"
+                   "This moves your %n games from %s to %s and puts your 100%% games choices back to how they started.", used["count"]) % (used["label"], tr(LABELS[key]))
+
+    @Slot(str)
+    def switchTo(self, key):
+        """The answer "yes" to that question: every game of this run goes into the new case, and the 100% games step starts from its defaults (the page stays)."""
+        if self.switchNeeded(key):
+            games = sorted(self._assigned)
+            self._key, self._gid = key, ""
+            self._follow_case()
+            self._assign(games)
+            self._shell.hundred.reset_choices()
 
     def _note(self, case, gid, games):
         """This run's lists know that the games are in the group `gid`, drawn in this case."""

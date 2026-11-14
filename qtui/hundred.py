@@ -180,10 +180,16 @@ class Hundred(QObject):
         self._req += 1
         self._watcher.restart()
         self._path, self._completed = "", None
-        self._style, self._marks, self._marks_before = "ribbon", "full", None
         self._status, self._kind, self._note = tr(WAITING), "wait", ""
-        for signal in (self.pathChanged, self.styleChanged, self.marksChanged, self.statusChanged):
-            signal.emit()
+        self.pathChanged.emit()
+        self.statusChanged.emit()
+        self.reset_choices()
+
+    def reset_choices(self):
+        """The case and the marks chosen here go back to the ones of a window just opened; the page stays."""
+        self._style, self._marks, self._marks_before = "ribbon", "full", None
+        self.styleChanged.emit()
+        self.marksChanged.emit()
         self._theme_changed()
 
     # ----- the page -----

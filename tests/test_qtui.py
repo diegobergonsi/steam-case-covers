@@ -7883,6 +7883,48 @@ class CasesState(PickerBase):
         cases.pick("xbox360")
         self.assertEqual(cases.previewSource, "image://preview/platform/xbox360/1")
 
+    def test_a_card_with_nothing_ticked_asks_to_move_the_games_when_one_case_is_in_use(self):
+        self.load()
+        cases = self.shell.cases
+        self.assertFalse(cases.switchNeeded("ps5"))                                  # no game has a case yet: a card just picks
+        self.assign("steam", 1, 2)
+        self.assertTrue(cases.switchNeeded("xboxseries"))
+        self.assertFalse(cases.switchNeeded("steam"))                                # the case they are in already
+        self.assertFalse(cases.switchNeeded("custom"))                               # your own case asks for its file instead
+        self.picker.toggle(3)
+        self.assertFalse(cases.switchNeeded("xboxseries"))                          # games are ticked: the usual way, the button decides
+        self.picker.toggle(3)
+        self.assign("ps5", 3)
+        self.assertFalse(cases.switchNeeded("xboxseries"))                          # two cases in use: which games would move? the usual way
+
+    def test_the_question_says_how_many_games_move_where(self):
+        self.load()
+        self.assign("steam", 1, 2)
+        text = self.shell.cases.switchSentence("xboxseries")
+        self.assertIn("2 games", text)
+        self.assertIn("Steam", text)
+        self.assertIn("Xbox Series X", text)
+
+    def test_switching_moves_every_game_and_starts_the_100_choices_again(self):
+        self.load()
+        cases, h = self.shell.cases, self.shell.hundred
+        self.assign("steam", 1, 2)
+        h._completed = {1}
+        h._style, h._marks = "gold-case", "rosette"
+        cases.switchTo("xboxseries")
+        self.assertEqual(cases.assigned(), {1: "xboxseries", 2: "xboxseries"})
+        self.assertEqual([s["key"] for s in cases.summary], ["xboxseries"])
+        self.assertEqual((h.style, h.marks), ("ribbon", "full"))
+        self.assertTrue(h.loaded)                                                    # the games page stays
+        self.assertEqual(cases.hundredSource.split("/")[4], "xboxseries")
+
+    def test_switching_does_nothing_when_it_is_not_needed(self):
+        self.load()
+        cases = self.shell.cases
+        self.assign("steam", 1)
+        cases.switchTo("steam")
+        self.assertEqual(cases.assigned(), {1: None})
+
     def test_the_100_step_preview_is_the_case_most_games_are_in_with_the_marks(self):
         self.load()
         cases, look = self.shell.cases, self.shell.look
@@ -8270,6 +8312,21 @@ class ManualWindow(WindowClicks, PickerBase):
         self.assertTrue(self.item("toast").property("visible"))
         self.assertEqual(self.text("toast_text"), "You picked a new case, so the saved group was unselected.")
 
+    def test_another_card_with_nothing_ticked_asks_first_then_moves_the_games_on_yes(self):
+        self.open_case_screen(1)
+        self.click("case_steam")
+        self.click("case_main")                                                     # the game is in the Steam case, nothing is ticked now
+        self.click("case_xboxseries")
+        self.wait_for(lambda: self.item("case_switch_dlg_card").property("visible"))
+        self.assertEqual(self.text("case_switch_dlg_title"), "Change the case?")
+        self.assertIn("1 game from Steam to Xbox Series X", self.text("case_switch_dlg_p0"))
+        self.click("case_switch_dlg_cancel")
+        self.assertEqual(self.shell.cases.assigned(), {1: None})
+        self.click("case_xboxseries")
+        self.wait_for(lambda: self.item("case_switch_dlg_card").property("visible"))
+        self.click("case_switch_dlg_confirm")
+        self.assertEqual(self.shell.cases.assigned(), {1: "xboxseries"})
+
     def test_deleting_a_group_asks_first_and_cancel_changes_nothing(self):
         gid = self.saved_red()
         self.open_case_screen(1)
@@ -8387,7 +8444,9 @@ class ManualWindow(WindowClicks, PickerBase):
         self.open_case_screen(1)
         self.click("case_ps5")
         self.click("case_main")                                                             # game 1 has a case; nothing is ticked now
-        self.click("case_xbox360")
+        self.click("case_xbox360")                                                          # another card with nothing ticked asks before moving the game
+        self.wait_for(lambda: self.item("case_switch_dlg_card").property("visible"))
+        self.click("case_switch_dlg_cancel")
         main = self.item("case_main")
         self.assertEqual((main.property("text"), main.property("enabled")), ("Next \u2192", True))
         self.click("case_main")
