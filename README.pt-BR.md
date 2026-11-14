@@ -359,7 +359,7 @@ Salve a sua página de jogos de novo (mesmo nome, do mesmo jeito), escolha o arq
 <details>
 <summary><b>Funciona para jogos fora da Steam e atalhos?</b></summary>
 
-Ainda não. Só jogos da sua biblioteca da Steam.
+Funciona, se você ativar. No passo **Visual**, ligue **Incluir jogos de fora da Steam** (na linha de comando, `--include-non-steam`). Os jogos que você adicionou à Steam à mão ganham um case quando já têm um retrato na sua pasta de arte da Steam. O programa não procura arte na internet, então um jogo sem retrato lá fica como está.
 
 </details>
 
