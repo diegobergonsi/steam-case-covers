@@ -97,6 +97,8 @@ TOOL_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks Common|Steam C
 BACKUP_PREFIX = "grid_backup_"
 
 # Shown next to the "skip blurry auto-art" option (GUI tooltip, CLI --help).
+SOFTWARE_HELP = ("Also make covers for software you own on Steam, such as Wallpaper Engine or Lossless Scaling. "
+                 "Steam's own tools, demos and DLC still get none.")
 AUTO_ART_HELP = (
     "Some games, mostly older or small ones, have no real portrait on Steam. "
     "Steam builds a stand-in from the wide header image: the title banner sits in the "
@@ -2453,7 +2455,7 @@ def cmd_make(args):
             print("ok  ", appid, name)
 
     res = make_covers(games, os.path.abspath(args.out), args.only, args.force, args.skip_auto_art, progress, log=print, family=family, hue=hue, sat=sat, val=val, completed=completed, treatment=treatment, theme=theme, custom_art=custom_art,
-                     platforms={appid: CUSTOM for appid in games} if args.case_file else None)
+                     platforms={appid: CUSTOM for appid in games} if args.case_file else None, software=args.include_software)
     own_art = sum(1 for f in res["files"] if cover_art(f))
     print("\n%d covers in %s | %d skipped (DLC/tools/non-games) | %d without portrait art" % (res["ok"], os.path.abspath(args.out), res["skipped"], len(res["missing"]))
           + (" | %d from your Steam Family library" % res["family"] if res["family"] else "")
@@ -2601,6 +2603,7 @@ def main():
                        help="what 100%% games get on the cover: full (the rosette and the \"100%% Complete\" ribbon, the default; with a theme the default is rosette) rosette (the rosette alone) or none (no marks: the gold case or border alone; with the normal case it is the same as --completed-style none). "
                             "Works with every --completed-style except none (which has no marks) and needs --games-page, like it")
         p.add_argument("--skip-auto-art", action="store_true", help=AUTO_ART_HELP)
+        p.add_argument("--include-software", action="store_true", help=SOFTWARE_HELP)
         art = p.add_mutually_exclusive_group()
         art.add_argument("--use-custom-art", dest="use_custom_art", action="store_const", const=True, default=None,
                          help="put the art you set yourself (in Steam's menu or from SteamGridDB) inside the case, for the games that have it; a copy is kept in this app's own folder, "

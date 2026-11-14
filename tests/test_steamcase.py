@@ -1223,6 +1223,25 @@ class StoreMocks(Base):
         return out.getvalue()
 
 
+class SoftwareCli(StoreMocks):
+    def make_kwargs(self, *extra):
+        """The keywords the command line gave make_covers."""
+        seen = {}
+        real = sc.make_covers
+        sc.make_covers = lambda *a, **kw: seen.update(kw) or {"ok": 0, "skipped": 0, "not_games": 0, "unlisted": 0, "missing": [], "failed": [], "cancelled": False, "files": [], "family": 0, "completed": 0, "platforms": 0}
+        try:
+            self.run_cli("make", "--steam-dir", self.steam, "--library", self.fake_library(True), "--out", os.path.join(self.tmp, "out"), *extra)
+        finally:
+            sc.make_covers = real
+        return seen
+
+    def test_flag_gives_make_covers_software(self):
+        self.assertIs(self.make_kwargs("--include-software")["software"], True)
+
+    def test_without_the_flag_software_is_off(self):
+        self.assertIs(self.make_kwargs()["software"], False)
+
+
 class FamilyCovers(StoreMocks):
     """Family games are drawn with the family frame, and Reset recognises both kinds of cover."""
 
